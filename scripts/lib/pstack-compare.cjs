@@ -15,7 +15,20 @@ function firstFailure(steps, expects) {
   return -1;
 }
 
-function classifyRun(run) {
+function plannedActions(run, plan) {
+  if (Array.isArray(plan?.actions) && plan.actions.length) return plan.actions;
+  const steps = Array.isArray(run?.steps) ? run.steps : [];
+  const actions = steps.map((step) => step?.action);
+  return actions.length && actions.every((action) => action && typeof action === "object") ? actions : null;
+}
+
+function apiOnlyRun(run, plan) {
+  if (run?.apiOnly === true) return true;
+  const actions = plannedActions(run, plan);
+  return actions ? actions.every((action) => action.op === "api") : false;
+}
+
+function classifyRun(run, plan) {
   if (!run || run.preview === "down") return { state: "unavailable", failIndex: -1 };
   const steps = Array.isArray(run.steps) ? run.steps : null;
   const expects = Array.isArray(run.expects) ? run.expects : null;
@@ -26,7 +39,7 @@ function classifyRun(run) {
   const navigations = Array.isArray(run.navigations) ? run.navigations : [];
   const badNav = navigations.some((item) => !(Number(item?.status) >= 200 && Number(item?.status) < 400));
   if (badNav || (Array.isArray(run.offOrigin) && run.offOrigin.length)) return { state: "failed", failIndex: tail };
-  if (run.apiOnly !== true && navigations.length === 0) return { state: "failed", failIndex: tail };
+  if (!apiOnlyRun(run, plan) && navigations.length === 0) return { state: "failed", failIndex: tail };
   const judgedField = run.judged && typeof run.judged === "object" ? run.judged.verdict : run.judged;
   const judged = String(judgedField ?? "").trim().toUpperCase();
   if (judged && !PASS_VERDICTS.includes(judged)) return { state: "failed", failIndex: tail };
@@ -36,8 +49,8 @@ function classifyRun(run) {
 function decideComparison({ journeys, bugfix = false } = {}) {
   const list = (Array.isArray(journeys) ? journeys : []).map((item) => ({
     journey: String(item?.journey ?? ""),
-    base: classifyRun(item?.base),
-    head: classifyRun(item?.head),
+    base: classifyRun(item?.base, item?.plan),
+    head: classifyRun(item?.head, item?.plan),
   }));
   if (!list.length) return { verdict: "FAIL", notes: "no journey was planned" };
   const problems = [];

@@ -182,6 +182,16 @@ test("a cached base result stands in for a base run", async () => {
   assert.equal(verdict.verdict, "PASS");
 });
 
+test("a cached api-only base that passed means the repro did not reproduce", async () => {
+  const api = { op: "api", method: "POST", path: "/api/mcp/tasks", body: {}, expectStatus: 200 };
+  const base = cachedArea({ journey: "change:repro", steps: [{ action: api, ok: true }], expects: [], navigations: [] });
+  const plan = planFor({ journeys: [{ journey: "change:repro", actions: [api], expect: [], base, planned: false }] });
+  const head = { journey: "change:repro", steps: [{ action: api, ok: true }], expects: [], navigations: [] };
+  const verdict = await (await load()).judgeJourneys(judgeDeps({ plan, evidence: { ...binding, journeys: [head] }, baseEvidence: null }));
+  assert.equal(verdict.verdict, "FAIL");
+  assert.match(verdict.notes, /does not reproduce the bug/);
+});
+
 test("a model failure on the head lane still fails the journey", async () => {
   const verdict = await (await load()).judgeJourneys(judgeDeps({ ask: () => ({ verdict: "FAIL", notes: "wrong total" }) }));
   assert.equal(verdict.verdict, "FAIL");

@@ -138,6 +138,7 @@ function parseCacheEntry(value) {
     journey: body.journey,
     scriptHash: body.scriptHash,
     pageHash: body.pageHash,
+    apiOnly: body.apiOnly === true,
     ok: body.ok,
     judged: ["PASS", "PASS+NOTES", "FAIL"].includes(judged.verdict) ? { verdict: judged.verdict } : { verdict: "" },
     steps: body.steps,
