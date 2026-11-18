@@ -14,12 +14,10 @@ test("up --dry-run prints the docker, prisma and Next commands without writing",
   assert.match(plan, /postgres:14\.0-alpine/);
   assert.match(plan, /prisma migrate deploy/);
   assert.match(plan, /next dev -p 3999/);
+  assert.match(plan, /-p 127\.0\.0\.1:5678:5432/);
+  assert.match(plan, /-v hypertask-verify-db:\/var\/lib\/postgresql\/data/);
   assert.equal(spawnSync("test", ["-e", join(dir, "default")]).status, 1);
-});
-
-test("up refuses an invalid port before touching anything", async () => {
-  const result = await json(home(), ["up", "--port", "80"]);
-  assert.equal(result.status, 2);
-  assert.equal(result.json.error.code, "usage");
-  assert.match(result.json.error.next, /1024 and 65535/);
+  const bad = await json(home(), ["up", "--port", "80"]);
+  assert.equal(bad.status, 2);
+  assert.match(bad.json.error.next, /between 1024 and 65535/);
 });

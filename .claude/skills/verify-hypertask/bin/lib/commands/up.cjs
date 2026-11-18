@@ -16,22 +16,19 @@ const {
 const usage = `ht-verify up - start the disposable local stack (Postgres, migrations, Next dev)
 
 Usage:
-  ht-verify up [--port 3000] [--db-port 5678] [--timeout 240] [--dry-run]
+  ht-verify up [--port 3000] [--db-port 5678] [--dry-run]
 
   --port      Next dev port. Default 3000.
-  --db-port   Published Postgres port. Default 5678, never production.
+  --db-port   Postgres port, bound to 127.0.0.1 only. Default 5678.
   --dry-run   Print the exact commands and write nothing.
 
-Safe to repeat: a running container and dev server are reused. State lands in the
-run folder: env.json, dev.log, dev.pid. Secrets are placeholders. Needs Docker and
-node_modules installed here; a symlink to another checkout fails Next.
+Repeat runs reuse the container and server and wait up to 240s for /login 200.
+State lands in the run folder: env.json, dev.log, dev.pid. Secrets are
+placeholders. Needs Docker and node_modules here; a symlink fails Next.
 
 Example:
   ht-verify up`;
-
 const dbName = "hypertask-verify-db";
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 function nodeModulesSymlinked() {
   try { return lstatSync(path.join(repoRoot, "node_modules")).isSymbolicLink(); } catch { return false; }
 }
@@ -39,7 +36,7 @@ function nodeModulesSymlinked() {
 async function poll(check, deadline, interval) {
   while (Date.now() < deadline) {
     if (await check()) return true;
-    await sleep(interval);
+    await new Promise((resolve) => setTimeout(resolve, interval));
   }
   return false;
 }
@@ -67,7 +64,7 @@ function docker(args, next) {
 }
 
 function prisma(env, args) {
-  const result = run("npx", args, { env, timeout: 300_000 });
+  const result = run("npx", args, { env, timeout: 300_000, clear: ["DIRECT_URL", "SHADOW_DATABASE_URL"] });
   if (result.status !== 0) {
     fail(`npx ${args.join(" ")} failed: ${(result.stderr || result.stdout).trim().split("\n").slice(-3).join(" ").slice(0, 400)}`, "Run the same command by hand with DATABASE_URL from the run folder env.json and fix the first error.", "failed");
   }
@@ -81,8 +78,8 @@ module.exports = {
     const { values } = parseArgs(argv, { port: "value", "db-port": "value", "dry-run": "bool" });
     const port = Number(values.port ?? 3000);
     const dbPort = Number(values["db-port"] ?? 5678);
-    for (const [flag, value] of [["--port", port], ["--db-port", dbPort]]) {
-      if (!Number.isInteger(value) || value < 1024 || value > 65535) fail(`invalid ${flag} ${value}`, "Use a port between 1024 and 65535.", "usage", 2);
+    if (![port, dbPort].every((value) => Number.isInteger(value) && value >= 1024 && value <= 65535)) {
+      fail(`invalid port: --port ${port} --db-port ${dbPort}`, "Use ports between 1024 and 65535.", "usage", 2);
     }
     const baseUrl = `http://127.0.0.1:${port}`;
     const databaseUrl = `postgresql://verify:verify@127.0.0.1:${dbPort}/hypertask`;
@@ -96,7 +93,7 @@ module.exports = {
     };
     const plan = [
       `docker volume create ${dbName}`,
-      `docker run -d --name ${dbName} -e POSTGRES_USER=verify -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=hypertask -p ${dbPort}:5432 postgres:14.0-alpine`,
+      `docker run -d --name ${dbName} -e POSTGRES_USER=verify -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=hypertask -v ${dbName}:/var/lib/postgresql/data -p 127.0.0.1:${dbPort}:5432 postgres:14.0-alpine`,
       "npx prisma generate",
       "npx prisma migrate deploy",
       `npx next dev -p ${port}`,
@@ -105,8 +102,12 @@ module.exports = {
     ensureRunDir();
     if (run("docker", ["info"]).status !== 0) fail("Docker is not reachable on this machine", "Start Docker, then re-run ht-verify up.", "unreadable", 2);
     docker(["volume", "create", dbName], "Run ht-verify up --dry-run and check each docker command by hand.");
+    const previous = readJson(path.join(runDir(), "env.json"), {});
+    if (previous.dbPort && previous.dbPort !== dbPort) {
+      fail(`the existing ${dbName} container publishes port ${previous.dbPort}, not ${dbPort}`, `Run ht-verify down, then ht-verify up --db-port ${dbPort}.`, "refused");
+    }
     if (run("docker", ["container", "inspect", dbName]).status !== 0) {
-      docker(["run", "-d", "--name", dbName, "-e", "POSTGRES_USER=verify", "-e", "POSTGRES_PASSWORD=verify", "-e", "POSTGRES_DB=hypertask", "-p", `${dbPort}:5432`, "postgres:14.0-alpine"], `Free port ${dbPort} or pass --db-port <free port>, then re-run.`);
+      docker(["run", "-d", "--name", dbName, "-e", "POSTGRES_USER=verify", "-e", "POSTGRES_PASSWORD=verify", "-e", "POSTGRES_DB=hypertask", "-v", `${dbName}:/var/lib/postgresql/data`, "-p", `127.0.0.1:${dbPort}:5432`, "postgres:14.0-alpine"], `Free port ${dbPort} or pass --db-port <free port>, then re-run.`);
     } else if (!run("docker", ["container", "inspect", "-f", "{{.State.Running}}", dbName]).stdout.includes("true")) {
       docker(["start", dbName], `Run docker logs ${dbName} and read the first error.`);
     }
