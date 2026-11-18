@@ -2,143 +2,36 @@ import { chmod, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const envFile = process.env.CORE_SMOKE_ENV_FILE;
-if (!envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
+export function archivedSmokeProject({ runKey, ownerId, teamId }) {
+  return {
+    name: `core-smoke-archived-${runKey}`,
+    title: "Archived smoke board",
+    ownerId,
+    teamId,
+    status: "Archive",
+    sections: ["Baseline"],
+  };
+}
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const appRoot = process.env.CORE_SMOKE_APP_ROOT ?? root;
-const jiti = createRequire(path.join(appRoot, "package.json"))("jiti")(
-  import.meta.url,
-  {
-    interopDefault: true,
-    alias: { "@": path.join(appRoot, "src") },
-  },
-);
-const prisma = jiti(path.join(appRoot, "src/lib/prisma.ts"));
-const { signSession } = jiti(path.join(appRoot, "src/lib/auth/session.ts"));
-const { createMcpToken } = jiti(path.join(appRoot, "src/lib/mcp/auth/verifyJwt.ts"));
-
-const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
-const displayName = `Core smoke user ${runKey}`;
-const agentName = `Core smoke agent ${runKey}`;
-
-try {
-  const user = await prisma.user.create({
-    data: {
-      uid: `core-smoke-${runKey}`,
-      email: `core-smoke-${runKey}@example.invalid`,
-      displayName,
-      UserSetting: {
-        create: { notification: false, onboardingTourStatus: true },
-      },
-    },
-  });
-  const googleAccount = await prisma.googleAccount.create({
-    data: {
-      userId: user.id,
-      stripe_customer_id: `core-smoke-${runKey}`,
-    },
-  });
-  const team = await prisma.team.create({
-    data: {
-      title: "Core actions smoke",
-      totalSeats: 1,
-      googleAccountId: googleAccount.id,
-    },
-  });
-  const project = await prisma.project.create({
-    data: {
-      name: `core-smoke-${runKey}`,
-      title: "Core actions smoke",
-      ownerId: user.id,
-      teamId: team.id,
-      sections: ["Baseline", "Alternate"],
-    },
-  });
-  const archived = await prisma.project.create({
-    data: {
-      name: `core-smoke-archived-${runKey}`,
-      title: "Archived smoke board",
-      ownerId: user.id,
-      teamId: team.id,
-      status: "Archive",
-      sections: ["Baseline"],
-    },
-  });
-  const [sourceSection, targetSection] = await Promise.all([
-    prisma.section.create({
-      data: {
-        projectId: project.id,
-        section_title: "Baseline",
-        ranking: "A0100",
-      },
-    }),
-    prisma.section.create({
-      data: {
-        projectId: project.id,
-        section_title: "Alternate",
-        ranking: "A0200",
-      },
-    }),
-  ]);
-  const agent = await prisma.agent.create({
-    data: { displayName: agentName, userId: user.id },
-  });
-  await prisma.member.create({
-    data: { projectId: project.id, userId: user.id, agentId: agent.id },
-  });
-  const task = await prisma.task.create({
-    data: {
-      uniqueIndex: 1,
-      ticketNumber: "SMOKE-1",
-      title: "Core actions smoke fixture",
-      description: "",
-      projectId: project.id,
-      userId: user.id,
-      section: sourceSection.section_title,
-      sectionId: sourceSection.id,
-      ranking: "A0100",
-    },
-  });
-
-  const signedSession = signSession({ id: user.id, email: user.email });
-  const mcpToken = createMcpToken(user.id, user.email);
-  const legacyUser = encodeURIComponent(
-    JSON.stringify({
-      id: user.id,
-      email: user.email,
-      displayName: user.displayName,
-      photoURL: user.photoURL,
-    }),
-  );
-  const cookie = `nookies_user=${legacyUser}; ht_session=${signedSession}`;
-  const firebasePrivateKey = generateKeyPairSync("rsa", {
-    modulusLength: 2048,
-  }).privateKey.export({ type: "pkcs8", format: "pem" });
-  const firebaseServiceAccount = Buffer.from(
-    JSON.stringify({
-      project_id: `core-smoke-${runKey}`,
-      client_email: `core-smoke-${runKey}@example.invalid`,
-      private_key: firebasePrivateKey,
-    }),
-  ).toString("base64");
-  const betterAuthSecret = randomBytes(32).toString("base64url");
-  const byokCipherSecret = randomBytes(32).toString("hex");
-  if (process.env.GITHUB_ACTIONS === "true") {
-    for (const value of [
-      cookie,
-      firebaseServiceAccount,
-      betterAuthSecret,
-      byokCipherSecret,
-      mcpToken,
-    ]) {
-      console.log(`::add-mask::${value}`);
-    }
-  }
-
-  const values = {
+export function coreSmokeValues({
+  cookie,
+  mcpToken,
+  project,
+  archived,
+  task,
+  user,
+  displayName,
+  agent,
+  agentName,
+  sourceSection,
+  targetSection,
+  firebaseServiceAccount,
+  betterAuthSecret,
+  byokCipherSecret,
+}) {
+  return {
     CORE_SMOKE_COOKIE: cookie,
     CORE_SMOKE_MCP_TOKEN: mcpToken,
     CORE_SMOKE_PROJECT_ID: project.id,
@@ -154,17 +47,167 @@ try {
     BETTER_AUTH_SECRET: betterAuthSecret,
     BYOK_CIPHER_SECRET: byokCipherSecret,
   };
-  await writeFile(
-    envFile,
-    `${Object.entries(values)
-      .map(([name, value]) => `${name}=${value}`)
-      .join("\n")}\n`,
-    { flag: "wx", mode: 0o600 },
+}
+
+const launched = process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+const envFile = process.env.CORE_SMOKE_ENV_FILE;
+if (launched && !envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
+
+if (launched) await seedCoreSmoke(envFile);
+
+async function seedCoreSmoke(envFile) {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const appRoot = process.env.CORE_SMOKE_APP_ROOT ?? root;
+  const jiti = createRequire(path.join(appRoot, "package.json"))("jiti")(
+    import.meta.url,
+    {
+      interopDefault: true,
+      alias: { "@": path.join(appRoot, "src") },
+    },
   );
-  await chmod(envFile, 0o600);
-  console.log(
-    `Seeded core-actions fixture on board ${project.id}, task ${task.id}, archived board ${archived.id}.`,
-  );
-} finally {
-  await prisma.$disconnect();
+  const prisma = jiti(path.join(appRoot, "src/lib/prisma.ts"));
+  const { signSession } = jiti(path.join(appRoot, "src/lib/auth/session.ts"));
+  const { createMcpToken } = jiti(path.join(appRoot, "src/lib/mcp/auth/verifyJwt.ts"));
+
+  const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
+  const displayName = `Core smoke user ${runKey}`;
+  const agentName = `Core smoke agent ${runKey}`;
+
+  try {
+    const user = await prisma.user.create({
+      data: {
+        uid: `core-smoke-${runKey}`,
+        email: `core-smoke-${runKey}@example.invalid`,
+        displayName,
+        UserSetting: {
+          create: { notification: false, onboardingTourStatus: true },
+        },
+      },
+    });
+    const googleAccount = await prisma.googleAccount.create({
+      data: {
+        userId: user.id,
+        stripe_customer_id: `core-smoke-${runKey}`,
+      },
+    });
+    const team = await prisma.team.create({
+      data: {
+        title: "Core actions smoke",
+        totalSeats: 1,
+        googleAccountId: googleAccount.id,
+      },
+    });
+    const project = await prisma.project.create({
+      data: {
+        name: `core-smoke-${runKey}`,
+        title: "Core actions smoke",
+        ownerId: user.id,
+        teamId: team.id,
+        sections: ["Baseline", "Alternate"],
+      },
+    });
+    const archived = await prisma.project.create({
+      data: archivedSmokeProject({ runKey, ownerId: user.id, teamId: team.id }),
+    });
+    const [sourceSection, targetSection] = await Promise.all([
+      prisma.section.create({
+        data: {
+          projectId: project.id,
+          section_title: "Baseline",
+          ranking: "A0100",
+        },
+      }),
+      prisma.section.create({
+        data: {
+          projectId: project.id,
+          section_title: "Alternate",
+          ranking: "A0200",
+        },
+      }),
+    ]);
+    const agent = await prisma.agent.create({
+      data: { displayName: agentName, userId: user.id },
+    });
+    await prisma.member.create({
+      data: { projectId: project.id, userId: user.id, agentId: agent.id },
+    });
+    const task = await prisma.task.create({
+      data: {
+        uniqueIndex: 1,
+        ticketNumber: "SMOKE-1",
+        title: "Core actions smoke fixture",
+        description: "",
+        projectId: project.id,
+        userId: user.id,
+        section: sourceSection.section_title,
+        sectionId: sourceSection.id,
+        ranking: "A0100",
+      },
+    });
+
+    const signedSession = signSession({ id: user.id, email: user.email });
+    const mcpToken = createMcpToken(user.id, user.email);
+    const legacyUser = encodeURIComponent(
+      JSON.stringify({
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+      }),
+    );
+    const cookie = `nookies_user=${legacyUser}; ht_session=${signedSession}`;
+    const firebasePrivateKey = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+    }).privateKey.export({ type: "pkcs8", format: "pem" });
+    const firebaseServiceAccount = Buffer.from(
+      JSON.stringify({
+        project_id: `core-smoke-${runKey}`,
+        client_email: `core-smoke-${runKey}@example.invalid`,
+        private_key: firebasePrivateKey,
+      }),
+    ).toString("base64");
+    const betterAuthSecret = randomBytes(32).toString("base64url");
+    const byokCipherSecret = randomBytes(32).toString("hex");
+    if (process.env.GITHUB_ACTIONS === "true") {
+      for (const value of [
+        cookie,
+        firebaseServiceAccount,
+        betterAuthSecret,
+        byokCipherSecret,
+        mcpToken,
+      ]) {
+        console.log(`::add-mask::${value}`);
+      }
+    }
+
+    const values = coreSmokeValues({
+      cookie,
+      mcpToken,
+      project,
+      archived,
+      task,
+      user,
+      displayName,
+      agent,
+      agentName,
+      sourceSection,
+      targetSection,
+      firebaseServiceAccount,
+      betterAuthSecret,
+      byokCipherSecret,
+    });
+    await writeFile(
+      envFile,
+      `${Object.entries(values)
+        .map(([name, value]) => `${name}=${value}`)
+        .join("\n")}\n`,
+      { flag: "wx", mode: 0o600 },
+    );
+    await chmod(envFile, 0o600);
+    console.log(
+      `Seeded core-actions fixture on board ${project.id}, task ${task.id}, archived board ${archived.id}.`,
+    );
+  } finally {
+    await prisma.$disconnect();
+  }
 }

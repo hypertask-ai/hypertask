@@ -606,7 +606,7 @@ test("an api action passes from the preview response with no page navigation", a
   const savedToken = process.env.GH_TOKEN;
   delete process.env.GH_TOKEN;
   try {
-  const { parsePlan, runPlan, decide, buildPrompt } = await load();
+  const { parsePlan, runPlan, decide, buildPrompt, smokeDriveIds } = await load();
   const parsed = parsePlan(JSON.stringify({
     actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
     expect: [],
@@ -658,14 +658,38 @@ test("an api action passes from the preview response with no page navigation", a
     navigations: [],
   });
   assert.deepEqual(plain, [{}]);
+  const { archivedSmokeProject, coreSmokeValues } = await import("../scripts/seed-core-actions-smoke.mjs");
+  const board = archivedSmokeProject({ runKey: "run-1", ownerId: "1", teamId: "3" });
+  assert.equal(board.status, "Archive");
+  assert.equal(board.title, "Archived smoke board");
+  const seeded = coreSmokeValues({
+    cookie: "c",
+    mcpToken: "smoke-token",
+    project: { id: "4" },
+    archived: { id: "2" },
+    task: { id: "7" },
+    user: { id: "1" },
+    displayName: "Core",
+    agent: { id: "8" },
+    agentName: "Agent",
+    sourceSection: { id: "s" },
+    targetSection: { id: "t" },
+    firebaseServiceAccount: "f",
+    betterAuthSecret: "b",
+    byokCipherSecret: "k",
+  });
+  const ids = smokeDriveIds(seeded);
+  assert.equal(seeded.CORE_SMOKE_ARCHIVED_PROJECT_ID, "2");
+  assert.equal(seeded.CORE_SMOKE_PROJECT_ID, "4");
+  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token" });
   const archivedCalls = [];
   const archivedPage = {
     async screenshot() {},
     request: { async fetch(url, options) { archivedCalls.push({ url, options }); return { status: () => 400, async text() { return 'Board "Archived smoke board" is archived, so it cannot take new tickets.'; } }; } },
   };
   const archivedAction = { op: "api", method: "POST", path: "/api/tasks/createGlobally", body: { projectId: "{archived}", title: "A ticket", description: "A note" }, expectStatus: 400, expectText: "is archived, so it cannot take new tickets." };
-  const archived = await runPlan({ page: archivedPage, plan: plan([archivedAction]), ...drive, archivedProjectId: "2", navigations: [] });
-  assert.equal(archivedCalls[0].options.data.projectId, "2");
+  const archived = await runPlan({ page: archivedPage, plan: plan([archivedAction]), ...drive, archivedProjectId: ids.archivedProjectId, navigations: [] });
+  assert.equal(archivedCalls[0].options.data.projectId, ids.archivedProjectId);
   assert.equal(archived.steps[0].ok, true);
   const normalBody = [];
   await runPlan({
@@ -686,12 +710,6 @@ test("an api action passes from the preview response with no page navigation", a
   assert.equal(blocked.length, 0);
   assert.match(missingBoard.steps[0].error, /archived project id is not allowed/);
   assert.match(prompt, /\{archived\} is the seeded archived board/);
-  const { readFileSync } = require("node:fs");
-  const seed = readFileSync("scripts/seed-core-actions-smoke.mjs", "utf8");
-  const driveSource = readFileSync("scripts/pstack-verifier-drive.mjs", "utf8");
-  assert.match(seed, /status: "Archive"/);
-  assert.match(seed, /CORE_SMOKE_ARCHIVED_PROJECT_ID/);
-  assert.match(driveSource, /CORE_SMOKE_ARCHIVED_PROJECT_ID/);
   const empty = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason: "no user path", files: ["src/lib/api/task-writes/save.ts"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
   assert.equal(empty.verdict, "FAIL");
   assert.match(empty.notes, /no user path verified/);

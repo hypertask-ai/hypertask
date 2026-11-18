@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { attachGuard, cookiesFromHeader, previewDownBody, readPlan, readSmokeEnv, recordNav, runPlan, waitForPreview } from "./pstack-verifier.mjs";
+import { attachGuard, cookiesFromHeader, previewDownBody, readPlan, readSmokeEnv, recordNav, runPlan, smokeDriveIds, waitForPreview } from "./pstack-verifier.mjs";
 
 const work = process.env.WORK;
 const binding = { sha: process.env.HEAD_SHA, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
@@ -36,7 +36,7 @@ try {
     const request = response.request();
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) recordNav(navigations, response.url(), response.status());
   });
-  const run = await runPlan({ page, plan, base: ready.url, projectId: seeded.CORE_SMOKE_PROJECT_ID, archivedProjectId: seeded.CORE_SMOKE_ARCHIVED_PROJECT_ID, taskId: seeded.CORE_SMOKE_TASK_ID, bearer: seeded.CORE_SMOKE_MCP_TOKEN, shotsDir, navigations });
+  const run = await runPlan({ page, plan, base: ready.url, ...smokeDriveIds(seeded), shotsDir, navigations });
   writeEvidence({ ...binding, steps: run.steps, expects: run.expects, navigations, offOrigin });
 } finally {
   await context?.close();

@@ -99,6 +99,14 @@ export function parsePlan(text) {
     reason: String(body.reason ?? "").replace(/\s+/g, " ").trim().slice(0, 300),
   };
 }
+export function smokeDriveIds(seeded) {
+  return {
+    projectId: seeded.CORE_SMOKE_PROJECT_ID,
+    archivedProjectId: seeded.CORE_SMOKE_ARCHIVED_PROJECT_ID,
+    taskId: seeded.CORE_SMOKE_TASK_ID,
+    bearer: seeded.CORE_SMOKE_MCP_TOKEN,
+  };
+}
 export function readSmokeEnv(text) {
   const values = {};
   for (const line of String(text).split("\n")) {
