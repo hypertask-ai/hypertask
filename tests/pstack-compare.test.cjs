@@ -44,6 +44,19 @@ test("a failing step, a failing expect and a bad document status each fail a run
 test("a journey with no document response fails unless every action is an api call", () => {
   assert.equal(classifyRun(okRun({ navigations: [] })).state, "failed");
   assert.equal(classifyRun(okRun({ navigations: [], apiOnly: true })).state, "ok");
+  assert.equal(classifyRun(okRun({ navigations: [] }), { actions: [{ op: "api", method: "GET", path: "/api/health" }] }).state, "ok");
+  assert.equal(classifyRun(okRun({ navigations: [] }), { actions: [{ op: "goto", path: "/" }] }).state, "failed");
+});
+
+test("a cached api-only base run keeps its plan, so a bugfix repro cannot claim it reproduced", () => {
+  const cached = { steps: [{ action: { op: "api", method: "POST", path: "/api/mcp/tasks" }, ok: true }], expects: [], navigations: [], offOrigin: [], judged: { verdict: "PASS" } };
+  const head = { ...cached, apiOnly: true, judged: "PASS" };
+  assert.equal(classifyRun(cached).state, "ok");
+  assert.equal(classifyRun(head).state, "ok");
+  const repro = decideComparison({ journeys: [{ journey: "change:repro", base: cached, head }], bugfix: true });
+  assert.equal(repro.verdict, "FAIL");
+  assert.match(repro.notes, /does not reproduce the bug/);
+  assert.equal(decideComparison({ journeys: [{ journey: "area:api", base: cached, head }] }).verdict, "PASS");
 });
 
 test("an unrecognized judge verdict fails closed", () => {

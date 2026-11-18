@@ -944,7 +944,7 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
   for (const [index, item] of plan.journeys.entries()) {
     const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey) ?? null;
     let judged = head ? String(head.judged ?? "") : "";
-    if (head && !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head).state.match(/failed|unavailable/)) {
+    if (head && !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/)) {
       try {
         const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: head }), { key, model: picked.model, images: imagesIn(shotsDirFor(path.join(workDir(), "evidence", "shots"), index)) }, parseAnswer);
         judged = parsed.verdict;
@@ -954,7 +954,7 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
         console.log(`journey ${item.journey}: ${failureText(error, 160)}`);
       }
     }
-    journeys.push({ journey: item.journey, base: baseRunFor(plan, item.journey, baseEvidence), head: head ? { ...head, judged } : null });
+    journeys.push({ journey: item.journey, plan: item, base: baseRunFor(plan, item.journey, baseEvidence), head: head ? { ...head, judged } : null });
   }
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true });
 }

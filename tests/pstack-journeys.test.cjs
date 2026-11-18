@@ -133,6 +133,11 @@ test("a valid cache entry parses and keeps its verdict", () => {
   assert.equal(parsed.journey, "area:boards-and-views");
   assert.deepEqual(parsed.judged, { verdict: "PASS" });
   assert.equal(parsed.pageHash, sha256("page"));
+  assert.equal(parsed.apiOnly, false);
+});
+
+test("a cache entry keeps its api-only marker", () => {
+  assert.equal(parseCacheEntry(JSON.stringify({ ...entry(), apiOnly: true })).apiOnly, true);
 });
 
 test("a cache entry without its page hash is ignored", () => {
