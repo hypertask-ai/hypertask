@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: vercel-security-findings-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   findings:
     if: github.ref == 'refs/heads/production'

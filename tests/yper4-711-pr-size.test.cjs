@@ -121,7 +121,7 @@ test('the size block reddens the existing required context instead of a new chec
   assert.match(publish, /const sizeBlocked = results\.size\?\.outputs\?\.blocked === 'true';/);
   assert.match(publish, /const passed = !sizeBlocked/);
   assert.match(publish, /context: 'pr-title'/);
-  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'runner-policy']);
+  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'feature-map', 'runner-policy']);
   assert.equal(steps.find(step => step.id === 'metadata').with.script.includes('labels: pr.labels'), true);
 });
 

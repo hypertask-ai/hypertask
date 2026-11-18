@@ -3,16 +3,12 @@ name: UX Signoff Gate
 # https://app.hypertask.ai/detail/project-15/7072 shipped new decision inbox UI
 # in PR 1271 without Valentin's design yes. Visible UI needs ticket signoff
 # on a clickable wireframe; new component names need his explicit approval too.
-# Run trusted production code only. Reactions are reread on every pull request
-# event, and the hourly pass is dispatched by ux-signoff-chain.yml (YPER4-985):
-# GitHub ran the cron it used to own every four to six hours (12 of 168 runs in
-# the seven days to 2026-11-02T04:17Z), so the schedule now lives in the chain and
-# this workflow keeps only what it does itself.
+# Run trusted production code only. The hourly pass is dispatched by
+# ux-signoff-chain.yml (YPER4-985) and sweeps every open pull request. It no
+# longer runs on a pull request event (HTPR-9450): a person's sign-off is not a
+# check a machine can produce, and the verifier drives the journeys it is about.
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
-    branches: [production]
   workflow_dispatch:
 
 permissions:
@@ -21,9 +17,8 @@ permissions:
   statuses: write
 
 concurrency:
-  group: ux-signoff-gate
-  queue: max
-  cancel-in-progress: false
+  group: ux-signoff-gate-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ux-signoff-gate:
@@ -61,11 +56,4 @@ jobs:
           MCP_BASE_URL: https://app.hypertask.ai
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          EVENT_NAME: ${{ github.event_name }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ "$EVENT_NAME" = pull_request_target ]; then
-            node .github/scripts/ux-signoff-gate.mjs --reconcile --pr "$PR_NUMBER"
-          else
-            node .github/scripts/ux-signoff-gate.mjs --reconcile
-          fi
+        run: node .github/scripts/ux-signoff-gate.mjs --reconcile

@@ -72,6 +72,40 @@ test("strict mode fails while a feature is unmapped and passes when it is mapped
   assert.match(reportOnly.stdout, /^3 of 6\n/);
 });
 
+test("strict mode fails on the whole tree while one route is unmapped", (t) => {
+  const root = tree();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const gap = run(root, ["--strict"]);
+  assert.equal(gap.status, 1);
+  assert.match(gap.stdout, /^2 of 6\nUnmapped features:\n- \/inbox-extra\n/);
+});
+
+test("strict mode fails while an area has no map row and passes once the row exists", (t) => {
+  const root = tree();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  write(root, ".claude/skills/verify-qa/reference/feature-map/inbox.md", "Open `/inbox`, `/inbox-extra`, `/learn`, `/settings`, `/trash/<boardId>`.\n`demo-feature` is on.\n");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/themes.md", "Themes are listed in settings.\n");
+  const gap = run(root, ["--strict"]);
+  assert.equal(gap.status, 1);
+  assert.match(gap.stdout, /^6 of 6\nUnmapped features:\n- none\nMap rows out of sync:\n- missing row themes\.md\n$/);
+  assert.equal(run(root, []).status, 0);
+  write(root, ".claude/skills/verify-qa/reference/feature-map/rows/themes.md", "| Themes |\n");
+  const covered = run(root, ["--strict"]);
+  assert.equal(covered.status, 0);
+  assert.match(covered.stdout, /^6 of 6\nUnmapped features:\n- none\n$/);
+});
+
+test("strict mode fails while a map row has no area file", (t) => {
+  const root = tree();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  write(root, ".claude/skills/verify-qa/reference/feature-map/inbox.md", "Open `/inbox`, `/inbox-extra`, `/learn`, `/settings`, `/trash/<boardId>`.\n`demo-feature` is on.\n");
+  write(root, ".claude/skills/verify-qa/reference/feature-map/rows/orphans.md", "| Orphans |\n");
+  const gap = run(root, ["--strict"]);
+  assert.equal(gap.status, 1);
+  assert.match(gap.stdout, /Map rows out of sync:\n- missing area orphans\.md\n$/);
+  assert.equal(run(root, []).status, 0);
+});
+
 test("a dynamic route is not mapped by a shared prefix", (t) => {
   const root = tree();
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -3,6 +3,8 @@ name: verify-on-phone
 description: Any ticket touching UI, before opening the PR
 ---
 
+pstack: 0.15.43
+
 # verify-on-phone
 
 A pre-PR gate for any ticket whose change is visible on screen. Run it before `open-pr.sh`, not after.

@@ -107,7 +107,7 @@ test('trusted PR title execution scans candidate Git data and publishes failure 
     try { await new AsyncFunction('github', 'context', 'core', 'require', runner)(github, context, core, () => ({ checkPullRequest })); }
     catch (error) { outcome = 'failure'; assert.doesNotMatch(error.message, /Candidate code executed/); }
     const previous = process.env.RESULTS;
-    process.env.RESULTS = JSON.stringify({ outside: { outcome: 'success', outputs: { sha } }, size: { outcome: 'success', outputs: { sha } }, title: { outcome: 'success', outputs: { sha, title: pr.title } }, 'runner-policy': { outcome, outputs } });
+    process.env.RESULTS = JSON.stringify({ outside: { outcome: 'success', outputs: { sha } }, size: { outcome: 'success', outputs: { sha } }, title: { outcome: 'success', outputs: { sha, title: pr.title } }, 'runner-policy': { outcome, outputs }, 'feature-map': { outcome: 'success', outputs: { sha } } });
     try { await new AsyncFunction('github', 'context', 'core', 'retryGithubRequest', publish)(github, context, { ...core, setFailed() {} }, retryGithubRequest); }
     finally { if (previous === undefined) delete process.env.RESULTS; else process.env.RESULTS = previous; }
     assert.equal(posts.find(post => post.context === 'pr-title').state, state);

@@ -8,7 +8,8 @@ const { join, resolve } = require("node:path");
 const script = resolve(__dirname, "../.github/scripts/verify-required-check-settings.mjs");
 const base = "a".repeat(40);
 const head = "b".repeat(40);
-const contexts = [
+const contexts = ["pstack-verifier"];
+const oldContexts = [
   "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
   "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
 ];
@@ -21,8 +22,7 @@ const endpoints = [
 function runSettings({
   event = "pull_request", file = ".github/workflows/ci-tests.yml",
   diffStatus = 0, fetchStatus = 0, httpStatus = 200, resetSeconds = 0,
-  liveContexts = contexts, proof = null,
-  integrationFor = (context) => context === "pstack-verifier" ? 5264284 : 15368,
+  liveContexts = contexts, proof = null, integrationId = 15368, omitIntegration = false,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "required-check-settings-"));
   const log = join(directory, "calls");
@@ -107,7 +107,9 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
           target: "branch",
           conditions: { ref_name: { include: ["refs/heads/production"], exclude: [] } },
           rules: [{ type: "required_status_checks", parameters: {
-            required_status_checks: liveContexts.map((context) => ({ context, integration_id: integrationFor(context) })),
+            required_status_checks: liveContexts.map((context) => (
+              omitIntegration ? { context } : { context, integration_id: integrationId }
+            )),
           } }],
         }),
       },
@@ -123,9 +125,10 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
   }
 }
 
-function assertVerified(result, expectedEndpoints = endpoints) {
+function assertVerified(result, expectedEndpoints = endpoints, expectedContexts = contexts) {
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Required-check settings verified:/);
+  assert.match(result.output, new RegExp(`Required-check settings: the live ruleset requires ${expectedContexts.join(", ")} and nothing else`));
   assert.doesNotMatch(result.output, /skipping settings API reads|::error::|not verified this run/);
   assert.deepEqual(result.calls.filter(([tool]) => tool === "gh"),
     expectedEndpoints.map((endpoint) => ["gh", "api", "--include", endpoint]));
@@ -133,8 +136,7 @@ function assertVerified(result, expectedEndpoints = endpoints) {
     repository: "test/repo",
     defaultBranch: "production",
     rulesetId: 42,
-    contexts: [...contexts].sort(),
-    integrations: Object.fromEntries([...contexts].sort().map((context) => [context, context === "pstack-verifier" ? 5264284 : 15368])),
+    contexts: [...expectedContexts].sort(),
     verifiedAt: result.stored.verifiedAt,
   });
   assert.ok(Number.isFinite(Date.parse(result.stored.verifiedAt)), result.stored.verifiedAt);
@@ -218,7 +220,7 @@ test("403 reset beyond the wait cap keeps the last verified value instead of fai
   assertNotVerified(result);
   assert.match(result.output, /not a test failure: wait cap exceeded.*settings were not verified/);
   assert.match(result.output, new RegExp(`Last verified settings: ${verifiedAt} \\(3h \\d+m ago\\)`));
-  assert.match(result.output, /ruleset 42, required checks ai-review, app-smoke, browser-smoke, ci-tests, claude-review/);
+  assert.match(result.output, /ruleset 42, required checks pstack-verifier/);
   assert.match(result.stepSummary, /### Required-check settings: not verified this run/);
   assert.match(result.stepSummary, /An empty GitHub API allowance is not a settings failure/);
   assert.deepEqual(result.stored.contexts, [...contexts].sort());
@@ -248,14 +250,23 @@ for (const httpStatus of [404, 403]) {
   });
 }
 
-test("actions integration on pstack-verifier fails the monitor", () => {
-  const result = runSettings({ integrationFor: () => 15368 });
+test("a required check without Actions integration_id 15368 fails", () => {
+  const missing = runSettings({ omitIntegration: true });
+  assertRejected(missing);
+  assert.match(missing.output, /integration_id 15368/);
+  const other = runSettings({ integrationId: 1 });
+  assertRejected(other);
+  assert.match(other.output, /integration_id 15368/);
+});
+
+test("the old ten-context ruleset fails the monitor now the live one is verifier-only", () => {
+  const result = runSettings({ liveContexts: oldContexts });
   assertRejected(result);
-  assert.match(result.output, /pstack-verifier integration must be 5264284/);
+  assert.match(result.output, /pstack-verifier is the whole set/);
 });
 
 test("different live required contexts fail verification", () => {
-  const result = runSettings({ liveContexts: contexts.filter((context) => context !== "ci-tests") });
+  const result = runSettings({ liveContexts: oldContexts.filter((context) => context !== "ci-tests") });
   assertRejected(result);
   assert.match(result.output, /Live required checks do not match docs\/ci-policy.yml/);
   assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 3);

@@ -14,17 +14,16 @@ test("the UX chain owns the hourly schedule and the gate keeps only what it does
   assert.deepEqual(Object.keys(chain.on).sort(), ["schedule", "workflow_dispatch"]);
   assert.equal(chain.concurrency.group, "ux-signoff-chain");
   assert.equal(chain.concurrency["cancel-in-progress"], false);
-  assert.equal(gate.on.schedule, undefined);
-  assert.equal(gate.on.pull_request_target.branches[0], "production");
-  assert.ok("workflow_dispatch" in gate.on, "the chain dispatches the gate, so the gate stays dispatchable");
+  assert.deepEqual(Object.keys(gate.on), ["workflow_dispatch"], "the chain dispatches the gate, so a pull request event pays nothing (HTPR-9450)");
 });
 
 test("the wait never shares a group with the gate, so a pull-request reconciliation cannot queue behind it", () => {
   const chain = read("ux-signoff-chain.yml");
   const gate = read("ux-signoff-gate.yml");
 
-  assert.equal(gate.concurrency.group, "ux-signoff-gate");
-  assert.equal(gate.concurrency.queue, "max");
+  assert.equal(gate.concurrency.group, "ux-signoff-gate-${{ github.ref }}");
+  assert.equal(gate.concurrency.queue, undefined);
+  assert.equal(gate.concurrency["cancel-in-progress"], true);
   const jobs = Object.values(chain.jobs);
   assert.equal(jobs.length, 1);
   assert.equal(jobs.flatMap(job => Object.values(job.concurrency ?? {})).filter(group => group === "ux-signoff-gate").length, 0);

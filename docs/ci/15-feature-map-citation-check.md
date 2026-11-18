@@ -2,8 +2,9 @@
 
 The non-required `feature-map-check` job in
 [feature-map-weekly.yml](../.github/workflows/feature-map-weekly.yml) runs Mondays
-at 03:37 UTC, on manual dispatch and on production PRs changing the maintenance
-skill, feature-map or ops-map pages, or that workflow. It runs only the tiny offline fixture
+at 03:37 UTC and on manual dispatch. The pull request trigger moved into
+`skills-evals` (HTPR-9450), whose paths cover the maintenance skill, the
+feature-map and ops-map pages, this workflow and the weekly live file. It runs only the tiny offline fixture
 test and dependency-free checker with Node 24 on free GitHub-hosted Ubuntu,
 pinned actions, `contents: read`, no installs, secrets or paid AI calls.
 It checks index completeness, repository-path citations and API-route resolution;
@@ -23,3 +24,22 @@ A runner ships documentation repairs through `/ship` and executes only the liste
 live recipes with `verify-qa` after deploy. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
+
+## Feature-map change gate (HTPR-9415)
+
+A `[FEATURE]` or `[IMPROVE]` pull request that changes a source file under
+`src/app/` or `src/components/` must add or edit a feature-map page for every
+area it touches. The check runs as one lane of the static gates inside
+`ci-tests`, so it costs no extra job, and it reads the pull request diff and the
+map pages in the same checkout. Areas are the first directory under `src/app/`
+or `src/components/`; a changed page covers an area when it cites the area path
+or a changed file in it in backticks. `[BUGFIX]`, `[INFRA]`, `[REFACTOR]` and
+every other tag are exempt. A pull request that breaks the rule fails with a
+message naming
+`.claude/skills/verify-qa/reference/feature-map/` and the uncovered areas.
+
+The tag can be changed after the pull request is opened, and `ci-tests` does not
+rerun on a title edit, so the same check runs again in the title-sensitive
+`pr-guards-trusted` workflow. It reads the file list and the map pages through
+the pull request API and fails the required `pr-title` context, which keeps a
+retag from slipping past the gate.

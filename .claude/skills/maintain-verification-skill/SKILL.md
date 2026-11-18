@@ -3,7 +3,7 @@ name: maintain-verification-skill
 description: Source-only weekly feature-map upkeep, free GitHub citation checks and a runner ticket for verified drift. Adapted from pstack by Lauren Tan, MIT.
 disable-model-invocation: true
 ---
-Source: pstack 0.15.36 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, skills/maintain-verification-skill/SKILL.md. MIT License, Copyright (c) 2026 Lauren Tan. Adapted for Hypertask (YPER4-610, HYCI-205).
+Source: pstack 0.15.43 by Lauren Tan, https://github.com/cursor/plugins/tree/main/pstack, skills/maintain-verification-skill/SKILL.md. MIT License, Copyright (c) 2026 Lauren Tan. Adapted for Hypertask (YPER4-610, HYCI-205).
 
 # Maintain the verification skill
 

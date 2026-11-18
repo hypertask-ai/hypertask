@@ -224,6 +224,7 @@ test("existing create validation rejects foreign labels, users and agents before
       "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
       "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
       "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+      "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
       "@/lib/mcp/tasks/services": { validateProjectMemberIds: async (projectId, ids) => {
         assert.equal(projectId, 15);
         assert.deepEqual(ids, [42, 42]);

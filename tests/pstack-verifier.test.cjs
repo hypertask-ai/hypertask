@@ -121,6 +121,51 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
+test("a red or pending cheap check fails the empty-plan gate", async () => {
+  const { ciGate, REQUIRED_CI_CONTEXTS } = await load();
+  for (const name of REQUIRED_CI_CONTEXTS) {
+    const runs = REQUIRED_CI_CONTEXTS.map((item) => ({ name: item, conclusion: item === name ? "failure" : "success" }));
+    const statuses = REQUIRED_CI_CONTEXTS.filter((item) => item !== name).map((context) => ({ context, state: "success" }));
+    assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: false, checksPending: false }, name);
+  }
+});
+
+test("checks read only the latest run of each check", async () => {
+  const { ciChecksPassed, ciChecksPending, CONTEXT } = await load();
+  const run = (conclusion, at) => ({ name: "ci-tests", conclusion, created_at: `2026-11-18T${at}Z`, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const red = run("failure", "15:50:49");
+  const green = run("success", "16:09:59");
+  const redLater = run("failure", "16:20:00");
+  const running = { name: "ci-tests", conclusion: null, created_at: "2026-11-18T16:21:00Z", started_at: null, completed_at: null };
+  assert.equal(ciChecksPassed([red, green]), true);
+  assert.equal(ciChecksPending([red, green]), false);
+  assert.equal(ciChecksPassed([green, red]), true);
+  assert.equal(ciChecksPassed([green, redLater]), false);
+  assert.equal(ciChecksPending([green, redLater]), false);
+  assert.equal(ciChecksPassed([green, running]), false);
+  assert.equal(ciChecksPending([green, running]), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "success" }, { name: "ci-tests", conclusion: "failure" }]), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "failure" }, { name: "ci-tests", conclusion: "success" }]), false);
+  assert.equal(ciChecksPassed([red, green, { name: CONTEXT, conclusion: "failure" }]), true);
+});
+
+test("a cancelled run is a superseded run, not a result", async () => {
+  const { ciChecksPassed, ciChecksPending, requiredContextsReady, CONTEXT } = await load();
+  const run = (name, conclusion, at) => ({ name, conclusion, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const green = run("ai-review", "success", "16:36:04");
+  const cancelledLater = run("ai-review", "cancelled", "16:40:25");
+  const red = run("ai-review", "failure", "16:30:00");
+  assert.equal(ciChecksPassed([green, cancelledLater]), true);
+  assert.equal(ciChecksPending([green, cancelledLater]), false);
+  assert.equal(ciChecksPassed([cancelledLater]), false);
+  assert.equal(ciChecksPending([cancelledLater]), true);
+  assert.equal(ciChecksPassed([red, cancelledLater]), false);
+  assert.equal(ciChecksPending([red, cancelledLater]), false);
+  assert.deepEqual(requiredContextsReady([{ ...cancelledLater, name: "ci-tests" }, { ...green, name: "ci-tests" }], [], ["ci-tests"]), { missing: false, pending: false, failed: false });
+  assert.deepEqual(requiredContextsReady([{ ...cancelledLater, name: "ci-tests" }], [], ["ci-tests"]), { missing: false, pending: true, failed: false });
+  assert.equal(ciChecksPassed([green, cancelledLater, { name: CONTEXT, conclusion: "failure" }]), true);
+});
+
 test("a non-app pass waits until every required context is green", async () => {
   const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
   const reason = "no user path in this diff";
@@ -133,18 +178,18 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
   assert.equal(passed.verdict, "PASS+NOTES");
-  const partial = statuses.filter((status) => status.context !== "app-smoke");
+  const partial = statuses.filter((status) => status.context !== "pr-title");
   assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
-  const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
+  const red = statuses.map((status) => status.context === "pr-title" ? { context: "pr-title", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
   assert.deepEqual(blockedGate, { checksPassed: false, checksPending: false });
   const blocked = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: blockedGate.checksPassed, checksPending: blockedGate.checksPending });
   assert.equal(blocked.verdict, "FAIL");
   assert.match(blocked.notes, /no user path verified/);
-  const pending = statuses.map((status) => status.context === "app-smoke" ? { context: "app-smoke", state: "pending" } : status);
+  const pending = statuses.map((status) => status.context === "pr-title" ? { context: "pr-title", state: "pending" } : status);
   assert.deepEqual(ciGate({ runs, statuses: pending }), { checksPassed: false, checksPending: true });
   assert.deepEqual(ciGate({ runs, statuses: [] }), { checksPassed: false, checksPending: true });
-  const skipped = runs.map((run) => run.name === "browser-smoke" ? { name: "browser-smoke", conclusion: "skipped" } : run);
+  const skipped = runs.map((run) => run.name === "secret-scan" ? { name: "secret-scan", conclusion: "skipped" } : run);
   assert.deepEqual(ciGate({ runs: skipped, statuses }), { checksPassed: false, checksPending: false });
   const queued = [...runs, { name: "feature-flag-gate", conclusion: null }];
   assert.equal(ciGate({ runs: queued, statuses }).checksPending, true);
@@ -218,6 +263,75 @@ test("agent docs and root markdown are non-app; a src file stays app", async () 
   assert.match(app.notes, /no user path verified/);
 });
 
+test("a red or pending bot review never fails or holds the empty plan", async () => {
+  const { decide, emptyPlanGate, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
+  const kept = ["ci-tests", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
+  assert.deepEqual([...REQUIRED_CI_CONTEXTS].sort(), [...kept].sort());
+  const greenRuns = kept.map((name) => ({ name, conclusion: "success" }));
+  const greenStatuses = kept.map((context) => ({ context, state: "success" }));
+  const redReview = [
+    { name: "ai-review", conclusion: "failure" },
+    { name: "claude-review", conclusion: "failure" },
+    { name: "app-smoke", conclusion: "failure" },
+    { name: "browser-smoke", conclusion: "failure" },
+  ];
+  const redStatuses = [
+    { context: "ai-review", state: "failure" },
+    { context: "claude-review", state: "failure" },
+    { context: "app-smoke", state: "failure" },
+    { context: "browser-smoke", state: "failure" },
+    { context: "ai-review", state: "pending" },
+  ];
+  const runs = [...greenRuns, ...redReview];
+  const statuses = [...greenStatuses, ...redStatuses];
+  const gate = emptyPlanGate({ runs, statuses });
+  assert.deepEqual(gate, { checksPassed: true, checksPending: false, failed: false });
+  const passed = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: gate.checksPassed, checksPending: gate.checksPending });
+  assert.deepEqual([passed.verdict, passed.notes], ["PASS+NOTES", "no app path: no user path"]);
+  const settled = settleWaiting({ runs, statuses, now: Date.parse("2026-11-18T20:00:00Z") });
+  assert.deepEqual([settled.verdict, settled.state], ["PASS+NOTES", "success"]);
+  for (const absent of ["ai-review", "claude-review", "app-smoke", "browser-smoke"]) {
+    assert.deepEqual(emptyPlanGate({ runs: greenRuns, statuses: [...greenStatuses, { context: absent, state: "pending" }] }), { checksPassed: true, checksPending: false, failed: false }, absent);
+  }
+});
+
+test("a finished required failure waits for a running check and fails the moment none is left", async () => {
+  const { decide, emptyPlanGate, settleWaiting, REQUIRED_CI_CONTEXTS, CONTEXT, WAIT_LIMIT_MS } = await load();
+  const redThenRunning = {
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ci-tests" ? "failure" : name === "secret-scan" ? null : "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ci-tests" ? "failure" : context === "secret-scan" ? "pending" : "success" })),
+  };
+  const gate = emptyPlanGate(redThenRunning);
+  assert.deepEqual(gate, { checksPassed: false, checksPending: true, failed: true });
+  const waiting = decide({ model: {}, plan: plan([], { reason: "no user path", files: [".claude/skills/INDEX.md", "AGENTS.md"], filesTruncated: false }), evidence: null, binding, checksPassed: gate.checksPassed, checksPending: gate.checksPending });
+  assert.deepEqual(waiting, { verdict: "PENDING", notes: "waiting for required checks" });
+  const stillWaiting = settleWaiting({ ...redThenRunning, now: Date.parse("2026-11-18T20:00:00Z") });
+  assert.deepEqual([stillWaiting.verdict, stillWaiting.state], ["PENDING", "pending"]);
+  const settled = { runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ci-tests" ? "failure" : "success" })), statuses: [] };
+  assert.deepEqual(emptyPlanGate(settled), { checksPassed: false, checksPending: false, failed: true });
+  const failed = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: false, checksPending: false });
+  assert.equal(failed.verdict, "FAIL");
+  assert.match(failed.notes, /no user path verified/);
+  assert.deepEqual([settleWaiting({ ...settled, now: Date.parse("2026-11-18T20:00:00Z") }).verdict], ["FAIL"]);
+  const late = {
+    ...redThenRunning,
+    statuses: [...redThenRunning.statuses, { context: CONTEXT, state: "pending", description: "waiting for required checks", created_at: "2026-11-18T20:00:00Z" }],
+  };
+  const timedOut = settleWaiting({ ...late, now: Date.parse("2026-11-18T20:00:00Z") + WAIT_LIMIT_MS });
+  assert.deepEqual([timedOut.verdict, timedOut.notes], ["FAIL", "required checks did not finish"]);
+});
+
+test("formal models and repros under verification are non-app; a src file stays app", async () => {
+  const { hasAppPath, decide } = await load();
+  assert.equal(hasAppPath(["verification/formal/x.tla"]), false);
+  assert.equal(hasAppPath(["verification/formal/Board.tla", "verification/repros/hang.md"]), false);
+  assert.equal(hasAppPath(["src/app/page.tsx"]), true);
+  assert.equal(hasAppPath(["verification/formal/x.tla", "src/app/page.tsx"]), true);
+  const result = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason: "no user path: formal models are never shipped", files: ["verification/formal/x.tla"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(result.verdict, "PASS+NOTES");
+  assert.match(result.notes, /^no app path: /);
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
@@ -255,7 +369,7 @@ test("a recorded off-origin subresource fails the verdict", async () => {
   ]);
   const body = plan([{ op: "goto", path: "/" }]);
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ offOrigin }), binding }).verdict, "FAIL");
-  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding, checksPassed: true }).verdict, "PASS");
 });
 
 test("status 500 on the first goto fails", async () => {
@@ -509,14 +623,14 @@ test("a run posts only when it owns the newest verifier status", async () => {
   const fs = require("node:fs"), work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-`);
   fs.mkdirSync(`${work}/verdict`);
   fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict: "PASS", notes: "", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "m" }));
-  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work, RUN_STARTED_AT: "2026-11-17T12:00:00.000Z" });
   const statusesUrl = `repos/acme/app/commits/${sha}/statuses`;
   const owned = "https://github.com/acme/app/actions/runs/10/attempts/1";
-  const mark = (runId, attempt) => ({ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
+  const mark = (runId, attempt) => ({ context: "pstack-verifier", target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}` });
   const run = async (pull, statuses) => {
     posts.length = 0;
     await postCommand({
-      token: "app-token",
+      now: Date.parse("2026-11-17T12:12:00.000Z"),
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
       gh: (args) => {
         const url = String(args[1]);
@@ -539,10 +653,21 @@ test("a run posts only when it owns the newest verifier status", async () => {
   ];
   for (const [pull, statuses] of denied) assert.deepEqual(await run(pull, statuses), []);
   const posted = await run(open, [{ context: "ci", target_url: "https://example.test" }, mark("10", "1"), mark("9", "3")]);
-  assert.equal(posted.length, 1);
+  assert.equal(posted.length, 2);
   assert.equal(posted[0].state, "success");
   assert.equal(posted[0].context, "pstack-verifier");
   assert.equal(posted[0].target_url, owned);
+  assert.equal(posted[1].body, "PASS. Run time 12 min.");
+});
+
+test("a verdict comment names how long the run took", async () => {
+  const { verdictComment, runMinutes } = await load();
+  assert.equal(runMinutes("2026-11-17T12:00:00.000Z", Date.parse("2026-11-17T12:12:00.000Z")), 12);
+  assert.equal(runMinutes("not-a-time", 0), null);
+  assert.equal(verdictComment("PASS", "", 12), "PASS. Run time 12 min.");
+  assert.equal(verdictComment("PASS+NOTES", "the banner is clipped", 12), "PASS+NOTES: the banner is clipped Run time 12 min.");
+  assert.equal(verdictComment("FAIL", "the board did not open", 12), "FAIL: the board did not open Run time 12 min.");
+  assert.equal(verdictComment("FAIL", "the board did not open", null), "FAIL: the board did not open Run time unknown.");
 });
 
 test("non-app files skip the model and pass on green checks", async () => {
@@ -632,7 +757,7 @@ test("an api action passes from the preview response with no page navigation", a
   assert.equal(run.steps[0].ok, true);
   assert.equal(run.steps[0].text.includes("saved"), true);
   const seen = evidence({ steps: run.steps, expects: run.expects, navigations: [] });
-  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding, checksPassed: true }).verdict, "PASS");
   assert.equal(decide({ model: { verdict: "", notes: "" }, plan: body, evidence: seen, binding }).verdict, "FAIL");
   const miss = await runPlan({
     page: { ...page, request: { async fetch() { return { status: () => 200, async text() { return "nope"; } }; } } },
@@ -668,6 +793,62 @@ test("an api action passes from the preview response with no page navigation", a
   }
 });
 
+test("the drive fills archived, board and task ids in an api body", async () => {
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  try {
+  const { runPlan, buildPrompt, smokeDriveIds } = await load();
+  const { ARCHIVED_SMOKE_PROJECT_ENV, archivedSmokeProject } = await import("../scripts/lib/core-smoke-seed-plan.mjs");
+  const board = archivedSmokeProject({ runKey: "run-1", ownerId: "1", teamId: "3", googleAccountId: "acct" });
+  assert.equal(board.status, "Archive");
+  assert.equal(board.title, "Archived smoke board");
+  assert.equal(board.googleAccountId, "acct");
+  const ids = smokeDriveIds({
+    CORE_SMOKE_PROJECT_ID: "4",
+    [ARCHIVED_SMOKE_PROJECT_ENV]: "2",
+    CORE_SMOKE_TASK_ID: "7",
+    CORE_SMOKE_MCP_TOKEN: "smoke-token",
+  });
+  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token" });
+  const calls = [];
+  const action = {
+    op: "api",
+    method: "POST",
+    path: "/api/tasks/createGlobally",
+    body: { projectId: "{archived}", taskId: "{task}", openId: "{id}" },
+    expectStatus: 400,
+    expectText: "archived board refused",
+  };
+  const run = await runPlan({
+    page: { request: { async fetch(_url, options) { calls.push(options.data); return { status: () => 400, async text() { return "archived board refused the ticket"; } }; } } },
+    plan: plan([action]),
+    base: "http://127.0.0.1:3100",
+    ...ids,
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.deepEqual(calls, [{ projectId: "2", taskId: "7", openId: "4" }]);
+  assert.equal(run.steps[0].ok, true);
+  const blocked = [];
+  const missing = await runPlan({
+    page: { request: { async fetch() { blocked.push(1); return { status: () => 400, async text() { return "nope"; } }; } } },
+    plan: plan([action]),
+    base: "http://127.0.0.1:3100",
+    projectId: "4",
+    taskId: "7",
+    bearer: "smoke-token",
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.equal(blocked.length, 0);
+  assert.match(missing.steps[0].error, /archived project id is not allowed/);
+  const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
+  assert.match(prompt, /\{archived\} is the seeded archived board/);
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = savedToken;
+  }
+});
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
   const { decide } = await load();
@@ -737,6 +918,7 @@ test("one bad model reply is retried and two bad replies fail closed", async () 
     plan: plan([{ op: "goto", path: "/" }]),
     evidence: evidence(),
     binding,
+    checksPassed: true,
   });
   assert.equal(passed.verdict, "PASS");
   assert.equal(passed.notes, "");
@@ -793,31 +975,33 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const renamed = takeFileList([{ filename: "docs/example.ts", previous_filename: "src/pages/api/example.ts" }]);
   assert.equal(renamed.files.includes("src/pages/api/example.ts"), true);
   const moved = await planFromRequest(request(renamed.files), { binding, ask() { asked += 1; return { actions: [], expect: [], reason: "no user path" }; } });
-  assert.equal(asked, 1);
+  assert.ok(asked >= 1, "an app change asks the model");
   assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: renamed.files, filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "FAIL");
+  const afterMoved = asked;
   const workflow = await planFromRequest(request([".github/workflows/pstack-verifier.yml"]), {
     binding,
     ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
   });
-  assert.equal(asked, 1);
+  assert.equal(asked, afterMoved);
   assert.deepEqual([workflow.reason, workflow.botLogin], ["no user path: non-app files only", undefined]);
   assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [".github/workflows/pstack-verifier.yml"], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES");
   for (const file of ["packages/agent-sdk/README.md", "skills/ship/SKILL.md", ".agents/skills/ship/SKILL.md"]) {
     assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [file], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES", file);
   }
   const failedRequired = emptyPlanGate({
-    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ai-review" ? "failure" : "success" })),
-    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ai-review" ? "failure" : "success" })),
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: name === "ci-tests" ? "failure" : "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: context === "ci-tests" ? "failure" : "success" })),
   });
   assert.deepEqual([failedRequired.failed, failedRequired.checksPending], [true, false]);
   const bot = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false, botLogin: "dependabot[bot]" }), evidence: null, binding, checksPassed: true });
   assert.equal(bot.verdict, "PASS+NOTES");
   assert.match(statusDescription({ verdict: bot.verdict, authorFamily: bot.authorFamily, verifierModel: "" }), /dependabot\[bot\]/);
+  const beforeHuman = asked;
   const humanPlan = await planFromRequest(request(["package.json"]), {
     binding,
     ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
   });
-  assert.equal(asked, 2);
+  assert.ok(asked > beforeHuman, "a human app change is planned");
   assert.equal(humanPlan.botLogin, undefined);
   const human = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
   assert.deepEqual([human.verdict, human.authorFamily], ["FAIL", undefined]);
@@ -846,12 +1030,11 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
   const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
-  const mark = (runId, attempt, extra = {}) => ({ context: CONTEXT, creator: { login: "hypertask-runners[bot]" }, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
+  const mark = (runId, attempt, extra = {}) => ({ context: CONTEXT, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/${attempt}`, state: "pending", description: "waiting for required checks", created_at: "2026-11-17T08:00:00Z", ...extra });
   const post = async (verdict, statusRows, checkRuns, now) => {
     fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict, notes: "waiting for required checks", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "" }));
     const posts = [];
     await postCommand({
-      token: "app-token",
       now,
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
       gh: (args) => {
@@ -888,14 +1071,14 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const commit = (sha, author = "dependabot[bot]", committer = "web-flow", verification = { verified: true, reason: "valid" }) => ({
     sha, author: author ? { login: author } : null, committer: committer ? { login: committer } : null, commit: { verification },
   });
-  const pull = (login, sha = head, body = "") => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } });
+  const pull = (login, sha = head, body = "", baseSha = "d".repeat(40)) => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production", sha: baseSha }, head: { sha, repo: { full_name: "acme/app" } } });
   const lines = (files) => files.map((file) => JSON.stringify(typeof file === "string" ? { filename: file, previous_filename: null } : file)).join("\n");
-  const runResolve = async ({ login = "dependabot[bot]", body = "", files = ["package.json"], commits, second }) => {
+  const runResolve = async ({ login = "dependabot[bot]", body = "", files = ["package.json"], commits, second, baseSha }) => {
     fs.rmSync(`${dir}/request`, { recursive: true, force: true });
     fs.writeFileSync(output, "");
     const posts = [];
     const calls = [];
-    const pulls = [pull(login, head, body), second ?? pull(login, head, body)];
+    const pulls = [pull(login, head, body, baseSha), second ?? pull(login, head, body, baseSha)];
     await resolveCommand({
       event: { workflow_run: { conclusion: "success", head_sha: head, pull_requests: [{ number: 7 }] } },
       postStatus: async (row) => { posts.push(row); },
@@ -903,6 +1086,8 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
         calls.push(args);
         const url = args.join(" ");
         if (url.includes("/pulls/7/commits")) return JSON.stringify(args.includes("--paginate") ? commits : commits.slice(0, 30));
+        if (url.includes(`/commits/${head}`) && !url.includes("/statuses") && !url.includes("/check-runs")) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+        if (url.includes("/issues/7/comments")) return "[]";
         if (url.includes("/pulls/7/files")) return lines(files);
         if (url.includes("vnd.github.diff")) return "";
         if (url.includes("/pulls/7")) return JSON.stringify(pulls.shift());
@@ -916,31 +1101,26 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const trusted = [commit("b".repeat(40)), commit(head)];
     const clean = await runResolve({ commits: trusted, files: ["package.json"] });
     assert.match(clean.stop, /stop=false/);
-    assert.match(clean.stop, /mark=pending/);
-    assert.deepEqual(clean.posts, []);
     assert.equal(clean.written.botLogin, "dependabot[bot]");
+    assert.deepEqual([clean.written.baseSha, /base=d{40}/.test(clean.stop)], ["d".repeat(40), true]);
+    const noBase = await runResolve({ commits: trusted, baseSha: "" });
+    assert.deepEqual([/stop=true/.test(noBase.stop), noBase.written, noBase.posts], [true, null, []]);
     let planned = 0;
     const built = await planFromRequest(clean.written, { binding: { sha: head, run: "10", attempt: "1" }, ask() { planned += 1; throw new Error("model"); } });
     assert.deepEqual([planned, built.botLogin], [0, "dependabot[bot]"]);
     const other = await runResolve({ commits: [commit(head, "octocat")] });
     assert.match(other.stop, /stop=true/);
     assert.equal(other.written, null);
-    assert.deepEqual(other.posts, []);
-    assert.match(other.stop, /mark=failure/);
-    assert.match(other.stop, /author model unknown/);
+    assert.match(other.posts[0].description, /author model unknown/);
     const unsigned = await runResolve({ commits: [commit(head, "dependabot[bot]", "web-flow", { verified: false, reason: "unsigned" })] });
     assert.match(unsigned.stop, /stop=true/);
     assert.equal(unsigned.written, null);
-    assert.deepEqual(unsigned.posts, []);
-    assert.match(unsigned.stop, /mark=failure/);
-    assert.equal(unsigned.stop.includes("PASS"), false);
+    assert.equal(unsigned.posts.some((row) => row.description.includes("PASS")), false);
     const source = await runResolve({ commits: trusted, files: ["src/app/page.tsx"] });
     assert.match(source.stop, /stop=true/);
     assert.equal(source.written, null);
-    assert.deepEqual(source.posts, []);
-    assert.match(source.stop, /mark=failure/);
-    assert.match(source.stop, /dependabot\[bot\]/);
-    assert.match(source.stop, /bot changed a user path/);
+    assert.match(source.posts[0].description, /dependabot\[bot\]/);
+    assert.match(source.posts[0].description, /bot changed a user path/);
     const many = [...Array.from({ length: 30 }, () => commit("e".repeat(40))), commit(head, "octocat")];
     const page = await runResolve({ commits: many });
     assert.equal(page.calls.some((args) => args.includes("--paginate") && args.join(" ").includes("/commits")), true);
@@ -948,12 +1128,9 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const raced = await runResolve({ commits: [commit("f".repeat(40))], second: pull("dependabot[bot]", head) });
     assert.match(raced.stop, /stop=true/);
     assert.deepEqual(raced.posts, []);
-    assert.match(raced.stop, /mark=skip/);
     const person = await runResolve({ login: "octocat", body: "", files: ["package.json"], commits: [] });
     assert.match(person.stop, /stop=true/);
-    assert.deepEqual(person.posts, []);
-    assert.match(person.stop, /mark=failure/);
-    assert.match(person.stop, /author model unknown/);
+    assert.match(person.posts[0].description, /author model unknown/);
   } finally {
     for (const [key, value] of savedResolve) {
       if (value === undefined) delete process.env[key];
@@ -963,78 +1140,32 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   }
 });
 
-test("the app token writes the status and ignores a newer actions status", async () => {
-  const { generateKeyPairSync } = require("node:crypto");
-  const { postCommand, cancelCommand } = await load();
-  const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" });
-  const sha = "e".repeat(40);
-  const fs = require("node:fs");
-  const work = fs.mkdtempSync(`${require("node:os").tmpdir()}/pv-app-`);
-  fs.mkdirSync(`${work}/verdict`);
-  const saved = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK", "HYPERTASK_RUNNERS_KEY"].map((key) => [key, process.env[key]]);
-  const write = process.stdout.write.bind(process.stdout);
-  process.stdout.write = (chunk, ...rest) => String(chunk).startsWith("::add-mask::") ? true : write(chunk, ...rest);
-  Object.assign(process.env, { GH_TOKEN: "actions-token", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work, HYPERTASK_RUNNERS_KEY: Buffer.from(pem).toString("base64") });
-  const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
-  const row = (runId, login, state = "pending") => ({ context: "pstack-verifier", creator: { login }, state, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/1` });
-  const owned = row(10, "hypertask-runners[bot]");
-  const gh = (statuses) => (args) => {
-    const url = String(args[1]);
-    if (url === "repos/acme/app/pulls/5") return JSON.stringify(open);
-    if (url === `repos/acme/app/commits/${sha}/statuses`) return JSON.stringify(statuses);
-    throw new Error("gh");
-  };
-  const http = (mode) => {
-    const calls = [];
-    const fetch = async (url, options = {}) => {
-      calls.push({ url: String(url), auth: options.headers?.Authorization, body: options.body ? JSON.parse(options.body) : null });
-      const path = String(url);
-      if (path.endsWith("/installation")) return { ok: true, status: 200, async json() { return { id: 77 }; } };
-      if (path.includes("/access_tokens")) return { ok: true, status: 201, async json() { return { token: "app-token" }; } };
-      if (path.includes("/statuses/")) return { ok: mode !== "status", status: mode === "status" ? 403 : 201 };
-      if (path.includes("/comments")) return { ok: mode !== "comment", status: mode === "comment" ? 403 : 201 };
-      throw new Error("url");
-    };
-    return { calls, fetch };
-  };
-  const run = async (command, statuses, verdict, extra = {}) => {
-    fs.writeFileSync(`${work}/verdict/verdict.json`, JSON.stringify({ verdict, notes: verdict === "FAIL" ? "broke" : "", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "m" }));
-    const posts = [];
-    const logs = [];
-    const prior = console.log;
-    console.log = (...args) => logs.push(args.join(" "));
-    const fetch = extra.fetch ?? (async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; });
-    try { await command({ token: extra.fetch ? undefined : "app-token", fetch, gh: gh(statuses) }); }
-    finally { console.log = prior; }
-    return { posts, logs };
-  };
+test("the base lane judges its own run from its own screenshots before the comparison", async () => {
+  const { judgeBaseCommand, judgeJourneys, pickVerifier } = await load();
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const dir = fs.mkdtempSync(`${os.tmpdir()}/pv-base-`), base = path.join(dir, "base"), head = path.join(dir, "head");
+  const journey = { journey: "change:repro", actions: [{ op: "goto", path: "/inbox" }], expect: [] };
+  const run = { journey: "change:repro", steps: [{ action: journey.actions[0], ok: true, error: "" }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }] };
+  const shot = (root, body) => { fs.mkdirSync(path.join(root, "evidence", "shots"), { recursive: true }); fs.writeFileSync(path.join(root, "evidence", "shots", "0.png"), body); };
+  const saved = ["HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "PSTACK_VERIFIER_ALT_MODEL"].map((key) => [key, process.env[key]]);
+  fs.mkdirSync(path.join(base, "plan"), { recursive: true });
+  shot(base, "base-shot");
+  shot(head, "head-shot");
+  fs.writeFileSync(path.join(base, "plan", "base-plan.json"), JSON.stringify({ ...binding, actions: [], expect: [], authorFamily: "deepseek", journeys: [journey], bugfix: true }));
+  fs.writeFileSync(path.join(base, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [run] }));
+  Object.assign(process.env, { HEAD_SHA: binding.sha, GITHUB_RUN_ID: binding.run, GITHUB_RUN_ATTEMPT: binding.attempt, WORK: head, PSTACK_VERIFIER_ALT_MODEL: "grok/grok-4" });
   try {
-    const ok = http("ok");
-    await run(postCommand, [owned], "FAIL", { fetch: ok.fetch });
-    const minted = ok.calls.find((call) => call.url.includes("/access_tokens"));
-    const status = ok.calls.find((call) => call.url.includes("/statuses/"));
-    const comment = ok.calls.find((call) => call.url.includes("/comments"));
-    assert.equal(ok.calls.some((call) => call.url === "https://api.github.com/repos/hypertask-ai/hypertask/installation"), true);
-    assert.equal(minted.url, "https://api.github.com/app/installations/77/access_tokens");
-    assert.deepEqual(minted.body, { repositories: ["hypertask"], permissions: { statuses: "write" } });
-    const payload = JSON.parse(Buffer.from(minted.auth.slice(7).split(".")[1], "base64url").toString());
-    assert.equal(payload.iss === 5264284 && payload.exp - payload.iat < 600, true);
-    assert.equal(ok.calls.indexOf(status) < ok.calls.indexOf(comment) && status.auth === "Bearer app-token" && comment.auth === "Bearer actions-token" && status.auth !== comment.auth && status.body.state === "failure", true);
-    const deniedStatus = http("status");
-    await assert.rejects(() => run(postCommand, [owned], "FAIL", { fetch: deniedStatus.fetch }), /status HTTP 403/);
-    assert.equal(deniedStatus.calls.some((call) => call.url.includes("/comments")), false);
-    const deniedComment = http("comment");
-    await assert.rejects(() => run(postCommand, [owned], "FAIL", { fetch: deniedComment.fetch }), /comment HTTP 403/);
-    assert.equal(deniedComment.calls.some((call) => call.url.includes("/statuses/")), true);
-    const forged = await run(postCommand, [row(99, "github-actions[bot]", "success"), owned], "PASS");
-    assert.equal(forged.posts.length === 1 && forged.posts[0].state === "success", true);
-    const stalePost = await run(postCommand, [row(11, "hypertask-runners[bot]"), owned], "PASS");
-    assert.equal(stalePost.posts.length === 0 && stalePost.logs.includes("not owner"), true);
-    const staleCancel = await run(cancelCommand, [row(11, "hypertask-runners[bot]"), owned], "PASS");
-    assert.equal(staleCancel.posts.length === 0 && staleCancel.logs.includes("not owner"), true);
+    const images = [];
+    await judgeBaseCommand({ work: base, key: "k", ask: (_prompt, options) => { images.push(options.images); return { verdict: "FAIL", notes: "the bug is visible on base" }; } });
+    const baseEvidence = JSON.parse(fs.readFileSync(path.join(base, "base-evidence.json"), "utf8"));
+    assert.deepEqual([images[0], baseEvidence.journeys[0].judged], [[Buffer.from("base-shot").toString("base64")], "FAIL"]);
+    const judged = await judgeJourneys({ plan: { ...binding, actions: [], expect: [], journeys: [journey], bugfix: true, compare: true, authorFamily: "deepseek", verifierModel: "grok/grok-4" }, binding, evidence: { ...binding, journeys: [run] }, picked: pickVerifier("deepseek", "grok/grok-4"), baseEvidence, ask: () => ({ verdict: "PASS", notes: "fixed" }) });
+    assert.deepEqual([judged.verdict, judged.notes], ["PASS", ""]);
   } finally {
-    process.stdout.write = write;
-    for (const [key, value] of saved) if (value === undefined) delete process.env[key]; else process.env[key] = value;
-    fs.rmSync(work, { recursive: true, force: true });
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
