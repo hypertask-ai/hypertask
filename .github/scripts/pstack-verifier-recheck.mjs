@@ -20,8 +20,12 @@ export function exactWaiting(status) {
   return !!status && status.context === "pstack-verifier" && status.state === "pending" && status.description === WAITING;
 }
 
-export function shouldRerun(status, run) {
-  return exactWaiting(status) && runIsVerifier(run);
+export function exactFailed(status) {
+  return !!status && status.context === "pstack-verifier" && status.state === "failure";
+}
+
+export function shouldRerun(status, run, recovered = false) {
+  return runIsVerifier(run) && (exactWaiting(status) || (recovered && exactFailed(status)));
 }
 
 export function workflowRunSha(event) {
@@ -70,16 +74,16 @@ function runIdFromUrl(url) {
   return match ? match[1] : "";
 }
 
-export function rerunRequest(repo, sha, call) {
+export function rerunRequest(repo, sha, call, recovered = false) {
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/statuses`]));
   const status = newestVerifierStatus(statuses);
-  if (!exactWaiting(status)) {
-    console.log(`skip ${sha}: description is not waiting for required checks`);
+  if (!exactWaiting(status) && !(recovered && exactFailed(status))) {
+    console.log(`skip ${sha}: the verifier status is neither waiting nor failed`);
     return false;
   }
   const runId = runIdFromUrl(status.target_url);
   const run = runId ? JSON.parse(call(["api", `repos/${repo}/actions/runs/${runId}`])) : null;
-  if (!shouldRerun(status, run)) {
+  if (!shouldRerun(status, run, recovered)) {
     console.log(`skip ${sha}: foreign target_url`);
     return false;
   }
@@ -128,7 +132,7 @@ async function main() {
       console.log("skip: workflow_run does not carry a candidate sha");
       return;
     }
-    rerunRequest(repo, sha, gh);
+    rerunRequest(repo, sha, gh, event.workflow_run.conclusion === "success");
     return;
   }
   if (eventName === "schedule" || eventName === "workflow_dispatch") {

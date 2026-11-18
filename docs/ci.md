@@ -124,9 +124,7 @@ App Smoke falls from four to two jobs.
 Skipped jobs and synthetic check contexts are excluded.
 Path-specific gates can add jobs on both sides.
 
-PRs keep cheap checks and the independent verifier.
-The ruleset requires only `pstack-verifier`.
-The verifier refuses a pass while a cheap check is red or missing.
+PRs keep cheap checks and the independent verifier; the ruleset requires only `pstack-verifier`, and a red or missing cheap check never reaches a pass.
 
 Everything that drives the UI left the pull request:
 
@@ -137,8 +135,8 @@ Everything that drives the UI left the pull request:
 - PR `visual-compare` stays dormant behind skipped `browser-build`.
   `visual-regression.yml` owns the nightly screen comparison.
   Production pushes and manual comparisons remain available.
-- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
-  request gets a status stub.
+- App Smoke drives production nightly (03:47 UTC) and on dispatch, and no pull
+  request publishes its status.
   `app-smoke-request.yml` is dispatch-only now.
   Manual dispatch retains the validated smoke path.
 - `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
@@ -150,8 +148,7 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Cheap checks still gate the verifier through `verifier_waits_for`, so a red one
-never reaches a pass. Automerge waits for the same context.
+Cheap checks still gate the verifier through `verifier_waits_for`; automerge waits for the same context.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the
@@ -335,11 +332,10 @@ on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
 checkout always uses `production`. It verifies the default branch, exactly one
 active `production-required-checks` ruleset, its branch target and production
 include/exclude conditions, and the exact required-context set (without
-aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the live ruleset
-already carries exactly that one context, so the monitor requires it and rejects
-any other set. Drift
-still fails the monitor; this is not a required PR context. Detection can lag
-until the next hourly run, plus GitHub scheduling and any rate-limit wait.
+aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the monitor
+requires exactly it. Drift and unreadable settings still fail the monitor; this
+is not a required PR context. Detection lags until the next hourly run, plus
+scheduling and any rate-limit wait.
 
 CI Tests no longer reads repository settings on PRs or production pushes.
 Its optional review precheck reads commit statuses once. Read failures warn
@@ -844,7 +840,7 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-The contract is asserted by a step of the `browser-smoke` summary (HYCI-108; it was a
+The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
 separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
 because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
 that half and the required `browser-smoke` summary over it, and the assertion step proves the
@@ -1122,12 +1118,11 @@ The decision, for the two alternatives HYCI-49 offers:
   8 percent saving against a lost reload signal is not a trade to take blind;
   revisit only with a run proving a shorter window still fails the same way.
 
-Required contexts did not change then: `browser-smoke` was the required summary,
+Required contexts do not change: `browser-smoke` stays the required summary,
 `browser-smoke-desktop` and `browser-smoke-mobile` keep their names (HYCI-57 gave
 `browser-smoke-mobile` only the phone pages and split the rest into
 `browser-smoke-matrix` and `browser-smoke-flags`), and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
-config line, so the undo is that there is nothing to undo. HTPR-9450 later moved
-both lanes to nightly and made `pstack-verifier` the only required context.
+config line, so the undo is that there is nothing to undo.
 
 ## GitHub completion notifications (YPER4-881)
 

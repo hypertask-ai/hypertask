@@ -59,9 +59,7 @@ App Smoke falls from four to two jobs.
 Skipped jobs and synthetic check contexts are excluded.
 Path-specific gates can add jobs on both sides.
 
-PRs keep cheap checks and the independent verifier.
-The ruleset requires only `pstack-verifier`.
-The verifier refuses a pass while a cheap check is red or missing.
+PRs keep cheap checks and the independent verifier; the ruleset requires only `pstack-verifier`, and a red or missing cheap check never reaches a pass.
 
 Everything that drives the UI left the pull request:
 
@@ -72,8 +70,8 @@ Everything that drives the UI left the pull request:
 - PR `visual-compare` stays dormant behind skipped `browser-build`.
   `visual-regression.yml` owns the nightly screen comparison.
   Production pushes and manual comparisons remain available.
-- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
-  request gets a status stub.
+- App Smoke drives production nightly (03:47 UTC) and on dispatch, and no pull
+  request publishes its status.
   `app-smoke-request.yml` is dispatch-only now.
   Manual dispatch retains the validated smoke path.
 - `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
@@ -85,8 +83,7 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Cheap checks still gate the verifier through `verifier_waits_for`, so a red one
-never reaches a pass. Automerge waits for the same context.
+Cheap checks still gate the verifier through `verifier_waits_for`; automerge waits for the same context.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the

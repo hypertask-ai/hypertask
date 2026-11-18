@@ -6,11 +6,10 @@ on free GitHub-hosted runners at minute 17. Manual dispatch is production-only;
 checkout always uses `production`. It verifies the default branch, exactly one
 active `production-required-checks` ruleset, its branch target and production
 include/exclude conditions, and the exact required-context set (without
-aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the live ruleset
-already carries exactly that one context, so the monitor requires it and rejects
-any other set. Drift
-still fails the monitor; this is not a required PR context. Detection can lag
-until the next hourly run, plus GitHub scheduling and any rate-limit wait.
+aliasing). HTPR-9450 makes `pstack-verifier` that whole set, and the monitor
+requires exactly it. Drift and unreadable settings still fail the monitor; this
+is not a required PR context. Detection lags until the next hourly run, plus
+scheduling and any rate-limit wait.
 
 CI Tests no longer reads repository settings on PRs or production pushes.
 Its optional review precheck reads commit statuses once. Read failures warn

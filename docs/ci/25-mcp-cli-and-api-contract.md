@@ -1,6 +1,6 @@
 ## MCP, CLI and API contract
 
-The contract is asserted by a step of the `browser-smoke` summary (HYCI-108; it was a
+The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
 separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
 because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
 that half and the required `browser-smoke` summary over it, and the assertion step proves the
