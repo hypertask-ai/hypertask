@@ -97,6 +97,42 @@ jobs:
         with:
           script: |
             await require('./.github/scripts/pr-title.cjs')({ github, context, core, pr: JSON.parse(process.env.PR_METADATA) });
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        id: feature-map
+        if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
+        env:
+          PR_METADATA: ${{ steps.metadata.outputs.pr }}
+        with:
+          script: |
+            const pr = JSON.parse(process.env.PR_METADATA);
+            const { evaluate, formatFailure, mapFolder, enforcedTags, tagOf } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/feature-map-change-guard.mjs`);
+            if (!enforcedTags.includes(tagOf(pr.title))) {
+              core.info(`Skipping feature map check; the title tag is not enforced.`);
+              core.setOutput('sha', pr.head.sha);
+              return;
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo, pull_number: pr.number, per_page: 100,
+            });
+            const changed = files.map(file => ({ path: file.filename, status: file.status }));
+            core.setOutput('sha', pr.head.sha);
+            if (files.length !== pr.changed_files) {
+              core.setFailed(`The changed-file list is incomplete (${files.length} of ${pr.changed_files}); the feature map cannot be checked.`);
+              return;
+            }
+            const pages = changed.filter(file => file.status !== 'removed' && file.path.startsWith(`${mapFolder}/`) && file.path.endsWith('.md'));
+            const texts = [];
+            for (const page of pages) {
+              const { data } = await github.rest.repos.getContent({ ...context.repo, path: page.path, ref: pr.head.sha });
+              texts.push({ ...page, text: Buffer.from(data.content, 'base64').toString('utf8') });
+            }
+            const changedFiles = files.flatMap(file => file.previous_filename && file.previous_filename !== file.filename ? [file.filename, file.previous_filename] : [file.filename]);
+            const result = evaluate({ title: pr.title, changedFiles, mapPages: texts });
+            if (!result.ok) {
+              core.setFailed(formatFailure(result));
+              return;
+            }
+            core.info('The feature map covers every user-facing area this pull request changes.');
       - name: Install the trusted workflow parser
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
         run: npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
@@ -134,7 +170,7 @@ jobs:
             const evaluated = JSON.parse(results.metadata?.outputs?.pr || '{}');
             const labelNames = labels => (labels ?? []).map(label => label.name).sort().join(',');
             const sizeBlocked = results.size?.outputs?.blocked === 'true';
-            const passed = !sizeBlocked && ['outside', 'title', 'runner-policy'].every(id =>
+            const passed = !sizeBlocked && ['outside', 'title', 'runner-policy', 'feature-map'].every(id =>
               results[id]?.outcome === 'success' && results[id]?.outputs?.sha === eventPr.head.sha);
             await retryGithubRequest(async () => {
               const { data: current } = await github.rest.pulls.get({
