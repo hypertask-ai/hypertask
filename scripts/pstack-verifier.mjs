@@ -643,6 +643,35 @@ export async function runPlan({ page, plan, base, projectId, taskId, bearer, arc
 export function shotsDirFor(shotsRoot, index) {
   return index === 0 ? shotsRoot : path.join(shotsRoot, String(index));
 }
+export function cacheEntryFor({ plan, run, baseSha, mapSha }) {
+  const item = plan.journeys.find((entry) => entry.journey === run.journey);
+  if (!item || !run) return null;
+  return {
+    baseSha,
+    mapSha,
+    journey: run.journey,
+    scriptHash: journeyLib.scriptHash(item.actions, item.expect ?? []),
+    pageHash: item.page ? pageHash((readFeaturePages().find((page) => page.name === item.page) ?? { text: "" }).text) : "",
+    ok: compareLib.classifyRun(run).state === "ok",
+    judged: { verdict: String(run.judged ?? "") },
+    steps: run.steps,
+    expects: run.expects,
+    navigations: run.navigations,
+    offOrigin: run.offOrigin ?? [],
+  };
+}
+export function writeBaseCache({ plan, evidence, dir, baseSha, mapSha }) {
+  mkdirSync(dir, { recursive: true });
+  let written = 0;
+  for (const run of evidence.journeys ?? []) {
+    if (run.journey.startsWith("change:")) continue;
+    const entry = cacheEntryFor({ plan, run, baseSha, mapSha });
+    if (!entry || !entry.pageHash) continue;
+    writeFileSync(path.join(dir, `${entry.journey.replace(/[^a-z0-9-]/gi, "-")}-${entry.scriptHash.slice(0, 12)}.json`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+    written += 1;
+  }
+  return written;
+}
 export async function runJourneys({ page, plan, base, projectId, taskId, bearer, archivedProjectId, shotsRoot, offOrigin = [], nextNavigations = () => [], run = runPlan }) {
   const items = Array.isArray(plan.journeys) && plan.journeys.length ? plan.journeys : [{ journey: "change:primary", actions: plan.actions ?? [], expect: plan.expect ?? [] }];
   const journeys = [];
@@ -849,11 +878,13 @@ export async function resolveCommand(io = {}) {
   const diff = call(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/pulls/${item.number}`]).slice(0, 12000);
   const dir = path.join(workDir(), "request");
   mkdirSync(dir, { recursive: true });
-  const request = { ...bound, pr: item.number, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const baseSha = String(item.base?.sha ?? "");
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true" }); return; }
+  const request = { ...bound, pr: item.number, baseSha, title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   if (botLogin) request.botLogin = botLogin;
   writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });
   await send({ repo, ...bound, state: "pending", description: "Planning a user check" });
-  output({ stop: "false", pr: String(item.number), sha, files: listed.files.join("\n"), author: request.author });
+  output({ stop: "false", pr: String(item.number), sha, base: baseSha, files: listed.files.join("\n"), author: request.author });
 }
 export async function planFromRequest(request, deps = {}) {
   const ask = deps.ask ?? askModel;
@@ -929,8 +960,11 @@ async function planCommand() {
   const dir = path.join(workDir(), "plan");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "plan.json"), `${JSON.stringify(plan)}\n`, { mode: 0o600 });
+  const basePlan = { ...plan, journeys: (plan.journeys ?? []).filter((item) => item.actions.length > 0 && !item.base) };
+  writeFileSync(path.join(dir, "base-plan.json"), `${JSON.stringify(basePlan)}\n`, { mode: 0o600 });
+  console.log(`base journeys: ${basePlan.journeys.map((item) => item.journey).join(", ") || "(none)"}`);
   const runnable = (plan.journeys ?? []).filter((item) => item.actions.length > 0).length;
-  output({ empty: plan.actions.length || runnable ? "false" : "true", model: plan.verifierModel });
+  output({ empty: plan.actions.length || runnable ? "false" : "true", model: plan.verifierModel, baseNeeded: basePlan.journeys.length ? "true" : "false" });
 }
 function baseRunFor(plan, journey, baseEvidence) {
   const fresh = (baseEvidence?.journeys ?? []).find((run) => run.journey === journey);
@@ -958,13 +992,38 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
   }
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true });
 }
+export async function judgeBaseCommand({ work = workDir(), ask = askModel, key = process.env.OPENROUTER_EVAL_KEY } = {}) {
+  const binding = bindingNow();
+  const plan = readPlan(readFileSync(path.join(work, "plan", "base-plan.json"), "utf8"), binding);
+  let evidence = null;
+  try { evidence = readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding); } catch { evidence = null; }
+  const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
+  const journeys = [];
+  for (const item of plan.journeys ?? []) {
+    const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey) ?? null;
+    let judged = "";
+    if (run && picked.model && !compareLib.classifyRun(run).state.match(/failed|unavailable/)) {
+      try {
+        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, images: imagesIn(path.join(work, "evidence", "shots", String(plan.journeys.indexOf(item)))) }, parseAnswer);
+        judged = parsed.verdict;
+      } catch (error) {
+        judged = "FAIL";
+        console.log(`base journey ${item.journey}: ${failureText(error, 160)}`);
+      }
+    }
+    journeys.push({ journey: item.journey, apiOnly: run?.apiOnly === true, steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
+  }
+  writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
+  console.log(`base evidence: ${journeys.map((item) => `${item.journey} ${item.judged || compareLib.classifyRun(item).state}`).join(", ")}`);
+}
 async function judgeCommand() {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
   let evidence = null;
   try { evidence = JSON.parse(readFileSync(path.join(workDir(), "evidence", "evidence.json"), "utf8")); } catch { evidence = null; }
   let baseEvidence = null;
-  try { baseEvidence = JSON.parse(readFileSync(path.join(workDir(), "base-evidence.json"), "utf8")); } catch { baseEvidence = null; }
+  const baseEvidenceFile = process.env.PSTACK_BASE_EVIDENCE || path.join(workDir(), "base-evidence.json");
+  try { baseEvidence = JSON.parse(readFileSync(baseEvidenceFile, "utf8")); } catch { baseEvidence = null; }
   let model = { verdict: "", notes: "" };
   notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
@@ -1044,8 +1103,9 @@ async function main() {
   if (command === "resolve") await resolveCommand();
   else if (command === "plan") await planCommand();
   else if (command === "judge") await judgeCommand();
+  else if (command === "judge-base") await judgeBaseCommand();
   else if (command === "post") await postCommand();
-  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|post");
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|judge-base|post");
 }
 const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
 if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

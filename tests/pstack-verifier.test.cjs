@@ -956,7 +956,7 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const commit = (sha, author = "dependabot[bot]", committer = "web-flow", verification = { verified: true, reason: "valid" }) => ({
     sha, author: author ? { login: author } : null, committer: committer ? { login: committer } : null, commit: { verification },
   });
-  const pull = (login, sha = head, body = "") => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } });
+  const pull = (login, sha = head, body = "") => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production", sha: "d".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } } });
   const lines = (files) => files.map((file) => JSON.stringify(typeof file === "string" ? { filename: file, previous_filename: null } : file)).join("\n");
   const runResolve = async ({ login = "dependabot[bot]", body = "", files = ["package.json"], commits, second }) => {
     fs.rmSync(`${dir}/request`, { recursive: true, force: true });
