@@ -15,20 +15,7 @@ const page = (name, text) => ({ name, text });
 const INBOX_PAGE = "# Inbox\nInbox rows from `src/pages/api/queues/inboxReminder.ts`.";
 const pagePlan = (reason = "page") => ({ actions: [{ op: "goto", path: "/inbox" }], expect: [{ text: "Inbox" }], reason });
 const changePlan = () => ({ actions: [{ op: "goto", path: "/all-tasks" }], expect: [{ text: "All tasks" }], reason: "" });
-const cachedArea = (overrides = {}) => ({
-  baseSha: BASE,
-  mapSha: MAP,
-  journey: "area:inbox",
-  scriptHash: scriptHash(pagePlan().actions, pagePlan().expect),
-  pageHash: sha256(INBOX_PAGE),
-  ok: true,
-  judged: { verdict: "PASS" },
-  steps: [{ action: { op: "goto", path: "/inbox" }, ok: true }],
-  expects: [{ expect: { text: "Inbox" }, ok: true }],
-  navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }],
-  offOrigin: [],
-  ...overrides,
-});
+const cachedArea = (overrides = {}) => ({ baseSha: BASE, mapSha: MAP, journey: "area:inbox", scriptHash: scriptHash(pagePlan().actions, pagePlan().expect), pageHash: sha256(INBOX_PAGE), ok: true, judged: { verdict: "PASS" }, steps: [{ action: { op: "goto", path: "/inbox" }, ok: true }], expects: [{ expect: { text: "Inbox" }, ok: true }], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }], offOrigin: [], ...overrides });
 
 test("a mapped page gets its own journey from the page text, then the change journey", async () => {
   const prompts = [];
