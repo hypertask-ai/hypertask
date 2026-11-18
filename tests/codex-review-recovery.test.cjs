@@ -7,7 +7,7 @@ const old = 'b'.repeat(40);
 const marker = sha => `<!-- codex-review-request:${sha} -->`;
 const comment = (login, body) => ({ author: { login }, body });
 
-async function sweep({ comments = [], reviews = [], isDraft = false, currentHead = head, state = 'open', payload = {}, base = 'production', fork = false, statusHistory = [], existingChecks = [] } = {}) {
+async function sweep({ comments = [], reviews = [], isDraft = false, currentHead = head, state = 'open', payload = {}, base = 'production', fork = false, statusHistory = [], existingChecks = [], second = null } = {}) {
   const posted = [];
   const statuses = [];
   const checks = [];
@@ -19,14 +19,15 @@ async function sweep({ comments = [], reviews = [], isDraft = false, currentHead
     paginate: async (method, params) => {
       reads.push({ name: method.api, params });
       assert.equal(params.per_page, 100);
+      const view = second && gets > 1 ? second : null;
       switch (method.api) {
         case 'pulls.list': return [{ number: 3331 }];
-        case 'pulls.listReviews': return reviews.map((review, id) => ({ id, user: review.author, html_url: review.url, body: review.body, commit_id: review.commit.oid, submitted_at: review.submittedAt }));
-        case 'pulls.listReviewComments': return reviews.flatMap((review, id) => review.comments.nodes.map(entry => ({
+        case 'pulls.listReviews': return (view?.reviews ?? reviews).map((review, id) => ({ id, user: review.author, html_url: review.url, body: review.body, commit_id: review.commit.oid, submitted_at: review.submittedAt }));
+        case 'pulls.listReviewComments': return (view?.reviews ?? reviews).flatMap((review, id) => review.comments.nodes.map(entry => ({
           pull_request_review_id: id, body: entry.body, user: entry.author,
           in_reply_to_id: entry.replyTo, commit_id: entry.commit?.oid ?? review.commit.oid,
         })));
-        case 'issues.listComments': return comments.map(entry => ({ ...entry, user: entry.author }));
+        case 'issues.listComments': return (view?.comments ?? comments).map(entry => ({ ...entry, user: entry.author }));
         case 'repos.listCommitStatusesForRef': return statusHistory;
         case 'checks.listForRef': return existingChecks;
         default: throw new Error(`Unexpected read: ${method.api}`);
@@ -40,7 +41,12 @@ async function sweep({ comments = [], reviews = [], isDraft = false, currentHead
           return { data: { number: params.pull_number, head: { sha: gets++ ? currentHead : head, repo: { full_name: fork ? 'other/repo' : 'hypertask-ai/hypertask' } }, base: { ref: base, repo: { full_name: 'hypertask-ai/hypertask' } }, state, draft: isDraft } };
         },
       },
-      issues: { listComments: api('issues.listComments'), createComment: async value => posted.push(value), listForRepo: async () => ({ data: [] }) },
+      issues: {
+        listComments: api('issues.listComments'),
+        createComment: async value => { posted.push(value); return { data: { id: posted.length } }; },
+        deleteComment: async () => {},
+        listForRepo: async () => ({ data: [] }),
+      },
       repos: { listCommitStatusesForRef: api('repos.listCommitStatusesForRef'), createCommitStatus: async value => statuses.push(value) },
       checks: { listForRef: api('checks.listForRef'), create: async value => checks.push(value) },
     },
@@ -86,6 +92,18 @@ test('completed exact-head reviews approve without requesting another review', a
   assert.equal(posted.length, 1);
   assert.match(posted[0].body, /^APPROVE/);
   assert.deepEqual(statuses.map(value => value.state), ['success', 'success']);
+});
+
+test('a P1 that arrives before publish stops a clean snapshot from publishing success', async () => {
+  const clean = `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: head, status: 'completed', has_any_findings: false } })} -->`;
+  const later = {
+    reviews: [{
+      author: { login: 'chatgpt-codex-connector[bot]' }, commit: { oid: head }, body: 'Codex Review',
+      comments: { nodes: [{ body: '[P1] Data loss', author: { login: 'chatgpt-codex-connector[bot]' }, commit: { oid: head } }], pageInfo: { hasNextPage: false } },
+    }],
+  };
+  const { statuses, checks, posted } = await sweep({ comments: [comment('chatgpt-codex-connector', clean)], second: later });
+  assert.deepEqual({ statuses, checks, posted }, { statuses: [], checks: [], posted: [] });
 });
 
 test('review events read only their PR without GraphQL or a repository sweep', async () => {
