@@ -423,10 +423,11 @@ jobs:
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
         # falls back to a full check when they differ. Generated route types move
         # with it and are reused only when their own input digest still matches.
-        # HTPR-8234: PRs cache under their own `tsc-pr-` namespace so a repeat push
-        # reuses the branch's own state instead of a production one that has moved.
-        # Production never restores a `tsc-pr-` key: only trusted pushes may feed
-        # the production check, the same rule the ESLint cache follows.
+        # HTPR-8234: a pull request reads under its own `tsc-pr-` namespace so it
+        # never restores a production state that has moved. HTPR-9450 stops the
+        # fill from a pull request: only a production push saves, the same rule
+        # the ESLint cache follows, so no cached TypeScript output comes from
+        # untrusted code.
         env:
           TSC_CACHE_NAMESPACE: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'prod' }}
           TSC_CACHE_FINGERPRINT: ${{ hashFiles('package-lock.json', 'tsconfig.json', 'src/prisma/schema.prisma', 'prisma.config.ts') }}

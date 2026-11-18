@@ -107,7 +107,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
   assert.deepEqual(parsedWorkflow.on.push.branches, ["production"]);
   assert.deepEqual(yaml.load(request).concurrency, {
-    group: "app-smoke-request-${{ github.run_id }}",
+    group: "app-smoke-request-${{ github.event.pull_request.number || github.run_id }}",
     "cancel-in-progress": true,
   });
   const validationSteps = parsedWorkflow.jobs.validate.steps;

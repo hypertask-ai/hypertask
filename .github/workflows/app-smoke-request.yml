@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: app-smoke-request-${{ github.run_id }}
+  group: app-smoke-request-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 permissions: {}
