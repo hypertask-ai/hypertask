@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { boardRecords, buildCoreSmokeSeedPlan, teamRoster } from "./lib/core-smoke-seed-plan.mjs";
+import { ARCHIVED_SMOKE_PROJECT_ENV, archivedSmokeProject, boardRecords, buildCoreSmokeSeedPlan, teamRoster } from "./lib/core-smoke-seed-plan.mjs";
 
 const envFile = process.env.CORE_SMOKE_ENV_FILE;
 if (!envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
@@ -57,6 +57,9 @@ try {
       data: { name: board.name, title: board.title, ownerId: user.id, teamId: team.id, googleAccountId: board.googleAccountId, sections: board.sections },
     }));
   }
+  const archived = await prisma.project.create({
+    data: archivedSmokeProject({ runKey, ownerId: user.id, teamId: team.id, googleAccountId: googleAccount.id }),
+  });
   const sections = new Map();
   for (const board of plan.boards) {
     for (const [index, title] of board.sections.entries()) {
@@ -155,6 +158,7 @@ try {
     CORE_SMOKE_COOKIE: cookie,
     CORE_SMOKE_MCP_TOKEN: mcpToken,
     CORE_SMOKE_PROJECT_ID: project.id,
+    [ARCHIVED_SMOKE_PROJECT_ENV]: archived.id,
     CORE_SMOKE_TASK_ID: task.id,
     CORE_SMOKE_USER_ID: user.id,
     CORE_SMOKE_USER_NAME: displayName,
@@ -175,7 +179,7 @@ try {
   );
   await chmod(envFile, 0o600);
   console.log(
-    `Seeded core-actions fixture on board ${project.id}, task ${task.id}, tickets ${plan.tasks.length}, members ${plan.members.length}.`,
+    `Seeded core-actions fixture on board ${project.id}, task ${task.id}, archived board ${archived.id}, tickets ${plan.tasks.length}, members ${plan.members.length}.`,
   );
 } finally {
   await prisma.$disconnect();

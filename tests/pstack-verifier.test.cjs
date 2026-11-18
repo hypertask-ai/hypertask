@@ -667,6 +667,62 @@ test("an api action passes from the preview response with no page navigation", a
   }
 });
 
+test("the drive fills archived, board and task ids in an api body", async () => {
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  try {
+  const { runPlan, buildPrompt, smokeDriveIds } = await load();
+  const { ARCHIVED_SMOKE_PROJECT_ENV, archivedSmokeProject } = await import("../scripts/lib/core-smoke-seed-plan.mjs");
+  const board = archivedSmokeProject({ runKey: "run-1", ownerId: "1", teamId: "3", googleAccountId: "acct" });
+  assert.equal(board.status, "Archive");
+  assert.equal(board.title, "Archived smoke board");
+  assert.equal(board.googleAccountId, "acct");
+  const ids = smokeDriveIds({
+    CORE_SMOKE_PROJECT_ID: "4",
+    [ARCHIVED_SMOKE_PROJECT_ENV]: "2",
+    CORE_SMOKE_TASK_ID: "7",
+    CORE_SMOKE_MCP_TOKEN: "smoke-token",
+  });
+  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token" });
+  const calls = [];
+  const action = {
+    op: "api",
+    method: "POST",
+    path: "/api/tasks/createGlobally",
+    body: { projectId: "{archived}", taskId: "{task}", openId: "{id}" },
+    expectStatus: 400,
+    expectText: "archived board refused",
+  };
+  const run = await runPlan({
+    page: { request: { async fetch(_url, options) { calls.push(options.data); return { status: () => 400, async text() { return "archived board refused the ticket"; } }; } } },
+    plan: plan([action]),
+    base: "http://127.0.0.1:3100",
+    ...ids,
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.deepEqual(calls, [{ projectId: "2", taskId: "7", openId: "4" }]);
+  assert.equal(run.steps[0].ok, true);
+  const blocked = [];
+  const missing = await runPlan({
+    page: { request: { async fetch() { blocked.push(1); return { status: () => 400, async text() { return "nope"; } }; } } },
+    plan: plan([action]),
+    base: "http://127.0.0.1:3100",
+    projectId: "4",
+    taskId: "7",
+    bearer: "smoke-token",
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.equal(blocked.length, 0);
+  assert.match(missing.steps[0].error, /archived project id is not allowed/);
+  const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
+  assert.match(prompt, /\{archived\} is the seeded archived board/);
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = savedToken;
+  }
+});
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
   const { decide } = await load();
