@@ -75,7 +75,7 @@ test('CI policy preserves every required context and describes native guard publ
   assert.deepEqual(policy.pr_job_budget.trusted_pull_request_guards.published_statuses, ['pr-title']);
   assert.deepEqual(policy.required_checks.contexts, [
     'app-smoke', 'browser-smoke', 'ci-tests', 'ai-review', 'claude-review',
-    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan',
+    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan', 'pstack-verifier',
   ]);
   assert.deepEqual(policy.policies.production_ruleset.required_status_checks, policy.required_checks.contexts);
 });
