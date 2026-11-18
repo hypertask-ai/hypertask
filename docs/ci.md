@@ -107,6 +107,42 @@ which splits setup, fetch and working-tree time from the run's own log.
 CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
 
+### PR checks follow pstack (HTPR-9450)
+
+The verifier is the only check a pull request has to satisfy. A pull request now
+starts **32 jobs** of this repository's own workflows: `ci-tests` with its
+preparation, static checks, test shards and summary, plus the short guard and
+review gates. It started **40** on PR 3680, where the same commit carried **46**
+check runs including CodeQL's five.
+
+Everything that drives the UI left the pull request:
+
+- `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
+  `browser-smoke-matrix`, `browser-smoke-flags` and the `browser-smoke` summary
+  run on `push` to production and on the nightly schedule (03:23 UTC), never on
+  a pull request.
+- `visual-compare` is gone from `ci-tests.yml`; `visual-regression.yml` owns the
+  screen comparison on production and on demand, and now runs nightly as well
+  as on Mondays.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
+  request no longer requests it, so `app-smoke-request.yml` only dispatches by
+  hand.
+- `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
+  own nightly crons.
+
+The verifier still drives the journeys for the features a pull request touches,
+using the diff to choose them, and it boots the candidate with the same
+`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof stays
+with `bugfix-regression`, which runs the changed test on the merge base and on
+the head.
+
+Cheap checks still run on every pull request and are still required by the
+ruleset until the orchestrator drops them: `ci-tests`, `ai-review`,
+`claude-review`, `feature-flag-gate`, `pr-title`, `next-public-secrets` and
+`secret-scan`. `auto-merge` waits on those and on `pstack-verifier`; it no longer
+waits for `app-smoke` or `browser-smoke`, which a pull request never reports.
+Emergency path unchanged: revert first, then fix forward.
+
 HYCI-32 spent two of the remaining three job slots on the browser check: the
 single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, which
 run in parallel, plus the small `browser-smoke` summary job that keeps the
@@ -204,7 +240,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - No application or review workflow uses a self-hosted runner. The former `contabo-1` review runner is retired with the self-hosted reviewer.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - App Smoke validation quietly skips skipped request workflows and successful requests whose exact open production PR is still a draft (HYCI-316), including requests without a PR number in the event payload. It publishes no status and starts no build; `ready_for_review` requests validation again. Failed request workflows, ambiguous PR matches and invalid bases still fail.
-- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both contexts run on every non-draft PR without a label gate; `browser-smoke` is a summary over its two halves (HYCI-32). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request uses the same four events. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
+- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. `ci-tests` still runs on every non-draft PR without a label gate (HTPR-9450 took `browser-smoke` and `app-smoke` off the PR lane; see "PR checks follow pstack" above). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request no longer runs on a pull request at all; App Smoke reads production on a nightly schedule instead. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.

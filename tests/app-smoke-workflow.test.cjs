@@ -96,21 +96,18 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
   assert.match(workflow, /name: run app-smoke/);
   assert.match(workflow, /timeout-minutes: 15/);
-  assert.match(request, /branches: \[production\]/);
-  assert.match(
-    request,
-    /types: \[opened, synchronize, reopened, ready_for_review\]/,
-  );
+  assert.deepEqual(yaml.load(request).on, { workflow_dispatch: null });
+  assert.deepEqual(parsedWorkflow.on.schedule, [{ cron: "47 3 * * *" }]);
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
   assert.deepEqual(parsedWorkflow.concurrency, {
-    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
+    group: "${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
     "cancel-in-progress": true,
   });
   assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
   assert.deepEqual(parsedWorkflow.on.push.branches, ["production"]);
   assert.deepEqual(yaml.load(request).concurrency, {
-    group: "app-smoke-request-${{ github.event.pull_request.number }}",
+    group: "app-smoke-request-${{ github.run_id }}",
     "cancel-in-progress": true,
   });
   const validationSteps = parsedWorkflow.jobs.validate.steps;
@@ -370,11 +367,11 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets pr-title"/,
+    /REQUIRED="ci-tests ai-review next-public-secrets pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
-  assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED pstack-verifier"/);
+  assert.doesNotMatch(workflow, /REQUIRED="\$REQUIRED (app-smoke|browser-smoke)"/);
 });
 
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
@@ -484,8 +481,6 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   assert.equal(policy.topology.repository_default_branch, "production");
   assert.deepEqual(policy.required_checks.contexts, required);
   assert.deepEqual(policy.required_checks.automerge_also_requires, [
-    "app-smoke",
-    "browser-smoke",
     "ci-tests",
     "feature-flag-gate",
     "pstack-verifier",

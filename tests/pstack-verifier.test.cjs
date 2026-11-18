@@ -133,7 +133,7 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
   assert.equal(passed.verdict, "PASS+NOTES");
-  const partial = statuses.filter((status) => status.context !== "app-smoke");
+  const partial = statuses.filter((status) => status.context !== "claude-review");
   assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
   const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
@@ -141,10 +141,10 @@ test("a non-app pass waits until every required context is green", async () => {
   const blocked = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: blockedGate.checksPassed, checksPending: blockedGate.checksPending });
   assert.equal(blocked.verdict, "FAIL");
   assert.match(blocked.notes, /no user path verified/);
-  const pending = statuses.map((status) => status.context === "app-smoke" ? { context: "app-smoke", state: "pending" } : status);
+  const pending = statuses.map((status) => status.context === "claude-review" ? { context: "claude-review", state: "pending" } : status);
   assert.deepEqual(ciGate({ runs, statuses: pending }), { checksPassed: false, checksPending: true });
   assert.deepEqual(ciGate({ runs, statuses: [] }), { checksPassed: false, checksPending: true });
-  const skipped = runs.map((run) => run.name === "browser-smoke" ? { name: "browser-smoke", conclusion: "skipped" } : run);
+  const skipped = runs.map((run) => run.name === "ci-tests" ? { name: "ci-tests", conclusion: "skipped" } : run);
   assert.deepEqual(ciGate({ runs: skipped, statuses }), { checksPassed: false, checksPending: false });
   const queued = [...runs, { name: "feature-flag-gate", conclusion: null }];
   assert.equal(ciGate({ runs: queued, statuses }).checksPending, true);

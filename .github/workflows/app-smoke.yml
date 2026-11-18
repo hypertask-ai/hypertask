@@ -6,6 +6,8 @@ run-name: ${{ github.event_name == 'workflow_run' && format('App Smoke request {
 on:
   push:
     branches: [production]
+  schedule:
+    - cron: '47 3 * * *'
   workflow_run:
     workflows: ["App Smoke Request"]
     types: [completed]
@@ -13,13 +15,13 @@ on:
 permissions: {}
 
 concurrency:
-  group: ${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}
+  group: "${{ (github.event_name == 'push' || github.event_name == 'schedule') && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}"
   cancel-in-progress: true
 
 jobs:
   warm-dependencies:
     name: warm app-smoke dependencies
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
@@ -263,7 +265,7 @@ jobs:
     name: run app-smoke
     needs: validate
     runs-on: ubuntu-latest
-    if: needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'
+    if: always() && (github.event_name == 'schedule' || needs.validate.result == 'success') && needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'
     timeout-minutes: 15
     permissions:
       contents: read

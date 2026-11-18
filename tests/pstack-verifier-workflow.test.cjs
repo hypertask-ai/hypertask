@@ -85,7 +85,13 @@ test("each verifier job has the declared permissions, key and token", async () =
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
   assert.equal(REQUIRED_CI_CONTEXTS.includes("pstack-verifier"), false);
-  assert.deepEqual([...policy.policies.production_ruleset.required_status_checks].sort(), [...REQUIRED_CI_CONTEXTS, "pstack-verifier"].sort());
+  assert.equal(REQUIRED_CI_CONTEXTS.includes("app-smoke"), false);
+  assert.equal(REQUIRED_CI_CONTEXTS.includes("browser-smoke"), false);
+  for (const context of REQUIRED_CI_CONTEXTS) {
+    assert.ok(!["app-smoke", "browser-smoke"].includes(context), `${context} no longer reports on a pull request`);
+  }
+  assert.ok(policy.required_checks.contexts.includes("pstack-verifier"));
+  assert.ok(policy.policies.production_ruleset.required_status_checks.includes("pstack-verifier"));
   assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
   const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");
   const guardAt = cancel.indexOf("waiting for required checks");

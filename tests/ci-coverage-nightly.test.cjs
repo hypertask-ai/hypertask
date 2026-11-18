@@ -12,22 +12,22 @@ function assertNoCoverage(ci) {
 
 function assertNormalTriggers(ci, request) {
   assert.deepEqual(ci.on.pull_request.types, prTypes);
-  assert.deepEqual(request.on.pull_request.types, prTypes);
   assert.deepEqual(ci.on.push.branches, ["production"]);
-  assert.equal(ci.on.schedule, undefined);
+  assert.deepEqual(ci.on.schedule, [{ cron: "23 3 * * *" }]);
   assert.equal(ci.on.workflow_dispatch, undefined);
   assert.equal(ci.jobs["ci-prepare"].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
   for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
-    assert.equal(ci.jobs[key].if, "github.event_name == 'push' || github.event.pull_request.draft == false", key);
+    assert.equal(ci.jobs[key].if, "github.event_name != 'pull_request'", key);
   }
-  assert.equal(ci.jobs["browser-smoke"].if, "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)");
+  assert.equal(ci.jobs["browser-smoke"].if, "always() && github.event_name != 'pull_request'");
   assert.equal(ci.jobs["ci-tests"].name, "ci-tests");
   assert.equal(
     ci.jobs["ci-tests"].if,
     "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)",
   );
   assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test", "ci-fixtures"]);
-  assert.equal(request.jobs.request.if, "github.event.pull_request.draft == false");
+  assert.deepEqual(request.on, { workflow_dispatch: null });
+  assert.equal(request.jobs.request.if, undefined);
 }
 
 test("metadata changes cannot restart or skip required CI, and PR/push tests collect no coverage", () => {
