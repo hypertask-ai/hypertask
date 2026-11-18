@@ -88,6 +88,15 @@ test('ok with a loopback cookie state and a loopback base URL', async t => {
   assert.ok(result.receivedCookie === `fixture_session=${fixtureValue}`, 'a seeded local state must reach the local endpoint');
 });
 
+test('a loopback state is never sent to a non-loopback base URL', async t => {
+  const result = await run(t, {
+    cookies: [cookie({ domain: '127.0.0.1', secure: false })],
+    args: ['--base-url', 'http://app.hypertask.ai'],
+    code: 2, expected: 'identity unreadable: test base URL must be an HTTP origin on 127.0.0.1',
+  });
+  assert.equal(result.requests, 0);
+});
+
 test('mismatch is not expiry', async t => {
   await run(t, { args: ['--expect', '2343'], code: 1, expected: 'identity mismatch: user 985, expected 2343' });
 });
