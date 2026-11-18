@@ -479,11 +479,15 @@ test("CI policy keeps the protected smoke producer live and required", async () 
 
   assert.equal(policy.topology.repository_default_branch, "production");
   assert.deepEqual(policy.required_checks.contexts, required);
-  assert.deepEqual(policy.required_checks.automerge_also_requires, [
-    "ci-tests",
-    "feature-flag-gate",
-    "pstack-verifier",
-  ]);
+  const automerge = await readFile(".github/workflows/automerge.yml", "utf8");
+  const automergeRequired = [...automerge.matchAll(/REQUIRED="(?:\$REQUIRED )?([^"]+)"/g)]
+    .flatMap((match) => match[1].split(" "))
+    .sort();
+  assert.deepEqual(
+    [...policy.required_checks.automerge_also_requires].sort(),
+    automergeRequired,
+    "automerge_also_requires must mirror the REQUIRED list in automerge.yml",
+  );
   assert.deepEqual(
     policy.policies.production_ruleset.required_status_checks,
     required,

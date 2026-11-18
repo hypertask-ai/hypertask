@@ -309,7 +309,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "push" ] && [ "$BUILD_NEEDED" != "true" ]; then
+          MODE=$(node .github/scripts/test-shard-plan.mjs)
+          if [ "$MODE" = "none" ]; then
             echo "run_tests=false" >> "$GITHUB_OUTPUT"
             echo 'indexes=["0"]' >> "$GITHUB_OUTPUT"
             exit 0
@@ -320,11 +321,8 @@ jobs:
           # waits on a serial file with three workers idle and no lane pays for every
           # serial file.
           LANES=$((CI_TEST_SHARDS + CI_SERIAL_SHARDS))
-          if [ "$GITHUB_EVENT_NAME" = "push" ] || grep -qx ALL "$RUNNER_TEMP/selected-tests.txt"; then
+          if [ "$MODE" = "all" ]; then
             node .github/scripts/shard-tests.mjs --discover --count "$LANES" --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT"
-          elif ! grep -q '[^[:space:]]' "$RUNNER_TEMP/selected-tests.txt"; then
-            echo "selected test list is empty; refusing to skip the suite" >&2
-            exit 1
           else
             node .github/scripts/shard-tests.mjs --count "$LANES" --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
           fi
