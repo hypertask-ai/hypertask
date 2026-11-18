@@ -307,44 +307,33 @@ export function selectPlan(files, filesTruncated = false) {
   if (filesTruncated || hasAppPath(list)) return null;
   return { actions: [], expect: [], reason: "no user path: non-app files only" };
 }
-export function readFeaturePages(dir = FEATURE_MAP_DIR) {
+const readDir = (dir) => {
   try {
-    return readdirSync(dir)
-      .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
-      .sort()
-      .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
+    return readdirSync(dir).sort();
   } catch {
     return [];
   }
+};
+export function readFeaturePages(dir = FEATURE_MAP_DIR) {
+  return readDir(dir)
+    .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
+    .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
 }
 export function readBaseCache(dir) {
-  try {
-    return readdirSync(dir)
-      .filter((name) => name.endsWith(".json"))
-      .sort()
-      .flatMap((name) => {
-        try {
-          const parsed = journeyLib.parseCacheEntry(readFileSync(path.join(dir, name), "utf8"));
-          return parsed ? [parsed] : [];
-        } catch {
-          return [];
-        }
-      });
-  } catch {
-    return [];
-  }
+  return readDir(dir)
+    .filter((name) => name.endsWith(".json"))
+    .flatMap((name) => {
+      try {
+        const parsed = journeyLib.parseCacheEntry(readFileSync(path.join(dir, name), "utf8"));
+        return parsed ? [parsed] : [];
+      } catch {
+        return [];
+      }
+    });
 }
-export function pageHash(text) {
-  return journeyLib.sha256(text);
-}
+export const pageHash = (text) => journeyLib.sha256(text);
 export function cachedJourney(entries, { baseSha, mapSha, journey, page }) {
-  const wanted = { baseSha, mapSha, journey };
-  for (const entry of Array.isArray(entries) ? entries : []) {
-    if (entry.baseSha !== wanted.baseSha || entry.mapSha !== wanted.mapSha || entry.journey !== wanted.journey) continue;
-    if (entry.pageHash !== pageHash(page?.text ?? "")) continue;
-    return entry;
-  }
-  return null;
+  return (Array.isArray(entries) ? entries : []).find((entry) => entry.baseSha === baseSha && entry.mapSha === mapSha && entry.journey === journey && entry.pageHash === pageHash(page?.text ?? "")) ?? null;
 }
 export function bugfixTitle(title) {
   return /\[BUGFIX\]/i.test(String(title ?? ""));
@@ -433,12 +422,12 @@ export function planFileList(request) {
   return { files: listed.files, filesTruncated: request?.filesTruncated === true || listed.filesTruncated };
 }
 export function ciChecksPending(runs) {
-  const relevant = relevantChecks(runs);
-  return relevant.length === 0 || relevant.some((run) => run?.conclusion == null);
+  const latest = latestRuns(runs);
+  return latest.length === 0 || latest.some((run) => run?.conclusion == null);
 }
 export function ciChecksPassed(runs) {
-  const relevant = relevantChecks(runs);
-  return relevant.length > 0 && relevant.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
+  const latest = latestRuns(runs);
+  return latest.length > 0 && latest.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
 }
 export function relevantStatuses(statuses) {
   const seen = new Set();
@@ -459,14 +448,28 @@ export function ciStatusesPassed(statuses) {
   const latest = relevantStatuses(statuses);
   return latest.length > 0 && latest.every((status) => status?.state === "success");
 }
+function runCreatedAt(run) {
+  const at = Date.parse(run?.created_at ?? run?.started_at ?? run?.completed_at ?? "");
+  return Number.isNaN(at) ? null : at;
+}
 function latestRuns(runs) {
+  const ordered = relevantChecks(runs).map((run, index) => ({ run, index, at: runCreatedAt(run) }));
+  if (ordered.every((entry) => entry.at != null)) ordered.sort((a, b) => b.at - a.at || a.index - b.index);
   const seen = new Set();
+  const superseded = new Map();
   const latest = [];
-  for (const run of relevantChecks(runs)) {
-    if (!run?.name || seen.has(run.name)) continue;
-    seen.add(run.name);
+  for (const { run } of ordered) {
+    if (run?.name) {
+      if (seen.has(run.name)) continue;
+      if (run.conclusion === "cancelled") {
+        if (!superseded.has(run.name)) superseded.set(run.name, run);
+        continue;
+      }
+      seen.add(run.name);
+    }
     latest.push(run);
   }
+  for (const [name, run] of superseded) if (!seen.has(name)) latest.push({ ...run, conclusion: null });
   return latest;
 }
 export function requiredContextsReady(runs, statuses, required = REQUIRED_CI_CONTEXTS) {
@@ -686,7 +689,7 @@ export async function runJourneys({ page, plan, base, projectId, taskId, bearer,
     journeys.push({ journey: item.journey, apiOnly: item.actions.every((action) => action.op === "api"), steps: result.steps, expects: result.expects, navigations, offOrigin: offOrigin.slice(before) });
   }
   const change = journeys.find((run) => run.journey.startsWith("change:")) ?? journeys[0] ?? { steps: [], expects: [], navigations: [] };
-  return { journeys, steps: change.steps, expects: change.expects, navigations: change.navigations, offOrigin };
+  return { journeys, steps: change.steps, expects: change.expects, navigations: change.navigations, offOrigin: change.offOrigin ?? [] };
 }
 export function githubEnv(base = process.env) {
   if (!base.GH_TOKEN) throw new Error("gh token is missing");
@@ -901,6 +904,7 @@ export async function planFromRequest(request, deps = {}) {
   else if (selected) Object.assign(plan, selected);
   else if (!plan.fail) {
     const bugfix = bugfixTitle(request.title);
+    const compare = deps.compare ?? process.env.PSTACK_VERIFIER_COMPARE === "true";
     const journeys = await planJourneys({
       request,
       pages: deps.pages ?? readFeaturePages(),
@@ -911,6 +915,7 @@ export async function planFromRequest(request, deps = {}) {
       mapSha: deps.mapSha ?? process.env.GITHUB_SHA,
       baseSha: request.baseSha,
       bugfix,
+      compare,
     });
     plan.journeys = journeys.items;
     plan.bugfix = bugfix;
@@ -919,13 +924,13 @@ export async function planFromRequest(request, deps = {}) {
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
     if (journeys.fail) plan.fail = journeys.fail;
+    if (compare && plan.journeys.length) plan.compare = true;
   }
-  if (Array.isArray(plan.journeys) && plan.journeys.length && process.env.PSTACK_VERIFIER_COMPARE === "true") plan.compare = true;
   return plan;
 }
-export async function planJourneys({ request, pages, entries, ask, key, model, mapSha, baseSha, bugfix = false }) {
+export async function planJourneys({ request, pages, entries, ask, key, model, mapSha, baseSha, bugfix = false, compare = false }) {
   const items = [];
-  const chosen = journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages });
+  const chosen = compare ? journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages }) : [];
   for (const item of chosen) {
     const page = pages.find((candidate) => candidate.name === item.page);
     const journey = `area:${item.page}`;
@@ -953,6 +958,9 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
   const change = parsed.actions.length ? [{ journey, page: "", actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true }] : [];
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "" };
 }
+export function driveNeeded(plan) {
+  return !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
+}
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
   const plan = await planFromRequest(request);
@@ -964,8 +972,7 @@ async function planCommand() {
   const basePlan = { ...plan, journeys: (plan.journeys ?? []).filter((item) => item.actions.length > 0 && !item.base) };
   writeFileSync(path.join(dir, "base-plan.json"), `${JSON.stringify(basePlan)}\n`, { mode: 0o600 });
   console.log(`base journeys: ${basePlan.journeys.map((item) => item.journey).join(", ") || "(none)"}`);
-  const runnable = (plan.journeys ?? []).filter((item) => item.actions.length > 0).length;
-  output({ empty: plan.actions.length || runnable ? "false" : "true", model: plan.verifierModel, baseNeeded: basePlan.journeys.length ? "true" : "false" });
+  output({ empty: driveNeeded(plan) ? "false" : "true", model: plan.verifierModel, baseNeeded: basePlan.journeys.length ? "true" : "false" });
 }
 function baseRunFor(plan, journey, baseEvidence) {
   const fresh = (baseEvidence?.journeys ?? []).find((run) => run.journey === journey);
@@ -1019,6 +1026,9 @@ export async function judgeBaseCommand({ work = workDir(), ask = askModel, key =
   writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
   console.log(`base evidence: ${journeys.map((item) => `${item.journey} ${item.judged || compareLib.classifyRun(item).state}`).join(", ")}`);
 }
+export function comparisonMode(plan) {
+  return plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+}
 async function judgeCommand() {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
@@ -1030,7 +1040,7 @@ async function judgeCommand() {
   let model = { verdict: "", notes: "" };
   notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
-  const comparing = plan.compare === true && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+  const comparing = comparisonMode(plan);
   let compared = null;
   if (comparing) {
     try {
