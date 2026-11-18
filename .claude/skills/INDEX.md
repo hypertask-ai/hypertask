@@ -1,6 +1,6 @@
 # Skills for Valentin's Claude Code sessions
 
-**Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
+**Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-hypertask`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
 
 Together these skills, their scripts, the hooks and the rule files (CLAUDE.md, AGENTS.md) are the **Agent Kit**: how every Hypertask session works (Valentin, 2026-10-02). It lives in this repo, next to the code it works on. Changes to it are tickets on the Fleet CI & Infra board (project 11514) and PRs, like any other change. (Not to be confused with Product Bot, the retired farm agent.)
 
@@ -34,10 +34,10 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | no-comments | Before the PR, inside simplify-before-pr: Comment Sicko (`.claude/agents/comment-sicko.md`) on the PR diff kills comments, lint and TypeScript suppressions and workaround code, also outside `src/` (pstack by Lauren Tan, MIT) | .claude/skills/no-comments/SKILL.md |
 | design-compliance | Before the PR (UI) | .claude/skills/design-compliance/SKILL.md |
 | update-docs | Before the PR (user-visible change) | .claude/skills/update-docs/SKILL.md |
-| verify-on-phone | Pointer: load verify-hypertask. The old file stays at `.claude/skills/verify-on-phone/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
-| verify-visual | Pointer: load verify-hypertask for the Visual Regression result before a UI merge. The old file stays at `.claude/skills/verify-visual/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
-| verify-qa | Pointer: load verify-hypertask for the production proof after deploy. The old file stays at `.claude/skills/verify-qa/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
-| verify-design | Pointer: load verify-hypertask for design QA on design-pass, Figma and visible UI tickets. The old file stays at `.claude/skills/verify-design/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
+| verify-on-phone | Retired name: load verify-hypertask for the pre-PR 390x844 shot. The retired file at `.claude/skills/verify-on-phone/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| verify-visual | Retired name: load verify-hypertask for the Visual Regression result before a UI merge. The retired file at `.claude/skills/verify-visual/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| verify-qa | Retired name: load verify-hypertask for the production proof after deploy. The retired file at `.claude/skills/verify-qa/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| verify-design | Retired name: load verify-hypertask for design QA on design-pass, Figma and visible UI tickets. The retired file at `.claude/skills/verify-design/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
 | verify-hypertask | The one verification skill: local before the PR (390x844 shot), Visual Regression before a UI merge, production after deploy, design QA against the ticket frame | .claude/skills/verify-hypertask/SKILL.md |
 
 Performance reviews use the official shared pstack installation, not repository copies. Before reporting measurements, load `~/.agents/skills/principle-explain-the-number/SKILL.md` and `~/.agents/skills/benchmark-checklist/SKILL.md`. Install or repair pstack from its official source if either path is missing; never copy its contents into this repository.
