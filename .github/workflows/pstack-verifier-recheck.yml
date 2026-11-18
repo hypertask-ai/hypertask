@@ -7,6 +7,9 @@ on:
   schedule:
     - cron: "7,22,37,52 * * * *"
 permissions: {}
+concurrency:
+  group: pstack-verifier-recheck-${{ github.event.workflow_run.pull_requests[0].number || github.run_id }}-${{ github.event.workflow_run.head_sha || github.run_id }}
+  cancel-in-progress: true
 jobs:
   recheck:
     if: "(github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request') || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production')"

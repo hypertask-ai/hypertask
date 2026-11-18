@@ -870,6 +870,8 @@ production_revert_proposal:
   manual_dispatch: historical_replay_only
   production_mutation: forbidden
   automatic_merge: false
+  emergency_rule: revert_the_bad_change_first
+  emergency_rule_detail: "In an emergency, revert the bad change first through the normal required checks, then ship the real fix through the normal steps. The revert is a revert PR like any other: no skip lane, no bypass, no direct push to production."
   repeats_per_probe: 2
   maximum_commits: 50
   required_proof: [last_green_passes, culprit_parent_passes, culprit_fails, current_head_fails, single_commit_revert_passes]
