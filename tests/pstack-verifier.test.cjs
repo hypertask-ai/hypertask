@@ -1120,6 +1120,7 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     assert.equal(other.written, null);
     assert.deepEqual(other.posts, []);
     assert.match(other.stop, /mark=failure/);
+    assert.match(other.stop, new RegExp(`sha=${head}`));
     assert.match(other.stop, /description=FAIL: author model unknown/);
     const unsigned = await runResolve({ commits: [commit(head, "dependabot[bot]", "web-flow", { verified: false, reason: "unsigned" })] });
     assert.match(unsigned.stop, /stop=true/);

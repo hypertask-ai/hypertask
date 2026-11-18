@@ -84,7 +84,7 @@ if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/statuses"* ]]; then
-  printf '%s\\n' ${JSON.stringify(JSON.stringify(statusRows))}
+  printf '%s\\n' ${JSON.stringify(JSON.stringify([statusRows]))}
   exit 0
 fi
 if [ "$1 $2" = "pr diff" ]; then echo ${JSON.stringify(changedFile)}; exit 0; fi

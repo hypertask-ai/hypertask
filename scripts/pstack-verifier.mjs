@@ -932,15 +932,15 @@ export async function resolveCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const sha = String(run.head_sha ?? "");
   const bound = { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
-  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true", mark: "skip" }); return; }
+  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let number = String(run.pull_requests?.[0]?.number ?? "");
   if (!/^[0-9]+$/.test(number)) {
     const matches = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => eligiblePull(item, repo, sha));
-    if (matches.length !== 1) { output({ stop: "true", mark: "skip" }); return; }
+    if (matches.length !== 1) { output({ stop: "true", mark: "skip", sha }); return; }
     number = String(matches[0].number);
   }
   const item = JSON.parse(call(["api", pullUrl(repo, number)]));
-  if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip" }); return; }
+  if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
   if (BOT_LOGINS.has(item.user?.login)) {
@@ -949,17 +949,17 @@ export async function resolveCommand(io = {}) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const commitsKnown = Array.isArray(commits) ? commits : [];
     const lastSha = commitsKnown.at(-1)?.sha;
-    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip" }); return; }
+    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
       const gate = authorGate(item.body);
       if (gate.stop) {
-        output({ stop: "true", mark: "failure", description: "FAIL: author model unknown" });
+        output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
         return;
       }
     } else if (listed.filesTruncated || !botFilesAllowed(listed.files)) {
       const description = listed.filesTruncated ? "FAIL: file list truncated" : `FAIL: author ${item.user.login}, bot changed a user path`;
-      output({ stop: "true", mark: "failure", description: description.slice(0, 140) });
+      output({ stop: "true", mark: "failure", description: description.slice(0, 140), sha });
       return;
     } else {
       botLogin = item.user.login;
@@ -967,7 +967,7 @@ export async function resolveCommand(io = {}) {
   }
   const gate = authorGate(item.body);
   if (!botLogin && gate.stop) {
-    output({ stop: "true", mark: "failure", description: "FAIL: author model unknown" });
+    output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
   }
   if (!listed) listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
@@ -980,8 +980,8 @@ export async function resolveCommand(io = {}) {
   const fullDiff = call(["api", "-H", "Accept: application/vnd.github.diff", pullUrl(repo, number)]);
   const patchId = patchIdOf(fullDiff, io.spawn ?? spawnSync);
   const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId });
-  if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused) }); return; }
-  if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip" }); return; }
+  if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused), sha }); return; }
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip", sha }); return; }
   const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   if (botLogin) request.botLogin = botLogin;
   writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });

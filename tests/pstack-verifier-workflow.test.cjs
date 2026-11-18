@@ -64,8 +64,7 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(needs(trusted.jobs.base), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "base", "drive"]);
-  assert.deepEqual(needs(trusted.jobs.mark), ["resolve"]);
-  assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge", "mark"]);
+  assert.deepEqual([needs(trusted.jobs.mark), needs(trusted.jobs.post)], [["resolve"], ["resolve", "judge", "mark"]]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
   assert.deepEqual(secretJobs, ["plan", "base", "judge", "mark", "post", "cancel"]);
@@ -97,8 +96,7 @@ test("each verifier job has the declared permissions, key and token", async () =
 });
 
 test("only mark, post and cancel use the verifier environment and the job token cannot write the status", () => {
-  const named = readdirSync(".github/workflows").filter((name) => /\.ya?ml$/.test(name)).flatMap((file) => Object.entries(read(`.github/workflows/${file}`)?.jobs ?? {})
-    .filter(([, job]) => (job.environment?.name ?? job.environment) === "pstack-verifier").map(([name]) => `${file}:${name}`));
+  const named = readdirSync(".github/workflows").filter((name) => /\.ya?ml$/.test(name)).flatMap((file) => Object.entries(read(`.github/workflows/${file}`)?.jobs ?? {}).filter(([, job]) => (job.environment?.name ?? job.environment) === "pstack-verifier").map(([name]) => `${file}:${name}`));
   assert.deepEqual(named.sort(), ["pstack-verifier.yml:cancel", "pstack-verifier.yml:mark", "pstack-verifier.yml:post"]);
   const refs = (job) => (job.steps ?? []).filter((step) => String(step.uses ?? "").startsWith("actions/checkout")).map((step) => step.with?.ref ?? "");
   for (const name of ["mark", "post", "cancel"]) {

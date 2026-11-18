@@ -146,6 +146,7 @@ jobs:
     needs: [resolve]
     if: "${{ github.ref == 'refs/heads/production' && needs.resolve.result == 'success' && needs.resolve.outputs.mark != 'skip' }}"
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment: pstack-verifier
     permissions: { contents: read, statuses: read }
     steps:

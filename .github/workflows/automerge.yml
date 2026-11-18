@@ -327,9 +327,9 @@ jobs:
             ok=1
             for c in $required_for_pr; do
               if [ "$c" = "pstack-verifier" ]; then
-                fetch_verifier() { gh api --paginate "repos/$REPO/commits/$headOid/statuses" >"$AUTOMERGE_TMP/verifier-statuses.json"; }
+                fetch_verifier() { gh api --paginate --slurp "repos/$REPO/commits/$headOid/statuses" >"$AUTOMERGE_TMP/verifier-statuses.json"; }
                 state=MISSING login=""
-                retry fetch_verifier && read -r state login <<<"$(jq -r '[.[] | select(.context=="pstack-verifier" and .creator.login=="hypertask-runners[bot]")] | first | if . == null then "MISSING" else "\(.state | ascii_upcase) \(.creator.login)" end' "$AUTOMERGE_TMP/verifier-statuses.json")" || true
+                retry fetch_verifier && read -r state login <<<"$(jq -r '[.[][]] | map(select(.context=="pstack-verifier" and .creator.login=="hypertask-runners[bot]")) | first | if . == null then "MISSING" else "\(.state | ascii_upcase) \(.creator.login)" end' "$AUTOMERGE_TMP/verifier-statuses.json")" || true
                 if [ "$state" = "SUCCESS" ]; then echo "check $c = SUCCESS $login"
                 else echo "check $c = $state $login"; ok=0; fi
                 continue
