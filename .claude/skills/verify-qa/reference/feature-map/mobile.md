@@ -3,6 +3,9 @@
 ## Sub-features
 
 - `phone-zoom` Phone zoom.
+- `phone-chat-delete` With `htpr-7575-phone-chat-delete` on, each personal chat row in the phone history list has a trash button labeled Delete chat. It asks "Delete this chat?" before it deletes. Agent rows do not get the button. Off, the button is hidden.
+- `phone-new-task-layout` With `htpr-8029-phone-new-task-layout` on, the phone new-task sheet starts below the status bar, and the attach and dictate bar stays at the bottom of the description card, above the keyboard. Desktop is unchanged. Off keeps the full-screen sheet.
+- `phone-chat-fullscreen` With `htpr-8032-phone-chat-fullscreen` on, phone AI chat opens as a full-screen dialog, and the board picker is one small chip in the header. Desktop stays the sidebar. Off restores the sheet and the large board picker.
 
 ## How to get to it (user POV)
 
@@ -40,6 +43,42 @@ Intercept only the title request with a 503 in a separate browser context to
 prove saving uses the first 80 description characters and shows the fallback
 notice. This injected failure proves recovery, not live provider health. Never
 change shared provider settings. Delete only this run's QA fixtures.
+
+### Delete a chat on the phone
+
+At 390x844, with `htpr-7575-phone-chat-delete` on, open AI chat and open
+the chat history list. A personal row has a button labeled Delete chat.
+Tap it. The browser asks "Delete this chat?". Confirm, and that chat
+leaves the list. Cancel, and it stays. An agent chat row has no trash
+button. Flag off, the trash button is absent on every row. Desktop
+delete is the same confirm and the same delete action.
+
+### New task sheet on the phone
+
+Open `/new?id=<board id>` at 390x844 with
+`htpr-8029-phone-new-task-layout` on. `#createTaskModal` has
+`data-phone-new-task-sheet="on"`. The form body padding-top is the
+safe area, and at least 28px, so the sheet starts below the status bar.
+The description card has `data-phone-new-task-card="on"`. The bar
+inside `.attachment-upload-container` (Attach files, and dictate) sits
+at the bottom of that card. Open the keyboard. The modal gets
+`data-phone-new-task-keyboard="on"` and its bottom edge is the keyboard
+inset, so the bar sits above the keyboard. A short visible height, 640px
+or less, sets `data-phone-new-task-short="on"`. At desktop width the
+sheet attribute is absent. Flag off, those attributes are absent and
+the sheet is full screen.
+
+### Full-screen phone chat
+
+At 390x844, with `htpr-8032-phone-chat-fullscreen` on, open AI chat
+from a board. The chat is a dialog labeled AI Chat with
+`data-ai-chat-phone-fullscreen`, and it has no sheet handle. The header
+is one row. The board picker is one small chip in that header, with no
+"Context:" label. The model line under the
+title (`data-ai-chat-mobile-model-label`) is hidden. On `/chat` the
+screen is still full screen, and that header chip is not added. Desktop
+stays the sidebar. Flag off restores the sheet, the handle, the large
+board picker, and the model line.
 
 ## Gotchas
 

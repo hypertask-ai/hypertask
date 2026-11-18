@@ -3,6 +3,10 @@
 ## Sub-features
 
 - `quick-entry-cards` Quick entry cards.
+- `drafts` `/drafts` lists your unsent comment drafts. Signed out, the page redirects to `/login`.
+- `action-chips` With `htpr-7979-action-chips` on, after Ctrl+J creates a ticket the chat can show up to three next-action buttons. Nothing that fits means no buttons. Off restores the writing chips.
+- `picker-auto` With `htpr-8995-picker-auto` on, the New Task model menu lists Auto first and uses that choice. Off hides Auto.
+- `ctrl-j-new-task` With `htpr-9002-ctrl-j-new-task` on, Ctrl+J on the desktop new-task screen opens Write with AI inside the description. It does not save the ticket. Off keeps the old Ctrl+J.
 
 ## How to get to it (user POV)
 
@@ -15,6 +19,56 @@ On a board in Kanban view, the column **+** at the top (`.create-new-task-button
 3. Click on the board background, press `N`. Expect the inline box at the bottom of the active column. Hover the bottom **Create task** row: the tooltip shows `N`. With focus outside the board, hover another column and press `N`: the box opens in that column. Focus a column or card, hover another column, press `N`: the focused column wins with the HTPR-8716 flag on; with it off, the hovered column wins. `Shift+C` must do nothing.
 4. Switch to Table view, click **New task** (or press `N`). Expect the inline box above the table; Enter creates the task in the selected row's column.
 5. Reload: the new cards stay.
+
+### Unsent comment drafts
+
+Open `/drafts` while signed in. Rows are unsent comment drafts, under
+an All tab and one tab per board. An empty list says "No drafts".
+Press E on a row. That posts `POST /api/drafts/archiveDraft` and the
+row leaves the list. A failed archive shows "Draft wasn’t archived.
+Try again." and the row comes back. G then D is Go to drafts. A
+signed-out visit redirects to `/login`. Saved comment drafts are not
+listed.
+
+### Action chips after Ctrl+J
+
+Turn `htpr-7979-action-chips` on. Create a ticket with Ctrl+J. The
+chat sidebar opens on that ticket. Under the first message, the label
+is "Questions and ideas for this ticket", then zero to three buttons.
+Each button is one next action or one open decision from the original
+note and the board rules. Click a button. That text is sent as the
+next chat message. When nothing fits, the label and the buttons are
+absent. Flag off, the chips are the writing prompts again. The request
+is `POST /api/ai/task-questions` with the original note.
+
+### Auto in the New Task model menu
+
+Turn on `htpr-8265-task-shortcuts-writer-model` and
+`htpr-8995-picker-auto`. Open Ctrl+J. The compose footer has the model
+menu. Auto is the first item. Its title is Auto and its description is
+"Picks the right model for each job". Pick Auto, then create a ticket.
+The task writer uses the automatic model for that job. A stored named
+model stays selected until you pick Auto. Flag off, Auto is not in
+that menu, and saving a task-writer preference of auto is rejected.
+
+### Ctrl+J inside the new task screen
+
+On desktop, open `/new?id=<board id>` with `htpr-9002-ctrl-j-new-task`
+on. The description placeholder says "Add a description, or press
+Ctrl+J to write it with AI" (Cmd+J on a Mac). Press Ctrl+J or Cmd+J.
+The Write with AI box opens in the description. The ticket is not
+saved, and AI chat does not open. With an empty description the prompt
+says "Describe the task…" and the send button says Write. With
+`htpr-7472-task-templates` on, the chips are that board's template
+names, up to eight. Otherwise the chips are Bug report, Feature, and
+Acceptance criteria. Write fills the title and description in the
+form and does not create the task. Press the shortcut again to close
+the box. The shortcut does nothing while the Ctrl+J palette is already
+open. On a phone, the inline box does not open. With the flag off, the
+inline box stays closed. The older shortcut, when that behavior is
+enabled, still saves the draft and opens the new ticket in AI chat.
+If that save fails, the toast says "Could not open AI chat. Your task
+draft is still here."
 
 ## Gotchas
 

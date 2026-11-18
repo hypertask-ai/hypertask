@@ -95,7 +95,7 @@ jobs:
     if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read, pull-requests: write, statuses: write }
+    permissions: { actions: read, contents: read, pull-requests: write, statuses: write }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
@@ -103,7 +103,7 @@ jobs:
         continue-on-error: true
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/verdict" }
       - env: { GH_TOKEN: "${{ github.token }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", PR: "${{ needs.resolve.outputs.pr }}" }
-        run: node scripts/pstack-verifier.mjs post
+        run: started="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --jq .run_started_at || true)"; RUN_STARTED_AT="$started" node scripts/pstack-verifier.mjs post
   cancel:
     needs: [resolve, post]
     if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success' }}"
@@ -119,7 +119,10 @@ jobs:
           run_id="${{ github.run_id }}"
           attempt="${{ github.run_attempt }}"
           url="https://github.com/${repo}/actions/runs/${run_id}/attempts/${attempt}"
-          state="$(gh api "repos/${repo}/commits/${sha}/statuses" --jq '.[] | select(.context=="pstack-verifier" and .target_url=="'"${url}"'") | .state' | head -n 1 || true)"
+          line="$(gh api "repos/${repo}/commits/${sha}/statuses" --jq '[.[] | select(.context=="pstack-verifier" and .target_url=="'"${url}"'")] | first | if . == null then "" else [.state, .description] | @tsv end' || true)"
+          state="${line%%$'\t'*}"
+          description="${line#*$'\t'}"
           if [ "$state" = "success" ] || [ "$state" = "failure" ]; then exit 0; fi
+          if [ "$state" = "pending" ] && [ "$description" = "waiting for required checks" ]; then exit 0; fi
           gh api --method POST "repos/${repo}/statuses/${sha}" -f state=failure -f context=pstack-verifier -f description="FAIL: The verifier did not finish." -f target_url="$url"
           exit 1

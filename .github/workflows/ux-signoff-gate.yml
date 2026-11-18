@@ -21,9 +21,8 @@ permissions:
   statuses: write
 
 concurrency:
-  group: ux-signoff-gate
-  queue: max
-  cancel-in-progress: false
+  group: ux-signoff-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   ux-signoff-gate:

@@ -4,11 +4,6 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '23 4 * * 1'
-  # A new workflow cannot be dispatched until it exists on the default branch.
-  # Seed the packages on this one branch before any CI consumers switch to GHCR.
-  push:
-    branches: [yper4-231-ghcr-ci-images]
-    paths: [.github/workflows/ci-images.yml, .github/ci-images.json]
 
 permissions: {}
 
