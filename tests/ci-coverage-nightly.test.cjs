@@ -19,14 +19,14 @@ function assertNormalTriggers(ci, request) {
   for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
     assert.equal(ci.jobs[key].if, "github.event_name != 'pull_request'", key);
   }
-  assert.equal(ci.jobs["browser-smoke"].if, "always()");
+  assert.equal(ci.jobs["browser-smoke"].if, "always() && github.event_name != 'pull_request'");
   assert.equal(ci.jobs["ci-tests"].name, "ci-tests");
   assert.equal(
     ci.jobs["ci-tests"].if,
     "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)",
   );
   assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test", "ci-fixtures"]);
-  assert.deepEqual(request.on.pull_request.types, prTypes);
+  assert.equal(request.on.pull_request, undefined);
   assert.equal(request.jobs.request.if, undefined);
 }
 
@@ -126,7 +126,7 @@ test("contract rejects restored instrumentation, metadata triggers, and label sk
     const changed = { ...ci, on: { ...ci.on, pull_request: { types: [...prTypes, type] } } };
     assert.throws(() => assertNormalTriggers(changed, request));
   }
-  const edited = { ...request, on: { pull_request: { types: [...prTypes, "edited"] } } };
+  const edited = { ...request, on: { pull_request: { types: prTypes } } };
   assert.throws(() => assertNormalTriggers(ci, edited));
   const skipped = { ...ci, jobs: { ...ci.jobs, "ci-tests": { ...ci.jobs["ci-tests"], if: "contains(github.event.pull_request.labels.*.name, 'full-ci')" } } };
   assert.throws(() => assertNormalTriggers(skipped, request));

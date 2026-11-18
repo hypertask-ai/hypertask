@@ -17,34 +17,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  pr-status:
-    name: report app-smoke nightly move
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    permissions:
-      contents: read
-      pull-requests: read
-      statuses: write
-    steps:
-      - name: Report the required app-smoke status
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
-        with:
-          script: |
-            const request = context.payload.workflow_run;
-            const { data: pulls } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-              ...context.repo, commit_sha: request.head_sha,
-            });
-            const current = pulls.some(pr => pr.state === 'open' && pr.base.ref === 'production' && pr.head.sha === request.head_sha);
-            if (!current) return;
-            await github.rest.repos.createCommitStatus({
-              ...context.repo,
-              sha: request.head_sha,
-              state: 'success',
-              context: 'app-smoke',
-              description: 'moved to nightly (HTPR-9450)',
-            });
-
   warm-dependencies:
     name: warm app-smoke dependencies
     if: github.event_name == 'push'

@@ -50,13 +50,15 @@ pr_job_budget:
   # count is measured per push with scripts/ci-jobs-per-push.sh.
   # HTPR-9450 moves the UI-driving jobs to nightly production runs. CI Tests
   # still lists 21 jobs on a pull request, but the six browser jobs skip there
-  # and start on the nightly production run instead, so a pull request starts
-  # 15 of them. App Smoke and the two pilot workflows stop running on a pull
-  # request altogether, and the screen comparison lives in its own workflow.
-  normal_synchronize_before: 21
-  normal_synchronize_after: 15
-  opened_before: 21
-  opened_after: 15
+  # and start on the nightly production run instead. The browser-smoke summary
+  # and the App Smoke status stub stop starting on a pull request too, so a pull
+  # request starts 13 of them. App Smoke and the two pilot workflows stop
+  # running on a pull request altogether, and the screen comparison lives in its
+  # own workflow.
+  normal_synchronize_before: 19
+  normal_synchronize_after: 13
+  opened_before: 19
+  opened_after: 13
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -115,21 +117,19 @@ review_first_gate:
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
-  # An administrator applied these checks through GitHub's ruleset API on
-  # 2026-09-08. The hourly Required Check Settings monitor verifies this live ruleset.
-  # claude-review is the reviewer's legacy status name; the live ruleset
-  # still requires it next to ai-review (HTPR-6734).
-  contexts: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan, pstack-verifier]
-  automerge_also_requires: [app-smoke, browser-smoke, ci-tests, ai-review, next-public-secrets, pr-title, feature-flag-gate, pstack-verifier]
-  # HTPR-9450 keeps both smoke contexts as PR stubs.
-  # app-smoke.yml publishes the app-smoke commit status.
-  # ci-tests.yml reports the browser-smoke job summary.
-  # Both say "moved to nightly (HTPR-9450)".
-  # Neither stub builds or starts a browser.
-  # Keep both until an admin removes their requirements.
-  # Ruleset production-required-checks, id 21854377, stays unchanged.
-  # automerge_also_requires mirrors the REQUIRED list in automerge.yml,
-  # and the verifier still waits for both contexts.
+  # HTPR-9450: one independent verifier per pull request. Its verdict is the only
+  # required context; green CI and bot reviews are not verdicts. An administrator
+  # removes the other nine contexts from ruleset production-required-checks
+  # (id 21854377) right after this contract merges. The hourly Required Check
+  # Settings monitor accepts either the old ten-context ruleset or this
+  # one-context ruleset while that flip is pending.
+  contexts: [pstack-verifier]
+  automerge_also_requires: [pstack-verifier]
+  # The verifier reads this list as its wait set and refuses PASS while any
+  # context here is red or missing. claude-review is the reviewer's legacy
+  # status name and still publishes next to ai-review (HTPR-6734).
+  verifier_waits_for: [ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan]
+  # automerge_also_requires mirrors the REQUIRED list in automerge.yml.
 
 pr_size_observation:
   ticket: https://app.hypertask.ai/detail/project-11514/29
@@ -665,7 +665,7 @@ policies:
         human_github_action_required: false
         note: "The next automatic merge sweep re-evaluates health. Green monitoring alone never clears the freeze; if the restored workflow is disabled or red, repair it before resuming merges."
   production_ruleset:
-    required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan, pstack-verifier]
+    required_status_checks: [pstack-verifier]
 
 ci_app_api_pool:
   ticket: https://app.hypertask.ai/detail/project-4060/881

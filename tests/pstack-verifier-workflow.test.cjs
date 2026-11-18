@@ -80,13 +80,14 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(names.filter((name) => !name.includes("${{ github.run_id }}-${{ github.run_attempt }}")), []);
   assert.equal(policy.pstack_verifier.required, true);
   assert.equal(policy.pstack_verifier.note, "https://app.hypertask.ai/detail/project-15/9411");
-  assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), true);
+  assert.deepEqual(policy.required_checks.contexts, ["pstack-verifier"]);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
+  assert.deepEqual(REQUIRED_CI_CONTEXTS, [...policy.required_checks.verifier_waits_for]);
   assert.equal(REQUIRED_CI_CONTEXTS.includes("pstack-verifier"), false);
-  assert.deepEqual([...policy.policies.production_ruleset.required_status_checks].sort(), [...REQUIRED_CI_CONTEXTS, "pstack-verifier"].sort());
-  assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
+  assert.deepEqual([...policy.policies.production_ruleset.required_status_checks], ["pstack-verifier"]);
+  assert.deepEqual([...policy.required_checks.automerge_also_requires], ["pstack-verifier"]);
   const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");
   const guardAt = cancel.indexOf("waiting for required checks");
   const failureAt = cancel.indexOf("state=failure");
@@ -249,7 +250,9 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   mkdirSync(bin);
   mkdirSync(join(dir, "candidate"));
   mkdirSync(join(dir, "trusted", "scripts"), { recursive: true });
+  mkdirSync(join(dir, "trusted", "docs"), { recursive: true });
   copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(dir, "trusted", "scripts", "pstack-verifier.mjs"));
+  copyFileSync(join(root, "docs/ci-policy.yml"), join(dir, "trusted", "docs", "ci-policy.yml"));
   writeFileSync(join(bin, "docker"), dockerStub(join(dir, "docker.log")), { mode: 0o755 });
   const ready = join(dir, "ready.env");
   const stop = join(dir, "stop");
@@ -298,6 +301,8 @@ test("a smoke boot that never writes ready records a down preview", (t) => {
   const scripts = join(trusted, "scripts");
   const work = join(dir, "work");
   mkdirSync(scripts, { recursive: true });
+  mkdirSync(join(trusted, "docs"), { recursive: true });
+  copyFileSync(join(root, "docs/ci-policy.yml"), join(trusted, "docs", "ci-policy.yml"));
   mkdirSync(join(dir, "candidate"));
   copyFileSync(join(root, "scripts/pstack-verifier-drive.mjs"), join(scripts, "pstack-verifier-drive.mjs"));
   copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(scripts, "pstack-verifier.mjs"));

@@ -55,25 +55,26 @@ App Smoke falls from four to two jobs.
 Skipped jobs and synthetic check contexts are excluded.
 Path-specific gates can add jobs on both sides.
 
-PRs keep cheap checks and the independent verifier.
-The existing ruleset still requires all ten contexts.
-This PR leaves that ruleset unchanged.
-An admin must remove requirements before deleting stubs.
+PRs keep the cheap checks and run one independent verifier.
+The verifier is the only required context, and its verdict is the only verdict.
+Green CI and bot reviews are not verdicts.
+The verifier refuses to pass while a cheap check it waits for is red or missing;
+that list is `required_checks.verifier_waits_for` in `docs/ci-policy.yml`.
+An admin removes the other nine contexts from the ruleset after this contract
+merges, and the hourly settings monitor accepts either contract until then.
 
 Everything that drives the UI left the pull request:
 
 - `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
-  `browser-smoke-matrix` and `browser-smoke-flags` run after production pushes.
-  They also run nightly at 03:23 UTC.
-  PRs retain a cheap `browser-smoke` summary stub.
+  `browser-smoke-matrix`, `browser-smoke-flags` and their `browser-smoke`
+  summary run after production pushes. They also run nightly at 03:23 UTC.
+  No pull request starts any of them.
 - PR `visual-compare` stays dormant behind skipped `browser-build`.
   `visual-regression.yml` owns the nightly screen comparison.
   Production pushes and manual comparisons remain available.
-- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
-  request gets a status stub from `app-smoke.yml`.
-  That trusted job checks out no candidate code.
-  `app-smoke-request.yml` requests that status after each PR.
-  Manual dispatch retains the validated smoke path.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). No pull
+  request publishes an `app-smoke` status.
+  `app-smoke-request.yml` is dispatch-only and retains the validated smoke path.
 - `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
   own nightly crons.
 
@@ -83,15 +84,10 @@ using the diff to choose them, and it boots the candidate with the same
 with `bugfix-regression`, which runs the changed test on the merge base and on
 the head.
 
-Cheap checks remain required alongside `pstack-verifier`.
-Both smoke contexts remain required PR stubs.
-Each says "moved to nightly (HTPR-9450)".
-Neither stub builds or starts a browser.
-`app-smoke.yml` publishes the `app-smoke` commit status.
-`ci-tests.yml` reports the `browser-smoke` job summary.
-Automerge and the verifier wait for both contexts.
-Only an admin can remove these ruleset requirements.
-Keep the stubs until that happens.
+Automerge waits for the same single context.
+The cheap checks still gate the verifier, so a red `ci-tests`, `secret-scan`,
+`next-public-secrets`, `pr-title`, `feature-flag-gate` or `ai-review` never
+reaches a pass.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the

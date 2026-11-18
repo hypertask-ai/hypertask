@@ -417,7 +417,7 @@ test("the workflow reports and never blocks a merge", () => {
   assert.equal(job["runs-on"], "ubuntu-latest");
   assert.ok(job.if.includes("github.event.pull_request.draft == false"));
   const policy = yaml.load(readFileSync(path.join(root, "docs/ci-policy.yml"), "utf8"));
-  for (const list of [policy.required_checks.contexts, policy.required_checks.automerge_also_requires]) {
+  for (const list of [policy.required_checks.contexts, policy.required_checks.automerge_also_requires, policy.required_checks.verifier_waits_for]) {
     assert.ok(!list.includes("bugfix-regression"), "the check stays report-only until it has a week of clean runs");
   }
   assert.equal(policy.bugfix_regression.workflow, ".github/workflows/bugfix-regression.yml");

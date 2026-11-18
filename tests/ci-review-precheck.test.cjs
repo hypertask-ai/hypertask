@@ -73,10 +73,9 @@ test("ten consecutive rate-limited pushes still start tests without retries", ()
   }
 });
 
-test("independent required review contexts remain mandatory", () => {
+test("independent required review contexts remain mandatory for the verifier", () => {
   const policy = yaml.load(readFileSync("docs/ci-policy.yml", "utf8"));
   for (const context of ["ai-review", "claude-review"]) {
-    assert.ok(policy.required_checks.contexts.includes(context));
-    assert.ok(policy.policies.production_ruleset.required_status_checks.includes(context));
+    assert.ok(policy.required_checks.verifier_waits_for.includes(context));
   }
 });

@@ -147,7 +147,8 @@ try {
         ruleset.conditions.ref_name.exclude.includes("refs/heads/production")) {
       throw new Error("The required-check ruleset does not protect production.");
     }
-    const expected = [
+    const expected = ["pstack-verifier"].sort();
+    const transition = [
       "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
       "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
     ].sort();
@@ -155,9 +156,12 @@ try {
       .filter((rule) => rule.type === "required_status_checks")
       .flatMap((rule) => rule.parameters.required_status_checks);
     const actual = [...new Set(checks.map((check) => check.context))].sort();
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    const contract = JSON.stringify(actual) === JSON.stringify(expected) ? "verifier-only"
+      : JSON.stringify(actual) === JSON.stringify(transition) ? "transition-ten" : "";
+    if (!contract) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");
     }
+    console.log(`Required-check settings: matched the ${contract} contract (${actual.length} required contexts).`);
     if (checks.some((check) => check.integration_id !== 15368)) {
       throw new Error("A required check is missing GitHub Actions integration_id 15368.");
     }

@@ -121,6 +121,21 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
+test("the verifier refuses a pass while any cheap check it waits for is red", async () => {
+  const { ciGate, REQUIRED_CI_CONTEXTS } = await load();
+  const yaml = require("js-yaml");
+  const policy = yaml.load(require("node:fs").readFileSync("docs/ci-policy.yml", "utf8"));
+  assert.deepEqual(REQUIRED_CI_CONTEXTS, [...policy.required_checks.verifier_waits_for]);
+  for (const cheap of ["ci-tests", "secret-scan", "next-public-secrets", "pr-title", "feature-flag-gate", "ai-review"]) {
+    assert.equal(REQUIRED_CI_CONTEXTS.includes(cheap), true, cheap);
+  }
+  for (const name of REQUIRED_CI_CONTEXTS) {
+    const runs = REQUIRED_CI_CONTEXTS.map((item) => ({ name: item, conclusion: item === name ? "failure" : "success" }));
+    const statuses = REQUIRED_CI_CONTEXTS.filter((item) => item !== name).map((context) => ({ context, state: "success" }));
+    assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: false, checksPending: false }, name);
+  }
+});
+
 test("a non-app pass waits until every required context is green", async () => {
   const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
   const reason = "no user path in this diff";

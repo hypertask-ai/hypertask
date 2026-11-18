@@ -2242,16 +2242,12 @@ jobs:
     # HYCI-59: the one build is a need of its own, so a build that fails or is
     # cancelled before any shard starts is a red check, never a skipped one.
     needs: [browser-build, browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
-    if: always()
+    if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      - name: Report the required browser-smoke stub
-        if: github.event_name == 'pull_request'
-        run: echo 'moved to nightly (HTPR-9450)' >> "$GITHUB_STEP_SUMMARY"
       - name: Require every browser shard
-        if: github.event_name != 'pull_request'
         env:
           BUILD: ${{ needs.browser-build.result }}
           DESKTOP: ${{ needs.browser-smoke-desktop.result }}
