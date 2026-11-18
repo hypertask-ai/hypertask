@@ -8,7 +8,8 @@ test("doctor on a healthy local instance reports every check true", async () => 
   const web = await serve(200);
   const db = await tcp();
   const dir = home();
-  mkdirSync(join(dir, "default"), { recursive: true });
+  mkdirSync(join(dir, "default", "browser"), { recursive: true });
+  writeFileSync(join(dir, "default", "browser", "state.json"), JSON.stringify({ cookies: [{ name: "ht_session", value: "x", domain: "127.0.0.1", path: "/", expires: -1 }] }));
   writeFileSync(join(dir, "default", "env.json"), JSON.stringify({
     baseUrl: `http://127.0.0.1:${web.address().port}`,
     databaseUrl: `postgresql://verify:verify@127.0.0.1:${db.address().port}/hypertask`,
@@ -19,7 +20,8 @@ test("doctor on a healthy local instance reports every check true", async () => 
   db.close();
   assert.equal(result.status, 0, result.stdout);
   assert.equal(result.json.ok, true);
-  assert.deepEqual(result.json.data.checks.map((check) => check.name), ["page /login", "database", "dev pid"]);
+  assert.deepEqual(result.json.data.checks.map((check) => check.name), ["page /login", "database", "dev pid", "identity"]);
+  assert.equal(result.json.data.checks.find((check) => check.name === "identity").detail, "identity ok: user 985");
   assert.equal(result.json.data.checks.every((check) => check.ok), true);
 });
 
@@ -32,7 +34,7 @@ test("doctor fails on an instance that does not answer and names the failing che
   web.close();
   assert.equal(result.status, 1);
   assert.equal(result.json.ok, false);
-  assert.deepEqual(result.json.data.failed, ["page /login", "database", "dev pid"]);
+  assert.deepEqual(result.json.data.failed, ["page /login", "database", "dev pid", "identity"]);
   assert.match(result.json.error.next, /ht-verify up/);
 });
 

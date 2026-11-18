@@ -10,13 +10,17 @@ Usage:
   --dry-run   Print what would be killed and removed, change nothing.
   --keep-db   Keep the Postgres container and volume, for a faster next run.
 
-Kills the process group recorded in dev.pid, then removes the
-hypertask-verify-db container and volume. Never kills by process name or
-another session's server.
+Kills only the pid recorded in dev.pid, then removes the hypertask-verify-db
+container and volume. Never kills by process name or another session's server.
 
 Examples:
   ht-verify down
   ht-verify down --keep-db`;
+
+function ownsPid(pid) {
+  const result = run("ps", ["-p", String(pid), "-o", "command="]);
+  return result.status === 0 && /next/.test(result.stdout);
+}
 
 module.exports = {
   name: "down",
@@ -36,18 +40,19 @@ module.exports = {
     if (!values["keep-db"]) steps.push(`docker rm -f ${container}`, `docker volume rm ${container}`);
     if (values["dry-run"]) return { target: "local", data: dryRun("down", steps, { keptDatabase: Boolean(values["keep-db"]) }).data };
     const stopped = [];
-    if (pid) {
-      try {
-        process.kill(-pidFile.pid, "SIGTERM");
-        stopped.push(`process group ${pidFile.pid}`);
-      } catch {
+    let skipped = null;
+    if (pid && !ownsPid(pid)) {
+      skipped = `pid ${pid} no longer runs Next, left alone`;
+    } else if (pid) {
+      const signalled = [-pid, pid].some((target) => {
         try {
-          process.kill(pidFile.pid, "SIGTERM");
-          stopped.push(`pid ${pidFile.pid}`);
+          process.kill(target, "SIGTERM");
+          return true;
         } catch {
-          stopped.push(`pid ${pidFile.pid} was already gone`);
+          return false;
         }
-      }
+      });
+      stopped.push(signalled ? `process group ${pid}` : `pid ${pid} was already gone`);
       try {
         unlinkSync(path.join(runDir(), "dev.pid"));
       } catch {
@@ -55,10 +60,13 @@ module.exports = {
       }
     }
     if (!values["keep-db"]) {
-      run("docker", ["rm", "-f", container]);
-      run("docker", ["volume", "rm", container]);
-      stopped.push(`container and volume ${container}`);
+      const results = [run("docker", ["rm", "-f", container]), run("docker", ["volume", "rm", container])];
+      const failed = results.filter((result) => result.status !== 0 && !/no such (container|volume)/i.test(result.stderr));
+      if (failed.length) {
+        fail(`docker could not remove ${container}: ${(failed[0].stderr || failed[0].stdout).trim().split("\n").pop()}`, "Run docker rm -f hypertask-verify-db by hand, then retry.", "failed");
+      }
+      if (results.some((result) => result.status === 0)) stopped.push(`container and volume ${container}`);
     }
-    return { target: "local", data: { stopped, keptDatabase: Boolean(values["keep-db"]) } };
+    return { target: "local", data: { stopped, skipped, keptDatabase: Boolean(values["keep-db"]) } };
   },
 };
