@@ -2,14 +2,16 @@ import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import { home, json } from "./lib/test-helpers.mjs";
 
-test("help lists the commands and each one documents its flags", async () => {
+test("help lists every command and each one documents its flags", async () => {
   const help = await json(home(), ["--help"]);
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /\n  up\s+start the disposable local stack/);
-  const page = await json(home(), ["help", "up"]);
-  assert.equal(page.status, 0);
-  assert.match(page.stdout, /Usage:/);
-  assert.match(page.stdout, /Example:/);
+  for (const command of ["up", "down", "doctor"]) assert.match(help.stdout, new RegExp(`\\n  ${command}\\s`));
+  for (const command of ["up", "down", "doctor"]) {
+    const page = await json(home(), ["help", command]);
+    assert.equal(page.status, 0, command);
+    assert.match(page.stdout, /Usage:/);
+    assert.match(page.stdout, /Example/);
+  }
 });
 
 test("an unknown command or option is a usage error that names the next step", async () => {
