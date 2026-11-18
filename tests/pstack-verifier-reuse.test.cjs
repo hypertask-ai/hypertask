@@ -80,16 +80,17 @@ test("resolve stops and publishes when the same head tree was already verified",
         const url = args.join(" ");
         if (url.includes("/issues/5/comments")) return JSON.stringify([{ user: { login: BOT }, body: markerBodies() }]);
         if (url.startsWith("run download")) return "";
-        if (url.includes("/statuses")) return JSON.stringify([{ context: "pstack-verifier", state: "success", target_url: `https://github.com/${REPO}/actions/runs/${RUN}/attempts/1` }]);
+        if (url.includes("/statuses")) return JSON.stringify([{ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "success", target_url: `https://github.com/${REPO}/actions/runs/${RUN}/attempts/1` }]);
         if (url.includes(`/commits/${head}`)) return JSON.stringify({ commit: { tree: { sha: TREE } } });
         if (url.includes("vnd.github.diff")) return diffFor();
         if (url.includes("/pulls/5")) return JSON.stringify(pull);
         throw new Error(url);
       },
     });
-    assert.match(String(require("node:fs").readFileSync(output, "utf8")), /stop=true/);
-    assert.equal(posts.length, 1);
-    assert.equal(posts[0].state, "success");
+    const written = String(require("node:fs").readFileSync(output, "utf8"));
+    assert.match(written, /stop=true/);
+    assert.match(written, /mark=success/);
+    assert.deepEqual(posts, []);
   } finally {
     for (const [key, value] of savedEnv) value === undefined ? delete process.env[key] : (process.env[key] = value);
   }
@@ -104,12 +105,10 @@ test("resolve keeps going when the earlier artifact is gone", async () => {
   const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT", "RUNNER_TEMP"].map((key) => [key, process.env[key]]);
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: REPO, HEAD_SHA: head, GITHUB_RUN_ID: "11", GITHUB_RUN_ATTEMPT: "1", WORK: work, GITHUB_OUTPUT: output, RUNNER_TEMP: work });
   const pull = { number: 5, state: "open", draft: false, user: { login: "octocat" }, title: "t", body: "Author-Model: deepseek", base: { ref: "production", sha: BASE }, head: { sha: head, repo: { full_name: REPO } } };
-  const posts = [];
   try {
     await resolveCommand({
       event: { workflow_run: { conclusion: "success", head_sha: head, pull_requests: [{ number: 5 }] } },
       spawn: () => ({ status: 0, stdout: `${"e".repeat(40)} 0000000\n` }),
-      postStatus: async (row) => { posts.push(row); },
       gh: (args) => {
         const url = args.join(" ");
         if (url.includes("/issues/5/comments")) return JSON.stringify([{ user: { login: BOT }, body: markerBodies() }]);
@@ -122,8 +121,7 @@ test("resolve keeps going when the earlier artifact is gone", async () => {
         throw new Error(url);
       },
     });
-    assert.match(String(require("node:fs").readFileSync(output, "utf8")), /stop=false/);
-    assert.equal(posts.some((row) => row.state === "success"), false);
+    assert.doesNotMatch(String(require("node:fs").readFileSync(output, "utf8")), /mark=success/);
   } finally {
     for (const [key, value] of savedEnv) value === undefined ? delete process.env[key] : (process.env[key] = value);
   }
@@ -145,9 +143,10 @@ test("a base that moved during the run leaves the verdict pending for the rechec
       gh: (args) => {
         const url = String(args[1] ?? "");
         if (url === `repos/${REPO}/pulls/5`) return JSON.stringify(pull);
-        if (url === `repos/${REPO}/commits/${head}/statuses`) return JSON.stringify([{ context: "pstack-verifier", state: "pending", target_url: `https://github.com/${REPO}/actions/runs/10/attempts/1` }]);
+        if (url === `repos/${REPO}/commits/${head}/statuses`) return JSON.stringify([{ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "pending", target_url: `https://github.com/${REPO}/actions/runs/10/attempts/1` }]);
         throw new Error(url);
       },
+      token: "app-token",
       fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
     });
     assert.equal(posts.length, 1);
@@ -176,9 +175,10 @@ test("a verdict comment carries the marker reuse and base drift read", async () 
       gh: (args) => {
         const url = String(args[1] ?? "");
         if (url === `repos/${REPO}/pulls/5`) return JSON.stringify(pull);
-        if (url === `repos/${REPO}/commits/${head}/statuses`) return JSON.stringify([{ context: "pstack-verifier", state: "pending", target_url: `https://github.com/${REPO}/actions/runs/10/attempts/1` }]);
+        if (url === `repos/${REPO}/commits/${head}/statuses`) return JSON.stringify([{ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "pending", target_url: `https://github.com/${REPO}/actions/runs/10/attempts/1` }]);
         throw new Error(url);
       },
+      token: "app-token",
       fetch: async (url, options) => { posted.push({ url: String(url), body: JSON.parse(options.body) }); return { ok: true }; },
     });
   } finally {

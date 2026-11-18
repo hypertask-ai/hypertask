@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawn, spawnSync } = require("node:child_process");
-const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
+const { copyFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } = require("node:fs");
 const { createServer } = require("node:http");
 const { tmpdir } = require("node:os");
 const { dirname, join } = require("node:path");
@@ -14,13 +14,14 @@ const trusted = read(".github/workflows/pstack-verifier.yml");
 const request = read(".github/workflows/pstack-verifier-request.yml");
 const policy = read("docs/ci-policy.yml");
 const expected = {
-  resolve: { contents: "read", "pull-requests": "read", statuses: "write", actions: "read" },
+  resolve: { contents: "read", "pull-requests": "read", actions: "read" },
   plan: { contents: "read" },
   base: { contents: "read", packages: "read" },
   drive: { contents: "read", packages: "read" },
   judge: { contents: "read", checks: "read", statuses: "read" },
-  post: { actions: "read", contents: "read", "pull-requests": "write", statuses: "write" },
-  cancel: { statuses: "write" },
+  mark: { contents: "read", statuses: "read" },
+  post: { actions: "read", contents: "read", "pull-requests": "write", statuses: "read" },
+  cancel: { contents: "read", statuses: "read" },
 };
 
 function runParts(step) {
@@ -63,13 +64,13 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(needs(trusted.jobs.base), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "base", "drive"]);
-  assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge"]);
+  assert.deepEqual([needs(trusted.jobs.mark), needs(trusted.jobs.post)], [["resolve"], ["resolve", "judge", "mark"]]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
-  assert.deepEqual(secretJobs, ["plan", "base", "judge"]);
+  assert.deepEqual(secretJobs, ["plan", "base", "judge", "mark", "post", "cancel"]);
   assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.") || value.includes("OPENROUTER_EVAL_KEY")), false);
   assert.deepEqual(tokenGaps(trusted.jobs), []);
-  assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").includes("checkout")), false);
+  assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").startsWith("actions/checkout")), true);
   const names = [];
   for (const job of Object.values(trusted.jobs)) {
     for (const step of job.steps ?? []) {
@@ -81,7 +82,7 @@ test("each verifier job has the declared permissions, key and token", async () =
   }
   assert.deepEqual(names.filter((name) => !name.includes("${{ github.run_id }}-${{ github.run_attempt }}")), []);
   assert.equal(policy.pstack_verifier.required, true);
-  assert.equal(policy.pstack_verifier.note, "https://app.hypertask.ai/detail/project-15/9411");
+  assert.equal(policy.pstack_verifier.note, "app 5264284 writes it from environment pstack-verifier on production");
   assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), true);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
@@ -92,10 +93,19 @@ test("each verifier job has the declared permissions, key and token", async () =
   for (const name of REQUIRED_CI_CONTEXTS) assert.equal(ruleset.has(name), false, name);
   for (const name of ["ai-review", "claude-review", "app-smoke", "browser-smoke"]) assert.equal(REQUIRED_CI_CONTEXTS.includes(name), false, name);
   assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
-  const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");
-  const guardAt = cancel.indexOf("waiting for required checks");
-  const failureAt = cancel.indexOf("state=failure");
-  assert.equal(guardAt >= 0 && failureAt > guardAt, true);
+});
+
+test("only mark, post and cancel use the verifier environment and the job token cannot write the status", () => {
+  const named = readdirSync(".github/workflows").filter((name) => /\.ya?ml$/.test(name)).flatMap((file) => Object.entries(read(`.github/workflows/${file}`)?.jobs ?? {}).filter(([, job]) => (job.environment?.name ?? job.environment) === "pstack-verifier").map(([name]) => `${file}:${name}`));
+  assert.deepEqual(named.sort(), ["pstack-verifier.yml:cancel", "pstack-verifier.yml:mark", "pstack-verifier.yml:post"]);
+  const refs = (job) => (job.steps ?? []).filter((step) => String(step.uses ?? "").startsWith("actions/checkout")).map((step) => step.with?.ref ?? "");
+  for (const name of ["mark", "post", "cancel"]) {
+    assert.deepEqual(refs(trusted.jobs[name]), ["${{ github.sha }}"]);
+    assert.equal(trusted.jobs[name].permissions.statuses, "read");
+    assert.match(trusted.jobs[name].if, /github\.ref == 'refs\/heads\/production'/);
+  }
+  assert.equal(refs(trusted.jobs.drive).includes("${{ needs.resolve.outputs.sha }}"), true);
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("HYPERTASK_RUNNERS_KEY")), false);
 });
 
 test("recheck waits on production, reruns only a verifier wait, and pages past a full run list", async () => {
@@ -288,7 +298,7 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
   const cli = spawnSync(process.execPath, [join(root, "scripts/pstack-verifier.mjs")], { encoding: "utf8" });
   assert.equal(cli.status, 1);
-  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|judge-base\|post/);
+  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|judge-base\|mark\|post\|cancel/);
 });
 
 function playwrightModules() {

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+const APP_INTEGRATIONS = { "pstack-verifier": 5264284 };
 const maxWaitSeconds = 3900;
 const deadline = Date.now() + 4_000_000;
 const proofPath = process.env.SETTINGS_PROOF || ".settings-proof/last-verified.json";
@@ -156,14 +157,19 @@ try {
       throw new Error("Live required checks do not match docs/ci-policy.yml: pstack-verifier is the whole set.");
     }
     console.log(`Required-check settings: the live ruleset requires ${actual.join(", ")} and nothing else.`);
-    if (checks.some((check) => check.integration_id !== 15368)) {
-      throw new Error("A required check is missing GitHub Actions integration_id 15368.");
+    const integrations = Object.fromEntries(checks.map((check) => [check.context, check.integration_id]));
+    for (const check of checks) {
+      const pinned = APP_INTEGRATIONS[check.context] ?? 15368;
+      if (check.integration_id !== pinned) {
+        throw new Error(pinned === 15368 ? `Required check ${check.context} is missing GitHub Actions integration_id 15368.` : `Required check ${check.context} integration must be ${pinned}.`);
+      }
     }
     recordVerified({
       repository: repo,
       defaultBranch: repository.default_branch,
       rulesetId: matches[0].id,
       contexts: actual,
+      integrations,
     });
     publishResult(true);
     console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);
