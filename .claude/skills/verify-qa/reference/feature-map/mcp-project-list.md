@@ -3,6 +3,7 @@
 ## Sub-features
 
 - `mcp-and-cli-project-listing` MCP and CLI project listing.
+- `board-team-id` With `htpr-8413-board-team-id` on, each project from `GET /api/mcp/projects` includes `teamId`, the board's team id or null, when the caller does not project fields. A `fields` list includes `teamId` only when it names `teamId`. Flag off omits the field. The flag defaults to Everyone.
 
 ## How to get to it (user POV)
 
@@ -18,6 +19,7 @@
 5. Request `limit=0`, `limit=nope`, `limit=1.5`, `offset=nope`, `offset=-1`, and `sort_order=sideways`. Each returns HTTP 400, not 500.
 6. Request `sort_order=DESC` and `limit=1000`. Both succeed; the page limit stays capped at 100.
 7. Without authentication, require HTTP 401. Project visibility must remain scoped to the authenticated caller.
+8. With `htpr-8413-board-team-id` on, list projects with no `fields` parameter. Every project has `teamId` as a string or null, and no other new field. `fields=id,title` omits `teamId`. `fields=id,teamId` keeps it. Flag off omits `teamId` on the unfiltered list. Do not switch the flag on production. Read-only.
 
 ## Gotchas
 
@@ -25,6 +27,7 @@
 - Empty zero-sized pages dereference a missing last project while creating a cursor.
 - Invalid sort values reach the database instead of returning a readable validation error.
 - Validation accidentally changes ordinary listings, metadata, or cursor pagination.
+- A `fields` list drops `teamId` while `htpr-8413-board-team-id` is on, unless the caller names `teamId`.
 
 ### What proof to collect
 

@@ -9,6 +9,10 @@ Fuzzy-person search is permanent for everyone: typed `from:`/`assignee:` names o
 ## Sub-features
 
 - `search-autocomplete` Search autocomplete.
+- `ask-ai-fullscreen` With `htpr-6936-ask-ai-fullscreen` on, Ask AI on `/search` opens the full-screen AI chat with that question in a new conversation. Exit full-screen AI chat returns to the search address, which still has the query. Off, Ask AI opens the existing chat panel.
+- `search-server-start` With `htpr-7501-search-server-start` on, a full page load of `/search` with a query starts that search on the server. Results, tabs and order are that same search. A missing or mismatched server result falls back to the page searching itself.
+- `search-once` With `htpr-7502-search-once` on, that full page load does not send the search a second time when the server already started the same query. Off, the page sends the search again.
+- `search-lookups` With `htpr-9015-search-lookups` on, AI search remembers one team route for a minute, reuses the Task Writer ticket search, and skips the memory list when board memory is off. The tickets returned stay the same. Off repeats those lookups.
 
 ## How to get to it (user POV)
 
@@ -30,15 +34,24 @@ With search layout on for everyone and `htpr-6994-search-esc-leaves` off: Esc wi
 5. `after:`/`before:`/`on:` offer Today, Yesterday, Last 7 days, This week and a valid typed `YYYY-MM-DD`. Shortcuts insert real ISO dates, not unsupported words. Dates are UTC; This week is Monday. `after:` excludes the chosen day and `before:` excludes it too: the shortcut selects a boundary, not an implicit range. `on:` matches that day. `2024-02-29` is accepted; `2026-02-30` is not suggested. Advanced typed `created:YYYY-MM-DD` and `updated:YYYY-MM-DD` remain supported.
 6. While entering an operator value (including a fully typed value before acceptance), a coloured border frames just that filter, not the free text before it. Accepted chips use six distinct palettes: violet people, blue boards, rose labels, emerald status, amber dates, cyan `has`. Verify Porcelain and Graphite/AMOLED: chip text remains primary theme text; colours never replace readable labels.
 7. Search for an existing text term such as `login is:open`: literal, case-insensitive matches in result titles are marked. Filter values are not highlighted as text. Title text is rendered by React, not injected as HTML.
+8. Full page load: open a search address with a query in a new tab, not by moving inside the app. With `htpr-7501-search-server-start` and `htpr-7502-search-once` on, the results come from that one search. Ask AI on a non-empty query, with `htpr-6936-ask-ai-fullscreen` on, opens the full-screen chat; Exit full-screen AI chat returns to the same query. With `htpr-9015-search-lookups` on, an AI search still returns the same tickets.
 
 ## Gotchas
 
 - Keyboard acceptance loses focus, Escape returns to the wrong page, or suggestions stop following the selected operator.
 - Entity suggestions lose their access scope, date shortcuts use invalid boundaries, or result highlighting marks filter values.
+- Ask AI from search opening the docked panel while `htpr-6936-ask-ai-fullscreen` is on, or Exit full-screen AI chat dropping the query.
+- A full page load of a search sending a second search while `htpr-7502-search-once` and `htpr-7501-search-server-start` are on.
+- `htpr-9015-search-lookups` changing which tickets an AI search returns.
 
 ### What proof to collect
 
-`node --test tests/search-autocomplete*.test.cjs` exercises the real search input and reused `MentionListRows`, including keyboard acceptance, Escape propagation, typed dates, exclusions and entity lookup scope. Unit tests check parser-aligned operators and values, UTC dates, six colour mappings, full tips coverage and safe literal title highlighting. `npm test` also covers existing chip/parser/API regressions.
+`node --test tests/search-autocomplete*.test.cjs` exercises the real search input and reused `MentionListRows`, including keyboard acceptance, Escape propagation, typed dates, exclusions and entity lookup scope. Unit tests check parser-aligned operators and values, UTC dates, six colour mappings, full tips coverage and safe literal title highlighting. `npm test` also covers existing chip/parser/API regressions. For the search
+load flags, record one full page load of a search query with
+`htpr-7501-search-server-start` and `htpr-7502-search-once` on, Ask AI leaving
+for the full-screen chat and returning with the query while
+`htpr-6936-ask-ai-fullscreen` is on, and the same AI search tickets with
+`htpr-9015-search-lookups` on and off.
 
 ### Cleanup
 

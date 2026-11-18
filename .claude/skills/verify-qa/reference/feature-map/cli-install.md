@@ -3,6 +3,7 @@
 ## Sub-features
 
 - `cli-install-commands-and-login` CLI install commands and login.
+- `team-scoped-management-keys` With `htpr-6542-team-scoped-management-keys` on, Settings > Connect > Management keys can limit a new Management or Usage key to one team. Whole-account keys keep account-wide access. Full access stays whole-account only.
 
 ## How to get to it (user POV)
 
@@ -11,6 +12,7 @@
 - Onboarding "connect your agent" step email and the guest demo board's CLI task (`completeOnboardingStep.ts`, `guestSeedTasks.ts`).
 - `https://app.hypertask.ai/llms.txt` for AI agents.
 - After install, `hypertask login --token <agent token>`; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).
+- Settings, Connect, Management keys: `https://app.hypertask.ai/settings/management-keys` (`src/components/Modals/Settings/ManagementKeysSection.tsx`). Create and list use `GET /api/mcp/admin/keys` and `POST /api/mcp/admin/keys`.
 
 Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note sits behind `htpr-7033-cli-install-command`.
 
@@ -22,6 +24,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 4. With a QA agent of account 985 and a temporary `HOME`, run `hypertask login --token <agent token>` in default JSON and `--human` modes. Never print tokens. Require `signedInAs` / "Signed in as" to identify the agent name and "agent of <owner>", the newest board across all boards the token can see with its URL (not just the first 50; a missing title falls back to the short name), and the server's next steps: 3 for write agents, 2 for read-only agents (list and playbook, no create). With no board, `--human` must say "No board yet. Create one in your Hypertask web app." Require each login to finish within 5 s.
 5. Repeat with a trailing slash in `--api-url`. The CLI waits at most about 1.5 s for the guide. Use a local failure/delay endpoint: any hello failure or no response within about 1.5 s must print the old saved output in both modes, exit 0 and keep the token saved. Do not point failure injection at production.
 6. Reuse `node ~/.local/state/vcc-evidence/HTPR-7519/live-check.mjs` with env inputs `HT_QA_AGENT_TOKEN`, `CLI_BIN`, `API_URL` (API base including `/api`) and optionally `MCP_URL` (default `https://mcp.hypertask.ai/mcp`). It uses temporary homes, calls MCP `tools/list` with the same token, checks that each step tool and action is advertised, checks role-dependent step counts when the role is exposed (otherwise accepts 2 or 3 with list and playbook required), asserts each login finishes within 5 s, and runs only list/playbook reads. Never run the create step against production. The CLI prints the server's steps; with MCP v2 (on for Everyone), those advertise `hypertask_tasks` with `{"action":"list","input":{"project_id":ID}}` or `{"action":"create","input":{"project_id":ID,"title":"My first task"}}`, and `hypertask_projects` with `{"action":"playbook","input":{"project_id":ID}}`. Legacy catalogs retain the old tool names and top-level arguments. Check no-board, fallback and trailing-slash cases separately.
+7. With `htpr-6542-team-scoped-management-keys` on, open `/settings/management-keys`. The Team row lists Whole account and each team the account can use. Choosing a team disables Full access. A Usage key can be limited only to a team the account owns. The hint under the row says whether the key is account-wide, reads usage for any owned team, reads usage for the selected team, manages agents and keys across the account, or manages them only in the selected team. Existing keys show Whole account or the team title. A team-limited key is prefixed `httk_`. An account key is prefixed `htmk_`. Do not create a key on a shared account. On a disposable account, revoke any key you create before leaving. With the flag off, the Team row is absent, and `POST /api/mcp/admin/keys` with a `teamId` returns 403 and `Team-scoped management keys are not enabled.` A presented `httk_` key then fails auth. Approving a claimed device pairing also returns 403 `access_denied` while the flag is off, because that approval creates a team-scoped agent. Do not approve a pairing to prove the on path. It creates a team and a board.
 
 ## Gotchas
 
@@ -29,6 +32,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 - A command without `https://`: curl and irm then start over plain HTTP (HTPR-7276 review).
 - Hello errors or timeouts turn a successful token save into a failed or hanging login.
 - Test fixtures in `tests/fixtures/cli-install/legacy.json` holding the old command.
+- A team-limited key (`httk_`), or an agent token that carries a team id, is refused while `htpr-6542-team-scoped-management-keys` is off.
 
 ### What proof to collect
 

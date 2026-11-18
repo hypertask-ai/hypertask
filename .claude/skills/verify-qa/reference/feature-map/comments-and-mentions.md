@@ -7,11 +7,27 @@
 - `durable-agent-attribution` Durable agent attribution.
 - `retired-image-generation` Retired image generation.
 - `agent-writing-rules` Agent writing rules.
+- `idle-comment-mic` With `htpr-6555-idle-comment-mic` on, the closed phone comment bar shows a microphone beside "Add a comment…". One tap starts dictation before the editor opens. The spoken text then opens the editor and is inserted. A tap on the placeholder while that recording runs does not open the editor. Desktop keeps "Tip: Hit CTRL+M to comment" and shows no idle microphone.
+- `blocker-comment` With `htpr-7724-blocker-comment` on, the comment commands include "Mark as blocker", or "Unmark as blocker" when that comment is already the blocker. The marked comment gets a red outline. An activity row cannot be the blocker. The write sends `blockerCommentId` to `POST /api/tasks/waiting-on`, and the comment must be on that task. Off hides the command and answers that blocker comments are not enabled.
+- `comment-summary-reuse` With `htpr-7858-comment-summary-reuse` on, a stored comment TL;DR is reused when the comment text still matches the hash saved with it, so the model is not called again. A changed comment is summarized again. An activity row, or a comment under 120 words, stores no TL;DR. Off summarizes again on every job.
+- `agent-lane-collapse` With `htpr-8262-agent-lane-collapse` on, Shift+O collapses the agent lane together with the comments. A collapsed lane row is one line: icon, agent name when shown, text, and time. An open lane row uses the comment card. Enter or Space on a lane row toggles that row. Off leaves lane rows expanded. Shift+O still stacks comments, and one comment stays open.
+- `mention-by-name` With `htpr-8268-mention-by-name` on, an agent can pass a name or a user id in `mentions` on `POST /api/mcp/comments`. The name is matched to members of that board. An unknown name is refused, and the reply includes close matches when it has any. A name that matches more than one member is refused the same way, and nothing is saved. Off still accepts `{ user_id, display_name }` and refuses a bare name.
+- `comment-mic-pattern` With `htpr-8926-comment-mic-pattern` on, the desktop comment box and the description editor use a white microphone and hide the microphone picker. A comment ends in a plain text Send. While dictating, that microphone is replaced by a compact pill with a stop square and the elapsed time. Off restores the previous microphone, Send row, and recording controls.
+- `one-send-inbox` With `htpr-8962-one-send-clears-inbox` on, the desktop comment box has one Send on the right. Ctrl+Enter sends (Cmd+Enter on Apple). When the task is in your inbox, the tooltip says "Send and remove from inbox", and Send archives your inbox entry. The task stays on the board. A draft's discard control is a trash icon on the far left. Off restores the extra Send actions, including Ctrl+Shift+Enter for an inbox task.
+- `person-hover-card` With `htpr-8964-remove-person-hover` on, hovering a comment author, a description author, or a person or agent mention does not open the person card. Keyboard focus, and a tap that is not a mouse hover, can still open it. Escape still closes it. Off opens the card on mouse hover again.
 
 ## How to get to it (user POV)
 
 The comment box at the bottom of a task detail view. `@` opens the mention
 picker.
+
+The idle microphone is on that closed bar on a phone. Mark as blocker is in
+the comment command list. The TL;DR job runs for a comment of at least 120
+words. Shift+O is on the ticket thread when no text field is focused. An
+agent names a person from `POST /api/mcp/comments`. The white microphone,
+the text Send, and the single Send are on the desktop comment box. The white
+microphone is also on the description editor. The person card is on a
+comment or description author, and on a mention in the thread.
 
 ## Driving it with agent-browser
 
@@ -25,6 +41,37 @@ Posts, reloads and deletes a comment.
 Prints PASS/FAIL per step and `comments ok`. Loopback only.
 `--break post` must print `negative control ok`.
 Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+
+On a phone, with `htpr-6555-idle-comment-mic` on, tap the microphone on the
+closed comment bar and confirm dictation starts before the editor is open.
+On desktop, confirm that bar has no microphone.
+
+With `htpr-7724-blocker-comment` on, mark one real comment, reload, and
+confirm the red outline. Unmark it. An activity row has no blocker command.
+
+With `htpr-7858-comment-summary-reuse` on, run the summary job twice on an
+unchanged comment of at least 120 words. The second run returns the stored
+TL;DR. Edit the comment and confirm the next run does not return the old one.
+
+With `htpr-8262-agent-lane-collapse` on, press Shift+O with no field focused.
+Collapsed lane rows are one line. Shift+O again opens them as comment cards.
+Enter or Space on one row toggles that row only.
+
+With `htpr-8268-mention-by-name` on, post a mention that names one board
+member, then one unknown name, then one ambiguous name. Only the unique
+member is saved. Off, a bare name is refused and `{ user_id, display_name }`
+still works.
+
+With `htpr-8926-comment-mic-pattern` on, confirm the white microphone and
+text Send on the desktop comment box, and the white microphone on the
+description. Start dictation and confirm the compact pill. With
+`htpr-8962-one-send-clears-inbox` on, confirm one Send. On an inbox task,
+Send archives that inbox entry and leaves the task on the board. A blank
+comment is refused.
+
+With `htpr-8964-remove-person-hover` on, hover a comment author and a
+mention. The person card stays closed. Focus the name, or tap it without a
+mouse hover, and the card can open. Escape closes it.
 
 
 ## Gotchas
@@ -54,6 +101,17 @@ persisted with the same formatting.
 `comments-drive-live.mjs` deletes the comment it posted, then deletes the
 sandbox task. A comment you posted outside that script still needs deleting
 on the account's own board.
+
+`htpr-8262-agent-lane-collapse` and `htpr-8964-remove-person-hover` are on
+for Owner + QA unless the flag record says otherwise. Confirm the account
+before expecting the new behavior. Do not switch a production flag. A
+learn-tutorial task can keep its inbox row when Send would otherwise archive
+it. Screenshot the idle microphone, the red blocker outline, the white
+microphone, the single Send, and the closed hover card. For the TL;DR and
+the name mention, save the response body and do not call a paid model beyond
+the one summary the check needs. Delete only comments this check posted.
+Unmark the blocker. Undo the inbox archive. Leave other comments, mentions,
+and inbox rows alone.
 
 ### Local writing corrections
 
