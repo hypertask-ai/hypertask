@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -134,4 +134,68 @@ test("a generated test cannot see the key, the parent process, or the network", 
   assert.equal(launch.env.OPENROUTER_EVAL_KEY, undefined);
   assert.ok(launch.args.includes("--unshare-net") && launch.args.includes("--unshare-pid"));
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+test("a generated test that dodges a word filter still cannot see secrets, the network, or the host", async () => {
+  if (spawnSync("bwrap", ["--version"]).status !== 0) {
+    const install = spawnSync("bash", ["-lc", "sudo apt-get update -qq && sudo apt-get install -y bubblewrap"], { encoding: "utf8", timeout: 180000 });
+    assert.equal(install.status, 0, (install.stderr || "bubblewrap missing").slice(0, 300));
+  }
+  const { main } = await load();
+  const outside = mkdtempSync(path.join(tmpdir(), "break-it-host-"));
+  const hostFile = path.join(outside, "host-only.txt");
+  const hostPwn = path.join(outside, "pwn.txt");
+  writeFileSync(hostFile, "host-only");
+  const code = [
+    "const assert = require(\"node:assert/strict\");",
+    "const test = require(\"node:test\");",
+    "const fs = require(\"node:fs\");",
+    "test(\"contained\", async () => {",
+    "  const hit = (buf) => buf.includes(\"sk-break-canary\") || buf.includes(\"ghs-break-canary\");",
+    "  assert.equal(hit(fs.readFileSync(\"/proc/\" + process.ppid + \"/environ\")), false);",
+    "  let leaked = false;",
+    "  for (const pid of fs.readdirSync(\"/proc\")) {",
+    "    if (!/^\\d+$/.test(pid)) continue;",
+    "    try { if (hit(fs.readFileSync(\"/proc/\" + pid + \"/environ\"))) leaked = true; } catch (error) {}",
+    "  }",
+    "  assert.equal(leaked, false);",
+    "  try { fs[\"write\" + \"FileSync\"](" + JSON.stringify(hostPwn) + ", \"pwn\"); } catch (error) {}",
+    "  let sawHost = false;",
+    "  try { sawHost = fs.readFileSync(" + JSON.stringify(hostFile) + ", \"utf8\").includes(\"host-only\"); } catch (error) { sawHost = false; }",
+    "  assert.equal(sawHost, false);",
+    "  const net = require(\"node:\" + \"net\");",
+    "  const open = await new Promise((resolve) => {",
+    "    const socket = net.connect(443, \"1.1.1.1\");",
+    "    const timer = setTimeout(() => { socket.destroy(); resolve(false); }, 400);",
+    "    socket.on(\"connect\", () => { clearTimeout(timer); resolve(true); });",
+    "    socket.on(\"error\", () => { clearTimeout(timer); resolve(false); });",
+    "  });",
+    "  assert.equal(open, false);",
+    "});",
+  ].join("\n");
+  const posts = [];
+  const fetchImpl = async (url, init) => {
+    posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+    if (String(url).includes("openrouter")) {
+      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ tests: [{ name: "contained", code }] }) } }] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+  const repo = mkdtempSync(path.join(tmpdir(), "break-it-repo-"));
+  const pr = { title: "HTPR-9408 [BUGFIX] keep the empty title", body: "Author-Model: claude\n\nTicket: https://app.hypertask.ai/detail/project-15/9408", base: { sha: "a".repeat(40), ref: "production" } };
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "99", PR: "11", HEAD_SHA: "e".repeat(40), OPENROUTER_EVAL_KEY: "sk-break-canary", GH_TOKEN: "ghs-break-canary" });
+  try {
+    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(pr), repo });
+  } finally {
+    delete process.env.OPENROUTER_EVAL_KEY;
+    delete process.env.GH_TOKEN;
+  }
+  const comment = posts.find((item) => String(item.url).endsWith("/issues/11/comments"));
+  assert.match(comment.body.body, /HELD contained/);
+  assert.equal(existsSync(hostPwn), false);
+  assert.equal(readFileSync(hostFile, "utf8"), "host-only");
+  assert.equal(JSON.stringify(posts).includes("sk-break-canary"), false);
+  assert.equal(JSON.stringify(posts).includes("ghs-break-canary"), false);
+  rmSync(repo, { recursive: true, force: true });
+  rmSync(outside, { recursive: true, force: true });
 });
