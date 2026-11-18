@@ -236,7 +236,6 @@ test("MCP CLI API contract stays fatal inside the nightly browser-smoke job", as
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const policy = yaml.load(await source("docs/ci-policy.yml"));
   assert.equal(policy.required_checks.contexts.includes("browser-smoke"), false);
-  assert.equal(workflow.jobs["browser-smoke"].if, "always() && github.event_name != 'pull_request'");
   const smoke = workflow.jobs["browser-smoke-desktop"];
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");

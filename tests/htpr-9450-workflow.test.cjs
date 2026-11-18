@@ -1,19 +1,59 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readFileSync, mkdtempSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
+const { spawnSync } = require('node:child_process');
 const vm = require('node:vm');
 const yaml = require('js-yaml');
 const workflow = name => yaml.load(readFileSync(`.github/workflows/${name}.yml`, 'utf8'));
 const evaluate = (expression, github) => vm.runInNewContext(expression, { github, always: () => true });
 
-test('no pull request starts a smoke status stub', () => {
-  const request = workflow('app-smoke-request');
-  assert.equal(request.on.pull_request, undefined);
-  assert.deepEqual(request.on, { workflow_dispatch: null });
-  assert.equal(workflow('app-smoke').jobs['pr-status'], undefined);
-  const summary = workflow('ci-tests').jobs['browser-smoke'];
-  assert.equal(summary.if, "always() && github.event_name != 'pull_request'");
-  assert.equal(summary.steps.some(step => /stub/i.test(step.name ?? '')), false);
+test('PR app-smoke publishes the required commit status without candidate execution', async () => {
+  const smoke = workflow('app-smoke');
+  assert.deepEqual(workflow('app-smoke-request').on.pull_request, { branches: ['production'], types: ['opened', 'synchronize', 'reopened', 'ready_for_review'] });
+  const stub = smoke.jobs['pr-status'];
+  assert.equal(evaluate(stub.if, { event_name: 'workflow_run', event: { workflow_run: { event: 'pull_request', conclusion: 'success' } } }), true);
+  assert.equal(evaluate(stub.if, { event_name: 'schedule' }), false);
+  assert.deepEqual(stub.permissions, { contents: 'read', 'pull-requests': 'read', statuses: 'write' });
+  assert.equal(stub.needs, undefined);
+  assert.equal(stub.services, undefined);
+  assert.equal(stub.steps.length, 1);
+  assert.match(stub.steps[0].uses, /^actions\/github-script@[a-f0-9]{40}$/);
+  const published = [];
+  const head = 'a'.repeat(40);
+  const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+  const publish = new AsyncFunction('github', 'context', stub.steps[0].with.script);
+  const pull = { state: 'open', base: { ref: 'production' }, head: { sha: head } };
+  const github = { rest: { repos: {
+    listPullRequestsAssociatedWithCommit: async () => ({ data: [pull] }),
+    createCommitStatus: async args => published.push(args),
+  } } };
+  const context = { repo: { owner: 'owner', repo: 'repository' }, payload: { workflow_run: { head_sha: head } }, sha: 'base-sha' };
+  await publish(github, context);
+  assert.deepEqual(published, [{ owner: 'owner', repo: 'repository', sha: head, state: 'success', context: 'app-smoke', description: 'moved to nightly (HTPR-9450)' }]);
+  pull.head.sha = 'newer-head';
+  await publish(github, context);
+  assert.equal(published.length, 1);
+});
+
+test('PR browser-smoke succeeds without running shard or contract checks', () => {
+  const ci = workflow('ci-tests');
+  const stub = ci.jobs['browser-smoke'];
+  const github = { event_name: 'pull_request', event: { pull_request: { draft: true } } };
+  assert.equal(evaluate(stub.if, github), true);
+  for (const name of stub.needs) assert.equal(evaluate(ci.jobs[name].if, github), false, name);
+  const steps = stub.steps.filter(step => !step.if || evaluate(step.if, github));
+  assert.equal(steps.length, 1);
+  assert.equal(stub.services, undefined);
+  const directory = mkdtempSync(join(tmpdir(), 'htpr-9450-'));
+  try {
+    const summary = join(directory, 'summary');
+    const result = spawnSync('bash', ['-e', '-c', steps[0].run], { env: { ...process.env, GITHUB_STEP_SUMMARY: summary }, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(readFileSync(summary, 'utf8'), /moved to nightly \(HTPR-9450\)/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+  for (const step of stub.steps.slice(1)) assert.equal(evaluate(step.if, { event_name: 'schedule' }), true);
 });
 
 test('nightly runs the visual comparison and production AI pilot', () => {

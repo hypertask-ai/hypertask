@@ -131,13 +131,14 @@ Everything that drives the UI left the pull request:
 - `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
   `browser-smoke-matrix` and `browser-smoke-flags` run after production pushes.
   They also run nightly at 03:23 UTC.
-  No pull request starts them.
+  PRs retain a cheap `browser-smoke` summary stub.
 - PR `visual-compare` stays dormant behind skipped `browser-build`.
   `visual-regression.yml` owns the nightly screen comparison.
   Production pushes and manual comparisons remain available.
-- App Smoke drives production nightly (03:47 UTC) and on dispatch, and no pull
-  request publishes its status.
-  `app-smoke-request.yml` is dispatch-only now.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
+  request gets a status stub from `app-smoke.yml`.
+  That trusted job checks out no candidate code.
+  `app-smoke-request.yml` requests that status after each PR.
   Manual dispatch retains the validated smoke path.
 - `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
   own nightly crons.
@@ -148,7 +149,9 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Cheap checks still gate the verifier through `verifier_waits_for`; automerge waits for the same context.
+Both smoke stubs stay required PR producers until the verifier's wait set is
+regenerated with them gone. Cheap checks gate the verifier through
+`verifier_waits_for`; automerge waits for the same context.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the
@@ -248,7 +251,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - No application or review workflow uses a self-hosted runner. The former `contabo-1` review runner is retired with the self-hosted reviewer.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - App Smoke validation quietly skips skipped request workflows and successful requests whose exact open production PR is still a draft (HYCI-316), including requests without a PR number in the event payload. It publishes no status and starts no build; `ready_for_review` requests validation again. Failed request workflows, ambiguous PR matches and invalid bases still fail.
-- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`: `pstack-verifier` alone (HTPR-9450; see "PR checks follow pstack"). `ci-tests` still runs on every non-draft PR without a label gate, and the verifier waits for it. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. No pull request publishes an App Smoke or browser-smoke status; both run nightly on production. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
+- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`: `pstack-verifier` alone (HTPR-9450; see "PR checks follow pstack"). `ci-tests` still runs on every non-draft PR without a label gate, and the verifier waits for it. CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request starts the cheap status producer, and App Smoke publishes a cheap PR status stub; its real smoke runs nightly on production. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
@@ -840,11 +843,12 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
-separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
-because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
-that half and the required `browser-smoke` summary over it, and the assertion step proves the
-contract reported `passed`. It uses the disposable server before any layout flag reseed. The owner,
+The contract is asserted by a step of the `browser-smoke` summary (HYCI-108; it was a
+separate `mcp-cli-api-contract` job until then). It is not in the ruleset: the contract step runs
+inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails that half and the
+`browser-smoke` summary over it, and the assertion step proves the contract reported `passed`.
+HTPR-9450 made `pstack-verifier` the only required context, and the browser halves run nightly and
+on production pushes rather than on a pull request, so this coverage lands after a merge. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;
@@ -1118,11 +1122,12 @@ The decision, for the two alternatives HYCI-49 offers:
   8 percent saving against a lost reload signal is not a trade to take blind;
   revisit only with a run proving a shorter window still fails the same way.
 
-Required contexts do not change: `browser-smoke` stays the required summary,
+Required contexts did not change then: `browser-smoke` was the required summary,
 `browser-smoke-desktop` and `browser-smoke-mobile` keep their names (HYCI-57 gave
 `browser-smoke-mobile` only the phone pages and split the rest into
 `browser-smoke-matrix` and `browser-smoke-flags`), and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
-config line, so the undo is that there is nothing to undo.
+config line, so the undo is that there is nothing to undo. HTPR-9450 later made
+`pstack-verifier` the only required context; the summary keeps its name.
 
 ## GitHub completion notifications (YPER4-881)
 

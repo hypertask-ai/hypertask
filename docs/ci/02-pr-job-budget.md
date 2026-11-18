@@ -66,13 +66,14 @@ Everything that drives the UI left the pull request:
 - `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
   `browser-smoke-matrix` and `browser-smoke-flags` run after production pushes.
   They also run nightly at 03:23 UTC.
-  No pull request starts them.
+  PRs retain a cheap `browser-smoke` summary stub.
 - PR `visual-compare` stays dormant behind skipped `browser-build`.
   `visual-regression.yml` owns the nightly screen comparison.
   Production pushes and manual comparisons remain available.
-- App Smoke drives production nightly (03:47 UTC) and on dispatch, and no pull
-  request publishes its status.
-  `app-smoke-request.yml` is dispatch-only now.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
+  request gets a status stub from `app-smoke.yml`.
+  That trusted job checks out no candidate code.
+  `app-smoke-request.yml` requests that status after each PR.
   Manual dispatch retains the validated smoke path.
 - `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
   own nightly crons.
@@ -83,7 +84,9 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Cheap checks still gate the verifier through `verifier_waits_for`; automerge waits for the same context.
+Both smoke stubs stay required PR producers until the verifier's wait set is
+regenerated with them gone. Cheap checks gate the verifier through
+`verifier_waits_for`; automerge waits for the same context.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the
