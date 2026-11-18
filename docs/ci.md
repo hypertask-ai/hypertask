@@ -232,6 +232,7 @@ the count is 24 jobs per push: four shards plus the summary.
 ## Review gate
 
 - AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. It posts a standard pull request review with one inline comment per finding, each carrying a priority badge such as P1 or P2 ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github).
+- A review is advice, never a verdict. `ci-tests` builds and tests every non-draft pull request whatever the review state says, so a red review can no longer stop the build before it starts (HTPR-9450). The retry is a new push, not a blocked job, and the agent verdict that counts is `pstack-verifier`.
 - The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context stays in the live ruleset, and the gate sets both to the same state.
 - [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on every push to a pull request (opened, reopened, synchronize, ready for review) so the head gets its pending status and one review request at once, wakes on a Codex review, review comment or issue comment, and sweeps every open PR on a ten minute timer that GitHub runs only every few hours (22 runs in 5.5 days, HYCI-415). It loads its script from the `production` branch and reads PR content only as data.
 - The gate reads every PR through REST: an event or a single-PR run reads only its own PR, and the timer sweep pages through the open production PRs. Nothing reads PRs through GraphQL, which exhausted the 5,000-point installation quota (HYCI-293). Reviews, inline comments, issue comments and current-head statuses are read in full, so a late-page P1 still fails the gate. Before it publishes a success, the gate re-reads that PR and publishes nothing when the review state changed in between, so a sweep cannot overwrite a newer P1 verdict.
@@ -353,9 +354,7 @@ review contexts, without aliasing). Drift and unreadable settings still fail
 the monitor; this is not a required PR context. Detection can lag until the next
 hourly run, plus GitHub scheduling and any rate-limit wait.
 
-CI Tests no longer reads repository settings on PRs or production pushes.
-Its optional review precheck reads commit statuses once. Read failures warn
-and let tests run; an observed failed review still stops tests. Independent
+CI Tests no longer reads repository settings on PRs or production pushes, and it no longer reads review commit statuses: every non-draft pull request builds and tests, whatever `ai-review` or `claude-review` says (HTPR-9450). Independent
 required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository
@@ -408,9 +407,11 @@ trusted validation recheck requests `actions: write` and
 request `contents: read`, `pull-requests: read`, and `statuses: read`.
 
 A missing secret, failed mint, or failed App request falls back to `github.token`.
-Fallback success is not proof that requests used the separate pool. CI Tests
-deliberately keeps its single review precheck on `github.token`, so its
-PR-controlled workflow never receives the App private key. Status writes remain
+Fallback success is not proof that requests used the separate pool. CI Tests asks
+for `contents: read`, `pull-requests: read`, `issues: read`, `checks: read` and
+`packages: read`, and reads no commit statuses at all since HTPR-9450 removed its
+review precheck, so its PR-controlled workflow never needs the App private key.
+Status writes remain
 on `github.token` because required status authorship
 is pinned to the GitHub Actions integration. This changes no repository
 settings, runners, or required checks.
@@ -1951,6 +1952,8 @@ lands. No new required check is added.
 
 A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. Each test file stays under 1200 characters and the whole model answer under 3500, because a longer answer is cut off at the model's 1200-token cap and the review cannot run.
 
+The answer is read as JSON whether the model fences it, wraps it in prose, or does both: the parser walks the reply for balanced JSON objects and takes the first one that carries a `tests` array, so a closing brace in the surrounding sentence no longer breaks the review. If no answer can be read, the script asks the model once more and prints why the first one failed; after the second failure it reports the reason. A `[BUGFIX]` pull request therefore costs at most two model requests, and the retry only happens on a parse failure, never on an HTTP error.
+
 The job fails its own step when the review could not run or a break attempt found a hole, and prints the reason in the run log as well as in the comment and the status. `break-it` is not one of the required checks: per pstack's shipping playbook the one verdict on a bug fix comes from the independent verifier, so this result is that verifier's edge-case input rather than a second gate.
 
 It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
@@ -2007,6 +2010,15 @@ same script: it skips when no source file changed, and otherwise requires a
 changed test to fail on the merge base and pass on the head. It fails its own
 step and is not part of the `ci-tests` summary, so a missing proof is loud without
 silently reddening the build check.
+
+### The review precheck in CI Tests
+
+`ci-tests` no longer reads `ai-review` or `claude-review` before it starts. The
+prepare step that stopped the build on an already-red review is gone, with the
+`statuses: read` permission it needed, so a review is advice and never a gate: a
+non-draft pull request builds and tests whatever the bots said. pstack's
+shipping playbook counts only the independent agent verdict, and a review that
+steps a build away buys nothing a red check on the head does not already say.
 
 ### Test lanes on a pull request
 
