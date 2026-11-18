@@ -239,7 +239,21 @@ async function readPull(github, owner, repo, number) {
   };
 }
 
-async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies, reviewer }) {
+function evaluateNode(node, reviewer) {
+  const head = node.commits.nodes[0]?.commit;
+  return evaluate({
+    reviewer,
+    headOid: node.headRefOid,
+    statusContexts: head?.status?.contexts ?? [],
+    reviews: node.reviews.nodes.map(review => ({
+      author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid, submittedAt: review.submittedAt,
+      comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => ({ body: comment.body ?? '', commit: comment.commit?.oid })).concat(review.comments.pageInfo.hasNextPage ? [UNREAD] : []),
+    })),
+    comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
+  });
+}
+
+async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, result, existingContexts, commentBodies, reviewer, recheck }) {
   const description = [result.description, result.evidence].filter(Boolean).join(' ').slice(0, STATUS_DESCRIPTION_LIMIT);
   const existing = new Map(existingContexts.map(entry => [entry.context, entry]));
   const detailsUrl = result.evidence || `${serverUrl}/${owner}/${repo}/pull/${prNumber}`;
@@ -257,28 +271,32 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
       }
     }
   }
-  for (const statusContext of CONTEXTS) {
+  const checkMissing = statusContext => {
+    const existingCheck = latestCheckByName.get(statusContext);
+    return Boolean(checkConclusion) && !(existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion);
+  };
+  const statusChanged = statusContext => {
     const previous = existing.get(statusContext);
     const unchanged = previous && previous.state.toLowerCase() === result.state && previous.description === description;
-    if (!previous || !(result.state === 'pending' || unchanged)) {
+    return !previous || !(result.state === 'pending' || unchanged);
+  };
+  const writes = CONTEXTS.some(statusContext => statusChanged(statusContext) || checkMissing(statusContext));
+  if (result.state === 'success' && recheck && writes && (await recheck())?.state !== 'success') return false;
+  for (const statusContext of CONTEXTS) {
+    if (statusChanged(statusContext)) {
       await github.rest.repos.createCommitStatus({
         owner, repo, sha, state: result.state, context: statusContext, description,
         target_url: detailsUrl,
       });
     }
-    if (checkConclusion) {
-      const existingCheck = latestCheckByName.get(statusContext);
-      const checkOk = existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion;
-      if (!checkOk) {
-        await github.rest.checks.create({
-          owner, repo, name: statusContext, head_sha: sha, status: 'completed',
-          conclusion: checkConclusion, details_url: detailsUrl,
-          output: { title: statusContext, summary: description },
-        });
-      }
+    if (checkMissing(statusContext)) {
+      await github.rest.checks.create({
+        owner, repo, name: statusContext, head_sha: sha, status: 'completed',
+        conclusion: checkConclusion, details_url: detailsUrl,
+        output: { title: statusContext, summary: description },
+      });
     }
   }
-
   const marker = `reviewed-commit: ${sha}`;
   const alreadyApproved = commentBodies.some(text => text.includes(marker) && /^APPROVE/.test(text));
   if (result.state === 'success' && !alreadyApproved) {
@@ -287,6 +305,7 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
       body: `APPROVE\n\n${result.description}.${result.evidence ? ` ${result.description.startsWith(REVIEWER_NAMES[reviewer] ?? '\u0000') ? REVIEWER_NAMES[reviewer] : 'Codex'} review: ${result.evidence}` : ''}\n\n${marker}\n<!-- codex-review-gate -->`,
     });
   }
+  return true;
 }
 
 async function run({ github, context, core, single = 0 }) {
@@ -315,16 +334,7 @@ async function run({ github, context, core, single = 0 }) {
   for (const node of nodes) {
     const head = node.commits.nodes[0]?.commit;
     if (node.isCrossRepository || head?.oid !== node.headRefOid || node.reviews.pageInfo.hasPreviousPage) continue;
-    const result = evaluate({
-      reviewer,
-      headOid: node.headRefOid,
-      statusContexts: head?.status?.contexts ?? [],
-      reviews: node.reviews.nodes.map(review => ({
-        author: review.author?.login, url: review.url, body: review.body, commit: review.commit?.oid, submittedAt: review.submittedAt,
-        comments: review.comments.nodes.filter(comment => !comment.replyTo && isCodex(comment.author?.login)).map(comment => ({ body: comment.body ?? '', commit: comment.commit?.oid })).concat(review.comments.pageInfo.hasNextPage ? [UNREAD] : []),
-      })),
-      comments: node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login })),
-    });
+    const result = evaluateNode(node, reviewer);
 
     const requestMarker = `<!-- codex-review-request:${node.headRefOid} -->`;
     const comments = node.comments.nodes.map(comment => ({ ...comment, author: comment.author?.login }));
@@ -348,12 +358,18 @@ async function run({ github, context, core, single = 0 }) {
       }
     }
 
-    await publishResult({
+    const published = await publishResult({
       github, owner, repo, sha: node.headRefOid, prNumber: node.number, serverUrl: context.serverUrl, result, reviewer,
       existingContexts: head.status?.contexts ?? [],
       commentBodies: node.comments.nodes.map(comment => comment.body ?? ''),
+      recheck: async () => {
+        const fresh = await readPull(github, owner, repo, node.number);
+        return fresh ? evaluateNode(fresh, reviewer) : null;
+      },
     });
-    core.info(`PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`);
+    core.info(published
+      ? `PR #${node.number} ${node.headRefOid.slice(0, 7)}: ${result.state}. ${result.description}`
+      : `PR #${node.number} ${node.headRefOid.slice(0, 7)}: the review state changed before publish, so this run published nothing`);
   }
 }
 
