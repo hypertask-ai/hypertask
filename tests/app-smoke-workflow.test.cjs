@@ -275,7 +275,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(
     isolated,
-    /timeout --signal=KILL 1m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
+    /timeout --signal=KILL 2m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
   );
   assert.match(isolated, /trap 'cleanup 130' INT/);
   assert.match(isolated, /trap 'cleanup 143' TERM/);
@@ -323,11 +323,12 @@ test("app smoke validates the head before isolated build and route checks", asyn
     isolated,
     /Generated Prisma client missing from the candidate dependencies\./,
   );
+  const seedPlan = await readFile("scripts/lib/core-smoke-seed-plan.mjs", "utf8");
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
-  assert.match(seed, /sections: \["Baseline", "Alternate"\]/);
-  assert.match(seed, /section_title: "Baseline"/);
-  assert.match(seed, /section_title: "Alternate"/);
+  assert.match(seed, /buildCoreSmokeSeedPlan/);
+  assert.match(seedPlan, /"Baseline"/);
+  assert.match(seedPlan, /"Alternate"/);
   assert.match(isolated, /next build/);
   assert.doesNotMatch(isolated, /next build --webpack/);
   assert.match(isolated, /NODE_OPTIONS=--max-old-space-size=8192/);
@@ -373,6 +374,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
+  assert.match(workflow, /REQUIRED="\$REQUIRED pstack-verifier"/);
 });
 
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
@@ -454,7 +456,8 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /ruleset\.target !== "branch"/);
   assert.match(settingsScript, /!ruleset\.conditions\.ref_name\.include\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
-  assert.match(settingsScript, /new Set\(ruleset\.rules/);
+  assert.match(settingsScript, /new Set\(checks\.map\(\(check\) => check\.context\)\)/);
+  assert.match(settingsScript, /integration_id !== 15368/);
   assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
   const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
   assert.deepEqual(
@@ -475,6 +478,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "pr-title",
     "next-public-secrets",
     "secret-scan",
+    "pstack-verifier",
   ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
@@ -484,6 +488,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     "browser-smoke",
     "ci-tests",
     "feature-flag-gate",
+    "pstack-verifier",
   ]);
   assert.deepEqual(
     policy.policies.production_ruleset.required_status_checks,

@@ -563,6 +563,25 @@ live recipes with `verify-qa` after deploy. See the
 [maintenance skill](../.claude/skills/maintain-verification-skill/SKILL.md) for
 installation, state, load holds, limits and offline tests.
 
+## Feature-map change gate (HTPR-9415)
+
+A `[FEATURE]` or `[IMPROVE]` pull request that changes a source file under
+`src/app/` or `src/components/` must add or edit a feature-map page for every
+area it touches. The check runs as one lane of the static gates inside
+`ci-tests`, so it costs no extra job, and it reads the pull request diff and the
+map pages in the same checkout. Areas are the first directory under `src/app/`
+or `src/components/`; a changed page covers an area when it cites the area path
+or a changed file in it in backticks. `[BUGFIX]`, `[INFRA]`, `[REFACTOR]` and
+every other tag are exempt. A pull request that breaks the rule fails with a
+message naming
+`.claude/skills/verify-qa/reference/feature-map/` and the uncovered areas.
+
+The tag can be changed after the pull request is opened, and `ci-tests` does not
+rerun on a title edit, so the same check runs again in the title-sensitive
+`pr-guards-trusted` workflow. It reads the file list and the map pages through
+the pull request API and fails the required `pr-title` context, which keeps a
+retag from slipping past the gate.
+
 ## Feature-map coverage count (HTPR-9406)
 
 The non-required `feature-map-coverage` job in
@@ -1882,3 +1901,7 @@ workflow gets no allowance and fails on its first comment. Unused allowances do 
 fail, so cleaning a file is safe, and `node scripts/check-no-comments.mjs
 --write-baseline` shrinks the baseline to the current counts when that cleanup
 lands. No new required check is added.
+
+## Break-it review (HTPR-9408)
+
+A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. The job is report-only and never blocks a merge. It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).

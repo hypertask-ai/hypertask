@@ -453,6 +453,7 @@ jobs:
           RUN_TESTS: ${{ needs.ci-prepare.outputs.run_tests == 'true' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
           SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.event.pull_request.base.sha }}
           PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -549,6 +550,10 @@ jobs:
             node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
           }
 
+          lane_feature_map_change() {
+            node .github/scripts/feature-map-change-guard.mjs "$BASE_SHA" "$HEAD_SHA" "$PR_TITLE"
+          }
+
           run_lane() {
             local name=$1
             ( set -euo pipefail; "lane_${name//-/_}" ) > "$LOGS/$name.log" 2>&1 &
@@ -572,6 +577,7 @@ jobs:
             if [ -n "$BASE_SHA" ]; then
               run_lane changed-style-tokens
               run_lane paid-api-cost-notes
+              run_lane feature-map-change
             fi
           fi
 
@@ -2160,6 +2166,15 @@ jobs:
                 echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
               fi
             fi
+            record_now="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { inboxRecordingPlan } from "./.github/scripts/release-evidence-gate.mjs"; const files = readFileSync(process.env.VERIFY_QA_CHANGED_FILES, "utf8").split("\n").map((line) => line.trim()).filter(Boolean); let matched = ""; try { matched = JSON.parse(readFileSync("verify-qa-premerge/result.json", "utf8")).matchedPage || ""; } catch { matched = ""; } process.stdout.write(inboxRecordingPlan(files, matched).recordNow ? "true" : "false")')"
+            if [ "$record_now" = "true" ]; then
+              VERIFY_QA_NAMED_JOURNEY=inbox-cycle VERIFY_QA_OUT=verify-qa-premerge/inbox-recording \
+                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+              inbox_record_status=$?
+              if [ "$inbox_record_status" -ne 0 ]; then
+                echo "::warning::inbox recording for a mixed diff exited ${inbox_record_status}; evidence is report-only"
+              fi
+            fi
           else
             verify_qa_status=$reseed_status
             echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
@@ -2176,6 +2191,22 @@ jobs:
           name: verify-qa-premerge
           path: verify-qa-premerge/
           if-no-files-found: ignore
+          retention-days: 7
+      - name: Decide whether this recording is the inbox journey
+        id: inbox-recording
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        run: |
+          set -euo pipefail
+          upload="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { inboxRecordingPlan } from "./.github/scripts/release-evidence-gate.mjs"; const changed = process.env.RUNNER_TEMP + "/changed-files.txt"; let files = []; try { files = readFileSync(changed, "utf8").split("\n").map((line) => line.trim()).filter(Boolean); } catch { files = []; } let matched = ""; try { matched = JSON.parse(readFileSync("verify-qa-premerge/result.json", "utf8")).matchedPage || ""; } catch { matched = ""; } process.stdout.write(inboxRecordingPlan(files, matched).upload ? "true" : "false")')"
+          echo "upload=${upload}" >> "$GITHUB_OUTPUT"
+      - name: Upload the recorded inbox video
+        id: verify-qa-video
+        if: always() && steps.inbox-recording.outputs.upload == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-qa-video-inbox
+          path: verify-qa-premerge/**/inbox-cycle/*.webm
+          if-no-files-found: warn
           retention-days: 7
       - name: Link premerge verify-qa evidence
         if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''

@@ -10,10 +10,25 @@
 - `new-task-model-picker` New Task model picker.
 - `new-task-dictation-shortcut` New Task dictation shortcut.
 - `new-task-board-shortcut-tooltip` New Task board shortcut tooltip.
+- `ctrlj-board-from-text` With `htpr-7305-board-from-text` on, New Task moves the board chip when the note names exactly one board after for, on, in, into, or to. A board you already picked stays put.
+- `ctrlj-footer-one-line` With `htpr-7306-ctrlj-footer-one-line` on, the desktop New Task footer hides the Esc Close hint so the other hints stay on one line. Escape still closes the window. Phones still show Close.
+- `ctrlj-footer-clickable` With `htpr-7307-ctrlj-footer-clickable` on, the footer hints are buttons. Send creates the ticket, Attach files opens the file picker, Search switches to the Search tab, Board opens the board picker, and Close closes the window.
+- `ctrlj-skills` With `htpr-7312-ctrlj-skills` on, a known `/slug` in the note is sent as a writing template and removed from the text the task writer saves. An unknown token stays in the note.
+- `ctrlj-always-board-chip` With `htpr-7313-ctrlj-always-board-chip` on, the board chip is visible as soon as New Task opens, including on a board or ticket whose destination already matches that page.
+- `ctrlj-ticket-questions` With `htpr-7317-ctrlj-ticket-questions` on, a created ticket's AI sidebar shows clickable lines under "Questions and ideas for this ticket". The default prompt asks for 2 to 4.
+- `ctrlj-sidebar-on-empty-task` With `htpr-7544-ctrlj-sidebar-on-new-task` on, Ctrl+J on an empty task opens the AI sidebar for that task. It does not open New Task.
+- `search-lazy-closed` With `htpr-7547-search-lazy-closed` on, the Search page loads the closed command palette only when you open it. Search results stay the same.
+- `ctrlj-skill-menu` With `htpr-7656-ctrlj-skill-menu` on and `htpr-7312-ctrlj-skills` on, typing `/` in New Task opens the skill picker. Arrow keys move, Enter or Tab inserts the skill, and Escape closes the picker.
+- `ctrlj-composer-keys` With `htpr-8260-ctrlj-composer-keys` on, New Task puts the microphone beside a Create button, spells each footer key as words, and shows a Dictation pill while it listens. The plus-composer layout replaces this row on desktop.
+- `ctrlj-plus-composer` With `htpr-8829-ctrlj-plus-composer` on, desktop New Task puts a + menu, a filled microphone, and a text Send inside the box. The board chip and model picker sit under the box. The flag starts on for Owner and QA.
+- `ctrlk-integrated-tabs` With `htpr-8931-ctrlk-integrated-tabs` on, desktop Search and New Task tabs sit inside the window. The New Task box uses 4px corners.
+- `ctrlk-tabs-on-top` With `htpr-8943-ctrlk-tabs-on-top` on and `htpr-8931-ctrlk-integrated-tabs` on, those tabs stay above the search box, so they do not jump when you switch to New Task.
+- `ctrlk-no-footer` With `htpr-8947-ctrlk-no-footer` on, Search hides the shortcut hint row and the version line. The build id stays on the window as a hidden attribute.
+- `ctrlk-filled-search` With `htpr-8954-ctrlk-filled-search` on, and both tab flags on, the search box uses the same fill as the New Task box and drops the lines above and below it.
 
 ## How to get to it (user POV)
 
-`Ctrl+K` (or `Cmd+K`) anywhere in the app opens the command palette. On phones
+`Ctrl+J` (or `Cmd+J`) opens this window on New Task. `Ctrl+K` (or `Cmd+K`) opens it on Search. On phones
 the same palette lists the commands but hides the key chips
 (`CommandList.tsx` renders `keyboardCommands` only when `isMobile` is false).
 
@@ -68,6 +83,66 @@ the task again and the hint reads `Enter Send`. The phone New Task sheet hides
 the footer and keeps its Send button, so record that path as the closest check
 for the phone footer.
 
+### Board named in the note
+
+Turn `htpr-7305-board-from-text` on. Open New Task and type a note that says "for" and then one board title you belong to. The chip must name that board before you send. Two boards that share the name, or a title with no for, on, in, into, or to, leave the chip alone. Open the board picker, pick a different board, and type the first title again. The chip must keep your pick. Turn the flag off and type the same "for" note. The chip must stay on the page's board.
+
+### Footer on one line
+
+Turn `htpr-7306-ctrlj-footer-one-line` on. Open New Task on desktop. The footer must not show Close. Press Escape. The window must close. Open New Task on a phone. Close must still be in the footer. Turn the flag off on desktop. Close must return.
+
+### Clickable footer
+
+Turn `htpr-7307-ctrlj-footer-clickable` on. Open New Task and click Send with an empty note. Nothing is created. Type two words and click Send. One ticket opens. Reopen New Task and click Attach files, Search, Board, and Close. You get the file picker, the Search tab, the board picker, and a closed window. Turn the flag off. The same hints are text, and a click does nothing.
+
+### Skills in the note
+
+Turn `htpr-7312-ctrlj-skills` on. Open New Task and type a note that contains a skill you own, written as `/` plus its slug. Send it. The saved ticket must not contain that token, and the writer must follow that skill. Type `/not-a-real-skill` and send. That token must remain. Turn the flag off and send the same known skill. The token must remain in the saved text.
+
+### Board chip on every page
+
+Turn `htpr-7313-ctrlj-always-board-chip` on. Open New Task on a board, on a ticket from that board, in Inbox, and on My Tasks. The board chip must be visible in each place before you type. Turn the flag off. On that board, and on a ticket from that board, the chip must stay hidden until the destination differs from the page.
+
+### Questions after create
+
+Turn `htpr-7317-ctrlj-ticket-questions` on. Create a ticket from New Task and wait on the AI sidebar. Under the intro you must see the heading "Questions and ideas for this ticket" and one button per returned line. Click one button. That text must send as your next chat message. Turn the flag off and create another ticket. Those buttons must not appear.
+
+### Empty task uses the sidebar
+
+Turn `htpr-7544-ctrlj-sidebar-on-new-task` on. Open a task whose title is "New Task" or empty and whose description has no text. Press Ctrl+J. The AI sidebar must open for that task, and New Task must stay closed. Repeat on a task that already has a description. Ctrl+J must open New Task. Turn the flag off on the empty task. Ctrl+J must open New Task again.
+
+### Search loads the palette late
+
+Turn `htpr-7547-search-lazy-closed` on. Open the Search page and do not open the palette. Search results must still list matches. Press Ctrl+K. The palette must open, and a failed palette load must close it again. Turn the flag off, reload Search, and confirm results still match the same query.
+
+### Skill picker
+
+Turn `htpr-7656-ctrlj-skill-menu` and `htpr-7312-ctrlj-skills` on. Open New Task and type `/`. A picker of your skills must open. Arrow keys must move the highlight. Enter must insert `/` plus the slug and a space. Escape must close the picker and leave the window open. Turn either flag off, type `/`, and confirm the picker stays closed.
+
+### Create button and word keys
+
+Turn `htpr-8260-ctrlj-composer-keys` on and leave the plus-composer flag off. Open New Task. The microphone must sit beside a Create button. The footer must spell keys as words, such as Ctrl Enter and Ctrl Shift B on Windows, or Cmd Enter and Cmd Shift B on Apple. Start dictation. A pill must show the word Dictation, and that control stops listening. A separate control cancels it. Turn the flag off. The send control must be the old icon button, and the footer must return to the short key chips.
+
+### Plus menu inside the box
+
+Turn `htpr-8829-ctrlj-plus-composer` on. This flag starts on for Owner and QA. Open New Task on desktop. Inside the box you must see a + control, a filled microphone, and a Send label. The + menu must offer Attach file and Add context. The board chip and the model picker must sit under the box, and the old footer must be gone. Open New Task on a phone. This layout must not appear. Turn the flag off on desktop. The previous row and footer must return.
+
+### Tabs inside the window
+
+Turn `htpr-8931-ctrlk-integrated-tabs` on. Open Ctrl+K on desktop, outside a demo and outside the interactive tour. Search and New Task must sit inside the window, not above it. Switch to New Task. The text box corners must be 4px. Open the same window on a phone. The tabs must stay above the window. Turn the flag off on desktop. The tabs must return above the window.
+
+### Tabs stay on top
+
+Turn `htpr-8943-ctrlk-tabs-on-top` and `htpr-8931-ctrlk-integrated-tabs` on. Open Ctrl+K. The tabs must sit above the search box. Switch to New Task and back to Search. The tabs must not move under the search box. Turn only the tabs-on-top flag off, with integrated tabs still on. On Search, the tabs must sit under the search box.
+
+### No shortcut footer
+
+Turn `htpr-8947-ctrlk-no-footer` on. Open Ctrl+K on Search. The shortcut hint row and the version line must be gone. The window element must still carry the build id as a hidden attribute. Switch to New Task and back. Search, results, and the shortcuts themselves must still work. Turn the flag off. Both footer lines must return.
+
+### Filled search box
+
+Turn `htpr-8954-ctrlk-filled-search`, `htpr-8931-ctrlk-integrated-tabs`, and `htpr-8943-ctrlk-tabs-on-top` on. Open Ctrl+K. The search box must use the New Task fill and must not show a line above or below it. Type a command. Results must still filter. Turn only the filled-search flag off. The lines around the search box must return. Turn filled search on without the two tab flags. The search box must keep the old lines.
+
 ## Gotchas
 
 - A palette label drifting from the key that actually works: the palette
@@ -79,6 +154,12 @@ for the phone footer.
 - On Apple devices `CTRL` must render as `CMD`; `SingleKey` in
   `CommandList.tsx` does that mapping, so a label that hard-codes `CMD` would
   print `CMD` on Windows too.
+- The skill picker opens only when `htpr-7656-ctrlj-skill-menu` and
+  `htpr-7312-ctrlj-skills` are both on. The filled search box changes only
+  when `htpr-8954-ctrlk-filled-search`, `htpr-8931-ctrlk-integrated-tabs`,
+  and `htpr-8943-ctrlk-tabs-on-top` are all on. The plus-composer row
+  replaces the Create-button row on desktop while `htpr-8829-ctrlj-plus-composer`
+  is on.
 
 ### What proof to collect
 

@@ -34,7 +34,7 @@ test('native scanner checks retain required names without commit-status API call
   }
 });
 
-test('trusted publication combines outside and title guards without exposing candidate code', () => {
+test('trusted publication combines outside, title and feature-map guards without exposing candidate code', () => {
   const w = workflow('pr-guards-trusted');
   assert.deepEqual(Object.keys(w.jobs), ['pr-guards-trusted', 'bind-ticket']);
   assert.deepEqual(Object.keys(w.on), ['pull_request_target', 'workflow_dispatch']);
@@ -42,14 +42,15 @@ test('trusted publication combines outside and title guards without exposing can
   assert.equal(w.concurrency.queue, 'max');
   assert.equal(w.concurrency['cancel-in-progress'], false);
   const steps = w.jobs['pr-guards-trusted'].steps;
-  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'runner-policy']);
+  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'feature-map', 'runner-policy']);
   const checkout = steps.find(step => step.uses?.startsWith('actions/checkout@'));
   assert.equal(checkout.with.ref, 'production');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.ok(steps.every(step => !step['continue-on-error']));
-  for (const id of ['outside', 'size', 'title', 'runner-policy']) {
+  for (const id of ['outside', 'size', 'title', 'feature-map', 'runner-policy']) {
     assert.equal(steps.find(step => step.id === id).env.PR_METADATA, '${{ steps.metadata.outputs.pr }}');
   }
+  assert.match(steps.find(step => step.id === 'feature-map').with.script, /previous_filename !== file\.filename \? \[file\.filename, file\.previous_filename\]/);
   assert.equal(steps.at(-1).if, "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}");
   assert.deepEqual(workflow('gitleaks').on.push.branches, ['main', 'master', 'production']);
   assert.deepEqual(workflow('secret-guard').on.push.branches, ['production', 'main']);
@@ -74,7 +75,7 @@ test('CI policy preserves every required context and describes native guard publ
   assert.deepEqual(policy.pr_job_budget.trusted_pull_request_guards.published_statuses, ['pr-title']);
   assert.deepEqual(policy.required_checks.contexts, [
     'app-smoke', 'browser-smoke', 'ci-tests', 'ai-review', 'claude-review',
-    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan',
+    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan', 'pstack-verifier',
   ]);
   assert.deepEqual(policy.policies.production_ruleset.required_status_checks, policy.required_checks.contexts);
 });
