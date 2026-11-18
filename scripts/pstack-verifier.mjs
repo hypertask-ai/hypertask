@@ -652,6 +652,7 @@ export function cacheEntryFor({ plan, run, baseSha, mapSha }) {
     journey: run.journey,
     scriptHash: journeyLib.scriptHash(item.actions, item.expect ?? []),
     pageHash: item.page ? pageHash((readFeaturePages().find((page) => page.name === item.page) ?? { text: "" }).text) : "",
+    apiOnly: run.apiOnly === true,
     ok: compareLib.classifyRun(run).state === "ok",
     judged: { verdict: String(run.judged ?? "") },
     steps: run.steps,
@@ -999,18 +1000,20 @@ export async function judgeBaseCommand({ work = workDir(), ask = askModel, key =
   try { evidence = readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding); } catch { evidence = null; }
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   const journeys = [];
-  for (const item of plan.journeys ?? []) {
+  for (const [index, item] of (plan.journeys ?? []).entries()) {
     const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey) ?? null;
     let judged = "";
+    let unusable = false;
     if (run && picked.model && !compareLib.classifyRun(run).state.match(/failed|unavailable/)) {
       try {
-        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, images: imagesIn(path.join(work, "evidence", "shots", String(plan.journeys.indexOf(item)))) }, parseAnswer);
+        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, images: imagesIn(shotsDirFor(path.join(work, "evidence", "shots"), index)) }, parseAnswer);
         judged = parsed.verdict;
       } catch (error) {
-        judged = "FAIL";
+        unusable = true;
         console.log(`base journey ${item.journey}: ${failureText(error, 160)}`);
       }
     }
+    if (unusable) continue;
     journeys.push({ journey: item.journey, apiOnly: run?.apiOnly === true, steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
   }
   writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
