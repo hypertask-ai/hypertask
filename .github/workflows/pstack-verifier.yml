@@ -146,7 +146,6 @@ jobs:
     needs: [resolve]
     if: "${{ github.ref == 'refs/heads/production' && needs.resolve.result == 'success' && needs.resolve.outputs.mark != 'skip' }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     environment: pstack-verifier
     permissions: { contents: read, statuses: read }
     steps:
@@ -179,5 +178,5 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
-      - env: { GH_TOKEN: "${{ github.token }}", HYPERTASK_RUNNERS_KEY: "${{ secrets.HYPERTASK_RUNNERS_KEY }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+      - env: { GH_TOKEN: "${{ github.token }}", HYPERTASK_RUNNERS_KEY: "${{ secrets.HYPERTASK_RUNNERS_KEY }}", HEAD_SHA: "${{ needs.resolve.outputs.sha || github.event.workflow_run.head_sha }}" }
         run: node scripts/pstack-verifier.mjs cancel

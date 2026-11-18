@@ -707,10 +707,10 @@ export function githubHeaders(env = process.env, token) {
 export function attemptUrl(repo, run, attempt) {
   return `https://github.com/${repo}/actions/runs/${run}/attempts/${attempt}`;
 }
-function holdSecret(value) {
+function holdSecret(value, mask = true) {
   if (!value) return;
   heldSecrets.push(String(value));
-  process.stdout.write(`::add-mask::${value}\n`);
+  if (mask) process.stdout.write(`::add-mask::${value}\n`);
 }
 function secretValues() {
   return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN, process.env.HYPERTASK_RUNNERS_KEY, ...heldSecrets].filter(Boolean);
@@ -803,10 +803,8 @@ function bindingNow(sha = process.env.HEAD_SHA) {
   return { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
 }
 function appJwt(pem, now = Date.now()) {
-  const iat = Math.floor(now / 1000) - 60;
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
-  const data = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({ iat, exp: iat + 540, iss: APP_ID })}`;
-  const sign = createSign("RSA-SHA256");
+  const iat = Math.floor(now / 1000) - 60, encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const data = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({ iat, exp: iat + 540, iss: APP_ID })}`, sign = createSign("RSA-SHA256");
   sign.update(data);
   sign.end();
   return `${data}.${sign.sign(pem).toString("base64url")}`;
@@ -816,7 +814,8 @@ export async function mintStatusToken(fetchImpl = fetch, now = Date.now()) {
   const pem = Buffer.from(encoded, "base64").toString("utf8");
   if (!pem.includes("PRIVATE KEY")) throw new Error("token HTTP 0");
   const jwt = appJwt(pem, now);
-  for (const value of [encoded, pem, jwt]) holdSecret(value);
+  holdSecret(pem, false);
+  for (const value of [encoded, jwt]) holdSecret(value);
   const headers = { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
   const install = await fetchImpl("https://api.github.com/repos/hypertask-ai/hypertask/installation", { headers });
   if (!install.ok) throw new Error(`installation HTTP ${install.status}`);
@@ -866,9 +865,11 @@ export function eligiblePull(item, repo, sha) {
 function appStatuses(statuses) {
   return (Array.isArray(statuses) ? statuses : []).filter((status) => status?.context === CONTEXT && status?.creator?.login === APP_LOGIN);
 }
-function ownsAppStatus(statuses, repo, run, attempt, allowFirst = false) {
+function ownsAppStatus(statuses, run, attempt, allowFirst = false) {
   const newest = appStatuses(statuses)[0];
-  return newest ? newest.target_url === attemptUrl(repo, run, attempt) : allowFirst;
+  const target = /\/runs\/(\d+)\/attempts\/(\d+)$/.exec(String(newest?.target_url ?? ""));
+  if (!target) return allowFirst;
+  return Number(run) > Number(target[1]) || (Number(run) === Number(target[1]) && Number(attempt) >= Number(target[2]));
 }
 function pullUrl(repo, number) {
   return `repos/${repo}/pulls/${number}`;
@@ -1187,7 +1188,7 @@ export async function postCommand(io = {}) {
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
   if (!eligiblePull(item, repo, binding.sha)) return;
-  if (!ownsAppStatus(statuses, repo, binding.run, binding.attempt)) { console.log("not owner"); return; }
+  if (!ownsAppStatus(statuses, binding.run, binding.attempt)) { console.log("not owner"); return; }
   if (saved.baseSha && compareLib.baseMoved({ item, plan: { sha: guardSha(binding.sha), baseSha: saved.baseSha } }).moved) {
     await postStatus({ repo, ...binding, state: "pending", description: "waiting for required checks", fetchImpl: io.fetch, token: io.token });
     console.log("the base or the head moved during the run; the recheck will drive it again");
@@ -1215,7 +1216,7 @@ export async function markCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const binding = bindingNow();
   const statuses = JSON.parse((io.gh ?? gh)(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
-  if (!ownsAppStatus(statuses, repo, binding.run, binding.attempt, true)) { console.log("not owner"); return; }
+  if (!ownsAppStatus(statuses, binding.run, binding.attempt, true)) { console.log("not owner"); return; }
   const description = process.env.MARK_DESCRIPTION || (mode === "pending" ? "Planning a user check" : "FAIL: author model unknown");
   await postStatus({ repo, ...binding, state: mode, description, fetchImpl: io.fetch, token: io.token });
 }
@@ -1223,7 +1224,7 @@ export async function cancelCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const binding = bindingNow();
   const statuses = JSON.parse((io.gh ?? gh)(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
-  if (!ownsAppStatus(statuses, repo, binding.run, binding.attempt)) { console.log("not owner"); return; }
+  if (!ownsAppStatus(statuses, binding.run, binding.attempt, true)) { console.log("not owner"); return; }
   const newest = appStatuses(statuses)[0];
   if (cancelKeepsStatus(newest, attemptUrl(repo, binding.run, binding.attempt))) return;
   await postStatus({ repo, ...binding, state: "failure", description: "FAIL: The verifier did not finish.", fetchImpl: io.fetch, token: io.token });

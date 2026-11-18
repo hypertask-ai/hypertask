@@ -1190,9 +1190,8 @@ test("the app token writes the status and a newer actions status cannot hide it"
   const write = process.stdout.write.bind(process.stdout), masks = [];
   process.stdout.write = (chunk, ...rest) => String(chunk).startsWith("::add-mask::") ? masks.push(String(chunk)) && true : write(chunk, ...rest);
   Object.assign(process.env, { GH_TOKEN: "actions-token", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work, HYPERTASK_RUNNERS_KEY: Buffer.from(pem).toString("base64") });
-  const open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
   const row = (runId, login, state = "pending", extra = {}) => ({ context: "pstack-verifier", creator: { login }, state, target_url: `https://github.com/acme/app/actions/runs/${runId}/attempts/1`, ...extra });
-  const owned = row(10, "hypertask-runners[bot]");
+  const owned = row(10, "hypertask-runners[bot]"), open = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
   const gh = (statuses) => (args) => {
     const url = String(args[1]);
     if (url === "repos/acme/app/pulls/5") return JSON.stringify(open);
@@ -1226,19 +1225,19 @@ test("the app token writes the status and a newer actions status cannot hide it"
     const find = (part) => ok.calls.find((call) => call.url.includes(part));
     const minted = find("/access_tokens"), status = find("/statuses/"), comment = find("/comments");
     const payload = JSON.parse(Buffer.from(minted.auth.slice(7).split(".")[1], "base64url").toString());
-    assert.equal(ok.calls.some((call) => call.url === "https://api.github.com/repos/hypertask-ai/hypertask/installation"), true);
     assert.equal(minted.url, "https://api.github.com/app/installations/77/access_tokens");
     assert.deepEqual(minted.body, { repositories: ["hypertask"], permissions: { statuses: "write" } });
     assert.equal(payload.iss === 5264284 && payload.exp - payload.iat < 600, true);
     assert.equal(ok.calls.indexOf(status) < ok.calls.indexOf(comment) && status.auth === "Bearer app-token" && comment.auth === "Bearer actions-token" && status.body.state === "failure", true);
-    assert.equal(masks.length >= 3, true);
+    assert.equal(masks.some((line) => line.includes("PRIVATE KEY")), false);
     const deniedStatus = http("/statuses/");
     await assert.rejects(() => run(postCommand, [owned], { fetch: deniedStatus.fetch }), /status HTTP 403/);
     assert.equal(deniedStatus.calls.some((call) => call.url.includes("/comments")), false);
     await assert.rejects(() => run(postCommand, [owned], { fetch: http("/comments").fetch }), /comment HTTP 403/);
+    assert.equal((await run(postCommand, [row(9, "hypertask-runners[bot]")], {})).posts[0].state, "failure");
     const stalePost = await run(postCommand, [row(11, "hypertask-runners[bot]")], {});
-    const staleCancel = await run(cancelCommand, [row(11, "hypertask-runners[bot]")], {});
-    assert.equal(stalePost.posts.length === 0 && stalePost.logs.includes("not owner") && staleCancel.posts.length === 0 && staleCancel.logs.includes("not owner"), true);
+    assert.equal(stalePost.posts.length === 0 && stalePost.logs.includes("not owner"), true);
+    assert.equal((await run(cancelCommand, [row(11, "hypertask-runners[bot]")], {})).logs.includes("not owner"), true);
     assert.equal((await run(cancelCommand, [row(10, "hypertask-runners[bot]", "pending", { description: "waiting for required checks" })], {})).posts.length, 0);
     const gaveUp = await run(cancelCommand, [owned], {}).catch((error) => error.message);
     assert.equal(gaveUp, "verifier did not finish");

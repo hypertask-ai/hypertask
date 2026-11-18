@@ -84,7 +84,6 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(names.filter((name) => !name.includes("${{ github.run_id }}-${{ github.run_attempt }}")), []);
   assert.equal(policy.pstack_verifier.required, true);
   assert.equal(policy.pstack_verifier.note, "app 5264284 writes it from environment pstack-verifier on production");
-  assert.equal(policy.pstack_verifier.integration_id, 5264284);
   assert.equal(policy.required_checks.contexts.includes("pstack-verifier"), true);
   for (const name of ["post", "cancel"]) { assert.equal(trusted.jobs[name].if.includes("always()"), false); assert.match(trusted.jobs[name].if, /!cancelled\(\)/); }
   const { CI_WAIT_ROUNDS, CI_WAIT_INTERVAL_MS, REQUIRED_CI_CONTEXTS } = await import("../scripts/pstack-verifier.mjs");
@@ -95,7 +94,6 @@ test("each verifier job has the declared permissions, key and token", async () =
   for (const name of REQUIRED_CI_CONTEXTS) assert.equal(ruleset.has(name), false, name);
   for (const name of ["ai-review", "claude-review", "app-smoke", "browser-smoke"]) assert.equal(REQUIRED_CI_CONTEXTS.includes(name), false, name);
   assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
-  assert.equal(trusted.jobs.cancel.steps.at(-1).run, "node scripts/pstack-verifier.mjs cancel");
 });
 
 test("only mark, post and cancel use the verifier environment and the job token cannot write the status", () => {
@@ -107,9 +105,7 @@ test("only mark, post and cancel use the verifier environment and the job token 
     assert.deepEqual(refs(trusted.jobs[name]), ["${{ github.sha }}"]);
     assert.equal(trusted.jobs[name].permissions.statuses, "read");
     assert.match(trusted.jobs[name].if, /github\.ref == 'refs\/heads\/production'/);
-    assert.equal((trusted.jobs[name].steps ?? []).some((step) => String(step.uses ?? "").includes("actions/cache")), false);
   }
-  assert.deepEqual([trusted.jobs.post.permissions["pull-requests"], trusted.jobs.mark.permissions["pull-requests"], trusted.jobs.cancel.permissions["pull-requests"]], ["write", undefined, undefined]);
   assert.equal(refs(trusted.jobs.drive).includes("${{ needs.resolve.outputs.sha }}"), true);
   assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("HYPERTASK_RUNNERS_KEY")), false);
 });

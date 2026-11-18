@@ -22,7 +22,7 @@ const endpoints = [
 function runSettings({
   event = "pull_request", file = ".github/workflows/ci-tests.yml",
   diffStatus = 0, fetchStatus = 0, httpStatus = 200, resetSeconds = 0,
-  liveContexts = contexts, proof = null, integrationId = null, omitIntegration = false,
+  liveContexts = contexts, proof = null,
   integrationFor = (context) => context === "pstack-verifier" ? 5264284 : 15368,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "required-check-settings-"));
@@ -109,7 +109,7 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
           conditions: { ref_name: { include: ["refs/heads/production"], exclude: [] } },
           rules: [{ type: "required_status_checks", parameters: {
             required_status_checks: liveContexts.map((context) => (
-              omitIntegration ? { context } : { context, integration_id: integrationId ?? integrationFor(context) }
+              { context, integration_id: integrationFor(context) }
             )),
           } }],
         }),
@@ -253,10 +253,10 @@ for (const httpStatus of [404, 403]) {
 }
 
 test("a required check without an integration pin fails", () => {
-  const missing = runSettings({ omitIntegration: true });
+  const missing = runSettings({ integrationFor: () => undefined });
   assertRejected(missing);
   assert.match(missing.output, /integration must be 5264284/);
-  const other = runSettings({ integrationId: 1 });
+  const other = runSettings({ integrationFor: () => 1 });
   assertRejected(other);
   assert.match(other.output, /integration must be 5264284/);
   const pinned = runSettings({ integrationFor: () => 15368 });

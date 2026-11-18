@@ -90,6 +90,7 @@ test("resolve stops and publishes when the same head tree was already verified",
     const written = String(require("node:fs").readFileSync(output, "utf8"));
     assert.match(written, /stop=true/);
     assert.match(written, /mark=success/);
+    assert.deepEqual(posts, []);
   } finally {
     for (const [key, value] of savedEnv) value === undefined ? delete process.env[key] : (process.env[key] = value);
   }
@@ -104,12 +105,10 @@ test("resolve keeps going when the earlier artifact is gone", async () => {
   const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT", "RUNNER_TEMP"].map((key) => [key, process.env[key]]);
   Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: REPO, HEAD_SHA: head, GITHUB_RUN_ID: "11", GITHUB_RUN_ATTEMPT: "1", WORK: work, GITHUB_OUTPUT: output, RUNNER_TEMP: work });
   const pull = { number: 5, state: "open", draft: false, user: { login: "octocat" }, title: "t", body: "Author-Model: deepseek", base: { ref: "production", sha: BASE }, head: { sha: head, repo: { full_name: REPO } } };
-  const posts = [];
   try {
     await resolveCommand({
       event: { workflow_run: { conclusion: "success", head_sha: head, pull_requests: [{ number: 5 }] } },
       spawn: () => ({ status: 0, stdout: `${"e".repeat(40)} 0000000\n` }),
-      postStatus: async (row) => { posts.push(row); },
       gh: (args) => {
         const url = args.join(" ");
         if (url.includes("/issues/5/comments")) return JSON.stringify([{ user: { login: BOT }, body: markerBodies() }]);
