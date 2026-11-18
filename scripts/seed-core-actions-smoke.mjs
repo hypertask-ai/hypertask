@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { boardRecords, buildCoreSmokeSeedPlan, teamRoster } from "./lib/core-smoke-seed-plan.mjs";
 
 const envFile = process.env.CORE_SMOKE_ENV_FILE;
 if (!envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
@@ -24,74 +25,96 @@ const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB
 const displayName = `Core smoke user ${runKey}`;
 const agentName = `Core smoke agent ${runKey}`;
 
+const plan = buildCoreSmokeSeedPlan({ runKey });
+const commented = new Set(plan.comments.map((comment) => `${comment.boardKey}:${comment.uniqueIndex}`));
+
 try {
-  const user = await prisma.user.create({
-    data: {
-      uid: `core-smoke-${runKey}`,
-      email: `core-smoke-${runKey}@example.invalid`,
-      displayName,
-      UserSetting: {
-        create: { notification: false, onboardingTourStatus: true },
+  const users = [];
+  for (const member of plan.members) {
+    users.push(await prisma.user.create({
+      data: {
+        uid: member.uid,
+        email: member.email,
+        displayName: member.displayName,
+        UserSetting: { create: { notification: false, onboardingTourStatus: true } },
       },
-    },
-  });
+    }));
+  }
+  const user = users[0];
   const googleAccount = await prisma.googleAccount.create({
-    data: {
-      userId: user.id,
-      stripe_customer_id: `core-smoke-${runKey}`,
-    },
+    data: { userId: user.id, stripe_customer_id: `core-smoke-${runKey}` },
   });
   const team = await prisma.team.create({
-    data: {
-      title: "Core actions smoke",
-      totalSeats: 1,
-      googleAccountId: googleAccount.id,
-    },
+    data: { title: "Core actions smoke", totalSeats: plan.members.length, googleAccountId: googleAccount.id },
   });
-  const project = await prisma.project.create({
-    data: {
-      name: `core-smoke-${runKey}`,
-      title: "Core actions smoke",
-      ownerId: user.id,
-      teamId: team.id,
-      sections: ["Baseline", "Alternate"],
-    },
+  const roster = new Set(teamRoster(plan).map((member) => member.uid));
+  await prisma.member_Team.createMany({
+    data: users.filter((member) => roster.has(member.uid)).map((member) => ({ userId: member.id, teamId: team.id, googleAccountId: googleAccount.id })),
   });
-  const [sourceSection, targetSection] = await Promise.all([
-    prisma.section.create({
-      data: {
-        projectId: project.id,
-        section_title: "Baseline",
-        ranking: "A0100",
-      },
-    }),
-    prisma.section.create({
-      data: {
-        projectId: project.id,
-        section_title: "Alternate",
-        ranking: "A0200",
-      },
-    }),
-  ]);
-  const agent = await prisma.agent.create({
-    data: { displayName: agentName, userId: user.id },
+  const projects = new Map();
+  for (const board of boardRecords(plan, googleAccount.id)) {
+    projects.set(board.key, await prisma.project.create({
+      data: { name: board.name, title: board.title, ownerId: user.id, teamId: team.id, googleAccountId: board.googleAccountId, sections: board.sections },
+    }));
+  }
+  const sections = new Map();
+  for (const board of plan.boards) {
+    for (const [index, title] of board.sections.entries()) {
+      sections.set(`${board.key}\0${title}`, await prisma.section.create({
+        data: {
+          projectId: projects.get(board.key).id,
+          section_title: title,
+          ranking: `A${String((index + 1) * 100).padStart(4, "0")}`,
+        },
+      }));
+    }
+  }
+  const agent = await prisma.agent.create({ data: { displayName: agentName, userId: user.id } });
+  await prisma.member.createMany({
+    data: plan.boards.flatMap((board) => users.map((member) => {
+      const row = { projectId: projects.get(board.key).id, userId: member.id };
+      if (member.id === user.id) row.agentId = agent.id;
+      return row;
+    })),
   });
-  await prisma.member.create({
-    data: { projectId: project.id, userId: user.id, agentId: agent.id },
+  await prisma.label.createMany({
+    data: plan.labels.map((label) => ({ id: label.id, value: label.value, projectId: projects.get(label.boardKey).id })),
   });
-  const task = await prisma.task.create({
-    data: {
-      uniqueIndex: 1,
-      ticketNumber: "SMOKE-1",
-      title: "Core actions smoke fixture",
+  await prisma.task.createMany({
+    data: plan.tasks.map((task) => ({
+      uniqueIndex: task.uniqueIndex,
+      ticketNumber: task.ticketNumber,
+      title: task.title,
       description: "",
-      projectId: project.id,
+      projectId: projects.get(task.boardKey).id,
       userId: user.id,
-      section: sourceSection.section_title,
-      sectionId: sourceSection.id,
-      ranking: "A0100",
-    },
+      section: task.sectionTitle,
+      sectionId: sections.get(`${task.boardKey}\0${task.sectionTitle}`).id,
+      ranking: task.ranking,
+      totalComments: commented.has(`${task.boardKey}:${task.uniqueIndex}`) ? 1 : 0,
+    })),
   });
+  const stored = await prisma.task.findMany({
+    where: { projectId: { in: [...projects.values()].map((project) => project.id) } },
+    select: { id: true, projectId: true, uniqueIndex: true },
+  });
+  const taskIds = new Map(stored.map((row) => [`${row.projectId}:${row.uniqueIndex}`, row.id]));
+  const taskId = (boardKey, uniqueIndex) => taskIds.get(`${projects.get(boardKey).id}:${uniqueIndex}`);
+  await prisma.comment.createMany({
+    data: plan.comments.map((comment) => ({
+      taskId: taskId(comment.boardKey, comment.uniqueIndex),
+      creatorId: user.id,
+      text: `<p>${comment.text}</p>`,
+      commentText: comment.text,
+    })),
+  });
+  await prisma.taskLabel.createMany({
+    data: plan.taskLabels.map((link) => ({ taskId: taskId(link.boardKey, link.uniqueIndex), labelId: link.labelId })),
+  });
+  const project = projects.get("fixture");
+  const sourceSection = sections.get("fixture\0Baseline");
+  const targetSection = sections.get("fixture\0Alternate");
+  const task = { id: taskId("fixture", 1) };
 
   const signedSession = signSession({ id: user.id, email: user.email });
   const mcpToken = createMcpToken(user.id, user.email);
@@ -152,7 +175,7 @@ try {
   );
   await chmod(envFile, 0o600);
   console.log(
-    `Seeded core-actions fixture on board ${project.id}, task ${task.id}.`,
+    `Seeded core-actions fixture on board ${project.id}, task ${task.id}, tickets ${plan.tasks.length}, members ${plan.members.length}.`,
   );
 } finally {
   await prisma.$disconnect();
