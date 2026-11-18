@@ -31,7 +31,7 @@ Push the branch and require targeted checks in CI. Never run tests or builds on 
 
 ## Verify and close
 
-Load [verify-qa](../verify-qa/SKILL.md) after deployment and read the matching feature-map recipe. Write the checklist first. Use headless Playwright and the authorized QA identity for the path, never Valentin's account or browser. Confirm the doctor before judging the feature. Every app deployment includes the core inbox cycle.
+Load [verify-hypertask](../verify-hypertask/SKILL.md) after deployment and read the matching feature-map recipe. Write the checklist first. Use headless Playwright and the authorized QA identity for the path, never Valentin's account or browser. Confirm the doctor before judging the feature. Every app deployment includes the core inbox cycle.
 
 Drive the real parse or dispatch entry point, prove side effects, and reload saved results. Include the declared flag mode and flag-off case where relevant. Changed UI needs desktop and phone captures in all four themes plus a short main-path video. Mocks, previews, and helper-only tests do not replace live proof. Record unreachable paths and the closest real check instead of inventing success.
 

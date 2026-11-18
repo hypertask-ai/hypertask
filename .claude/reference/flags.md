@@ -1,6 +1,6 @@
 # Flag-release detail
 
-Read [Feature flags](#feature-flags-for-new-user-facing-behavior) and verify-qa Released flags for defaults, exceptions, cleanup and emergency flag-off.
+Read [Feature flags](#feature-flags-for-new-user-facing-behavior) and verify-hypertask Released flags for defaults, exceptions, cleanup and emergency flag-off.
 
 Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
 
