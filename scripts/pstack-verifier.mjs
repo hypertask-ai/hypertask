@@ -422,12 +422,12 @@ export function planFileList(request) {
   return { files: listed.files, filesTruncated: request?.filesTruncated === true || listed.filesTruncated };
 }
 export function ciChecksPending(runs) {
-  const relevant = relevantChecks(runs);
-  return relevant.length === 0 || relevant.some((run) => run?.conclusion == null);
+  const latest = latestRuns(runs);
+  return latest.length === 0 || latest.some((run) => run?.conclusion == null);
 }
 export function ciChecksPassed(runs) {
-  const relevant = relevantChecks(runs);
-  return relevant.length > 0 && relevant.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
+  const latest = latestRuns(runs);
+  return latest.length > 0 && latest.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
 }
 export function relevantStatuses(statuses) {
   const seen = new Set();
@@ -448,14 +448,28 @@ export function ciStatusesPassed(statuses) {
   const latest = relevantStatuses(statuses);
   return latest.length > 0 && latest.every((status) => status?.state === "success");
 }
+function runCreatedAt(run) {
+  const at = Date.parse(run?.created_at ?? run?.started_at ?? run?.completed_at ?? "");
+  return Number.isNaN(at) ? null : at;
+}
 function latestRuns(runs) {
+  const ordered = relevantChecks(runs).map((run, index) => ({ run, index, at: runCreatedAt(run) }));
+  if (ordered.every((entry) => entry.at != null)) ordered.sort((a, b) => b.at - a.at || a.index - b.index);
   const seen = new Set();
+  const superseded = new Map();
   const latest = [];
-  for (const run of relevantChecks(runs)) {
-    if (!run?.name || seen.has(run.name)) continue;
-    seen.add(run.name);
+  for (const { run } of ordered) {
+    if (run?.name) {
+      if (seen.has(run.name)) continue;
+      if (run.conclusion === "cancelled") {
+        if (!superseded.has(run.name)) superseded.set(run.name, run);
+        continue;
+      }
+      seen.add(run.name);
+    }
     latest.push(run);
   }
+  for (const [name, run] of superseded) if (!seen.has(name)) latest.push({ ...run, conclusion: null });
   return latest;
 }
 export function requiredContextsReady(runs, statuses, required = REQUIRED_CI_CONTEXTS) {
