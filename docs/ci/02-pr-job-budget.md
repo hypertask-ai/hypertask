@@ -93,7 +93,12 @@ Each says "moved to nightly (HTPR-9450)".
 Neither stub builds or starts a browser.
 `app-smoke.yml` publishes the `app-smoke` commit status.
 `ci-tests.yml` reports the `browser-smoke` job summary.
-Automerge and the verifier wait for both contexts.
+Automerge still waits for both contexts.
+The verifier waits only for checks that test a pull request: `ci-tests`,
+`feature-flag-gate`, `pr-title`, `next-public-secrets` and `secret-scan`.
+Its empty-plan pass no longer waits on either smoke stub.
+It reads no review status: a red or pending `ai-review` or `claude-review`
+never fails or holds its verdict, because a bot review is not a verdict.
 Only an admin can remove these ruleset requirements.
 Keep the stubs until that happens.
 Emergency path unchanged. Revert first, then fix forward.
