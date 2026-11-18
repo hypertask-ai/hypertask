@@ -131,6 +131,12 @@ test("recheck waits on production, reruns only a verifier wait, and pages past a
   assert.equal(helper.sourceStartsRecheck("Pstack Verifier Request"), false);
   assert.equal(helper.shouldRerun({ context: CONTEXT, state: "pending", description: "Planning a user check" }, { name: "Pstack Verifier Request", path: ".github/workflows/pstack-verifier-request.yml" }), false);
   assert.equal(helper.shouldRerun({ context: CONTEXT, state: "pending", description: "waiting for required checks" }, { path: ".github/workflows/pstack-verifier.yml" }), true);
+  const verifierRun = { path: ".github/workflows/pstack-verifier.yml" };
+  const unevaluatedStatus = { context: CONTEXT, state: "error", description: "verifier could not evaluate: model output invalid after retry" };
+  assert.equal(helper.shouldRerun(unevaluatedStatus, verifierRun, [unevaluatedStatus]), true);
+  assert.equal(helper.shouldRerun(unevaluatedStatus, verifierRun, [unevaluatedStatus, unevaluatedStatus, unevaluatedStatus]), false);
+  assert.equal(helper.shouldRerun({ ...unevaluatedStatus, state: "failure" }, verifierRun, []), false);
+  assert.equal(helper.shouldRerun(unevaluatedStatus, { path: ".github/workflows/other.yml" }, [unevaluatedStatus]), false);
   assert.equal(helper.workflowRunSha({ workflow_run: { name: "Pstack Verifier Request", event: "pull_request", head_sha: "a".repeat(40) } }), "");
   const oldest = "2026-11-17T01:00:00Z";
   const items = Array.from({ length: 31 }, (_, index) => ({ number: index + 1, waitingSince: index === 30 ? oldest : new Date(Date.parse("2026-11-17T02:00:00Z") + index * 1000).toISOString() }));

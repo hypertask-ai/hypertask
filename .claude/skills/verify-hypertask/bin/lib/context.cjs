@@ -1,9 +1,15 @@
 const { spawnSync } = require("node:child_process");
 const { mkdirSync, readFileSync, writeFileSync } = require("node:fs");
+const net = require("node:net");
 const { homedir } = require("node:os");
 const path = require("node:path");
 
 const repoRoot = path.resolve(__dirname, "../../../../..");
+const localSecrets = {
+  SESSION_SECRET: "local-verification-session-placeholder-32",
+  JWT_SECRET: "local-verification-jwt-placeholder-0000000000",
+  BETTER_AUTH_SECRET: "local-verification-auth-placeholder-32",
+};
 
 class CliError extends Error {
   constructor(message, options = {}) {
@@ -54,6 +60,7 @@ function runDir() {
 
 function ensureRunDir() {
   mkdirSync(runDir(), { recursive: true });
+  return runDir();
 }
 
 function readJson(file, fallback = null) {
@@ -95,15 +102,51 @@ async function httpStatus(url, timeout = 5_000) {
   }
 }
 
+function tcpReachable(host, port, timeout = 2_000) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    const done = (ok) => {
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeout);
+    socket.once("connect", () => done(true));
+    socket.once("timeout", () => done(false));
+    socket.once("error", () => done(false));
+  });
+}
+
+function localEnv() {
+  return readJson(path.join(runDir(), "env.json"), {});
+}
+
+function baseUrl() {
+  return process.env.HT_VERIFY_BASE || localEnv().baseUrl || "http://127.0.0.1:3000";
+}
+
+function stateFile() {
+  return process.env.HT_VERIFY_STATE || path.join(runDir(), "browser/state.json");
+}
+
+function dryRun(command, steps, data = {}) {
+  return { command, ok: true, target: data.target || null, run: runDir(), data: { dryRun: true, steps, ...data }, evidence: [], error: null };
+}
+
 module.exports = {
   CliError,
+  baseUrl,
+  dryRun,
   ensureRunDir,
   fail,
   httpStatus,
+  localEnv,
+  localSecrets,
   parseArgs,
   readJson,
   repoRoot,
   run,
   runDir,
+  stateFile,
+  tcpReachable,
   writeJson,
 };

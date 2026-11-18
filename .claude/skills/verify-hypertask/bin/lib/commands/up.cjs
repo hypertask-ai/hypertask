@@ -5,6 +5,7 @@ const {
   ensureRunDir,
   fail,
   httpStatus,
+  localSecrets,
   parseArgs,
   readJson,
   repoRoot,
@@ -25,6 +26,8 @@ Usage:
 Repeat runs reuse the container and server and wait up to 240s for /login 200.
 State lands in the run folder: env.json, dev.log, dev.pid. Secrets are
 placeholders. Needs Docker and node_modules here; a symlink fails Next.
+Known limit: the board view waits on the premerge realtime stack and stays at
+"Loading board..."; the task detail and /my-tasks do render.
 
 Example:
   ht-verify up`;
@@ -85,8 +88,7 @@ module.exports = {
     const databaseUrl = `postgresql://verify:verify@127.0.0.1:${dbPort}/hypertask`;
     const env = {
       DATABASE_URL: databaseUrl,
-      SESSION_SECRET: "local-verification-session-placeholder-32",
-      BETTER_AUTH_SECRET: "local-verification-auth-placeholder-32",
+      ...localSecrets,
       NEXT_PUBLIC_SITE_URL: baseUrl,
       CI: "1",
       __NEXT_AGENT_UPGRADE: "security",
