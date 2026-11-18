@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { ARCHIVED_SMOKE_PROJECT_ENV } from "./lib/core-smoke-seed-plan.mjs";
 
 const heavyNeeded = (files) => createRequire(import.meta.url)("../.github/scripts/ci-change-scope.cjs").heavyNeeded(files);
 
@@ -102,7 +103,7 @@ export function parsePlan(text) {
 export function smokeDriveIds(seeded) {
   return {
     projectId: seeded.CORE_SMOKE_PROJECT_ID,
-    archivedProjectId: seeded.CORE_SMOKE_ARCHIVED_PROJECT_ID,
+    archivedProjectId: seeded[ARCHIVED_SMOKE_PROJECT_ENV],
     taskId: seeded.CORE_SMOKE_TASK_ID,
     bearer: seeded.CORE_SMOKE_MCP_TOKEN,
   };
