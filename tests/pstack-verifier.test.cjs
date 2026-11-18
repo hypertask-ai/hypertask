@@ -13,15 +13,17 @@ test("missing Author-Model fails", async () => {
   assert.equal(authorGate("Author-Model: grok").author, "grok");
 });
 
-test("deepseek author picks the alt model and an empty alt fails", async () => {
+test("deepseek author picks the alt model and an empty alt is unevaluated", async () => {
   const { pickVerifier, decide, FLASH } = await load();
   assert.equal(pickVerifier("grok", "openai/gpt-5").model, FLASH);
+  assert.deepEqual(pickVerifier("grok", "openai/gpt-5").models, [FLASH, "openai/gpt-5"]);
   assert.equal(pickVerifier("deepseek", "openai/gpt-5").model, "openai/gpt-5");
+  assert.equal(pickVerifier("codex", "openai/gpt-5").model, FLASH);
   const picked = pickVerifier("deepseek", " ");
   assert.equal(picked.fail, "no other-family verifier configured");
   assert.equal(pickVerifier("deepseek", "deepseek/deepseek-v4.1-flash").fail, picked.fail);
-  const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { fail: picked.fail }), evidence: null, binding });
-  assert.equal(result.verdict, "FAIL");
+  const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { unevaluated: picked.fail }), evidence: null, binding });
+  assert.equal(result.verdict, "UNEVALUATED");
   assert.equal(result.notes, picked.fail);
 });
 
@@ -893,8 +895,8 @@ test("a real plan with no evidence file fails as evidence missing", async () => 
   }
 });
 
-test("one bad model reply is retried and two bad replies fail closed", async () => {
-  const { askModel, parseAnswer, parsePlan, decide } = await load();
+test("one bad model reply is retried and two bad replies are unevaluated, not a fail", async () => {
+  const { askModel, askVerifier, parseAnswer, parsePlan, decide } = await load();
   const model = "deepseek/deepseek-v4.1-flash";
   const prompt = "same prompt";
   const drive = (contents) => {
@@ -930,14 +932,34 @@ test("one bad model reply is retried and two bad replies fail closed", async () 
   let thrown;
   try { await askModel(prompt, closed.options, parseAnswer); } catch (error) { thrown = error; }
   assert.equal(closed.seen.length, 2);
-  const failed = decide({
-    model: { verdict: "FAIL", notes: thrown.message },
+  const unevaluated = decide({
+    model: { unevaluated: thrown.message },
     plan: plan([{ op: "goto", path: "/" }]),
     evidence: evidence(),
     binding,
   });
-  assert.equal(failed.verdict, "FAIL");
-  assert.equal(failed.notes, "model output invalid after retry");
+  assert.equal(unevaluated.verdict, "UNEVALUATED");
+  assert.equal(unevaluated.notes, "model output invalid after retry");
+  const real = decide({
+    model: { verdict: "FAIL", notes: "the page shows the empty state" },
+    plan: plan([{ op: "goto", path: "/" }]),
+    evidence: evidence(),
+    binding,
+  });
+  assert.equal(real.verdict, "FAIL");
+  const chain = [];
+  const fallback = await askVerifier(prompt, {
+    key: "secret",
+    models: [model, "openai/gpt-5"],
+    fetchImpl: async (_url, options) => {
+      const sent = JSON.parse(options.body);
+      chain.push(sent.model);
+      const content = sent.model === "openai/gpt-5" ? JSON.stringify(good) : "{";
+      return { ok: true, async json() { return { choices: [{ message: { content } }] }; } };
+    },
+  }, parseAnswer);
+  assert.equal(fallback.verdict, "PASS");
+  assert.deepEqual(chain, [model, model, "openai/gpt-5"]);
   let httpCalls = 0;
   await assert.rejects(
     askModel(prompt, {
@@ -948,6 +970,74 @@ test("one bad model reply is retried and two bad replies fail closed", async () 
     (error) => error.message === "model HTTP 500: busy",
   );
   assert.equal(httpCalls, 1);
+});
+
+test("a fenced or prose-wrapped answer is read by the verifier and by break-it", async () => {
+  const { parsePlan, parseAnswer } = await load();
+  const { parseBreakTests } = await import("../.github/scripts/break-it-review.mjs");
+  const planText = 'Here is the plan: ```json\n{"actions":[{"op":"goto","path":"/project?id={id}"}],"expect":[{"text":"Renewal {date}"}],"reason":"use {id}"}\n``` done';
+  assert.equal(parsePlan(planText).actions[0].path, "/project?id={id}");
+  assert.equal(parseAnswer('Sure. {"verdict":"PASS","notes":"the field {name} is shown"} Hope that helps.').verdict, "PASS+NOTES");
+  const tests = parseBreakTests(`Take these. ${JSON.stringify({ tests: [{ name: "edge", code: 'const test = require("node:test"); test("x", () => {});' }] })} thanks`);
+  assert.equal(tests[0].file, "break-it-edge.test.cjs");
+  assert.throws(() => parsePlan("no object here"), /model answer was not JSON/);
+});
+
+test("a plan that cannot be read from any model is unevaluated, not a change verdict", async () => {
+  const { planFromRequest, FLASH } = await load();
+  const request = { ...binding, author: "grok", title: "HTPR-1 [BUGFIX] thing", body: "", diff: "", files: ["src/app/page.tsx"], filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const seen = [];
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  let built;
+  try {
+    built = await planFromRequest(request, {
+      binding,
+      altModel: "openai/gpt-5",
+      pages: [],
+      entries: [],
+      ask: (_prompt, options) => { seen.push(options); throw new Error("model output invalid after retry"); },
+    });
+  } finally {
+    if (savedToken !== undefined) process.env.GH_TOKEN = savedToken;
+  }
+  assert.deepEqual(seen.at(-1).models, [FLASH, "openai/gpt-5"]);
+  assert.equal(built.unevaluated, "model output invalid after retry");
+  assert.equal(built.fail, "");
+});
+
+test("an unevaluated verifier posts an error status and no verdict comment", async () => {
+  const { postCommand, cancelKeepsStatus } = await load();
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const sha = "c".repeat(40), work = fs.mkdtempSync(path.join(os.tmpdir(), "pv-unevaluated-"));
+  fs.mkdirSync(path.join(work, "verdict"));
+  fs.writeFileSync(path.join(work, "verdict", "verdict.json"), JSON.stringify({ verdict: "UNEVALUATED", notes: "model output invalid after retry", sha, run: "10", attempt: "1", authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash" }));
+  const saved = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", PR: "5", WORK: work });
+  const pull = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
+  const owned = { context: "pstack-verifier", state: "pending", target_url: "https://github.com/acme/app/actions/runs/10/attempts/1" };
+  const posts = [];
+  try {
+    await postCommand({
+      now: Date.parse("2026-11-17T12:12:00.000Z"),
+      fetch: async (url, options) => { posts.push({ url: String(url), body: JSON.parse(options.body) }); return { ok: true }; },
+      gh: (args) => {
+        const url = String(args[1]);
+        if (url === "repos/acme/app/pulls/5") return JSON.stringify(pull);
+        if (url === `repos/acme/app/commits/${sha}/statuses`) return JSON.stringify([owned]);
+        throw new Error(url);
+      },
+    });
+  } finally {
+    for (const [key, value] of saved) value === undefined ? delete process.env[key] : (process.env[key] = value);
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].url.endsWith(`/statuses/${sha}`), true);
+  assert.equal(posts[0].body.state, "error");
+  assert.equal(posts[0].body.description, "verifier could not evaluate: model output invalid after retry");
+  assert.equal(cancelKeepsStatus({ state: "error", description: posts[0].body.description, target_url: owned.target_url }, owned.target_url), true);
+  assert.equal(cancelKeepsStatus({ state: "error", description: "FAIL: something", target_url: owned.target_url }, owned.target_url), false);
 });
 
 test("docs and bot shortcuts skip the model only for the sets decide accepts", async () => {
