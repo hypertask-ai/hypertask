@@ -3,6 +3,8 @@ name: verify-design
 description: Design QA for Hypertask (app.hypertask.ai). Puts the live screen next to the ticket's approved design frame in Light, AMOLED and Graphite 2, scores each pair, and flags purple, sparkle icons and corners other than 0, 2 or 4px. Use for every design-pass, Figma or visible UI ticket, before QA verdicts and before any flag goes to Everyone.
 ---
 
+pstack: 0.15.43
+
 # Verify design
 
 Valentin, 2026-11-04:
