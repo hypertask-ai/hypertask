@@ -48,7 +48,7 @@ means `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` ans
 before it serves. `npm run dev` also starts `stripe:listen`, which local proof does not need.
 A worktree whose `node_modules` is a symlink elsewhere cannot run Next: it fails on module
 resolution. Run `npm ci` there first, then `npx prisma generate`. More detail:
-[local launch](.claude/skills/verify-qa/reference/local-launch.md).
+[local launch](../verify-qa/reference/local-launch.md).
 
 A local run that needs a session seeds its own account: a fresh database has no user 985 and
 its own secrets, so a production storage state cannot sign in there. With the launch exports
@@ -185,7 +185,7 @@ refuse an address whose path says sign-in, even when that page is the one you as
 (https://app.hypertask.ai/detail/project-15/9462). For those pages prove the state with the
 served HTML and name the missing screenshot in the ticket. A missing or stale state file makes
 the script fail loud; repair it through
-[logins](.claude/skills/verify-qa/reference/logins.md) and never invent a login flow. Attach
+[logins](../verify-qa/reference/logins.md) and never invent a login flow. Attach
 the shot with `vcc comment add <TICKET> --kind qa --attach <out.png>`, never as a markdown
 image, which crashes the ticket UI. With no local dev server for the change, shoot production
 as it is today as the "before" and say so on the ticket.
