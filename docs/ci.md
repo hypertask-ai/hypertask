@@ -75,7 +75,7 @@ Small guards share scanner work and trusted metadata:
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. A newer pull request event cancels the older run of that same pull request. The group is `feature-flag-gate-${{ github.event.pull_request.number || github.ref }}` with `cancel-in-progress: true`. A scheduled sweep uses the ref, so it does not cancel a pull request run. HYCI-298 replaces the legacy `feature-flag-gate-production` queue, whose orphaned run no longer responds to cancellation. The replacement no longer uses `queue: max`, because GitHub rejects that next to cancellation (HYCI-182). Gate jobs retain five-minute and ten-minute timeouts. The existing stuck-job sweep cancels flag gate runs that are queued, pending, requested, waiting or in progress for thirty minutes or more, and tries the force-cancel endpoint when GitHub refuses the plain cancel, names each run GitHub still refuses once per chained link and counts those refused runs on every tick line; cancellation publishes no verdict, so scheduled reconciliation must repair the missing status. A future scheduler-level orphan may still require GitHub intervention; job timeouts do not bound time awaiting a runner.
   The gate's `ghApi` retries HTTP 500, 502, 503, and 504 up to twice, after one and two seconds, including status posts. `GH_API_NO_WAIT` still skips rate-limit waits but does not disable these server-error retries. Read-token fallback remains separate and happens first.
-- `ux-signoff-gate.yml` evaluates only the event PR on `pull_request_target`; the hourly chain dispatches `workflow_dispatch` sweeps of all open PRs. A newer event for the same pull request cancels the older run. The group names the pull request number.
+- `ux-signoff-gate.yml` runs only as the hourly chain's `workflow_dispatch` sweep of all open PRs (HTPR-9450); a pull request event pays nothing for it. Per pull request the group is the ref, so one dispatch never cancels another.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR smoke guards and most workflows cancel superseded runs. CI Tests and the trusted guard publish a required status and cancel a superseded run of the same pull request. `queue: max` is not set, because GitHub rejects it next to cancellation (HYCI-29, HYCI-182). The Dependabot lane cancels a superseded run of the same pull request. A sweep uses its own group key, so it does not cancel a pull request that is filing a ticket, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 - Every pull request workflow cancels a superseded run, including `ci-tests`, `pr-guards-trusted`, `feature-flag-gate`, `ux-signoff-gate`, `codex-review-gate` and `dependabot-lane`. Each group names the pull request and `cancel-in-progress` is true. `.github/scripts/pr-run-concurrency-guard.cjs` fails CI when any of those workflows loses that group or stops cancelling. `queue: max` stays off, because GitHub rejected it beside cancellation and left `ci-tests` missing (HYCI-182). `ci-images.yml` no longer has a `push` trigger on the missing seed branch `yper4-231-ghcr-ci-images`.
@@ -88,7 +88,10 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **24 jobs** per synchronize and opening event
+Static normal non-draft app PR budget after HTPR-9450: **12 jobs** per synchronize
+and opening event: `ci-tests` 7 (prepare, checks, 4 test lanes, summary), the
+verifier and its request shim, `secret-scan`, `pr-guards-trusted` and
+`feature-flag-gate`. The historical count was **24 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
 required summary job; HYCI-57 takes the page tests to four shards). The browser
@@ -111,7 +114,8 @@ which this change does not introduce.
 ### PR checks follow pstack (HTPR-9450)
 
 Counted workflow jobs for a ready internal app PR.
-Assumptions include eight test shards and no reruns.
+Assumptions include four test lanes on a pull request (six pool plus two serial
+on a production push) and no reruns.
 Fixtures stay off, and one verifier journey runs.
 Repository jobs fall from 39 to 31.
 Including CodeQL's three analysis jobs, 42 becomes 34.
@@ -144,9 +148,9 @@ Everything that drives the UI left the pull request:
 
 The verifier still drives the journeys for the features a pull request touches,
 using the diff to choose them, and it boots the candidate with the same
-`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof stays
-with `bugfix-regression`, which runs the changed test on the merge base and on
-the head.
+`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof is the
+`repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
+base and on the head.
 
 Cheap checks remain required alongside `pstack-verifier`.
 Both smoke contexts remain required PR stubs.
@@ -154,7 +158,12 @@ Each says "moved to nightly (HTPR-9450)".
 Neither stub builds or starts a browser.
 `app-smoke.yml` publishes the `app-smoke` commit status.
 `ci-tests.yml` reports the `browser-smoke` job summary.
-Automerge and the verifier wait for both contexts.
+Automerge still waits for both contexts.
+The verifier waits only for checks that test a pull request: `ci-tests`,
+`feature-flag-gate`, `pr-title`, `next-public-secrets` and `secret-scan`.
+Its empty-plan pass no longer waits on either smoke stub.
+It reads no review status: a red or pending `ai-review` or `claude-review`
+never fails or holds its verdict, because a bot review is not a verdict.
 Only an admin can remove these ruleset requirements.
 Keep the stubs until that happens.
 Emergency path unchanged. Revert first, then fix forward.
@@ -593,8 +602,9 @@ and null for unpinned checks. Text marks observed checks with unknown apps as
 
 The non-required `feature-map-check` job in
 [feature-map-weekly.yml](../.github/workflows/feature-map-weekly.yml) runs Mondays
-at 03:37 UTC, on manual dispatch and on production PRs changing the maintenance
-skill, feature-map or ops-map pages, or that workflow. It runs only the tiny offline fixture
+at 03:37 UTC and on manual dispatch. The pull request trigger moved into
+`skills-evals` (HTPR-9450), whose paths cover the maintenance skill, the
+feature-map and ops-map pages, this workflow and the weekly live file. It runs only the tiny offline fixture
 test and dependency-free checker with Node 24 on free GitHub-hosted Ubuntu,
 pinned actions, `contents: read`, no installs, secrets or paid AI calls.
 It checks index completeness, repository-path citations and API-route resolution;
@@ -633,28 +643,6 @@ rerun on a title edit, so the same check runs again in the title-sensitive
 `pr-guards-trusted` workflow. It reads the file list and the map pages through
 the pull request API and fails the required `pr-title` context, which keeps a
 retag from slipping past the gate.
-
-## Feature-map coverage count (HTPR-9406, HTPR-9415)
-
-The non-required `feature-map-coverage` job in
-[feature-map-coverage.yml](../.github/workflows/feature-map-coverage.yml) runs on
-manual dispatch and on production pull requests that change app pages, product
-flag definitions, the feature map, or this checker. It prints `N of M`, the
-unmapped names and the map rows out of sync in the job summary. `M` is every
-`page.tsx` route under `src/app` plus flag definitions whose kind is `feature` or
-`improvement`. `N` is how many of those names appear in a feature-map area page.
-Bugfix and internal flags are repairs, not extra features.
-
-A production pull request fails when the counter reports an unmapped feature, an
-area page with no row in `rows/`, or a row with no area page (HTPR-9415). A manual
-dispatch runs the same counter without `--strict`, so a maintainer can read the
-list from production and the weekly feature-map jobs keep their report-only pass.
-The job runs the counter only: no browser, no secrets, no database. The job is not
-a required context, so a red run needs a ruleset change before it stops a merge on
-its own.
-
-The unit test fails if the counter stops telling mapped and unmapped apart, or if
-strict mode stops failing on a row gap.
 
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
@@ -1966,3 +1954,64 @@ A `[BUGFIX]` pull request gets up to three edge-case tests from another model fa
 The job fails its own step when the review could not run or a break attempt found a hole, and prints the reason in the run log as well as in the comment and the status. `break-it` is not one of the required checks: per pstack's shipping playbook the one verdict on a bug fix comes from the independent verifier, so this result is that verifier's edge-case input rather than a second gate.
 
 It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
+
+## Checks a verdict replaces (HTPR-9450, second pass)
+
+pstack's shipping playbook: green CI and an approving bot review are not
+verdicts, and a few cheap checks plus an independent agent verdict beat a wall of
+gates. The first pass made `pstack-verifier` the only required context. This pass
+takes three more lanes off the pull request, each because a rule it enforced is
+now enforced by the verifier or by a lane that was already running.
+
+### UX sign-off
+
+[`ux-signoff-gate.yml`](../.github/workflows/ux-signoff-gate.yml) no longer runs on
+a pull request event. It runs on manual dispatch and on the hourly sweep
+[`ux-signoff-chain.yml`](../.github/workflows/ux-signoff-chain.yml) dispatches,
+which reconciles every open production pull request from its ticket comments and
+posts the same `ux-signoff` status. A person's sign-off is not something a check
+can produce, and the verifier drives the journeys the sign-off is about, so the
+status is a signal within the hour instead of a job on every push. The rules in
+[`.claude/reference/flags.md`](../../.claude/reference/flags.md) are unchanged.
+
+### Feature-map coverage
+
+The separate `feature-map-coverage` workflow is gone; its strict counter runs in
+the `ci-checks` lane of `ci-tests.yml` (`feature-map-coverage`), which was already
+paid for. The counter prints `N of M`, the unmapped names and the map rows out of
+sync. `M` is every `page.tsx` route under `src/app` plus flag definitions whose
+kind is `feature` or `improvement`, and `N` is how many of those names appear in a
+feature-map area page. Bugfix and internal flags are repairs, not extra features.
+
+The strict counter fails when a mapped area is unmapped, an area page has no row
+in `rows/`, or a row has no area page (HTPR-9415). It runs only when the diff
+touches `src/app/`, `src/lib/flags/definitions/` or the feature-map pages, so a
+pull request that cannot change the count pays nothing for it. The unit test
+`tests/feature-map-coverage.test.cjs` runs in the test shards, and the counter
+itself runs no browser, no secrets and no database.
+
+### The feature-map citation check
+
+It stays in the Monday 03:37 UTC run of
+[`feature-map-weekly.yml`](../.github/workflows/feature-map-weekly.yml) and on
+manual dispatch. The pull request trigger moved into `skills-evals`: the same
+offline fixture test and the same dependency-free checker run in that job when a
+skill, map, ops-map or weekly-file path changes, so a stale citation still fails
+the pull request that introduced it without a second workflow.
+
+### Repro first
+
+A `[BUGFIX]` pull request's proof is now the `repro-first` job inside
+`ci-tests.yml`, which replaced the separate workflow. It is the same job and the
+same script: it skips when no source file changed, and otherwise requires a
+changed test to fail on the merge base and pass on the head. It fails its own
+step and is not part of the `ci-tests` summary, so a missing proof is loud without
+silently reddening the build check.
+
+### Test lanes on a pull request
+
+A production push still runs the full suite in six pool lanes plus two serial
+lanes. A pull request runs the selector's scoped pick in three pool lanes plus one
+serial lane, so a head pays four test jobs instead of eight. The lane plan is the
+same `shard-tests.mjs` partition; only its lane count changes, and `--check`,
+`--prove` and the shard matrix all read the same two numbers.
