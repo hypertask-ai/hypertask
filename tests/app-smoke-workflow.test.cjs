@@ -96,11 +96,8 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
   assert.match(workflow, /name: run app-smoke/);
   assert.match(workflow, /timeout-minutes: 15/);
-  assert.match(request, /branches: \[production\]/);
-  assert.match(
-    request,
-    /types: \[opened, synchronize, reopened, ready_for_review\]/,
-  );
+  assert.deepEqual(yaml.load(request).on.pull_request.types, ["opened", "synchronize", "reopened", "ready_for_review"]);
+  assert.equal(parsedWorkflow.on.schedule, undefined);
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
   assert.deepEqual(parsedWorkflow.concurrency, {
@@ -110,7 +107,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
   assert.deepEqual(parsedWorkflow.on.push.branches, ["production"]);
   assert.deepEqual(yaml.load(request).concurrency, {
-    group: "app-smoke-request-${{ github.event.pull_request.number }}",
+    group: "app-smoke-request-${{ github.event.pull_request.number || github.run_id }}",
     "cancel-in-progress": true,
   });
   const validationSteps = parsedWorkflow.jobs.validate.steps;
@@ -126,11 +123,11 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
     parsedWorkflow.jobs.validate.if,
-    "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+    "github.event_name == 'workflow_run' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'",
   );
   assert.equal(
     parsedWorkflow.jobs.report.if,
-    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
+    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
   );
   assert.match(
     workflow,
@@ -370,10 +367,9 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
   assert.match(
     workflow,
-    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets pr-title"/,
+    /REQUIRED="app-smoke browser-smoke ci-tests ai-review next-public-secrets pr-title"/,
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
-  assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED pstack-verifier"/);
 });
 
@@ -483,13 +479,15 @@ test("CI policy keeps the protected smoke producer live and required", async () 
 
   assert.equal(policy.topology.repository_default_branch, "production");
   assert.deepEqual(policy.required_checks.contexts, required);
-  assert.deepEqual(policy.required_checks.automerge_also_requires, [
-    "app-smoke",
-    "browser-smoke",
-    "ci-tests",
-    "feature-flag-gate",
-    "pstack-verifier",
-  ]);
+  const automerge = await readFile(".github/workflows/automerge.yml", "utf8");
+  const automergeRequired = [...automerge.matchAll(/REQUIRED="(?:\$REQUIRED )?([^"]+)"/g)]
+    .flatMap((match) => match[1].split(" "))
+    .sort();
+  assert.deepEqual(
+    [...policy.required_checks.automerge_also_requires].sort(),
+    automergeRequired,
+    "automerge_also_requires must mirror the REQUIRED list in automerge.yml",
+  );
   assert.deepEqual(
     policy.policies.production_ruleset.required_status_checks,
     required,

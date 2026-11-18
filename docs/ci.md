@@ -1,6 +1,6 @@
 # CI contract
 
-_Last updated: 2026-10-31._
+_Last updated: 2026-11-18._
 
 **Hypertask app CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free), gates merges on Codex's built-in GitHub code review, and deploys production directly from the `production` branch.** No self-hosted runners remain on the Contabo host; private fleet repos use GitHub-hosted `ubuntu-latest`. This file is the human-readable contract; the machine-readable companion is [`docs/ci-policy.yml`](ci-policy.yml).
 
@@ -109,6 +109,57 @@ which splits setup, fetch and working-tree time from the run's own log.
 CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
 
+### PR checks follow pstack (HTPR-9450)
+
+Counted workflow jobs for a ready internal app PR.
+Assumptions include eight test shards and no reruns.
+Fixtures stay off, and one verifier journey runs.
+Repository jobs fall from 39 to 31.
+Including CodeQL's three analysis jobs, 42 becomes 34.
+CI Tests falls from 18 to 12 jobs.
+App Smoke falls from four to two jobs.
+Skipped jobs and synthetic check contexts are excluded.
+Path-specific gates can add jobs on both sides.
+
+PRs keep cheap checks and the independent verifier.
+The existing ruleset still requires all ten contexts.
+This PR leaves that ruleset unchanged.
+An admin must remove requirements before deleting stubs.
+
+Everything that drives the UI left the pull request:
+
+- `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
+  `browser-smoke-matrix` and `browser-smoke-flags` run after production pushes.
+  They also run nightly at 03:23 UTC.
+  PRs retain a cheap `browser-smoke` summary stub.
+- PR `visual-compare` stays dormant behind skipped `browser-build`.
+  `visual-regression.yml` owns the nightly screen comparison.
+  Production pushes and manual comparisons remain available.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
+  request gets a status stub from `app-smoke.yml`.
+  That trusted job checks out no candidate code.
+  `app-smoke-request.yml` requests that status after each PR.
+  Manual dispatch retains the validated smoke path.
+- `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
+  own nightly crons.
+
+The verifier still drives the journeys for the features a pull request touches,
+using the diff to choose them, and it boots the candidate with the same
+`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof stays
+with `bugfix-regression`, which runs the changed test on the merge base and on
+the head.
+
+Cheap checks remain required alongside `pstack-verifier`.
+Both smoke contexts remain required PR stubs.
+Each says "moved to nightly (HTPR-9450)".
+Neither stub builds or starts a browser.
+`app-smoke.yml` publishes the `app-smoke` commit status.
+`ci-tests.yml` reports the `browser-smoke` job summary.
+Automerge and the verifier wait for both contexts.
+Only an admin can remove these ruleset requirements.
+Keep the stubs until that happens.
+Emergency path unchanged. Revert first, then fix forward.
+
 HYCI-32 spent two of the remaining three job slots on the browser check: the
 single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, which
 run in parallel, plus the small `browser-smoke` summary job that keeps the
@@ -191,7 +242,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. PR and production ESLint both cover the full repository through `npm run lint`, including unchanged files (HYCI-261). Before restoring dependencies or lint caches, PR static checks fetch and merge the current `production` tip into the checked-out PR merge result; conflicts fail the job. Unchanged file results are restored through the content-validated cache; a cache miss performs a complete lint. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - CI Tests uses the committed `package-lock.json` with `npm ci --prefer-offline` and GitHub-hosted caches. The lint stage is split (HTPR-8233): Oxlint lints the whole repository in under a second for the rule ids listed in `.oxlintrc.json`, and ESLint runs only the rules Oxlint lacks. `eslint.config.mjs` reads that same rule list and switches each id off, so no rule runs twice, and `tests/oxlint-overlap.test.cjs` fails when the two files drift or when Oxlint stops reporting a handed-over rule. Both pull requests and `production` pushes lint the full repository with the content-validated cache; `lint:changed` remains a developer command, not a merge gate. The workflow relocates ESLint's absolute cache paths when GitHub schedules a run on a different hosted runner. PRs consume the trusted base-branch cache read-only. Every new `production` commit runs the full suite, and a failure warns without changing the live site. Only the current Production Health probe can trigger a rollback.
 - TypeScript and the selected PR tests (full suite on production pushes) remain correctness checks on every non-docs CI Tests run. The Test step is `CI_TEST_SHARDS` pool lanes plus `CI_SERIAL_SHARDS` serial lanes, and they split that same file list by measured run time (see the shard balance note below). Shard count, not only balance, sets the wall: CI waits on the slowest lane, and a hosted runner's throughput moves up to a third between VMs. One aggregate job is still named `ci-tests`, and it is green only after every lane succeeds and the uploaded file lists union to the full set with no duplicate. Dependency installation and test selection stay in `ci-prepare`. `ci-checks` restores dependencies and runs the board-scope guard, typecheck and lint beside the test lanes, not before them. The required `ci-tests` aggregate waits for successful preparation, static checks, every lane and the exact-file execution proof. Docs-only runs require both heavy jobs to be skipped explicitly. Only production pushes save caches; each job uses its own workspace. The pool-lane count is the workflow env `CI_TEST_SHARDS`; the plan adds the serial lane on top of it.
-- Typecheck cache ([HTPR-8234](https://app.hypertask.ai/detail/project-15/8234)): the `ci-checks` Typecheck step keeps one cache holding the incremental `tsbuildinfo` and the generated route types (`.next/types`, `next-env.d.ts`). Pull requests write under their own `tsc-pr-<number>` namespace, so a branch that pushes again reuses its own state; `production` restores only `tsc-prod-` keys and can never read a pull-request cache, the same trust rule the ESLint cache follows. The cache fingerprint also includes `src/prisma/schema.prisma` and `prisma.config.ts`, and `ci-checks` runs `npx prisma generate` before restoring that cache, so a Prisma schema change never pairs fresh source with stale generated client types (HYCI-179). The shared `node_modules` cache key includes the same Prisma inputs, and `ci-prepare` regenerates the client before it saves a production cache. `next typegen` reruns unless the restored types came from an identical digest of the route inputs (tracked App and Pages router files, `next.config.js`, middleware, `package-lock.json`), computed by `.github/scripts/ts-route-surface.mjs`; a missing digest, a missing types directory or any git error regenerates. Because `next typegen` also writes the feature-flag index through `next.config.js`, the step builds that index with `scripts/generate-flag-index.mjs` first, so no check depends on the Next generator running. The `tsc --noEmit --incremental` command is unchanged, so the same diagnostics still fail the step.
+- Typecheck cache ([HTPR-8234](https://app.hypertask.ai/detail/project-15/8234)): the `ci-checks` Typecheck step keeps one cache holding the incremental `tsbuildinfo` and the generated route types (`.next/types`, `next-env.d.ts`). Pull requests restore their `tsc-pr-<number>` namespace. Only production pushes publish TypeScript caches; `production` restores only `tsc-prod-` keys and can never read a pull-request cache, the same trust rule the ESLint cache follows. The cache fingerprint also includes `src/prisma/schema.prisma` and `prisma.config.ts`, and `ci-checks` runs `npx prisma generate` before restoring that cache, so a Prisma schema change never pairs fresh source with stale generated client types (HYCI-179). The shared `node_modules` cache key includes the same Prisma inputs, and `ci-prepare` regenerates the client before it saves a production cache. `next typegen` reruns unless the restored types came from an identical digest of the route inputs (tracked App and Pages router files, `next.config.js`, middleware, `package-lock.json`), computed by `.github/scripts/ts-route-surface.mjs`; a missing digest, a missing types directory or any git error regenerates. Because `next typegen` also writes the feature-flag index through `next.config.js`, the step builds that index with `scripts/generate-flag-index.mjs` first, so no check depends on the Next generator running. The `tsc --noEmit --incremental` command is unchanged, so the same diagnostics still fail the step.
 - Shard list download (HYCI-129): each test shard retries a failed artifact download once for reliability. A failed retry fails the job; test execution is not retried.
 - Test lanes (HYCI-7): `scripts/run-tests.mjs` sizes the pooled lane count from the machine (`os.availableParallelism()`), so a shard runs one lane per core - four on `ubuntu-latest` - and never oversubscribes a smaller runner. The shared VPS keeps a two-lane cap, `TEST_CONCURRENCY` overrides both, and a non-positive or non-integer override fails the run instead of guessing. Each shard prints `Test lanes: N of M cores.` and records `cores` in `test-durations.json`.
 - Shard balance (YPER4-777): the split is measured, not counted. `config/test-duration-weights.json` holds one work figure per test file, taken from the `test-durations` artifact of finished production runs; a file that runs in a serial lane costs its whole time and a pooled file costs 1/concurrency of it. `partition()` places files heaviest first onto the least-loaded shard, and the shard count is chosen from the slowest-VM case rather than the average one, and `--check`/`--prove` recompute that same plan, so the union and no-duplicate proof is unchanged. A file missing from the weights file costs `defaultWorkMs`, and with no weights file at all the split falls back to the old count split. Both shard job logs print `shard-plan … measured=…s,…s`; a balanced plan shows the two shards within a second of each other. Refresh the weights after a test-harness or dependency change: `gh run download <run-id> --repo hypertask-ai/hypertask -n test-durations -D runs/<run-id>` for ten or more finished production runs, then `node scripts/test-duration-weights.mjs --input runs --source "<what these runs are>"`. The generator takes the median across runs so one slow box cannot set the plan, and the file is generated, never hand-edited.
@@ -206,7 +257,7 @@ the count is 24 jobs per push: four shards plus the summary.
 - No application or review workflow uses a self-hosted runner. The former `contabo-1` review runner is retired with the self-hosted reviewer.
 - The repository default branch is `production`. GitHub loads `workflow_run` files from the default branch, so this setting lets the protected App Smoke workflow react to every App Smoke Request run. Frozen `main` remains the legacy EC2 rollback branch.
 - App Smoke validation quietly skips skipped request workflows and successful requests whose exact open production PR is still a draft (HYCI-316), including requests without a PR number in the event payload. It publishes no status and starts no build; `ready_for_review` requests validation again. Failed request workflows, ambiguous PR matches and invalid bases still fail.
-- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. Both contexts run on every non-draft PR without a label gate; `browser-smoke` is a summary over its two halves (HYCI-32). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request uses the same four events. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
+- The `production` ruleset requires the exact contexts in `docs/ci-policy.yml`, including `ci-tests` and `browser-smoke`. `ci-tests` still runs on every non-draft PR without a label gate (HTPR-9450 retains `browser-smoke` and `app-smoke` as PR stubs; see "PR checks follow pstack" above). CI Tests still verifies the live ruleset before deciding scope; this optimization adds no required check names. CI Tests reports on every non-draft PR opened, synchronize, reopened, and ready_for_review event; labels (including `full-ci`) and title/body edits do not restart it. App Smoke Request starts the cheap status producer. App Smoke publishes a cheap PR status stub. Its real smoke runs nightly on production. Title/body-sensitive gates retain their own triggers. The speed checks were retired with the 2026-08 staging rename; no `[SPEED]` gate exists today.
 - Gitleaks (`secret-scan`) scans only the commits a change adds: a pull request scans base..head, and a push scans the previous tip..new tip (a new branch, or a force push whose old tip is gone, scans everything not on `production`). A finding on one branch therefore cannot turn other branches red. Branch deletions are not scanned.
 - Auto-merge uses the newest result for each check name. This lets a current provider-portable compatibility check supersede an obsolete reviewer failure on the same backlog commit; the exact-commit `APPROVE` comment is still mandatory.
 - Auto-merge keeps all scratch state in a unique directory under `RUNNER_TEMP`. A PR read, diff read, or merge that still fails after retries makes the workflow fail visibly; an incomplete sweep must never report green.
@@ -598,22 +649,14 @@ if the counter stops telling mapped and unmapped apart.
 
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
-Required `app-smoke` and `browser-smoke` still report success when every changed
-file is documentation, skills or `tests/**` outside `src/`; both browser halves
-skip their heavy steps and the summary job reads their success (HYCI-32). The shared
-`.github/scripts/ci-change-scope.cjs` emits `heavy_needed=false` for `docs/**`,
-`.claude/**`, `skills/**`, `.agents/skills/**`, `tests/**` and Markdown outside
-`src/`. Source files (even Markdown), dependency files and CI/harness code run
-smoke normally. Empty/unknown diffs and detector failures run the heavy lane.
-Production pushes always run everything.
-
-App Smoke determines scope in its trusted validation job and publishes
-`app-smoke: success` with `docs-only change, skipped` without starting its build
-job. Browser smoke keeps its successful required job and explicit scope output,
-but skips install/build/tests with a clear log line. Its PostgreSQL, Redis and
-Soketi job-level services still start. Neither required workflow uses path skips.
-Visual Regression keeps its narrow screen/harness path filter and excludes
-Markdown; unit-test-only changes do not start it.
+HTPR-9450 keeps both smoke contexts as PR stubs.
+This includes docs-only and source-changing PRs.
+Neither stub starts services, builds, or browsers.
+The real browser shards run on production pushes.
+They also run nightly, using the existing scope detector.
+`app-smoke-nightly.yml` runs against the event's production SHA, and only when the ref is `production`, so a manual dispatch from a branch cannot smoke the branch.
+Manual App Smoke requests retain their scope detector.
+Visual comparison runs nightly and remains available manually.
 
 The stricter existing `build_needed` output for `ci-tests` is unchanged: changed
 unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`,
@@ -633,6 +676,7 @@ removed source file. Its self-check covers both outputs and fail-closed cases:
 ## Visual regression (informational v1)
 
 `Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on production pushes and on manual runs, which accept `base` and `head` refs.
+It also runs the screen comparison nightly at 03:53 UTC (HTPR-9450), now that pull requests no longer start `visual-compare`; the Monday 04:05 UTC cron keeps the `verify-qa` inbox journey and its weekly board filing, and only that cron starts them.
 Pull-request comparisons run as `visual-compare` in `.github/workflows/ci-tests.yml`, on non-draft production PRs touching screen or harness files (`.github/scripts/visual-change-scope.cjs` holds the list); HYCI-10 moved them there so the head reuses the one app build instead of building a second time; HYCI-77 made it need only that build, so it runs alongside the four page shards instead of after their summary.
 Base always builds from its own checkout with a fresh disposable database and creates temporary expected PNGs; head compares against them.
 HYCI-82 publishes those ten validated expected PNGs from the production capture as a `visual-baseline-<font fingerprint>-<render source>-<harness hash>` artifact as well as the cache entry. The 2 MB baseline shares a 10 GB cache pool with the build caches, so recent production baselines are usually evicted before a pull request asks for them: eight of the twelve captured on 2026-11-01 and 2026-11-02 were already gone, and each miss rebuilt the base app for 333 s of a 513 s step. `visual-compare` now restores the cache entry first and falls back to the newest unexpired artifact with that exact name before it builds anything; an artifact counts only when a successful `visual-regression.yml` run on a production push at the base commit produced it (`.github/scripts/published-baseline.mjs`), because the artifact list filters by name alone and a pull request could otherwise publish the screenshots another pull request compares against. Both paths hand the existing cache-hit branch ten validated screenshots, so the base build, its Next.js cache restore and its capture are skipped together. A miss still builds the base exactly as before.

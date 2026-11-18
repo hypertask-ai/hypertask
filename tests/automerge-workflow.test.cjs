@@ -303,20 +303,11 @@ test('auto-merge refuses fork and shared heads at the final feature-flag boundar
   }
 })
 
-test('auto-merge refuses a PR without the app smoke result', async () => {
-  const { result, scratchEntries } = await runWorkflow({ omitAppSmoke: true })
+test('auto-merge waits for both required smoke stubs', async () => {
+  const { result, scratchEntries } = await runWorkflow({ omitAppSmoke: true, omitBrowserSmoke: true })
 
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /check app-smoke = MISSING/)
-  assert.doesNotMatch(result.stdout, /MERGED #42/)
-  assert.deepEqual(scratchEntries, [])
-})
-
-test('auto-merge refuses a PR without the browser smoke result', async () => {
-  const { result, scratchEntries } = await runWorkflow({ omitBrowserSmoke: true })
-
-  assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /check browser-smoke = MISSING/)
+  assert.match(result.stdout, /check (app-smoke|browser-smoke) = MISSING/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
