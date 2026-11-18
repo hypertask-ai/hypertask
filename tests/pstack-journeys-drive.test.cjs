@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { mkdtempSync, mkdirSync, writeFileSync } = require("node:fs");
+const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const test = require("node:test");
@@ -50,40 +50,27 @@ test("a mapped page gets its own journey from the page text, then the change jou
   assert.deepEqual(plan.actions, changePlan().actions);
 });
 
-test("a cached area journey is adopted with no model call for that page", async () => {
+const areaCases = [
+  ["a cached area journey is adopted with no model call for that page", INBOX_PAGE, [cachedArea()], 1, [false, true]],
+  ["a cached area journey for another base, map or page text is not adopted", `${INBOX_PAGE} changed`, [cachedArea(), cachedArea({ baseSha: "d".repeat(40) }), cachedArea({ mapSha: "e".repeat(40) })], 2, [true, null]],
+];
+for (const [name, text, entries, calls, want] of areaCases) test(name, async () => {
   const asked = [];
   const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), {
     binding,
     mapSha: MAP,
-    pages: [page("inbox", INBOX_PAGE)],
-    entries: [cachedArea()],
+    pages: [page("inbox", text)],
+    entries,
     ask(prompt) {
       asked.push(prompt);
-      return changePlan();
+      return asked.length === 1 && calls > 1 ? pagePlan() : changePlan();
     },
   });
-  assert.equal(asked.length, 1);
-  assert.match(asked[0], /DATA: TITLE/);
+  assert.equal(asked.length, calls);
+  assert.ok(asked.some((prompt) => /DATA: TITLE/.test(prompt)));
   const area = plan.journeys.find((item) => item.journey === "area:inbox");
-  assert.equal(area.planned, false);
+  assert.deepEqual([area.planned, area.base?.ok ?? null], want);
   assert.deepEqual(area.actions, pagePlan().actions);
-  assert.equal(area.base.ok, true);
-});
-
-test("a cached area journey for another base, map or page text is not adopted", async () => {
-  const asked = [];
-  const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), {
-    binding,
-    mapSha: MAP,
-    pages: [page("inbox", `${INBOX_PAGE} changed`)],
-    entries: [cachedArea(), cachedArea({ baseSha: "d".repeat(40) }), cachedArea({ mapSha: "e".repeat(40) })],
-    ask() {
-      asked.push(1);
-      return asked.length === 1 ? pagePlan() : changePlan();
-    },
-  });
-  assert.equal(asked.length, 2);
-  assert.equal(plan.journeys.find((item) => item.journey === "area:inbox").planned, true);
 });
 
 test("a change that matches no page plans only the change journey", async () => {
@@ -154,46 +141,23 @@ const planFor = (extra = {}) => ({
 });
 const judgeDeps = (overrides = {}) => ({ plan: planFor(), evidence: { ...binding, journeys: [headRun()] }, picked: { model: "deepseek/deepseek-v4.1-flash" }, baseEvidence: { ...binding, journeys: [{ ...headRun(false) }] }, ask: () => ({ verdict: "PASS", notes: "saw it" }), ...overrides });
 
-test("a repro that failed on base and passes on head is a pass", async () => {
-  const verdict = await (await load()).judgeJourneys(judgeDeps());
-  assert.equal(verdict.verdict, "PASS");
+const cachedPlan = (steps, extra = {}) => planFor({
+  journeys: [{ journey: "change:repro", actions: steps.map((step) => step.action), expect: [], base: cachedArea({ journey: "change:repro", steps, expects: [], ...extra }), planned: false }],
 });
-
-test("a repro that also passed on base is not proof, so it fails", async () => {
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ baseEvidence: { ...binding, journeys: [headRun(true)] } }));
-  assert.equal(verdict.verdict, "FAIL");
-  assert.match(verdict.notes, /does not reproduce the bug/);
-});
-
-test("a head journey that fails is a fail even when the model would pass it", async () => {
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ evidence: { ...binding, journeys: [headRun(false)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }));
-  assert.equal(verdict.verdict, "FAIL");
-});
-
-test("no base evidence fails the comparison instead of passing it", async () => {
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ baseEvidence: null }));
-  assert.equal(verdict.verdict, "FAIL");
-  assert.match(verdict.notes, /base comparison did not run/);
-});
-
-test("a cached base result stands in for a base run", async () => {
-  const plan = planFor({ journeys: [{ journey: "change:repro", actions: [{ op: "goto", path: "/inbox" }], expect: [], base: cachedArea({ journey: "change:repro", steps: [{ action: { op: "goto", path: "/inbox" }, ok: false }], expects: [] }), planned: false }] });
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ plan, baseEvidence: null }));
-  assert.equal(verdict.verdict, "PASS");
-});
-
-test("a cached api-only base that passed means the repro did not reproduce", async () => {
-  const base = cachedArea({ journey: "change:repro", steps: [{ action: { op: "api", method: "POST", path: "/api/mcp/tasks", body: {}, expectStatus: 200 }, ok: true }], expects: [], navigations: [] });
-  const plan = planFor({ journeys: [{ journey: "change:repro", actions: base.steps.map((step) => step.action), expect: [], base, planned: false }] });
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ plan, evidence: { ...binding, journeys: [{ ...base, apiOnly: true }] }, baseEvidence: null }));
-  assert.equal(verdict.verdict, "FAIL");
-  assert.match(verdict.notes, /does not reproduce the bug/);
-});
-
-test("a model failure on the head lane still fails the journey", async () => {
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ ask: () => ({ verdict: "FAIL", notes: "wrong total" }) }));
-  assert.equal(verdict.verdict, "FAIL");
-  assert.match(verdict.notes, /still fails on head/);
+const apiBase = cachedPlan([{ action: { op: "api", method: "POST", path: "/api/mcp/tasks", body: {}, expectStatus: 200 }, ok: true }], { navigations: [] });
+const judgeCases = [
+  ["a repro that failed on base and passes on head is a pass", {}, "PASS"],
+  ["a repro that also passed on base is not proof, so it fails", { baseEvidence: { ...binding, journeys: [headRun(true)] } }, "FAIL", /does not reproduce the bug/],
+  ["a head journey that fails is a fail even when the model would pass it", { evidence: { ...binding, journeys: [headRun(false)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }, "FAIL"],
+  ["no base evidence fails the comparison instead of passing it", { baseEvidence: null }, "FAIL", /base comparison did not run/],
+  ["a cached base result stands in for a base run", { plan: cachedPlan([{ action: { op: "goto", path: "/inbox" }, ok: false }]), baseEvidence: null }, "PASS"],
+  ["a cached api-only base that passed means the repro did not reproduce", { plan: apiBase, evidence: { ...binding, journeys: [{ ...apiBase.journeys[0].base, apiOnly: true }] }, baseEvidence: null }, "FAIL", /does not reproduce the bug/],
+  ["a model failure on the head lane still fails the journey", { ask: () => ({ verdict: "FAIL", notes: "wrong total" }) }, "FAIL", /still fails on head/],
+];
+for (const [name, overrides, verdict, notes] of judgeCases) test(name, async () => {
+  const judged = await (await load()).judgeJourneys(judgeDeps(overrides));
+  assert.equal(judged.verdict, verdict);
+  if (notes) assert.match(judged.notes, notes);
 });
 
 test("journey evidence must match the run binding", async () => {
