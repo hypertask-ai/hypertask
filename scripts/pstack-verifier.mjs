@@ -293,7 +293,7 @@ export function modelHttpError(status, body, secrets) {
   const snippet = redact(String(body ?? "").replace(/\s+/g, " ").trim(), secrets).slice(0, 200);
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
-const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/"];
+const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/", "verification/"];
 export function hasAppPath(files) {
   return (Array.isArray(files) ? files : []).some((file) => {
     const name = String(file);

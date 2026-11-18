@@ -254,6 +254,17 @@ test("agent docs and root markdown are non-app; a src file stays app", async () 
   assert.match(app.notes, /no user path verified/);
 });
 
+test("formal models and repros under verification are non-app; a src file stays app", async () => {
+  const { hasAppPath, decide } = await load();
+  assert.equal(hasAppPath(["verification/formal/x.tla"]), false);
+  assert.equal(hasAppPath(["verification/formal/Board.tla", "verification/repros/hang.md"]), false);
+  assert.equal(hasAppPath(["src/app/page.tsx"]), true);
+  assert.equal(hasAppPath(["verification/formal/x.tla", "src/app/page.tsx"]), true);
+  const result = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason: "no user path: formal models are never shipped", files: ["verification/formal/x.tla"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.equal(result.verdict, "PASS+NOTES");
+  assert.match(result.notes, /^no app path: /);
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
