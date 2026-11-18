@@ -103,6 +103,9 @@ pr_job_budget:
   isolated_guards:
     node_version: vercel_secret_runner_separate_from_candidate_scripts
     parity_contract: candidate_data_checkout_keeps_read_only_token_and_no_mcp_secret
+    # HTPR-9450: path-filtered to everything that can move the inventory, so an
+    # unrelated pull request pays nothing and a route change still fails here.
+    parity_contract_paths: [config/parity, docs/parity.md, "scripts/parity-*.mjs", src/app/api/ai, src/app/api/mcp, src/lib/ai/tools, src/lib/mcp-server]
   codeql: default_setup_no_path_filter_without_advanced_setup
 
 review_first_gate:

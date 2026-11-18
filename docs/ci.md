@@ -204,7 +204,11 @@ Path-filtered lanes stay, because a pull request that does not touch them pays
 nothing: `node-version-guard` (the Vercel token must never share a runner with
 candidate scripts, so it cannot fold into `ci-tests`), `ship-scripts-tests`,
 `skills-evals`, `dependabot-lane`, and `parity-contract-trusted`, which now runs
-only when `config/parity/**` or its own workflow changes.
+only when something that can move its inventory changes: `config/parity/**`,
+`docs/parity.md`, `scripts/parity-*.mjs`, `src/app/api/ai/**`,
+`src/app/api/mcp/**`, `src/lib/ai/tools/**`, `src/lib/mcp-server/**` or its own
+workflow. Filtering it to the contract alone would let a new route reach
+production before the inventory noticed.
 
 ## PR size check (HYCI-29)
 

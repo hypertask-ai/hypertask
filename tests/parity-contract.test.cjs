@@ -479,6 +479,16 @@ test("trusted validation rejects candidate replacement of the canonical policy",
   assert.match(result.stderr, /Trusted parity policy evolution failed/);
 });
 
+test("the trusted parity check runs whenever a route root, the contract or the script can move", () => {
+  const workflow = yaml.load(
+    fs.readFileSync(path.join(__dirname, "../.github/workflows/parity-contract-trusted.yml"), "utf8"),
+  );
+  const paths = workflow.on.pull_request_target.paths;
+  for (const root of ["config/parity/**", "src/app/api/ai/**", "src/app/api/mcp/**", "src/lib/ai/tools/**", "src/lib/mcp-server/**", "scripts/parity-*.mjs", ".github/workflows/parity-contract-trusted.yml"]) {
+    assert.ok(paths.includes(root), `${root} can change the inventory`);
+  }
+});
+
 test("trusted parity workflows pin the current native CLI and carry no transition", () => {
   const root = path.resolve(__dirname, "..");
   const runnerPackage = JSON.parse(

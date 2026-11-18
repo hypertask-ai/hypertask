@@ -6,6 +6,12 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - config/parity/**
+      - docs/parity.md
+      - scripts/parity-*.mjs
+      - src/app/api/ai/**
+      - src/app/api/mcp/**
+      - src/lib/ai/tools/**
+      - src/lib/mcp-server/**
       - .github/workflows/parity-contract-trusted.yml
 
 permissions:
