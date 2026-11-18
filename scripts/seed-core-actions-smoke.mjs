@@ -57,6 +57,16 @@ try {
       sections: ["Baseline", "Alternate"],
     },
   });
+  const archived = await prisma.project.create({
+    data: {
+      name: `core-smoke-archived-${runKey}`,
+      title: "Archived smoke board",
+      ownerId: user.id,
+      teamId: team.id,
+      status: "Archive",
+      sections: ["Baseline"],
+    },
+  });
   const [sourceSection, targetSection] = await Promise.all([
     prisma.section.create({
       data: {
@@ -132,6 +142,7 @@ try {
     CORE_SMOKE_COOKIE: cookie,
     CORE_SMOKE_MCP_TOKEN: mcpToken,
     CORE_SMOKE_PROJECT_ID: project.id,
+    CORE_SMOKE_ARCHIVED_PROJECT_ID: archived.id,
     CORE_SMOKE_TASK_ID: task.id,
     CORE_SMOKE_USER_ID: user.id,
     CORE_SMOKE_USER_NAME: displayName,
@@ -152,7 +163,7 @@ try {
   );
   await chmod(envFile, 0o600);
   console.log(
-    `Seeded core-actions fixture on board ${project.id}, task ${task.id}.`,
+    `Seeded core-actions fixture on board ${project.id}, task ${task.id}, archived board ${archived.id}.`,
   );
 } finally {
   await prisma.$disconnect();

@@ -658,6 +658,40 @@ test("an api action passes from the preview response with no page navigation", a
     navigations: [],
   });
   assert.deepEqual(plain, [{}]);
+  const archivedCalls = [];
+  const archivedPage = {
+    async screenshot() {},
+    request: { async fetch(url, options) { archivedCalls.push({ url, options }); return { status: () => 400, async text() { return 'Board "Archived smoke board" is archived, so it cannot take new tickets.'; } }; } },
+  };
+  const archivedAction = { op: "api", method: "POST", path: "/api/tasks/createGlobally", body: { projectId: "{archived}", title: "A ticket", description: "A note" }, expectStatus: 400, expectText: "is archived, so it cannot take new tickets." };
+  const archived = await runPlan({ page: archivedPage, plan: plan([archivedAction]), ...drive, archivedProjectId: "2", navigations: [] });
+  assert.equal(archivedCalls[0].options.data.projectId, "2");
+  assert.equal(archived.steps[0].ok, true);
+  const normalBody = [];
+  await runPlan({
+    page: { request: { async fetch(_url, options) { normalBody.push(options.data); return { status: () => 400, async text() { return "Invalid project id"; } }; } } },
+    plan: plan([{ ...archivedAction, body: { projectId: "{id}", title: "A ticket", description: "A note" }, expectText: "Invalid project id" }]),
+    ...drive,
+    archivedProjectId: "2",
+    navigations: [],
+  });
+  assert.equal(normalBody[0].projectId, "4");
+  const blocked = [];
+  const missingBoard = await runPlan({
+    page: { request: { async fetch() { blocked.push(1); return { status: () => 400, async text() { return "nope"; } }; } } },
+    plan: plan([archivedAction]),
+    ...drive,
+    navigations: [],
+  });
+  assert.equal(blocked.length, 0);
+  assert.match(missingBoard.steps[0].error, /archived project id is not allowed/);
+  assert.match(prompt, /\{archived\} is the seeded archived board/);
+  const { readFileSync } = require("node:fs");
+  const seed = readFileSync("scripts/seed-core-actions-smoke.mjs", "utf8");
+  const driveSource = readFileSync("scripts/pstack-verifier-drive.mjs", "utf8");
+  assert.match(seed, /status: "Archive"/);
+  assert.match(seed, /CORE_SMOKE_ARCHIVED_PROJECT_ID/);
+  assert.match(driveSource, /CORE_SMOKE_ARCHIVED_PROJECT_ID/);
   const empty = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([], { reason: "no user path", files: ["src/lib/api/task-writes/save.ts"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
   assert.equal(empty.verdict, "FAIL");
   assert.match(empty.notes, /no user path verified/);
