@@ -34,10 +34,11 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | no-comments | Before the PR, inside simplify-before-pr: Comment Sicko (`.claude/agents/comment-sicko.md`) on the PR diff kills comments, lint and TypeScript suppressions and workaround code, also outside `src/` (pstack by Lauren Tan, MIT) | .claude/skills/no-comments/SKILL.md |
 | design-compliance | Before the PR (UI) | .claude/skills/design-compliance/SKILL.md |
 | update-docs | Before the PR (user-visible change) | .claude/skills/update-docs/SKILL.md |
-| verify-on-phone | Before the PR (UI) | .claude/skills/verify-on-phone/SKILL.md |
-| verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
-| verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
-| verify-design | Design QA for design-pass, Figma or visible UI tickets: live screen next to the frame per theme, scored, reviewer checklist | .claude/skills/verify-design/SKILL.md |
+| verify-on-phone | Pointer: load verify-hypertask. The old file stays at `.claude/skills/verify-on-phone/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
+| verify-visual | Pointer: load verify-hypertask for the Visual Regression result before a UI merge. The old file stays at `.claude/skills/verify-visual/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
+| verify-qa | Pointer: load verify-hypertask for the production proof after deploy. The old file stays at `.claude/skills/verify-qa/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
+| verify-design | Pointer: load verify-hypertask for design QA on design-pass, Figma and visible UI tickets. The old file stays at `.claude/skills/verify-design/SKILL.md` | .claude/skills/verify-hypertask/SKILL.md |
+| verify-hypertask | The one verification skill: local before the PR (390x844 shot), Visual Regression before a UI merge, production after deploy, design QA against the ticket frame | .claude/skills/verify-hypertask/SKILL.md |
 
 Performance reviews use the official shared pstack installation, not repository copies. Before reporting measurements, load `~/.agents/skills/principle-explain-the-number/SKILL.md` and `~/.agents/skills/benchmark-checklist/SKILL.md`. Install or repair pstack from its official source if either path is missing; never copy its contents into this repository.
 
