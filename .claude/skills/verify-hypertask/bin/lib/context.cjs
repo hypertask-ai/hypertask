@@ -72,11 +72,13 @@ function writeJson(file, value, mode = 0o644) {
 }
 
 function run(file, args, options = {}) {
+  const env = { ...process.env, ...(options.env || {}) };
+  for (const key of options.clear || []) delete env[key];
   const result = spawnSync(file, args, {
     cwd: options.cwd || repoRoot,
     encoding: "utf8",
     timeout: options.timeout || 120_000,
-    env: { ...process.env, ...(options.env || {}) },
+    env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   if (result.error) {
