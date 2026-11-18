@@ -140,6 +140,23 @@ test("checks read only the latest run of each check", async () => {
   assert.equal(ciChecksPassed([red, green, { name: CONTEXT, conclusion: "failure" }]), true);
 });
 
+test("a cancelled run is a superseded run, not a result", async () => {
+  const { ciChecksPassed, ciChecksPending, requiredContextsReady, CONTEXT } = await load();
+  const run = (name, conclusion, at) => ({ name, conclusion, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const green = run("ai-review", "success", "16:36:04");
+  const cancelledLater = run("ai-review", "cancelled", "16:40:25");
+  const red = run("ai-review", "failure", "16:30:00");
+  assert.equal(ciChecksPassed([green, cancelledLater]), true);
+  assert.equal(ciChecksPending([green, cancelledLater]), false);
+  assert.equal(ciChecksPassed([cancelledLater]), false);
+  assert.equal(ciChecksPending([cancelledLater]), true);
+  assert.equal(ciChecksPassed([red, cancelledLater]), false);
+  assert.equal(ciChecksPending([red, cancelledLater]), false);
+  assert.deepEqual(requiredContextsReady([{ ...cancelledLater, name: "ci-tests" }, { ...green, name: "ci-tests" }], [], ["ci-tests"]), { missing: false, pending: false, failed: false });
+  assert.deepEqual(requiredContextsReady([{ ...cancelledLater, name: "ci-tests" }], [], ["ci-tests"]), { missing: false, pending: true, failed: false });
+  assert.equal(ciChecksPassed([green, cancelledLater, { name: CONTEXT, conclusion: "failure" }]), true);
+});
+
 test("a non-app pass waits until every required context is green", async () => {
   const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
   const reason = "no user path in this diff";
