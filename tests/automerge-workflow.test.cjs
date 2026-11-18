@@ -19,7 +19,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, omitPstackVerifier = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
   const omitBrowserSmoke = Boolean(arguments[0] && arguments[0].omitBrowserSmoke)
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
@@ -61,6 +61,9 @@ JSON
 )
   if [ "\${GH_STUB_OMIT_BROWSER_SMOKE:-}" != "1" ]; then
     pr_view_json=$(printf '%s' "$pr_view_json" | jq '.statusCheckRollup += [{"name":"browser-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}]')
+  fi
+  if [ "\${GH_STUB_OMIT_PSTACK_VERIFIER:-}" != "1" ]; then
+    pr_view_json=$(printf '%s' "$pr_view_json" | jq '.statusCheckRollup += [{"name":"pstack-verifier","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}]')
   fi
   printf '%s\\n' "$pr_view_json"
   exit 0
@@ -157,6 +160,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_INVALID_GATE_DECISION: invalidGateDecision ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
         GH_STUB_OMIT_BROWSER_SMOKE: omitBrowserSmoke ? '1' : '',
+        GH_STUB_OMIT_PSTACK_VERIFIER: omitPstackVerifier ? '1' : '',
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
         EXPECTED_HEAD_SHA: head,
@@ -313,6 +317,15 @@ test('auto-merge refuses a PR without the browser smoke result', async () => {
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /check browser-smoke = MISSING/)
+  assert.doesNotMatch(result.stdout, /MERGED #42/)
+  assert.deepEqual(scratchEntries, [])
+})
+
+test('auto-merge refuses a PR without the pstack verifier result', async () => {
+  const { result, scratchEntries } = await runWorkflow({ omitPstackVerifier: true })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /check pstack-verifier = MISSING/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
