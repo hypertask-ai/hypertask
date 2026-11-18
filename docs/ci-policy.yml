@@ -48,13 +48,15 @@ pr_job_budget:
   # mcp-cli-api-contract tail job and asserts the contract inside that summary:
   # 22 -> 21 jobs, and one queue turn after the real work instead of two. The
   # count is measured per push with scripts/ci-jobs-per-push.sh.
-  # HTPR-9450 moves the UI-driving jobs to nightly production runs: the browser
-  # jobs, their summary and the App Smoke stub stop starting on a pull request,
-  # so it starts 13 of the 19 listed. The screen comparison has its own workflow.
-  normal_synchronize_before: 19
-  normal_synchronize_after: 13
-  opened_before: 19
-  opened_after: 13
+  # HTPR-9450 moves the UI-driving jobs to nightly production runs. CI Tests
+  # still lists 21 jobs on a pull request, but the six browser jobs skip there
+  # and start on the nightly production run instead, so a pull request starts
+  # 15 of them. App Smoke and the two pilot workflows stop running on a pull
+  # request altogether, and the screen comparison lives in its own workflow.
+  normal_synchronize_before: 21
+  normal_synchronize_after: 15
+  opened_before: 21
+  opened_after: 15
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -114,14 +116,16 @@ review_first_gate:
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
-  # HTPR-9450: the verifier verdict is the only required context; ruleset
-  # 21854377 and the hourly monitor both enforce it.
+  # HTPR-9450: an administrator removed every other context, so the verifier
+  # verdict is the only required one. Ruleset production-required-checks, id
+  # 21854377, and the hourly Required Check Settings monitor both enforce it.
   contexts: [pstack-verifier]
   automerge_also_requires: [pstack-verifier]
-  # Wait set: the contexts the verifier still waits for. Every one of them lands
-  # on a pull request today, including both smoke stubs. claude-review is the
-  # legacy reviewer status.
-  verifier_waits_for: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan]
+  # The cheap checks still gate a merge through the verifier, which waits for
+  # ci-tests, feature-flag-gate, pr-title, next-public-secrets and secret-scan.
+  # It reads no review status and no smoke stub, so ai-review, claude-review,
+  # app-smoke and browser-smoke are not in this file.
+  # claude-review is the legacy reviewer context the review gate still publishes.
   # automerge_also_requires mirrors the REQUIRED list in automerge.yml.
 
 pr_size_observation:

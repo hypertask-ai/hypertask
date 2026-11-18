@@ -86,7 +86,8 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
   assert.equal(REQUIRED_CI_CONTEXTS.includes("pstack-verifier"), false);
   const ruleset = new Set(policy.policies.production_ruleset.required_status_checks);
-  for (const name of REQUIRED_CI_CONTEXTS) assert.equal(ruleset.has(name), true, name);
+  assert.deepEqual([...ruleset], ["pstack-verifier"]);
+  for (const name of REQUIRED_CI_CONTEXTS) assert.equal(ruleset.has(name), false, name);
   for (const name of ["ai-review", "claude-review", "app-smoke", "browser-smoke"]) assert.equal(REQUIRED_CI_CONTEXTS.includes(name), false, name);
   assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
   const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");

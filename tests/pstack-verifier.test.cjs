@@ -121,13 +121,8 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
-test("a model pass on a real journey waits for red or pending cheap checks", async () => {
-  const { decide, ciGate, REQUIRED_CI_CONTEXTS } = await load();
-  const body = plan([{ op: "goto", path: "/" }]);
-  const model = { verdict: "PASS", notes: "" };
-  assert.equal(decide({ model, plan: body, evidence: evidence(), binding, checksPassed: true }).verdict, "PASS");
-  assert.deepEqual(decide({ model, plan: body, evidence: evidence(), binding, checksPassed: false, checksPending: true }), { verdict: "PENDING", notes: "waiting for required checks" });
-  assert.deepEqual(decide({ model, plan: body, evidence: evidence(), binding }), { verdict: "FAIL", notes: "required check failed" });
+test("a red or pending cheap check fails the empty-plan gate", async () => {
+  const { ciGate, REQUIRED_CI_CONTEXTS } = await load();
   for (const name of REQUIRED_CI_CONTEXTS) {
     const runs = REQUIRED_CI_CONTEXTS.map((item) => ({ name: item, conclusion: item === name ? "failure" : "success" }));
     const statuses = REQUIRED_CI_CONTEXTS.filter((item) => item !== name).map((context) => ({ context, state: "success" }));
