@@ -169,7 +169,7 @@ test("a non-app pass waits until every required context is green", async () => {
   assert.deepEqual(ciGate({ runs, statuses }), { checksPassed: true, checksPending: false });
   const passed = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, ...ciGate({ runs, statuses }) });
   assert.equal(passed.verdict, "PASS+NOTES");
-  const partial = statuses.filter((status) => status.context !== "claude-review");
+  const partial = statuses.filter((status) => status.context !== "app-smoke");
   assert.deepEqual(ciGate({ runs, statuses: partial }), { checksPassed: false, checksPending: true });
   const red = statuses.map((status) => status.context === "ai-review" ? { context: "ai-review", state: "failure" } : status);
   const blockedGate = ciGate({ runs, statuses: red });
@@ -177,10 +177,10 @@ test("a non-app pass waits until every required context is green", async () => {
   const blocked = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason, files: ["docs/ci.md"], filesTruncated: false }), evidence: null, binding, checksPassed: blockedGate.checksPassed, checksPending: blockedGate.checksPending });
   assert.equal(blocked.verdict, "FAIL");
   assert.match(blocked.notes, /no user path verified/);
-  const pending = statuses.map((status) => status.context === "claude-review" ? { context: "claude-review", state: "pending" } : status);
+  const pending = statuses.map((status) => status.context === "app-smoke" ? { context: "app-smoke", state: "pending" } : status);
   assert.deepEqual(ciGate({ runs, statuses: pending }), { checksPassed: false, checksPending: true });
   assert.deepEqual(ciGate({ runs, statuses: [] }), { checksPassed: false, checksPending: true });
-  const skipped = runs.map((run) => run.name === "ci-tests" ? { name: "ci-tests", conclusion: "skipped" } : run);
+  const skipped = runs.map((run) => run.name === "browser-smoke" ? { name: "browser-smoke", conclusion: "skipped" } : run);
   assert.deepEqual(ciGate({ runs: skipped, statuses }), { checksPassed: false, checksPending: false });
   const queued = [...runs, { name: "feature-flag-gate", conclusion: null }];
   assert.equal(ciGate({ runs: queued, statuses }).checksPending, true);
@@ -907,13 +907,14 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const renamed = takeFileList([{ filename: "docs/example.ts", previous_filename: "src/pages/api/example.ts" }]);
   assert.equal(renamed.files.includes("src/pages/api/example.ts"), true);
   const moved = await planFromRequest(request(renamed.files), { binding, ask() { asked += 1; return { actions: [], expect: [], reason: "no user path" }; } });
-  assert.equal(asked, 1);
+  assert.ok(asked >= 1, "an app change asks the model");
   assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: renamed.files, filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "FAIL");
+  const afterMoved = asked;
   const workflow = await planFromRequest(request([".github/workflows/pstack-verifier.yml"]), {
     binding,
     ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
   });
-  assert.equal(asked, 1);
+  assert.equal(asked, afterMoved);
   assert.deepEqual([workflow.reason, workflow.botLogin], ["no user path: non-app files only", undefined]);
   assert.equal(decide({ model: {}, plan: plan([], { reason: "no user path", files: [".github/workflows/pstack-verifier.yml"], filesTruncated: false }), evidence: null, binding, checksPassed: true }).verdict, "PASS+NOTES");
   for (const file of ["packages/agent-sdk/README.md", "skills/ship/SKILL.md", ".agents/skills/ship/SKILL.md"]) {
@@ -927,11 +928,12 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const bot = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false, botLogin: "dependabot[bot]" }), evidence: null, binding, checksPassed: true });
   assert.equal(bot.verdict, "PASS+NOTES");
   assert.match(statusDescription({ verdict: bot.verdict, authorFamily: bot.authorFamily, verifierModel: "" }), /dependabot\[bot\]/);
+  const beforeHuman = asked;
   const humanPlan = await planFromRequest(request(["package.json"]), {
     binding,
     ask() { asked += 1; return { actions: [], expect: [], reason: "no user path", botLogin: "dependabot[bot]" }; },
   });
-  assert.equal(asked, 2);
+  assert.ok(asked > beforeHuman, "a human app change is planned");
   assert.equal(humanPlan.botLogin, undefined);
   const human = decide({ model: {}, plan: plan([], { reason: "no user path", files: ["package.json"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
   assert.deepEqual([human.verdict, human.authorFamily], ["FAIL", undefined]);

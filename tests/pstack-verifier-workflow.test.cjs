@@ -248,8 +248,10 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   const bin = join(dir, "bin");
   mkdirSync(bin);
   mkdirSync(join(dir, "candidate"));
-  mkdirSync(join(dir, "trusted", "scripts"), { recursive: true });
+  mkdirSync(join(dir, "trusted", "scripts", "lib"), { recursive: true });
   copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(dir, "trusted", "scripts", "pstack-verifier.mjs"));
+  copyFileSync(join(root, "scripts/lib/pstack-journeys.cjs"), join(dir, "trusted", "scripts", "lib", "pstack-journeys.cjs"));
+  copyFileSync(join(root, "scripts/lib/pstack-compare.cjs"), join(dir, "trusted", "scripts", "lib", "pstack-compare.cjs"));
   writeFileSync(join(bin, "docker"), dockerStub(join(dir, "docker.log")), { mode: 0o755 });
   const ready = join(dir, "ready.env");
   const stop = join(dir, "stop");
@@ -299,8 +301,11 @@ test("a smoke boot that never writes ready records a down preview", (t) => {
   const work = join(dir, "work");
   mkdirSync(scripts, { recursive: true });
   mkdirSync(join(dir, "candidate"));
+  mkdirSync(join(scripts, "lib"), { recursive: true });
   copyFileSync(join(root, "scripts/pstack-verifier-drive.mjs"), join(scripts, "pstack-verifier-drive.mjs"));
   copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(scripts, "pstack-verifier.mjs"));
+  copyFileSync(join(root, "scripts/lib/pstack-journeys.cjs"), join(scripts, "lib", "pstack-journeys.cjs"));
+  copyFileSync(join(root, "scripts/lib/pstack-compare.cjs"), join(scripts, "lib", "pstack-compare.cjs"));
   symlinkSync(playwrightModules(), join(trusted, "node_modules"));
   writeFileSync(join(scripts, "run-app-smoke-isolated.sh"), "#!/bin/bash\nexit 1\n", { mode: 0o755 });
   const result = spawnSync("bash", [join(root, "scripts/pstack-verifier-job.sh"), trusted, join(dir, "candidate"), work], {
