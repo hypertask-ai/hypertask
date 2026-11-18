@@ -160,7 +160,8 @@ function main(argv = process.argv.slice(2), env = process.env) {
   const text = formatReport(report);
   process.stdout.write(text);
   if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, text);
-  return options.strict && report.unmapped.length > 0 ? 1 : 0;
+  const blocked = report.unmapped.length > 0 || report.rowGaps.length > 0;
+  return options.strict && blocked ? 1 : 0;
 }
 
 if (require.main === module) {

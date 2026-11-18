@@ -36,5 +36,9 @@ jobs:
           check-latest: true
       - name: Test coverage counter
         run: node --test tests/feature-map-coverage.test.cjs
+      - name: Enforce feature map coverage
+        if: github.event_name == 'pull_request'
+        run: node .github/scripts/feature-map-coverage.cjs --strict
       - name: Report feature map coverage
+        if: github.event_name != 'pull_request'
         run: node .github/scripts/feature-map-coverage.cjs
