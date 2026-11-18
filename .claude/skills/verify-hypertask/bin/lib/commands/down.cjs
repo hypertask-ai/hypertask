@@ -25,13 +25,17 @@ module.exports = {
     const { values } = parseArgs(argv, { "dry-run": "bool", "keep-db": "bool" });
     const env = localEnv();
     const pidFile = readJson(path.join(runDir(), "dev.pid"), {});
+    const pid = Number(pidFile.pid);
+    if (pidFile.pid !== undefined && (!Number.isInteger(pid) || pid <= 0)) {
+      fail(`refusing to kill a non-positive pid from dev.pid: ${pidFile.pid}`, "Remove the file by hand, then ht-verify up.", "refused", 2);
+    }
     const container = env.dbContainer || "hypertask-verify-db";
     const steps = [];
-    if (pidFile.pid) steps.push(`kill ${pidFile.pid}`);
+    if (pid) steps.push(`kill ${pid}`);
     if (!values["keep-db"]) steps.push(`docker rm -f ${container}`, `docker volume rm ${container}`);
     if (values["dry-run"]) return { target: "local", data: dryRun("down", steps, { keptDatabase: Boolean(values["keep-db"]) }).data };
     const stopped = [];
-    if (pidFile.pid) {
+    if (pid) {
       try {
         process.kill(pidFile.pid, "SIGTERM");
         stopped.push(`pid ${pidFile.pid}`);

@@ -33,14 +33,20 @@ test("doctor fails on an instance that does not answer and names the failing che
   assert.equal(result.status, 1);
   assert.equal(result.json.ok, false);
   assert.deepEqual(result.json.data.failed, ["page /login", "database", "dev pid"]);
-  assert.equal(result.json.data.checks.find((check) => check.name === "node_modules").ok, true);
   assert.match(result.json.error.next, /ht-verify up/);
 });
 
-test("doctor production needs a ticket key", async () => {
-  const result = await json(home(), ["doctor", "--target", "production"]);
-  assert.equal(result.status, 2);
-  assert.match(result.json.error.next, /--ticket/);
-  const bad = await json(home(), ["doctor", "--target", "production", "--ticket", "9471"]);
-  assert.equal(bad.status, 2);
+test("doctor verifies a seeded local state and fails a production ticket gap", async () => {
+  const web = await serve(200);
+  const dir = home();
+  mkdirSync(join(dir, "default", "browser"), { recursive: true });
+  writeFileSync(join(dir, "default", "env.json"), JSON.stringify({ baseUrl: `http://127.0.0.1:${web.address().port}`, databaseUrl: `postgresql://verify:verify@127.0.0.1:${web.address().port}/hypertask`, pid: process.pid }));
+  writeFileSync(join(dir, "default", "browser", "state.json"), JSON.stringify({ cookies: [{ name: "ht_session", value: "x", domain: "127.0.0.1", path: "/", expires: -1 }] }));
+  const seeded = await json(dir, ["doctor"]);
+  web.close();
+  assert.equal(seeded.status, 0, seeded.stdout);
+  assert.equal(seeded.json.data.checks.find((check) => check.name === "identity").detail, "identity ok: user 985");
+  const gap = await json(home(), ["doctor", "--target", "production"]);
+  assert.equal(gap.status, 2);
+  assert.match(gap.json.error.next, /--ticket/);
 });

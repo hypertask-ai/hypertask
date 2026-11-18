@@ -5,8 +5,8 @@ import { home, json } from "./lib/test-helpers.mjs";
 test("help lists every command and each one documents its flags", async () => {
   const help = await json(home(), ["--help"]);
   assert.equal(help.status, 0);
-  for (const command of ["up", "down", "doctor", "login"]) assert.match(help.stdout, new RegExp(`\\n  ${command}\\s`));
-  for (const command of ["up", "down", "doctor", "login"]) {
+  for (const command of ["up", "down", "doctor"]) assert.match(help.stdout, new RegExp(`\\n  ${command}\\s`));
+  for (const command of ["up", "down", "doctor"]) {
     const page = await json(home(), ["help", command]);
     assert.equal(page.status, 0, command);
     assert.match(page.stdout, /Usage:/);

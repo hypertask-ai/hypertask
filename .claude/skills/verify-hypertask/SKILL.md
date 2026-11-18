@@ -338,7 +338,6 @@ Every script below is executable and is invoked exactly as shown.
 |---|---|
 | `.claude/skills/verify-hypertask/bin/ht-verify up` | the disposable local stack starts and answers 200 on /login |
 | `.claude/skills/verify-hypertask/bin/ht-verify doctor` | the local page, database, dev pid and QA identity all pass |
-| `.claude/skills/verify-hypertask/bin/ht-verify login [account]` | the chosen QA account's state loads as the expected user |
 | `.claude/skills/verify-hypertask/bin/ht-verify down` | only this session's dev server and database stop |
 | `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
 | `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |

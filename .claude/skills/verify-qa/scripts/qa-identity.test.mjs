@@ -80,6 +80,14 @@ test('ok without --expect and with an unexpired parent-domain cookie', async t =
   assert.ok(result.receivedCookie === `fixture_session=${fixtureValue}`, 'parent-domain cookie must reach the endpoint');
 });
 
+test('ok with a loopback cookie state and a loopback base URL', async t => {
+  const result = await run(t, {
+    cookies: [cookie({ domain: '127.0.0.1', secure: false })],
+    code: 0, expected: 'identity ok: user 985',
+  });
+  assert.ok(result.receivedCookie === `fixture_session=${fixtureValue}`, 'a seeded local state must reach the local endpoint');
+});
+
 test('mismatch is not expiry', async t => {
   await run(t, { args: ['--expect', '2343'], code: 1, expected: 'identity mismatch: user 985, expected 2343' });
 });

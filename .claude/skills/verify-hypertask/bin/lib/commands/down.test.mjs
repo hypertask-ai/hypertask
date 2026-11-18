@@ -14,11 +14,14 @@ test("down --dry-run names the recorded pid and the container", async () => {
   assert.deepEqual(result.json.data.steps, ["kill 4242", "docker rm -f hypertask-verify-db", "docker volume rm hypertask-verify-db"]);
 });
 
-test("down --keep-db leaves the database alone", async () => {
+test("down --keep-db leaves the database alone and refuses a bad pid", async () => {
   const dir = home();
   mkdirSync(join(dir, "default"), { recursive: true });
-  const result = await json(dir, ["down", "--dry-run", "--keep-db"]);
-  assert.equal(result.status, 0);
-  assert.deepEqual(result.json.data.steps, []);
-  assert.equal(result.json.data.keptDatabase, true);
+  const kept = await json(dir, ["down", "--dry-run", "--keep-db"]);
+  assert.deepEqual(kept.json.data.steps, []);
+  assert.equal(kept.json.data.keptDatabase, true);
+  writeFileSync(join(dir, "default", "dev.pid"), JSON.stringify({ pid: "-1" }));
+  const refused = await json(dir, ["down", "--dry-run"]);
+  assert.equal(refused.status, 2);
+  assert.match(refused.json.error.message, /refusing to kill/);
 });

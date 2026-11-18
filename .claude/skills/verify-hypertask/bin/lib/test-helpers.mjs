@@ -32,8 +32,8 @@ export async function json(dir, args) {
 
 export function serve(status) {
   const server = createServer((request, response) => {
-    response.writeHead(request.url === "/login" ? status : 404);
-    response.end("ok");
+    response.writeHead(request.url === "/login" ? status : 200, { "Content-Type": "application/json" });
+    response.end(request.url === "/api/users/getById" ? JSON.stringify({ id: 985 }) : "ok");
   });
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 }
