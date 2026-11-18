@@ -42,6 +42,49 @@ test('a rerun stops only when its commit is no longer the live head', () => {
   assert.equal(shouldStop(2, 'schedule', 'abc', 'def'), false);
 });
 
+function eventPayload(payload) {
+  const directory = mkdtempSync(path.join(tmpdir(), 'stale-rerun-'));
+  const file = path.join(directory, 'event.json');
+  writeFileSync(file, JSON.stringify(payload));
+  return file;
+}
+
+function pullRequestEnv(head, merge) {
+  return {
+    GITHUB_RUN_ATTEMPT: '2',
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REPOSITORY: 'fixture/repository',
+    GITHUB_SHA: merge,
+    GITHUB_EVENT_PATH: eventPayload({ pull_request: { number: 42, head: { sha: head } } }),
+  };
+}
+
+const PULL_HEAD = 'a'.repeat(40);
+const MERGE_COMMIT = 'b'.repeat(40);
+const MOVED_HEAD = 'c'.repeat(40);
+
+function livePullHead(args) {
+  assert.deepEqual(args, ['api', 'repos/fixture/repository/pulls/42', '--jq', '.head.sha']);
+}
+
+test('a retried pull request run compares its own head, never the merge commit', () => {
+  const { main } = require('../.github/scripts/stale-rerun.cjs');
+  const env = pullRequestEnv(PULL_HEAD, MERGE_COMMIT);
+  assert.equal(main(env, (args) => { livePullHead(args); return `${PULL_HEAD}\n`; }), 0);
+  assert.equal(main(env, () => `${MOVED_HEAD}\n`), 1);
+  assert.equal(main({ ...env, GITHUB_RUN_ATTEMPT: '1' }, () => `${MOVED_HEAD}\n`), 0);
+});
+
+test('a retried push run still stops when the branch moved', () => {
+  const { main } = require('../.github/scripts/stale-rerun.cjs');
+  const env = { GITHUB_RUN_ATTEMPT: '2', GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: 'fixture/repository', GITHUB_REF_NAME: 'production', GITHUB_SHA: PULL_HEAD };
+  assert.equal(main(env, (args) => {
+    assert.deepEqual(args, ['api', 'repos/fixture/repository/commits/production', '--jq', '.sha']);
+    return `${PULL_HEAD}\n`;
+  }), 0);
+  assert.equal(main(env, () => `${MOVED_HEAD}\n`), 1);
+});
+
 test('the pilot workflow keeps both jobs and cancels per pull request', () => {
   const pilot = workflow('e2e-ai-pilot');
   assert.deepEqual(Object.keys(pilot.jobs), ['static', 'pilot']);
