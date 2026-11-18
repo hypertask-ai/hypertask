@@ -3,12 +3,17 @@
 ## Sub-features
 
 - `slack-app` Slack app.
+- `integrations-page` `/integrations` is the Integrations screen. Slack is the live card: task notifications, project updates, and sharing tasks to channels. Discord and Microsoft Teams stay disabled and say Coming Soon. `success=true` shows “Slack integration connected successfully!” Access denied, a missing code, a Slack failure, and a server error each show their own error. Connect Slack starts a connection, so a read-only check does not click it.
+- `slack-account-link` `/settings/slack/link` is Connect Slack, and it requires a signed-in user. A valid link shows the Hypertask email and Slack workspace, then Connect account posts the confirmation. `status=linked` says the Slack account now uses the Hypertask identity. An already-linked account, a team the user is not in, and an invalid or used link each say why and tell the user to run `/ht connect` in Slack again. A valid confirmation shows that same command, says it expires in 10 minutes, and says it works once.
+- `slack-app-parity` With `htpr-6817-slack-app` on, an ordinary task mention in Slack is handled as chat with the thread context, and the turn is saved. A mention that asks to make a task from this thread still creates the task from the thread. Assistant thread context is stored. Disconnect keeps that Slack user from being auto-linked again, and connect clears that mark. Off creates the task from a task mention directly and does not keep the disconnect.
 
 ## How to get to it (user POV)
 
 - Open `/add-to-slack` to read the install overview and requested scopes. The `htpr-4857-add-to-slack` flag gates this page; a disabled flag returns 404.
 - Open `/slack/support`, or click Slack app support on the install page. The `htpr-6921-slack-marketplace` flag gates the support page and the install page's Privacy policy, Terms, and Slack app support links. The support flag defaults to Everyone. Switching it Off returns 404, including signed-out visitors.
 - Sign in and open Settings > Slack (`/settings/slack`), select an accessible Hypertask team, and choose Connect Slack. This uses `/api/slack/install?teamId=<team-id>` to redirect to Slack OAuth. The install overview also offers an Add to Slack authorization link.
+- Open `/integrations` while signed in. Read the Slack card. Leave Discord and Microsoft Teams disabled. Do not press Connect Slack on a read-only run.
+- Open `/settings/slack/link` while signed in and without a link token. The page says the link is invalid and tells you to run `/ht connect` in Slack. Do not submit Connect account. A `status=linked` visit is the success screen and can be closed.
 
 ## Driving it with agent-browser
 
@@ -20,6 +25,9 @@
 6. Check `/api/slack/install` with redirects disabled. Signed out should redirect to `/login?returnTo=/settings/slack`. Signed in without an unambiguous accessible team redirects to Slack settings with `missing_team`; an inaccessible `teamId` yields `team_access_denied`. An authorized team redirects to Slack OAuth when configured, otherwise settings with `not_configured`. Record status and destination host/path only; never expose OAuth state, client identifiers, tokens, or cookies. Do not follow Slack redirects in a read-only run.
 7. Inspect `origin/production:docs/slack-app-manifest.json` for `app_uninstalled` and `tokens_revoked`. This proves the declared event subscriptions, not delivery or cleanup in a real workspace.
 8. Record a short WebM of `/add-to-slack`, clicking Slack app support, then scrolling the support page. Keep it under 3 MB.
+9. Open `/integrations` at 1440x900 and 390x844. Confirm the Slack card is active and Discord and Microsoft Teams say Coming Soon. Do not press Connect Slack.
+10. Open `/settings/slack/link` signed in, with no token. Confirm the invalid-link copy and that the address stays on this page. Signed out lands on `/login`. Do not post the form.
+11. `htpr-6817-slack-app` is proved in a real Slack workspace, which this run already records as UNREACHABLE. Do not install, disconnect, or send a Slack message to manufacture it.
 
 ## Gotchas
 
@@ -28,6 +36,9 @@
 - Theme contrast, phone wrapping, long support content, or scrolling hides text and links.
 - OAuth loses the team, accepts an inaccessible team, has missing configuration, or points to a noncanonical callback origin.
 - Manifest subscriptions omit uninstall or token-revocation events; subscription presence alone does not prove handlers ran.
+- `/integrations` is treated as the install overview, or Connect Slack is clicked.
+- `/settings/slack/link` is opened with a real confirmation token, or Connect account is submitted.
+- A headless run is recorded as proof that `htpr-6817-slack-app` saved a Slack turn or kept a disconnect.
 
 ### What proof to collect
 
