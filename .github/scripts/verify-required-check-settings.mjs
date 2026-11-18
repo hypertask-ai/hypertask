@@ -148,23 +148,14 @@ try {
       throw new Error("The required-check ruleset does not protect production.");
     }
     const expected = ["pstack-verifier"].sort();
-    const transition = [
-      "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
-    ].sort();
     const checks = ruleset.rules
       .filter((rule) => rule.type === "required_status_checks")
       .flatMap((rule) => rule.parameters.required_status_checks);
     const actual = [...new Set(checks.map((check) => check.context))].sort();
-    const contract = JSON.stringify(actual) === JSON.stringify(expected) ? "verifier-only"
-      : JSON.stringify(actual) === JSON.stringify(transition) ? "transition-ten" : "";
-    if (!contract) {
-      throw new Error("Live required checks do not match docs/ci-policy.yml.");
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+      throw new Error("Live required checks do not match docs/ci-policy.yml: pstack-verifier is the whole set.");
     }
-    if (contract === "transition-ten" && lastVerified()?.contract === "verifier-only") {
-      throw new Error("The live ruleset went back to the ten-context contract after the verifier-only one was verified.");
-    }
-    console.log(`Required-check settings: matched the ${contract} contract (${actual.length} required contexts).`);
+    console.log(`Required-check settings: the live ruleset requires ${actual.join(", ")} and nothing else.`);
     if (checks.some((check) => check.integration_id !== 15368)) {
       throw new Error("A required check is missing GitHub Actions integration_id 15368.");
     }
@@ -173,7 +164,6 @@ try {
       defaultBranch: repository.default_branch,
       rulesetId: matches[0].id,
       contexts: actual,
-      contract,
     });
     publishResult(true);
     console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);

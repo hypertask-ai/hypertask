@@ -9,7 +9,7 @@ const script = resolve(__dirname, "../.github/scripts/verify-required-check-sett
 const base = "a".repeat(40);
 const head = "b".repeat(40);
 const contexts = ["pstack-verifier"];
-const transitionContexts = [
+const oldContexts = [
   "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
   "next-public-secrets", "pr-title", "secret-scan", "browser-smoke", "pstack-verifier",
 ];
@@ -125,10 +125,10 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
   }
 }
 
-function assertVerified(result, expectedEndpoints = endpoints, contract = "verifier-only", expectedContexts = contexts) {
+function assertVerified(result, expectedEndpoints = endpoints, expectedContexts = contexts) {
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Required-check settings verified:/);
-  assert.match(result.output, new RegExp(`Required-check settings: matched the ${contract} contract \\(${expectedContexts.length} required contexts\\)`));
+  assert.match(result.output, new RegExp(`Required-check settings: the live ruleset requires ${expectedContexts.join(", ")} and nothing else`));
   assert.doesNotMatch(result.output, /skipping settings API reads|::error::|not verified this run/);
   assert.deepEqual(result.calls.filter(([tool]) => tool === "gh"),
     expectedEndpoints.map((endpoint) => ["gh", "api", "--include", endpoint]));
@@ -137,7 +137,6 @@ function assertVerified(result, expectedEndpoints = endpoints, contract = "verif
     defaultBranch: "production",
     rulesetId: 42,
     contexts: [...expectedContexts].sort(),
-    contract,
     verifiedAt: result.stored.verifiedAt,
   });
   assert.ok(Number.isFinite(Date.parse(result.stored.verifiedAt)), result.stored.verifiedAt);
@@ -260,16 +259,14 @@ test("a required check without Actions integration_id 15368 fails", () => {
   assert.match(other.output, /integration_id 15368/);
 });
 
-test("the old ten-context ruleset passes until the verifier-only one is verified", () => {
-  assertVerified(runSettings({ liveContexts: transitionContexts }), endpoints, "transition-ten", transitionContexts);
-  const proof = { repository: "test/repo", defaultBranch: "production", rulesetId: 42, contexts, contract: "verifier-only", verifiedAt: new Date().toISOString() };
-  const result = runSettings({ liveContexts: transitionContexts, proof });
+test("the old ten-context ruleset fails the monitor now the live one is verifier-only", () => {
+  const result = runSettings({ liveContexts: oldContexts });
   assertRejected(result);
-  assert.match(result.output, /went back to the ten-context contract/);
+  assert.match(result.output, /pstack-verifier is the whole set/);
 });
 
 test("different live required contexts fail verification", () => {
-  const result = runSettings({ liveContexts: transitionContexts.filter((context) => context !== "ci-tests") });
+  const result = runSettings({ liveContexts: oldContexts.filter((context) => context !== "ci-tests") });
   assertRejected(result);
   assert.match(result.output, /Live required checks do not match docs\/ci-policy.yml/);
   assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 3);
