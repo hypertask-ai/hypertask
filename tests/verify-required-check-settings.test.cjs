@@ -137,6 +137,7 @@ function assertVerified(result, expectedEndpoints = endpoints, contract = "verif
     defaultBranch: "production",
     rulesetId: 42,
     contexts: [...expectedContexts].sort(),
+    contract,
     verifiedAt: result.stored.verifiedAt,
   });
   assert.ok(Number.isFinite(Date.parse(result.stored.verifiedAt)), result.stored.verifiedAt);
@@ -259,9 +260,12 @@ test("a required check without Actions integration_id 15368 fails", () => {
   assert.match(other.output, /integration_id 15368/);
 });
 
-test("the old ten-context ruleset still passes while the flip is pending", () => {
-  const result = runSettings({ liveContexts: transitionContexts });
-  assertVerified(result, endpoints, "transition-ten", transitionContexts);
+test("the old ten-context ruleset passes until the verifier-only one is verified", () => {
+  assertVerified(runSettings({ liveContexts: transitionContexts }), endpoints, "transition-ten", transitionContexts);
+  const proof = { repository: "test/repo", defaultBranch: "production", rulesetId: 42, contexts, contract: "verifier-only", verifiedAt: new Date().toISOString() };
+  const result = runSettings({ liveContexts: transitionContexts, proof });
+  assertRejected(result);
+  assert.match(result.output, /went back to the ten-context contract/);
 });
 
 test("different live required contexts fail verification", () => {

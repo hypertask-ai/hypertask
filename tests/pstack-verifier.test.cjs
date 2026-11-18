@@ -121,14 +121,13 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
-test("the verifier refuses a pass while any cheap check it waits for is red", async () => {
-  const { ciGate, REQUIRED_CI_CONTEXTS } = await load();
-  const yaml = require("js-yaml");
-  const policy = yaml.load(require("node:fs").readFileSync("docs/ci-policy.yml", "utf8"));
-  assert.deepEqual(REQUIRED_CI_CONTEXTS, [...policy.required_checks.verifier_waits_for]);
-  for (const cheap of ["ci-tests", "secret-scan", "next-public-secrets", "pr-title", "feature-flag-gate", "ai-review"]) {
-    assert.equal(REQUIRED_CI_CONTEXTS.includes(cheap), true, cheap);
-  }
+test("a model pass on a real journey waits for red or pending cheap checks", async () => {
+  const { decide, ciGate, REQUIRED_CI_CONTEXTS } = await load();
+  const body = plan([{ op: "goto", path: "/" }]);
+  const model = { verdict: "PASS", notes: "" };
+  assert.equal(decide({ model, plan: body, evidence: evidence(), binding, checksPassed: true }).verdict, "PASS");
+  assert.deepEqual(decide({ model, plan: body, evidence: evidence(), binding, checksPassed: false, checksPending: true }), { verdict: "PENDING", notes: "waiting for required checks" });
+  assert.deepEqual(decide({ model, plan: body, evidence: evidence(), binding }), { verdict: "FAIL", notes: "required check failed" });
   for (const name of REQUIRED_CI_CONTEXTS) {
     const runs = REQUIRED_CI_CONTEXTS.map((item) => ({ name: item, conclusion: item === name ? "failure" : "success" }));
     const statuses = REQUIRED_CI_CONTEXTS.filter((item) => item !== name).map((context) => ({ context, state: "success" }));
@@ -270,7 +269,7 @@ test("a recorded off-origin subresource fails the verdict", async () => {
   ]);
   const body = plan([{ op: "goto", path: "/" }]);
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ offOrigin }), binding }).verdict, "FAIL");
-  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding, checksPassed: true }).verdict, "PASS");
 });
 
 test("status 500 on the first goto fails", async () => {
@@ -658,7 +657,7 @@ test("an api action passes from the preview response with no page navigation", a
   assert.equal(run.steps[0].ok, true);
   assert.equal(run.steps[0].text.includes("saved"), true);
   const seen = evidence({ steps: run.steps, expects: run.expects, navigations: [] });
-  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding, checksPassed: true }).verdict, "PASS");
   assert.equal(decide({ model: { verdict: "", notes: "" }, plan: body, evidence: seen, binding }).verdict, "FAIL");
   const miss = await runPlan({
     page: { ...page, request: { async fetch() { return { status: () => 200, async text() { return "nope"; } }; } } },
@@ -819,6 +818,7 @@ test("one bad model reply is retried and two bad replies fail closed", async () 
     plan: plan([{ op: "goto", path: "/" }]),
     evidence: evidence(),
     binding,
+    checksPassed: true,
   });
   assert.equal(passed.verdict, "PASS");
   assert.equal(passed.notes, "");

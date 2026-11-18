@@ -361,7 +361,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(npmProxy, /net\.connect\(443, registry/);
 });
 
-test("auto-merge waits for the verifier and runs when it completes", async () => {
+test("auto-merge waits for app smoke and runs when it completes", async () => {
   const workflow = await readFile(".github/workflows/automerge.yml", "utf8");
 
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
@@ -459,10 +459,21 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
 
 test("CI policy requires only the verifier and automerge mirrors it", async () => {
   const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
-  const verifierOnly = ["pstack-verifier"];
+  const required = [
+    "app-smoke",
+    "browser-smoke",
+    "ci-tests",
+    "ai-review",
+    "claude-review",
+    "feature-flag-gate",
+    "pr-title",
+    "next-public-secrets",
+    "secret-scan",
+    "pstack-verifier",
+  ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
-  assert.deepEqual(policy.required_checks.contexts, verifierOnly);
+  assert.deepEqual(policy.required_checks.contexts, ["pstack-verifier"]);
   const automerge = await readFile(".github/workflows/automerge.yml", "utf8");
   const automergeRequired = [...automerge.matchAll(/REQUIRED="(?:\$REQUIRED )?([^"]+)"/g)]
     .flatMap((match) => match[1].split(" "))
@@ -472,10 +483,7 @@ test("CI policy requires only the verifier and automerge mirrors it", async () =
     automergeRequired,
     "automerge_also_requires must mirror the REQUIRED list in automerge.yml",
   );
-  assert.deepEqual(
-    policy.policies.production_ruleset.required_status_checks,
-    verifierOnly,
-  );
+  assert.deepEqual(policy.policies.production_ruleset.required_status_checks, ["pstack-verifier"]);
 });
 
 test("npm registry proxy refuses arbitrary CONNECT targets", async (t) => {

@@ -55,26 +55,23 @@ App Smoke falls from four to two jobs.
 Skipped jobs and synthetic check contexts are excluded.
 Path-specific gates can add jobs on both sides.
 
-PRs keep the cheap checks and run one independent verifier.
-The verifier is the only required context, and its verdict is the only verdict.
-Green CI and bot reviews are not verdicts.
-The verifier refuses to pass while a cheap check it waits for is red or missing;
-that list is `required_checks.verifier_waits_for` in `docs/ci-policy.yml`.
-An admin removes the other nine contexts from the ruleset after this contract
-merges, and the hourly settings monitor accepts either contract until then.
+PRs keep cheap checks and the independent verifier.
+The ruleset requires only `pstack-verifier`.
+The verifier refuses a pass while a cheap check is red or missing.
 
 Everything that drives the UI left the pull request:
 
 - `browser-build`, `browser-smoke-desktop`, `browser-smoke-mobile`,
-  `browser-smoke-matrix`, `browser-smoke-flags` and their `browser-smoke`
-  summary run after production pushes. They also run nightly at 03:23 UTC.
-  No pull request starts any of them.
+  `browser-smoke-matrix` and `browser-smoke-flags` run after production pushes.
+  They also run nightly at 03:23 UTC.
+  No pull request starts them.
 - PR `visual-compare` stays dormant behind skipped `browser-build`.
   `visual-regression.yml` owns the nightly screen comparison.
   Production pushes and manual comparisons remain available.
-- App Smoke drives production on its own nightly schedule (03:47 UTC). No pull
-  request publishes an `app-smoke` status.
-  `app-smoke-request.yml` is dispatch-only and retains the validated smoke path.
+- App Smoke drives production on its own nightly schedule (03:47 UTC). A pull
+  request gets a status stub.
+  `app-smoke-request.yml` is dispatch-only now.
+  Manual dispatch retains the validated smoke path.
 - `e2e-ai-pilot.yml` and `desktop-live-readback.yml` run on dispatch and their
   own nightly crons.
 
@@ -84,10 +81,8 @@ using the diff to choose them, and it boots the candidate with the same
 with `bugfix-regression`, which runs the changed test on the merge base and on
 the head.
 
-Automerge waits for the same single context.
-The cheap checks still gate the verifier, so a red `ci-tests`, `secret-scan`,
-`next-public-secrets`, `pr-title`, `feature-flag-gate` or `ai-review` never
-reaches a pass.
+Cheap checks still gate the verifier through `verifier_waits_for`, so a red one
+never reaches a pass. Automerge waits for the same context.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the

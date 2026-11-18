@@ -161,6 +161,9 @@ try {
     if (!contract) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");
     }
+    if (contract === "transition-ten" && lastVerified()?.contract === "verifier-only") {
+      throw new Error("The live ruleset went back to the ten-context contract after the verifier-only one was verified.");
+    }
     console.log(`Required-check settings: matched the ${contract} contract (${actual.length} required contexts).`);
     if (checks.some((check) => check.integration_id !== 15368)) {
       throw new Error("A required check is missing GitHub Actions integration_id 15368.");
@@ -170,6 +173,7 @@ try {
       defaultBranch: repository.default_branch,
       rulesetId: matches[0].id,
       contexts: actual,
+      contract,
     });
     publishResult(true);
     console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);

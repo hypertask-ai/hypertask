@@ -213,6 +213,8 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
   if (problems.length) return { verdict: "FAIL", notes: [model.notes, ...problems].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 500) };
   const verdict = normalizeVerdict(model.verdict, model.notes);
   if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict: "FAIL", notes: String(model.notes || "model verdict missing").slice(0, 500) };
+  if (checksPending) return { verdict: "PENDING", notes: "waiting for required checks" };
+  if (!checksPassed) return { verdict: "FAIL", notes: "required check failed" };
   return { verdict, notes: String(model.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500) };
 }
 export function noteForeign(list, url, origin, kind) {
@@ -827,8 +829,7 @@ async function judgeCommand() {
   }
   let checksPassed = false;
   let checksPending = false;
-  const files = Array.isArray(plan.files) ? plan.files : [];
-  if (!plan.fail && !plan.actions.length && !listWasTruncated(plan, files)) {
+  if (!plan.fail) {
     try {
       const repo = requireRepo(process.env.GITHUB_REPOSITORY);
       const gate = await waitForCiChecks(async () => ({

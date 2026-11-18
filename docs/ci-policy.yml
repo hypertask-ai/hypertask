@@ -117,17 +117,11 @@ review_first_gate:
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
-  # HTPR-9450: one independent verifier per pull request. Its verdict is the only
-  # required context; green CI and bot reviews are not verdicts. An administrator
-  # removes the other nine contexts from ruleset production-required-checks
-  # (id 21854377) right after this contract merges. The hourly Required Check
-  # Settings monitor accepts either the old ten-context ruleset or this
-  # one-context ruleset while that flip is pending.
+  # HTPR-9450: the verifier verdict is the only required context. An admin
+  # removes the other nine from ruleset 21854377 after this merges.
   contexts: [pstack-verifier]
   automerge_also_requires: [pstack-verifier]
-  # The verifier reads this list as its wait set and refuses PASS while any
-  # context here is red or missing. claude-review is the reviewer's legacy
-  # status name and still publishes next to ai-review (HTPR-6734).
+  # The verifier's wait set. claude-review is the legacy reviewer status.
   verifier_waits_for: [ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan]
   # automerge_also_requires mirrors the REQUIRED list in automerge.yml.
 
