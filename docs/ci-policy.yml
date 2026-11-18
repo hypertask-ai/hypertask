@@ -96,7 +96,8 @@ pr_job_budget:
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1
       published_statuses: [ux-signoff-gate, ux-signoff]
-      concurrency_group: "ux-signoff-gate-${{ github.event.pull_request.number || github.ref }}"
+      triggers: [workflow_dispatch]
+      concurrency_group: "ux-signoff-gate-${{ github.ref }}"
       queue: none
       cancel_in_progress: true
   context_publication: native_scanner_checks_and_combined_trusted_commit_status
@@ -417,8 +418,8 @@ feature_map_weekly:
   runs_on: ubuntu-latest
   required: false
   cron_utc: "37 3 * * 1"
-  triggers: [schedule, workflow_dispatch, pull_request]
-  pull_request_base: production
+  triggers: [schedule, workflow_dispatch]
+  pull_request_trigger_moved_to: skills-evals
   paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".claude/skills/verify-qa/reference/ops-map/**", ".github/workflows/feature-map-weekly.yml"]
   node_major: 24
   permissions: [contents_read]
@@ -430,27 +431,19 @@ feature_map_weekly:
 
 feature_map_coverage:
   ticket: https://app.hypertask.ai/detail/project-15/9406
-  context: feature-map-coverage
-  workflow: .github/workflows/feature-map-coverage.yml
-  runs_on: ubuntu-latest
+  # HTPR-9450 folded the separate workflow into the ci-checks lane, which was
+  # already paid for.
+  context: null
+  workflow: .github/workflows/ci-tests.yml
+  job: ci-checks
+  lane: feature-map-coverage
   required: false
-  report_only: false
-  blocks_merge: false
-  triggers: [workflow_dispatch, pull_request]
-  pull_request_base: production
-  paths:
-    - src/app/**
-    - src/lib/flags/definitions/**
-    - .claude/skills/verify-qa/reference/feature-map/**
-    - .github/scripts/feature-map-coverage.cjs
-    - .github/workflows/feature-map-coverage.yml
-    - tests/feature-map-coverage.test.cjs
-  node_major: 24
-  permissions: [contents_read]
+  triggers: [pull_request_only_through_ci-tests]
+  runs_when: [src/app, src/lib/flags/definitions, feature_map_pages]
   commands:
-    - node --test tests/feature-map-coverage.test.cjs
     - node .github/scripts/feature-map-coverage.cjs --strict
-  fixtures: offline_with_temporary_home_and_no_secrets
+  test: tests/feature-map-coverage.test.cjs
+  additional_jobs: 0
   app_driving: false
 
 feature_map_live_weekly:
@@ -542,6 +535,12 @@ ux_signoff:
   context: ux-signoff
   workflow: .github/workflows/ux-signoff-gate.yml
   script: .github/scripts/ux-signoff-gate.mjs
+  # HTPR-9450: a person's sign-off is not a check a machine produces. The gate
+  # runs on the hourly chain's dispatch and sweeps every open production PR
+  # instead of paying a job on every pull request event.
+  triggers: [workflow_dispatch]
+  dispatched_by: .github/workflows/ux-signoff-chain.yml
+  latency: hourly
   # HT Product Lead flips this after statuses are seeded on all open PRs.
   required: false
 
@@ -822,6 +821,11 @@ ci_tests:
     pool_lanes: 6
     serial_lanes: 2
     lane_count: 8
+    pull_request_lanes:
+      pool_lanes: 3
+      serial_lanes: 1
+      lane_count: 4
+      note: HTPR-9450. A production push keeps the full-suite plan; a pull request runs the selector's scoped pick in four lanes.
     shard_constant: CI_TEST_SHARDS
     serial_shard_constant: CI_SERIAL_SHARDS
     required_check: ci-tests
@@ -1031,12 +1035,14 @@ pstack_verifier_eval:
 
 repro_first:
   ticket: https://app.hypertask.ai/detail/project-15/9407
-  workflow: .github/workflows/repro-first.yml
+  workflow: .github/workflows/ci-tests.yml
   job: repro-first
   script: .github/scripts/repro-first.mjs
   mode: fails_the_job
   required: false
   ruleset: unchanged
+  # HTPR-9450 moved the job into ci-tests.yml; it is not part of the ci-tests
+  # summary and still fails its own step.
   triggers: [pull_request]
   pull_request_base: production
   signal: bugfix_title_tag
