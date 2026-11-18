@@ -448,7 +448,7 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /!ruleset\.conditions\.ref_name\.include\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /new Set\(checks\.map\(\(check\) => check\.context\)\)/);
-  assert.match(settingsScript, /integration_id !== 15368/);
+  assert.match(settingsScript, /check\.integration_id !== pinned/);
   assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
   const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
   assert.deepEqual(
