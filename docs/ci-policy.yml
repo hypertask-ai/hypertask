@@ -53,6 +53,10 @@ pr_job_budget:
   # and start on the nightly production run instead, so a pull request starts
   # 15 of them. App Smoke and the two pilot workflows stop running on a pull
   # request altogether, and the screen comparison lives in its own workflow.
+  # The second pass removes the report-only bugfix replay and the pre-push hook
+  # lane, not a UI or scanner job: a pull request starts 15 of the 21 listed, as
+  # after the first pass. A [BUGFIX] pull request starts one fewer, because its
+  # replay is repro_first inside ci-tests.yml.
   normal_synchronize_before: 21
   normal_synchronize_after: 15
   opened_before: 21
@@ -94,7 +98,8 @@ pr_job_budget:
     - workflow: .github/workflows/ux-signoff-gate.yml
       jobs: 1
       published_statuses: [ux-signoff-gate, ux-signoff]
-      concurrency_group: "ux-signoff-gate-${{ github.event.pull_request.number || github.ref }}"
+      triggers: [workflow_dispatch]
+      concurrency_group: "ux-signoff-gate-${{ github.ref }}"
       queue: none
       cancel_in_progress: true
   context_publication: native_scanner_checks_and_combined_trusted_commit_status
@@ -115,21 +120,17 @@ review_first_gate:
   local_agent_verification: [tsc-noEmit, targeted-tests]
 
 required_checks:
-  # An administrator applied these checks through GitHub's ruleset API on
-  # 2026-09-08. The hourly Required Check Settings monitor verifies this live ruleset.
-  # claude-review is the reviewer's legacy status name; the live ruleset
-  # still requires it next to ai-review (HTPR-6734).
-  contexts: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan, pstack-verifier]
-  automerge_also_requires: [app-smoke, browser-smoke, ci-tests, ai-review, next-public-secrets, pr-title, feature-flag-gate, pstack-verifier]
-  # HTPR-9450 keeps both smoke contexts as PR stubs.
-  # app-smoke.yml publishes the app-smoke commit status.
-  # ci-tests.yml reports the browser-smoke job summary.
-  # Both say "moved to nightly (HTPR-9450)".
-  # Neither stub builds or starts a browser.
-  # Keep both until an admin removes their requirements.
-  # Ruleset production-required-checks, id 21854377, stays unchanged.
-  # automerge_also_requires mirrors the REQUIRED list in automerge.yml,
-  # and the verifier still waits for both contexts.
+  # HTPR-9450: an administrator removed every other context, so the verifier
+  # verdict is the only required one. Ruleset production-required-checks, id
+  # 21854377, and the hourly Required Check Settings monitor both enforce it.
+  contexts: [pstack-verifier]
+  automerge_also_requires: [pstack-verifier]
+  # The cheap checks still gate a merge through the verifier, which waits for
+  # ci-tests, feature-flag-gate, pr-title, next-public-secrets and secret-scan.
+  # It reads no review status and no smoke stub, so ai-review, claude-review,
+  # app-smoke and browser-smoke are not in this file.
+  # claude-review is the legacy reviewer context the review gate still publishes.
+  # automerge_also_requires mirrors the REQUIRED list in automerge.yml.
 
 pr_size_observation:
   ticket: https://app.hypertask.ai/detail/project-11514/29
@@ -412,8 +413,8 @@ feature_map_weekly:
   runs_on: ubuntu-latest
   required: false
   cron_utc: "37 3 * * 1"
-  triggers: [schedule, workflow_dispatch, pull_request]
-  pull_request_base: production
+  triggers: [schedule, workflow_dispatch]
+  pull_request_trigger_moved_to: skills-evals
   paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".claude/skills/verify-qa/reference/ops-map/**", ".github/workflows/feature-map-weekly.yml"]
   node_major: 24
   permissions: [contents_read]
@@ -425,27 +426,19 @@ feature_map_weekly:
 
 feature_map_coverage:
   ticket: https://app.hypertask.ai/detail/project-15/9406
-  context: feature-map-coverage
-  workflow: .github/workflows/feature-map-coverage.yml
-  runs_on: ubuntu-latest
+  # HTPR-9450 folded the separate workflow into the ci-checks lane, which was
+  # already paid for.
+  context: null
+  workflow: .github/workflows/ci-tests.yml
+  job: ci-checks
+  lane: feature-map-coverage
   required: false
-  report_only: false
-  blocks_merge: false
-  triggers: [workflow_dispatch, pull_request]
-  pull_request_base: production
-  paths:
-    - src/app/**
-    - src/lib/flags/definitions/**
-    - .claude/skills/verify-qa/reference/feature-map/**
-    - .github/scripts/feature-map-coverage.cjs
-    - .github/workflows/feature-map-coverage.yml
-    - tests/feature-map-coverage.test.cjs
-  node_major: 24
-  permissions: [contents_read]
+  triggers: [pull_request_only_through_ci-tests]
+  runs_when: [src/app, src/lib/flags/definitions, feature_map_pages]
   commands:
-    - node --test tests/feature-map-coverage.test.cjs
     - node .github/scripts/feature-map-coverage.cjs --strict
-  fixtures: offline_with_temporary_home_and_no_secrets
+  test: tests/feature-map-coverage.test.cjs
+  additional_jobs: 0
   app_driving: false
 
 feature_map_live_weekly:
@@ -537,6 +530,12 @@ ux_signoff:
   context: ux-signoff
   workflow: .github/workflows/ux-signoff-gate.yml
   script: .github/scripts/ux-signoff-gate.mjs
+  # HTPR-9450: a person's sign-off is not a check a machine produces. The gate
+  # runs on the hourly chain's dispatch and sweeps every open production PR
+  # instead of paying a job on every pull request event.
+  triggers: [workflow_dispatch]
+  dispatched_by: .github/workflows/ux-signoff-chain.yml
+  latency: hourly
   # HT Product Lead flips this after statuses are seeded on all open PRs.
   required: false
 
@@ -665,7 +664,7 @@ policies:
         human_github_action_required: false
         note: "The next automatic merge sweep re-evaluates health. Green monitoring alone never clears the freeze; if the restored workflow is disabled or red, repair it before resuming merges."
   production_ruleset:
-    required_status_checks: [app-smoke, browser-smoke, ci-tests, ai-review, claude-review, feature-flag-gate, pr-title, next-public-secrets, secret-scan, pstack-verifier]
+    required_status_checks: [pstack-verifier]
 
 ci_app_api_pool:
   ticket: https://app.hypertask.ai/detail/project-4060/881
@@ -677,7 +676,7 @@ ci_app_api_pool:
     ux_signoff_reconciliation: [contents_read, pull_requests_read, statuses_read]
   fallback: github_token_on_missing_secret_failed_mint_or_app_request
   fallback_is_pool_migration_proof: false
-  ci_tests_review_precheck: github_token_no_app_private_key_in_pr_workflow
+  ci_tests_reads_review_statuses: false
   status_writes: github_token_for_required_status_author_integration_pin
   repository_settings_runners_required_checks: unchanged
 
@@ -686,6 +685,7 @@ ci_tests:
   file: .github/workflows/ci-tests.yml
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
+  review_gate: none_build_and_tests_always_run_on_a_pull_request
   browser_halves:
     ticket: https://app.hypertask.ai/detail/project-11514/59
     required_context: browser-smoke
@@ -812,6 +812,11 @@ ci_tests:
     pool_lanes: 6
     serial_lanes: 2
     lane_count: 8
+    pull_request_lanes:
+      pool_lanes: 3
+      serial_lanes: 1
+      lane_count: 4
+      note: HTPR-9450. A production push keeps the full-suite plan; a pull request runs the selector's scoped pick in four lanes.
     shard_constant: CI_TEST_SHARDS
     serial_shard_constant: CI_SERIAL_SHARDS
     required_check: ci-tests
@@ -957,29 +962,13 @@ paid_api_cost_notes:
   paid_requests_from_check: 0
 
 bugfix_regression:
-  # Unit 1 only: report-only. Making it a required check is a later unit and
-  # needs Valentin's go (HYCI-14).
+  # HTPR-9450 deleted the report-only replay. The failing job it reported on is
+  # repro_first below, which runs inside ci-tests.yml.
   ticket: https://app.hypertask.ai/detail/project-11514/14
-  workflow: .github/workflows/bugfix-regression.yml
-  job: bugfix-regression
-  script: .github/scripts/bugfix-regression-check.mjs
-  mode: report_only
+  workflow: null
+  mode: deleted
+  replaced_by: repro_first
   required: false
-  triggers: [pull_request]
-  pull_request_types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled]
-  pull_request_base: production
-  signal: bugfix_title_tag
-  exemption: [no-regression-test_label, written_reason_in_the_pull_request_body]
-  replay: changed_tests_in_tests_run_on_the_merge_base_and_the_pull_request_head
-  replay_scope: "tests/**.test.cjs, tests/**.test.ts"
-  unproven_not_pass: [dependency_or_lockfile_difference, prisma_schema_difference, base_setup_failure, test_outside_tests]
-  tests_outside_tests: reported_as_unreplayable
-  node_major: 24
-  timeout_minutes: 30
-  jobs_per_push: 1
-  new_dependency: false
-  paid_service: false
-  forks_trusted: false
 
 break_it_review:
   ticket: https://app.hypertask.ai/detail/project-15/9408
@@ -989,6 +978,7 @@ break_it_review:
   script_source: pull_request_base_sha
   mode: report_only
   required: false
+  # HTPR-9450: break-it stays on [BUGFIX] pull requests (3707).
   triggers: [pull_request_target]
   pull_request_types: [opened, synchronize, reopened, edited, ready_for_review]
   pull_request_base: production
@@ -1006,7 +996,7 @@ break_it_review:
   jobs_per_push: 1
   new_dependency: false
   paid_service: true
-  paid_requests_per_bugfix_pr: "at most 1"
+  paid_requests_per_bugfix_pr: "at most 2"
   forks_trusted: false
 
 session_ledgers:
@@ -1037,12 +1027,14 @@ pstack_verifier_eval:
 
 repro_first:
   ticket: https://app.hypertask.ai/detail/project-15/9407
-  workflow: .github/workflows/repro-first.yml
+  workflow: .github/workflows/ci-tests.yml
   job: repro-first
   script: .github/scripts/repro-first.mjs
   mode: fails_the_job
   required: false
   ruleset: unchanged
+  # HTPR-9450 moved the job into ci-tests.yml; it is not part of the ci-tests
+  # summary and still fails its own step.
   triggers: [pull_request]
   pull_request_base: production
   signal: bugfix_title_tag

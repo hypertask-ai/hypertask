@@ -365,12 +365,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   const workflow = await readFile(".github/workflows/automerge.yml", "utf8");
 
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
-  assert.match(
-    workflow,
-    /REQUIRED="app-smoke browser-smoke ci-tests ai-review next-public-secrets pr-title"/,
-  );
-  assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
-  assert.match(workflow, /REQUIRED="\$REQUIRED pstack-verifier"/);
+  assert.match(workflow, /REQUIRED="pstack-verifier"/);
 });
 
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
@@ -462,23 +457,11 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   );
 });
 
-test("CI policy keeps the protected smoke producer live and required", async () => {
+test("CI policy requires only the verifier and automerge mirrors it", async () => {
   const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
-  const required = [
-    "app-smoke",
-    "browser-smoke",
-    "ci-tests",
-    "ai-review",
-    "claude-review",
-    "feature-flag-gate",
-    "pr-title",
-    "next-public-secrets",
-    "secret-scan",
-    "pstack-verifier",
-  ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
-  assert.deepEqual(policy.required_checks.contexts, required);
+  assert.deepEqual(policy.required_checks.contexts, ["pstack-verifier"]);
   const automerge = await readFile(".github/workflows/automerge.yml", "utf8");
   const automergeRequired = [...automerge.matchAll(/REQUIRED="(?:\$REQUIRED )?([^"]+)"/g)]
     .flatMap((match) => match[1].split(" "))
@@ -488,10 +471,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
     automergeRequired,
     "automerge_also_requires must mirror the REQUIRED list in automerge.yml",
   );
-  assert.deepEqual(
-    policy.policies.production_ruleset.required_status_checks,
-    required,
-  );
+  assert.deepEqual(policy.policies.production_ruleset.required_status_checks, ["pstack-verifier"]);
 });
 
 test("npm registry proxy refuses arbitrary CONNECT targets", async (t) => {
