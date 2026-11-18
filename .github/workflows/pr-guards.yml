@@ -13,6 +13,8 @@ concurrency:
 
 jobs:
   secret-scan:
+    outputs:
+      public-secrets: ${{ steps.public-secrets.outcome }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -91,3 +93,14 @@ jobs:
             exit 1
           fi
           echo "OK: no NEXT_PUBLIC_ secrets referenced in source"
+
+  next-public-secrets:
+    needs: secret-scan
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Require the public-secret scan to pass
+        env:
+          SCAN_OUTCOME: ${{ needs.secret-scan.outputs.public-secrets }}
+        run: test "$SCAN_OUTCOME" = success

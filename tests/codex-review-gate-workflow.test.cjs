@@ -12,11 +12,9 @@ test('codex review gate runs only the script from the production branch', () => 
   assert.equal(gate.if, "hashFiles('.github/scripts/codex-review-gate.cjs') != ''");
 });
 
-test('codex review gate wakes on a review, a review comment or a comment, never on a push', () => {
-  assert.deepEqual(Object.keys(workflow.on).sort(), ['issue_comment', 'pull_request_review', 'pull_request_review_comment', 'schedule', 'workflow_dispatch']);
-  assert.deepEqual(workflow.on.issue_comment.types, ['created', 'edited']);
-  assert.deepEqual(workflow.on.pull_request_review.types, ['submitted']);
-  assert.deepEqual(workflow.on.pull_request_review_comment.types, ['created']);
-  assert.ok(!workflow.jobs.gate.if.includes("github.event_name == 'pull_request_target'"));
-  assert.ok(workflow.jobs.gate.if.includes("github.event_name == 'schedule'"));
+test('codex review gate wakes on every push to a pull request against production', () => {
+  const trigger = workflow.on.pull_request_target;
+  assert.deepEqual(trigger.types, ['opened', 'reopened', 'synchronize', 'ready_for_review']);
+  assert.deepEqual(trigger.branches, ['production']);
+  assert.ok(workflow.jobs.gate.if.includes("github.event_name == 'pull_request_target'"));
 });

@@ -51,6 +51,15 @@ changed test to fail on the merge base and pass on the head. It fails its own
 step and is not part of the `ci-tests` summary, so a missing proof is loud without
 silently reddening the build check.
 
+### The review precheck in CI Tests
+
+`ci-tests` no longer reads `ai-review` or `claude-review` before it starts. The
+prepare step that stopped the build on an already-red review is gone, with the
+`statuses: read` permission it needed, so a review is advice and never a gate: a
+non-draft pull request builds and tests whatever the bots said. pstack's
+shipping playbook counts only the independent agent verdict, and a review that
+steps a build away buys nothing a red check on the head does not already say.
+
 ### Test lanes on a pull request
 
 A production push still runs the full suite in six pool lanes plus two serial

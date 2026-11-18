@@ -1,20 +1,18 @@
 name: Production Revert Check
 
 on:
-  workflow_dispatch:
-    inputs:
-      failed_run_id:
-        description: Failed CI run to replay (defaults to the 25 October source-regex incident)
-        required: false
-        default: '40201291546'
-        type: string
+  pull_request:
+    paths:
+      - .github/scripts/production-revert-pr.mjs
+      - .github/workflows/production-revert-*.yml
+      - tests/production-revert-pr.test.cjs
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: production-revert-check-${{ github.ref }}
+  group: production-revert-check-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -37,5 +35,5 @@ jobs:
       - run: node --test tests/production-revert-pr.test.cjs
       - env:
           GH_TOKEN: ${{ github.token }}
-          FAILED_RUN_ID: ${{ inputs.failed_run_id }}
+          FAILED_RUN_ID: '40201291546'
         run: node .github/scripts/production-revert-pr.mjs

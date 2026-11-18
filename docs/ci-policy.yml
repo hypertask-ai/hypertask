@@ -53,6 +53,10 @@ pr_job_budget:
   # and start on the nightly production run instead, so a pull request starts
   # 15 of them. App Smoke and the two pilot workflows stop running on a pull
   # request altogether, and the screen comparison lives in its own workflow.
+  # The second pass removes the report-only bugfix replay and the pre-push hook
+  # lane, not a UI or scanner job: a pull request starts 15 of the 21 listed, as
+  # after the first pass. A [BUGFIX] pull request starts one fewer, because its
+  # replay is repro_first inside ci-tests.yml.
   normal_synchronize_before: 21
   normal_synchronize_after: 15
   opened_before: 21
@@ -61,10 +65,8 @@ pr_job_budget:
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
     workflow: .github/workflows/pr-guards.yml
-    jobs: 1
-    native_checks: [secret-scan]
-    # HTPR-9450: one secret scan publishes one context. The next-public-secrets
-    # summary job republished the same step outcome under a second required name.
+    jobs: 2
+    native_checks: [secret-scan, next-public-secrets]
     github_status_api_calls: 0
     read_only_pr_tokens: native_job_checks
   trusted_pull_request_guards:
@@ -104,9 +106,6 @@ pr_job_budget:
   isolated_guards:
     node_version: vercel_secret_runner_separate_from_candidate_scripts
     parity_contract: candidate_data_checkout_keeps_read_only_token_and_no_mcp_secret
-    # HTPR-9450: path-filtered to everything that can move the inventory, so an
-    # unrelated pull request pays nothing and a route change still fails here.
-    parity_contract_paths: [config/parity, docs/parity.md, "scripts/parity-*.mjs", src/app/api/ai, src/app/api/mcp, src/lib/ai/tools, src/lib/mcp-server]
   codeql: default_setup_no_path_filter_without_advanced_setup
 
 review_first_gate:
@@ -623,11 +622,6 @@ policies:
     required_check_name: ai-review
     legacy_check_name: claude-review
     status_writer: .github/workflows/codex-review-gate.yml
-    # HTPR-9450: a bot review is not a verdict. The Codex gate writes ai-review
-    # from a review, a review comment or a comment, never from a push, and the
-    # Claude lane is a workflow_dispatch opinion only.
-    wakes_on: [pull_request_review, pull_request_review_comment, issue_comment, schedule, workflow_dispatch]
-    claude_lane: workflow_dispatch_only
     execute_pull_request_code: false
     exact_head_commit_required: true
     approve_passes: true
@@ -686,7 +680,7 @@ ci_app_api_pool:
     ux_signoff_reconciliation: [contents_read, pull_requests_read, statuses_read]
   fallback: github_token_on_missing_secret_failed_mint_or_app_request
   fallback_is_pool_migration_proof: false
-  ci_tests_review_precheck: github_token_no_app_private_key_in_pr_workflow
+  ci_tests_reads_review_statuses: false
   status_writes: github_token_for_required_status_author_integration_pin
   repository_settings_runners_required_checks: unchanged
 
@@ -695,6 +689,7 @@ ci_tests:
   file: .github/workflows/ci-tests.yml
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
+  review_gate: none_build_and_tests_always_run_on_a_pull_request
   browser_halves:
     ticket: https://app.hypertask.ai/detail/project-11514/59
     required_context: browser-smoke
@@ -987,10 +982,9 @@ break_it_review:
   script_source: pull_request_base_sha
   mode: report_only
   required: false
-  # HTPR-9450: the verifier already drives the base and the head of every pull
-  # request, so this paid lane runs only when a person asks for it.
-  triggers: [workflow_dispatch]
-  input_pr: required
+  # HTPR-9450: break-it stays on [BUGFIX] pull requests (3707).
+  triggers: [pull_request_target]
+  pull_request_types: [opened, synchronize, reopened, edited, ready_for_review]
   pull_request_base: production
   signal: bugfix_title_tag
   author_family: Author-Model_line_in_the_pull_request_body
@@ -1003,8 +997,10 @@ break_it_review:
   reports: [pr_comment, break-it_commit_status]
   node_major: 24
   timeout_minutes: 25
-  jobs_per_push: 0
-  paid_requests_per_bugfix_pr: "at most 1"
+  jobs_per_push: 1
+  new_dependency: false
+  paid_service: true
+  paid_requests_per_bugfix_pr: "at most 2"
   forks_trusted: false
 
 session_ledgers:

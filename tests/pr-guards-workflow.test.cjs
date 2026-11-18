@@ -7,12 +7,13 @@ const yaml = require('js-yaml');
 const read = file => readFileSync(file, 'utf8');
 const workflow = name => yaml.load(read(`.github/workflows/${name}.yml`));
 
-test('one secret scan publishes the required context from the candidate checkout only', () => {
+test('native scanner checks retain required names without commit-status API calls', () => {
   const w = workflow('pr-guards');
-  assert.deepEqual(Object.keys(w.jobs), ['secret-scan']);
+  assert.deepEqual(Object.keys(w.jobs), ['secret-scan', 'next-public-secrets']);
   assert.deepEqual(w.permissions, { contents: 'read' });
   assert.deepEqual(w.on.pull_request.types, ['opened', 'synchronize', 'reopened', 'ready_for_review']);
   const scan = w.jobs['secret-scan'];
+  assert.deepEqual(scan.outputs, { 'public-secrets': '${{ steps.public-secrets.outcome }}' });
   for (const id of ['gitleaks', 'trufflehog', 'public-secrets']) {
     const step = scan.steps.find(step => step.id === id);
     assert.ok(step);
@@ -21,6 +22,16 @@ test('one secret scan publishes the required context from the candidate checkout
   }
   assert.equal(scan.steps.find(step => step.uses?.startsWith('actions/checkout@')).with['persist-credentials'], false);
   assert.ok(scan.steps.every(step => !step.uses?.startsWith('actions/github-script@')));
+  const summary = w.jobs['next-public-secrets'];
+  assert.equal(summary.needs, 'secret-scan');
+  assert.equal(summary.if, '${{ !cancelled() }}');
+  assert.equal(summary.steps[0].env.SCAN_OUTCOME, '${{ needs.secret-scan.outputs.public-secrets }}');
+  for (const outcome of ['success', 'failure', 'skipped', 'cancelled', '']) {
+    const result = spawnSync('/bin/sh', ['-ec', summary.steps[0].run], {
+      env: { SCAN_OUTCOME: outcome }, encoding: 'utf8',
+    });
+    assert.equal(result.status, outcome === 'success' ? 0 : 1);
+  }
 });
 
 test('trusted publication combines outside, title and feature-map guards without exposing candidate code', () => {
@@ -60,7 +71,7 @@ test('runner policy installs its parser even after an earlier guard fails', () =
 
 test('CI policy preserves every required context and describes native guard publication', () => {
   const policy = yaml.load(read('docs/ci-policy.yml'));
-  assert.deepEqual(policy.pr_job_budget.pull_request_guards.native_checks, ['secret-scan']);
+  assert.deepEqual(policy.pr_job_budget.pull_request_guards.native_checks, ['secret-scan', 'next-public-secrets']);
   assert.deepEqual(policy.pr_job_budget.trusted_pull_request_guards.published_statuses, ['pr-title']);
   assert.deepEqual(policy.required_checks.contexts, [
     'app-smoke', 'browser-smoke', 'ci-tests', 'ai-review', 'claude-review',
