@@ -409,14 +409,20 @@ function latestRuns(runs) {
   const ordered = relevantChecks(runs).map((run, index) => ({ run, index, at: runCreatedAt(run) }));
   if (ordered.every((entry) => entry.at != null)) ordered.sort((a, b) => b.at - a.at || a.index - b.index);
   const seen = new Set();
+  const superseded = new Map();
   const latest = [];
   for (const { run } of ordered) {
     if (run?.name) {
       if (seen.has(run.name)) continue;
+      if (run.conclusion === "cancelled") {
+        if (!superseded.has(run.name)) superseded.set(run.name, run);
+        continue;
+      }
       seen.add(run.name);
     }
     latest.push(run);
   }
+  for (const [name, run] of superseded) if (!seen.has(name)) latest.push({ ...run, conclusion: null });
   return latest;
 }
 export function requiredContextsReady(runs, statuses, required = REQUIRED_CI_CONTEXTS) {
