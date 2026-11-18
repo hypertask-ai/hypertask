@@ -456,6 +456,7 @@ jobs:
           RUN_TESTS: ${{ needs.ci-prepare.outputs.run_tests == 'true' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
           SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.event.pull_request.base.sha }}
           PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -552,6 +553,10 @@ jobs:
             node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
           }
 
+          lane_feature_map_change() {
+            node .github/scripts/feature-map-change-guard.mjs "$BASE_SHA" "$HEAD_SHA" "$PR_TITLE"
+          }
+
           run_lane() {
             local name=$1
             ( set -euo pipefail; "lane_${name//-/_}" ) > "$LOGS/$name.log" 2>&1 &
@@ -575,6 +580,7 @@ jobs:
             if [ -n "$BASE_SHA" ]; then
               run_lane changed-style-tokens
               run_lane paid-api-cost-notes
+              run_lane feature-map-change
             fi
           fi
 

@@ -731,6 +731,20 @@ ci_tests:
     failed_cancelled_or_missing_fails_ci_tests: true
     pool_jobs_when_not_started: 0
     measured_2026_11_01: {pushes: 35, ci_prepare_median_seconds: 55, stress_runs: 8, stress_seconds_total: 2659}
+  feature_map_change_gate:
+    ticket: https://app.hypertask.ai/detail/project-15/9415
+    script: .github/scripts/feature-map-change-guard.mjs
+    test: tests/feature-map-change-guard.test.cjs
+    job: ci-checks
+    lane: feature-map-change
+    static_gate_parallel: true
+    job_budget_cost: 0
+    enforced_tags: [FEATURE, IMPROVE]
+    exempt_tags: [BUGFIX, INFRA, REFACTOR]
+    user_facing_paths: ["src/app/**", "src/components/**"]
+    area: first_directory_under_user_facing_root
+    map_folder: .claude/skills/verify-qa/reference/feature-map
+    failure_names_map_folder: true
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
   pull_request_concurrency:
     group: ci-tests-${{ github.event.pull_request.number || github.sha }}
@@ -956,6 +970,34 @@ bugfix_regression:
   jobs_per_push: 1
   new_dependency: false
   paid_service: false
+  forks_trusted: false
+
+break_it_review:
+  ticket: https://app.hypertask.ai/detail/project-15/9408
+  workflow: .github/workflows/break-it-review.yml
+  job: break-it
+  script: .github/scripts/break-it-review.mjs
+  script_source: pull_request_base_sha
+  mode: report_only
+  required: false
+  triggers: [pull_request_target]
+  pull_request_types: [opened, synchronize, reopened, edited, ready_for_review]
+  pull_request_base: production
+  signal: bugfix_title_tag
+  author_family: Author-Model_line_in_the_pull_request_body
+  other_family_model: PSTACK_VERIFIER_ALT_MODEL
+  secret: OPENROUTER_EVAL_KEY
+  max_generated_tests: 3
+  generated_tests_run: bubblewrap_no_network_no_secrets
+  install_failure: unproven
+  candidate_install: npm_ci_ignore_scripts
+  reports: [pr_comment, break-it_commit_status]
+  node_major: 24
+  timeout_minutes: 25
+  jobs_per_push: 1
+  new_dependency: false
+  paid_service: true
+  paid_requests_per_bugfix_pr: "at most 1"
   forks_trusted: false
 
 session_ledgers:
