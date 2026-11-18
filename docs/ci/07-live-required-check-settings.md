@@ -11,9 +11,7 @@ requires exactly it. Drift and unreadable settings still fail the monitor; this
 is not a required PR context. Detection lags until the next hourly run, plus
 scheduling and any rate-limit wait.
 
-CI Tests no longer reads repository settings on PRs or production pushes.
-Its optional review precheck reads commit statuses once. Read failures warn
-and let tests run; an observed failed review still stops tests. Independent
+CI Tests no longer reads repository settings on PRs or production pushes, and it no longer reads review commit statuses: every non-draft pull request builds and tests, whatever `ai-review` or `claude-review` says (HTPR-9450). Independent
 required review contexts continue to block merging without approval.
 Previously every production push and CI-policy PR made three settings API calls.
 The hourly monitor makes three on a successful first attempt: repository

@@ -59,7 +59,10 @@ App Smoke falls from four to two jobs.
 Skipped jobs and synthetic check contexts are excluded.
 Path-specific gates can add jobs on both sides.
 
-PRs keep cheap checks and the independent verifier; the ruleset requires only `pstack-verifier`, and a red or missing cheap check never reaches a pass.
+PRs keep cheap checks and the independent verifier.
+The existing ruleset still requires all ten contexts.
+This PR leaves that ruleset unchanged.
+An admin must remove requirements before deleting stubs.
 
 Everything that drives the UI left the pull request:
 
@@ -84,9 +87,20 @@ using the diff to choose them, and it boots the candidate with the same
 `repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
 base and on the head.
 
-Both smoke stubs stay required PR producers until the verifier's wait set is
-regenerated with them gone. Cheap checks gate the verifier through
-`verifier_waits_for`; automerge waits for the same context.
+Cheap checks remain required alongside `pstack-verifier`.
+Both smoke contexts remain required PR stubs.
+Each says "moved to nightly (HTPR-9450)".
+Neither stub builds or starts a browser.
+`app-smoke.yml` publishes the `app-smoke` commit status.
+`ci-tests.yml` reports the `browser-smoke` job summary.
+Automerge still waits for both contexts.
+The verifier waits only for checks that test a pull request: `ci-tests`,
+`feature-flag-gate`, `pr-title`, `next-public-secrets` and `secret-scan`.
+Its empty-plan pass no longer waits on either smoke stub.
+It reads no review status: a red or pending `ai-review` or `claude-review`
+never fails or holds its verdict, because a bot review is not a verdict.
+Only an admin can remove these ruleset requirements.
+Keep the stubs until that happens.
 Emergency path unchanged. Revert first, then fix forward.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the
