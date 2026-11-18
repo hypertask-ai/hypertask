@@ -271,30 +271,33 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
       }
     }
   }
-  const checkMissing = statusContext => {
+  const writePending = CONTEXTS.some(statusContext => {
+    const previous = existing.get(statusContext);
     const existingCheck = latestCheckByName.get(statusContext);
-    return Boolean(checkConclusion) && !(existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion);
-  };
-  const statusChanged = statusContext => {
+    return !previous
+      || !(result.state === 'pending' || (previous.state.toLowerCase() === result.state && previous.description === description))
+      || (Boolean(checkConclusion) && !(existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion));
+  });
+  if (result.state === 'success' && recheck && writePending && (await recheck())?.state !== 'success') return false;
+  for (const statusContext of CONTEXTS) {
     const previous = existing.get(statusContext);
     const unchanged = previous && previous.state.toLowerCase() === result.state && previous.description === description;
-    return !previous || !(result.state === 'pending' || unchanged);
-  };
-  const writes = CONTEXTS.some(statusContext => statusChanged(statusContext) || checkMissing(statusContext));
-  if (result.state === 'success' && recheck && writes && (await recheck())?.state !== 'success') return false;
-  for (const statusContext of CONTEXTS) {
-    if (statusChanged(statusContext)) {
+    if (!previous || !(result.state === 'pending' || unchanged)) {
       await github.rest.repos.createCommitStatus({
         owner, repo, sha, state: result.state, context: statusContext, description,
         target_url: detailsUrl,
       });
     }
-    if (checkMissing(statusContext)) {
-      await github.rest.checks.create({
-        owner, repo, name: statusContext, head_sha: sha, status: 'completed',
-        conclusion: checkConclusion, details_url: detailsUrl,
-        output: { title: statusContext, summary: description },
-      });
+    if (checkConclusion) {
+      const existingCheck = latestCheckByName.get(statusContext);
+      const checkOk = existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion;
+      if (!checkOk) {
+        await github.rest.checks.create({
+          owner, repo, name: statusContext, head_sha: sha, status: 'completed',
+          conclusion: checkConclusion, details_url: detailsUrl,
+          output: { title: statusContext, summary: description },
+        });
+      }
     }
   }
   const marker = `reviewed-commit: ${sha}`;
