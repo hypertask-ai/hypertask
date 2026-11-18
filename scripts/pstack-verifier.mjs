@@ -926,9 +926,7 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
   const change = parsed.actions.length ? [{ journey, page: "", actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true }] : [];
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "" };
 }
-export function driveNeeded(plan) {
-  return !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
-}
+export const driveNeeded = (plan) => !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
   const plan = await planFromRequest(request);
@@ -965,9 +963,7 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
   }
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true });
 }
-export function comparisonMode(plan) {
-  return plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
-}
+export const comparisonMode = (plan) => plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
 async function judgeCommand() {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
