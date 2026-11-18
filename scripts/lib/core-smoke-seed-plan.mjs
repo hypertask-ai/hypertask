@@ -1,5 +1,18 @@
 export const SEED_SIZE_FLOOR = { boards: 3, tickets: 200, members: 8, labels: 1, comments: 1, sectionsUsed: 2 };
 export const SEED_TICKET_CEILING = 249;
+export const ARCHIVED_SMOKE_PROJECT_ENV = "CORE_SMOKE_ARCHIVED_PROJECT_ID";
+
+export function archivedSmokeProject({ runKey, ownerId, teamId, googleAccountId }) {
+  return {
+    name: `core-smoke-archived-${runKey}`,
+    title: "Archived smoke board",
+    ownerId,
+    teamId,
+    googleAccountId,
+    status: "Archive",
+    sections: ["Baseline"],
+  };
+}
 
 const BOARDS = [
   ["fixture", "Core actions smoke", ["Baseline", "Alternate"], "SMOKE"],

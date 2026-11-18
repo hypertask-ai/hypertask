@@ -23,8 +23,9 @@ test("the wait never shares a group with the gate, so a pull-request reconciliat
   const chain = read("ux-signoff-chain.yml");
   const gate = read("ux-signoff-gate.yml");
 
-  assert.equal(gate.concurrency.group, "ux-signoff-gate");
-  assert.equal(gate.concurrency.queue, "max");
+  assert.match(gate.concurrency.group, /^ux-signoff-gate-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}$/);
+  assert.equal(gate.concurrency.queue, undefined);
+  assert.equal(gate.concurrency["cancel-in-progress"], true);
   const jobs = Object.values(chain.jobs);
   assert.equal(jobs.length, 1);
   assert.equal(jobs.flatMap(job => Object.values(job.concurrency ?? {})).filter(group => group === "ux-signoff-gate").length, 0);
