@@ -4,6 +4,10 @@ on:
     paths:
       - '.claude/skills/**'
       - '.github/workflows/skills-evals.yml'
+      - '.github/workflows/feature-map-weekly.yml'
+      - '.github/workflows/visual-regression.yml'
+      - '.github/scripts/feature-map-live-weekly-file.mjs'
+      - 'tests/feature-map-live-weekly-file.test.cjs'
 concurrency:
   group: skills-evals-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -20,3 +24,7 @@ jobs:
         run: bash .claude/skills/evals/run-evals.sh
       - name: Test scriptify scanner and weekly wrapper
         run: python3 .claude/skills/scriptify/scripts/scriptify.test.py
+      - name: Test the feature map fixtures
+        run: node --test .claude/skills/maintain-verification-skill/scripts/feature-map-check.test.mjs tests/feature-map-live-weekly-file.test.cjs
+      - name: Check feature map citations
+        run: node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs

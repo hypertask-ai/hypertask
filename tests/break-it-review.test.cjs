@@ -29,6 +29,27 @@ async function runMain({ reply, name = "blank-title", io = {}, item = pull("Auth
   return posts;
 }
 
+async function runCli({ reply = "", item = pull("Author-Model: claude"), io = {} } = {}) {
+  const { cli } = await load();
+  const lines = [];
+  const out = process.stdout.write, err = process.stderr.write, before = process.exitCode;
+  process.stdout.write = (chunk) => { lines.push(["stdout", String(chunk)]); return true; };
+  process.stderr.write = (chunk) => { lines.push(["stderr", String(chunk)]); return true; };
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
+  const fetchImpl = async (url) => ({ ok: true, json: async () => (String(url).includes("openrouter") ? { choices: [{ message: { content: reply } }] } : {}) });
+  try {
+    const status = await cli({ fetch: fetchImpl, git: () => "- old\n+ new", gh: () => JSON.stringify(item), spawn: () => ({ status: 0, stdout: "", stderr: "" }), ...io });
+    const text = (stream) => lines.filter(([name]) => name === stream).map(([, value]) => value).join("");
+    return { status, code: process.exitCode, stdout: text("stdout"), stderr: text("stderr") };
+  } finally {
+    process.stdout.write = out;
+    process.stderr.write = err;
+    process.exitCode = before;
+    delete process.env.OPENROUTER_EVAL_KEY;
+    delete process.env.GH_TOKEN;
+  }
+}
+
 function needsBubblewrap() {
   if (spawnSync("bwrap", ["--version"]).status === 0) return;
   const install = spawnSync("bash", ["-lc", "sudo apt-get update -qq && sudo apt-get install -y bubblewrap"], { encoding: "utf8", timeout: 180000 });
@@ -40,7 +61,7 @@ test("the break prompt carries the diff, the author family and the ticket, never
   process.env.OPENROUTER_EVAL_KEY = "sk-test-break-it-secret";
   const prompt = breakPrompt({ author: "deepseek", ticket: "https://app.hypertask.ai/detail/project-15/9408", diff: "- old line\n+ new line", files: ["src/app/page.tsx"] });
   delete process.env.OPENROUTER_EVAL_KEY;
-  for (const expected of [/author model family is deepseek/, /\+ new line/, /https:\/\/app\.hypertask\.ai\/detail\/project-15\/9408/, /src\/app\/page\.tsx/, /at most 3 tests/]) assert.match(prompt, expected);
+  for (const expected of [/author model family is deepseek/, /\+ new line/, /https:\/\/app\.hypertask\.ai\/detail\/project-15\/9408/, /src\/app\/page\.tsx/, /at most 3 tests/, /under 1200 characters/, /whole answer under 3500 characters/]) assert.match(prompt, expected);
   assert.equal(prompt.includes("sk-test-break-it-secret"), false);
 });
 
@@ -55,6 +76,67 @@ test("the parser accepts one honest test and refuses the ways a model answer goe
     [{ tests: [{ name: "a", code: "tiny" }] }, /wrong size/],
   ]) assert.throws(() => parseBreakTests(JSON.stringify(payload)), refused);
   assert.throws(() => parseBreakTests("not json at all"), /was not JSON/);
+});
+
+test("the parser reads JSON that arrives fenced, wrapped in prose, or both", async () => {
+  const { parseBreakTests } = await load();
+  const payload = JSON.stringify({ tests: [{ name: "empty-title", code: good }] });
+  const files = ["break-it-empty-title.test.cjs"];
+  for (const answer of [
+    "```json\n" + payload + "\n```",
+    `Here are the tests I would run.\n\n${payload}\n\nEach one fails on the old code.`,
+    `Sure.\n\`\`\`json\n${payload}\n\`\`\`\nLet me know if you want a fourth {test}.`,
+    `Note {"tests":"not an array"} then\n\`\`\`json\n${payload}\n\`\`\``,
+  ]) assert.deepEqual(parseBreakTests(answer).map((item) => item.file), files, answer);
+});
+
+async function runWithAnswers(answers) {
+  const { main } = await load();
+  const posts = [], lines = [];
+  let calls = 0;
+  const fetchImpl = async (url, init) => {
+    if (String(url).includes("openrouter")) {
+      const content = answers[Math.min(calls, answers.length - 1)];
+      calls += 1;
+      return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+    }
+    posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+    return { ok: true, json: async () => ({}) };
+  };
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
+  try {
+    const status = await main({
+      fetch: fetchImpl,
+      git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"),
+      gh: () => JSON.stringify(pull("Author-Model: claude")),
+      spawn: () => ({ status: 0, stdout: "", stderr: "" }),
+      log: (line) => lines.push(line),
+      warn: () => {},
+    });
+    return { status, posts, lines, calls: () => calls };
+  } finally {
+    delete process.env.OPENROUTER_EVAL_KEY;
+    delete process.env.GH_TOKEN;
+  }
+}
+
+const fenced = (code = good) => "```json\n" + JSON.stringify({ tests: [{ name: "blank-title", code }] }) + "\n```";
+
+test("an answer that arrives as prose is asked for once more and the reason is printed", async () => {
+  const run = await runWithAnswers(["My plan: read the title validator and then decide.", fenced()]);
+  const comments = run.posts.filter((entry) => String(entry.url).endsWith("/issues/7/comments"));
+  assert.deepEqual([run.calls(), run.status.state], [2, "success"]);
+  assert.equal(run.lines.join("\n").includes("could not be read"), true);
+  assert.equal(run.lines.join("\n").includes("asking once more"), true);
+  assert.equal(comments.length, 1);
+  assert.equal(/HELD blank-title/.test(comments[0].body.body), true);
+});
+
+test("a second unreadable answer fails the step with the reason and asks no third time", async () => {
+  const run = await runWithAnswers(["no json here", "still", fenced()]);
+  assert.deepEqual([run.calls(), run.status.state], [2, "failure"]);
+  assert.equal(run.lines.join("\n").includes("asking once more"), true);
+  assert.equal(/could not run: model answer was not JSON/.test(run.status.text), true);
 });
 
 test("broken attempts are named as broken, held attempts as held, and the rest unproven", async () => {
@@ -78,6 +160,27 @@ test("the breaker is never the author's own model family", async () => {
   assert.deepEqual([modelFor("claude", ""), modelFor("grok", "x-ai/grok-4"), modelFor("deepseek", "x-ai/grok-4")], ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash", "x-ai/grok-4"]);
   assert.throws(() => modelFor("deepseek", ""), /no other-family verifier configured/);
   assert.throws(() => modelFor("deepseek", "deepseek/deepseek-v4.1-flash"), /no other-family/);
+});
+
+test("a review that could not run prints its reason in the step log and fails the step", async () => {
+  const answer = JSON.stringify({ tests: [{ name: "blank-title", code: `${good}${good}` }] }).slice(0, 120);
+  const { status, code, stdout, stderr } = await runCli({ reply: answer });
+  assert.equal(status.state, "failure");
+  assert.match(stdout, /Break-it review could not run: .*JSON/);
+  assert.match(stderr, /^::error title=Break-it review::Break-it review could not run: .*JSON/m);
+  assert.deepEqual([code, stdout.includes("sk-test-break-it-secret"), stderr.includes("sk-test-break-it-secret")], [1, false, false]);
+});
+
+test("a break attempt that held prints its result and leaves the step green", async () => {
+  const { status, code, stdout } = await runCli({ reply: JSON.stringify({ tests: [{ name: "blank-title", code: good }] }) });
+  assert.equal(status.state, "success");
+  assert.match(stdout, /HELD blank-title[\s\S]*the fix held/);
+  assert.equal(code, 0);
+});
+
+test("a pull request that is not a bugfix says it was skipped instead of going quiet", async () => {
+  const { status, code, stdout } = await runCli({ item: pull("Author-Model: claude", { title: "HTPR-1 [FEATURE] add a button" }) });
+  assert.deepEqual([status.state, /skipped/.test(stdout), code], ["skipped", true, 0]);
 });
 
 test("a broken fix posts a red break-it status and a comment that names the failure", async () => {
