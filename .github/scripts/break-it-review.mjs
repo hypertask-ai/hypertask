@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { authorFamily, completeWithOpenRouter, pickVerifier, redact } from "../../scripts/pstack-verifier.mjs";
+import { authorFamily, completeWithOpenRouter, jsonObjects, pickVerifier, redact } from "../../scripts/pstack-verifier.mjs";
 
 const TICKET = /https:\/\/app\.hypertask\.ai\/\S+/;
 const SLUG = /^[a-z0-9-]{1,40}$/;
@@ -26,30 +26,6 @@ export function breakPrompt({ author, ticket, diff, files }) {
     `DATA: CHANGED FILES\n${files.slice(0, 60).join("\n")}\n`,
     `DATA: DIFF\n${diff}\n`,
   ].join("\n"), [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN]);
-}
-
-function jsonObjects(text) {
-  const objects = [];
-  let error = null;
-  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
-    let depth = 0, inString = false, escaped = false;
-    for (let at = start; at < text.length; at++) {
-      const char = text[at];
-      if (inString) {
-        if (escaped) escaped = false;
-        else if (char === "\\") escaped = true;
-        else if (char === '"') inString = false;
-        continue;
-      }
-      if (char === '"') inString = true;
-      else if (char === "{") depth++;
-      else if (char === "}" && --depth === 0) {
-        try { objects.push(JSON.parse(text.slice(start, at + 1))); } catch (failure) { error = error ?? failure; }
-        break;
-      }
-    }
-  }
-  return { objects, error };
 }
 
 export function parseBreakTests(text) {
