@@ -14,8 +14,8 @@ test('every pull request push cancels its superseded run', () => {
   assert.deepEqual(check(WORKFLOWS), []);
 });
 
-test('the six gates that used to queue now cancel the same pull request', () => {
-  for (const name of ['ci-tests', 'pr-guards-trusted', 'feature-flag-gate', 'ux-signoff-gate', 'codex-review-gate', 'dependabot-lane']) {
+test('the gates that used to queue now cancel the same pull request', () => {
+  for (const name of ['ci-tests', 'pr-guards-trusted', 'feature-flag-gate', 'codex-review-gate', 'dependabot-lane']) {
     const text = readFileSync(path.join(WORKFLOWS, `${name}.yml`), 'utf8');
     assert.deepEqual(problemsFor(name, text), [], name);
     const concurrency = workflow(name).concurrency;
@@ -23,6 +23,10 @@ test('the six gates that used to queue now cancel the same pull request', () => 
     assert.equal(concurrency.queue, undefined, name);
     assert.equal(String(concurrency.group).includes('github.event.pull_request.number'), true, name);
   }
+  const ux = workflow('ux-signoff-gate');
+  assert.deepEqual(Object.keys(ux.on), ['workflow_dispatch'], 'the UX gate no longer runs on a pull request event (HTPR-9450)');
+  assert.equal(ux.concurrency['cancel-in-progress'], true);
+
   const tests = workflow('ci-tests');
   assert.equal(tests.concurrency.group.includes("github.run_attempt > 1 && format('-{0}', github.run_id)"), true);
   for (const job of ['ci-prepare', 'browser-build']) {

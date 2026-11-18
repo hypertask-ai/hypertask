@@ -28,11 +28,35 @@ export function breakPrompt({ author, ticket, diff, files }) {
   ].join("\n"), [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN]);
 }
 
+function jsonObjects(text) {
+  const objects = [];
+  let error = null;
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    let depth = 0, inString = false, escaped = false;
+    for (let at = start; at < text.length; at++) {
+      const char = text[at];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === "{") depth++;
+      else if (char === "}" && --depth === 0) {
+        try { objects.push(JSON.parse(text.slice(start, at + 1))); } catch (failure) { error = error ?? failure; }
+        break;
+      }
+    }
+  }
+  return { objects, error };
+}
+
 export function parseBreakTests(text) {
-  const raw = String(text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("model answer was not JSON");
-  const body = JSON.parse(raw.slice(start, end + 1));
+  const raw = String(text ?? "").replace(/```(?:json)?/gi, " ");
+  const { objects, error } = jsonObjects(raw);
+  if (!objects.length) throw new Error(`model answer was not JSON${error ? `: ${error.message}` : ""}`);
+  const body = objects.find((item) => Array.isArray(item?.tests)) ?? objects[0];
   if (!Array.isArray(body.tests) || !body.tests.length || body.tests.length > MAX_TESTS) throw new Error("model sent no usable tests");
   return body.tests.map((item) => {
     const name = String(item?.name ?? "").trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -74,6 +98,27 @@ export function modelFor(author, alt) {
   const picked = pickVerifier(author, alt);
   if (picked.fail) throw new Error(picked.fail);
   return picked.model;
+}
+
+export async function breakTestsFromModel({ prompt, key, model, fetchImpl, say = () => {} }) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let answer;
+    try {
+      answer = await completeWithOpenRouter(prompt, { key, model, fetchImpl });
+    } catch (error) {
+      if (error?.message !== "model returned nothing") throw error;
+      if (attempt === 2) throw error;
+      say(`Break-it review: ${error.message}; asking once more.`);
+      continue;
+    }
+    try {
+      return parseBreakTests(answer);
+    } catch (error) {
+      if (attempt === 2) throw error;
+      say(`Break-it review: the model answer could not be read (${String(error.message ?? error).slice(0, 200)}); asking once more.`);
+    }
+  }
+  throw new Error("the model answered nothing twice");
 }
 
 function shell(program, args, cwd) {
@@ -130,7 +175,7 @@ export async function main(io = {}) {
     const diff = String(run(["diff", `${base}...${sha}`])).slice(0, 40000);
     const files = String(run(["diff", "--name-only", `${base}...${sha}`])).split("\n").filter(Boolean).slice(0, 60);
     const ticket = TICKET.exec(String(item.body ?? ""))?.[0] ?? "no ticket link in the body";
-    const tests = parseBreakTests(await completeWithOpenRouter(breakPrompt({ author, ticket, diff, files }), { key: process.env.OPENROUTER_EVAL_KEY, model, fetchImpl: io.fetch }));
+    const tests = await breakTestsFromModel({ prompt: breakPrompt({ author, ticket, diff, files }), key: process.env.OPENROUTER_EVAL_KEY, model, fetchImpl: io.fetch, say });
     const dir = path.join(tree, "tests", "break-it");
     mkdirSync(dir, { recursive: true });
     const results = [];

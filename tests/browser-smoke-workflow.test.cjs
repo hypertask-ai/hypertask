@@ -231,11 +231,11 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
   assert.doesNotMatch(smoke, /Minified React error #418/);
 });
 
-test("MCP CLI API contract stays fatal inside the required browser-smoke job", async () => {
+test("MCP CLI API contract stays fatal inside the nightly browser-smoke job", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const policy = yaml.load(await source("docs/ci-policy.yml"));
-  assert.ok(policy.required_checks.contexts.includes("browser-smoke"));
+  assert.equal(policy.required_checks.contexts.includes("browser-smoke"), false);
   const smoke = workflow.jobs["browser-smoke-desktop"];
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");
