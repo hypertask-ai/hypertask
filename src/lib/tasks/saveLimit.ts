@@ -33,9 +33,9 @@ function saveTooLong(): Error {
   return Object.assign(new Error(TASK_SAVE_TOO_LONG), { code: "TASK_SAVE_TIMEOUT" })
 }
 
-export function taskSaveBudget(deadline = Date.now() + TASK_SAVE_LIMIT_MS) {
+export function taskSaveBudget(deadline = Date.now() + TASK_SAVE_LIMIT_MS, now: () => number = Date.now) {
   const remaining = () => {
-    const ms = deadline - Date.now()
+    const ms = deadline - now()
     if (ms <= 0) throw saveTooLong()
     return ms
   }
@@ -71,9 +71,18 @@ export async function fetchTaskSave(url: string, init: RequestInit = {}, deadlin
 }
 
 export function finishWithin<T>(work: Promise<T>, ms = TASK_SAVE_LIMIT_MS): Promise<T> {
+  const deadline = Date.now() + ms
   let timer: ReturnType<typeof setTimeout> | undefined
   const limited = new Promise<T>((resolve, reject) => {
-    timer = setTimeout(() => reject(saveTooLong()), ms)
+    const expire = () => {
+      const left = deadline - Date.now()
+      if (left > 0) {
+        timer = setTimeout(expire, left)
+        return
+      }
+      reject(saveTooLong())
+    }
+    timer = setTimeout(expire, ms)
     work.then(resolve, reject)
   })
   return limited.finally(() => clearTimeout(timer))
