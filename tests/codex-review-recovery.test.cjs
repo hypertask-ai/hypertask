@@ -106,6 +106,20 @@ test('a P1 that arrives before publish stops a clean snapshot from publishing su
   assert.deepEqual({ statuses, checks, posted }, { statuses: [], checks: [], posted: [] });
 });
 
+test('a missing approval comment alone still re-reads before approving', async () => {
+  const clean = `<!-- codex-review-state:v1 ${JSON.stringify({ code_review: { commit_sha: head, status: 'completed', has_any_findings: false } })} -->`;
+  const first = await sweep({ comments: [comment('chatgpt-codex-connector', clean)] });
+  assert.equal(first.posted.length, 1);
+  const later = {
+    reviews: [{
+      author: { login: 'chatgpt-codex-connector[bot]' }, commit: { oid: head }, body: 'Codex Review',
+      comments: { nodes: [{ body: '[P1] Data loss', author: { login: 'chatgpt-codex-connector[bot]' }, commit: { oid: head } }], pageInfo: { hasNextPage: false } },
+    }],
+  };
+  const after = await sweep({ comments: [comment('chatgpt-codex-connector', clean)], statusHistory: first.statuses, existingChecks: first.checks, second: later });
+  assert.deepEqual({ statuses: after.statuses, checks: after.checks, posted: after.posted }, { statuses: [], checks: [], posted: [] });
+});
+
 test('review events read only their PR without GraphQL or a repository sweep', async () => {
   for (const payload of [{ pull_request: { number: 3301 } }, { issue: { number: 3301 } }]) {
     const { reads, statuses } = await sweep({ payload });

@@ -271,13 +271,15 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
       }
     }
   }
+  const marker = `reviewed-commit: ${sha}`;
+  const alreadyApproved = commentBodies.some(text => text.includes(marker) && /^APPROVE/.test(text));
   const writePending = CONTEXTS.some(statusContext => {
     const previous = existing.get(statusContext);
     const existingCheck = latestCheckByName.get(statusContext);
     return !previous
       || !(result.state === 'pending' || (previous.state.toLowerCase() === result.state && previous.description === description))
       || (Boolean(checkConclusion) && !(existingCheck?.status === 'completed' && existingCheck.conclusion === checkConclusion));
-  });
+  }) || (result.state === 'success' && !alreadyApproved);
   if (result.state === 'success' && recheck && writePending && (await recheck())?.state !== 'success') return false;
   for (const statusContext of CONTEXTS) {
     const previous = existing.get(statusContext);
@@ -300,8 +302,6 @@ async function publishResult({ github, owner, repo, sha, prNumber, serverUrl, re
       }
     }
   }
-  const marker = `reviewed-commit: ${sha}`;
-  const alreadyApproved = commentBodies.some(text => text.includes(marker) && /^APPROVE/.test(text));
   if (result.state === 'success' && !alreadyApproved) {
     await github.rest.issues.createComment({
       owner, repo, issue_number: prNumber,
