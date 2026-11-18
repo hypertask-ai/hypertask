@@ -183,11 +183,9 @@ test("a cached base result stands in for a base run", async () => {
 });
 
 test("a cached api-only base that passed means the repro did not reproduce", async () => {
-  const api = { op: "api", method: "POST", path: "/api/mcp/tasks", body: {}, expectStatus: 200 };
-  const base = cachedArea({ journey: "change:repro", steps: [{ action: api, ok: true }], expects: [], navigations: [] });
-  const plan = planFor({ journeys: [{ journey: "change:repro", actions: [api], expect: [], base, planned: false }] });
-  const head = { journey: "change:repro", steps: [{ action: api, ok: true }], expects: [], navigations: [] };
-  const verdict = await (await load()).judgeJourneys(judgeDeps({ plan, evidence: { ...binding, journeys: [head] }, baseEvidence: null }));
+  const base = cachedArea({ journey: "change:repro", steps: [{ action: { op: "api", method: "POST", path: "/api/mcp/tasks", body: {}, expectStatus: 200 }, ok: true }], expects: [], navigations: [] });
+  const plan = planFor({ journeys: [{ journey: "change:repro", actions: base.steps.map((step) => step.action), expect: [], base, planned: false }] });
+  const verdict = await (await load()).judgeJourneys(judgeDeps({ plan, evidence: { ...binding, journeys: [{ ...base, apiOnly: true }] }, baseEvidence: null }));
   assert.equal(verdict.verdict, "FAIL");
   assert.match(verdict.notes, /does not reproduce the bug/);
 });
