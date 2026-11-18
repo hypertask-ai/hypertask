@@ -37,6 +37,7 @@ test("a mapped page gets its own journey from the page text, then the change jou
     mapSha: MAP,
     pages: [page("inbox", INBOX_PAGE)],
     entries: [],
+    compare: true,
     ask(prompt) {
       prompts.push(prompt);
       return prompts.length === 1 ? pagePlan() : changePlan();
@@ -61,6 +62,7 @@ for (const [name, text, entries, calls, want] of areaCases) test(name, async () 
     mapSha: MAP,
     pages: [page("inbox", text)],
     entries,
+    compare: true,
     ask(prompt) {
       asked.push(prompt);
       return asked.length === 1 && calls > 1 ? pagePlan() : changePlan();
@@ -79,9 +81,16 @@ test("a change that matches no page plans only the change journey", async () => 
     mapSha: MAP,
     pages: [page("inbox", INBOX_PAGE)],
     entries: [],
+    compare: true,
     ask: () => changePlan(),
   });
   assert.deepEqual(plan.journeys.map((item) => item.journey), ["change:repro"]);
+});
+
+test("area planning waits for the comparison, so a page failure cannot reach the legacy plan", async () => {
+  const asked = [];
+  const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), { binding, mapSha: MAP, pages: [page("inbox", INBOX_PAGE)], entries: [], ask(prompt) { asked.push(prompt); return changePlan(); } });
+  assert.deepEqual([asked.length, plan.fail, plan.journeys.map((item) => item.journey)], [1, "", ["change:repro"]]);
 });
 
 test("journeys stay inert unless the workflow asks for the comparison", async () => {
@@ -118,6 +127,26 @@ test("the drive runs every planned journey and keeps one evidence entry per jour
   assert.equal(result.journeys.length, 2);
   assert.deepEqual(result.steps, result.journeys[1].steps);
   assert.equal(result.journeys[0].apiOnly, false);
+});
+
+test("legacy evidence carries only the change journey's off-origin events", async () => {
+  const offOrigin = [];
+  const run = async ({ plan }) => { if (plan.actions[0].path === "/inbox") offOrigin.push({ url: "http://elsewhere.invalid/inbox" }); return { steps: [{ action: plan.actions[0], ok: true, error: "" }], expects: [] }; };
+  const plan = { journeys: [{ journey: "area:inbox", actions: [{ op: "goto", path: "/inbox" }], expect: [] }, { journey: "change:repro", actions: [{ op: "goto", path: "/all-tasks" }], expect: [] }] };
+  const result = await (await load()).runJourneys({ page: {}, plan, base: "http://127.0.0.1:3000", shotsRoot: mkdtempSync(join(tmpdir(), "journeys-off-")), offOrigin, run });
+  assert.deepEqual([result.journeys[0].offOrigin.length, result.offOrigin], [1, []]);
+});
+
+test("a planned area journey drives the run, and a failed plan never does", async () => {
+  const driveNeeded = (await load()).driveNeeded;
+  const journeys = [{ journey: "area:inbox", actions: [{ op: "goto", path: "/inbox" }], expect: [] }];
+  assert.deepEqual([true, false], [driveNeeded({ actions: [], journeys }), driveNeeded({ actions: [], journeys, fail: "model failed" })]);
+});
+
+test("a failed plan never reaches the comparison, even with area journeys", async () => {
+  const comparisonMode = (await load()).comparisonMode;
+  const plan = { compare: true, journeys: [{ journey: "area:inbox" }] };
+  assert.deepEqual([true, false, false], [comparisonMode(plan), comparisonMode({ ...plan, fail: "the change plan failed" }), comparisonMode({ ...plan, compare: undefined })]);
 });
 
 test("an api-only journey is marked so a missing document response is not a failure", async () => {

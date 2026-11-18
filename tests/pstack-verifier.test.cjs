@@ -121,6 +121,42 @@ test("empty-plan checks wait until conclusions land", async () => {
   assert.equal(ciChecksPending([]), true);
 });
 
+test("checks read only the latest run of each check", async () => {
+  const { ciChecksPassed, ciChecksPending, CONTEXT } = await load();
+  const run = (conclusion, at) => ({ name: "ci-tests", conclusion, created_at: `2026-11-18T${at}Z`, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const red = run("failure", "15:50:49");
+  const green = run("success", "16:09:59");
+  const redLater = run("failure", "16:20:00");
+  const running = { name: "ci-tests", conclusion: null, created_at: "2026-11-18T16:21:00Z", started_at: null, completed_at: null };
+  assert.equal(ciChecksPassed([red, green]), true);
+  assert.equal(ciChecksPending([red, green]), false);
+  assert.equal(ciChecksPassed([green, red]), true);
+  assert.equal(ciChecksPassed([green, redLater]), false);
+  assert.equal(ciChecksPending([green, redLater]), false);
+  assert.equal(ciChecksPassed([green, running]), false);
+  assert.equal(ciChecksPending([green, running]), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "success" }, { name: "ci-tests", conclusion: "failure" }]), true);
+  assert.equal(ciChecksPassed([{ name: "ci-tests", conclusion: "failure" }, { name: "ci-tests", conclusion: "success" }]), false);
+  assert.equal(ciChecksPassed([red, green, { name: CONTEXT, conclusion: "failure" }]), true);
+});
+
+test("a cancelled run is a superseded run, not a result", async () => {
+  const { ciChecksPassed, ciChecksPending, requiredContextsReady, CONTEXT } = await load();
+  const run = (name, conclusion, at) => ({ name, conclusion, started_at: `2026-11-18T${at}Z`, completed_at: `2026-11-18T${at}Z` });
+  const green = run("ai-review", "success", "16:36:04");
+  const cancelledLater = run("ai-review", "cancelled", "16:40:25");
+  const red = run("ai-review", "failure", "16:30:00");
+  assert.equal(ciChecksPassed([green, cancelledLater]), true);
+  assert.equal(ciChecksPending([green, cancelledLater]), false);
+  assert.equal(ciChecksPassed([cancelledLater]), false);
+  assert.equal(ciChecksPending([cancelledLater]), true);
+  assert.equal(ciChecksPassed([red, cancelledLater]), false);
+  assert.equal(ciChecksPending([red, cancelledLater]), false);
+  assert.deepEqual(requiredContextsReady([{ ...cancelledLater, name: "ci-tests" }, { ...green, name: "ci-tests" }], [], ["ci-tests"]), { missing: false, pending: false, failed: false });
+  assert.deepEqual(requiredContextsReady([{ ...cancelledLater, name: "ci-tests" }], [], ["ci-tests"]), { missing: false, pending: true, failed: false });
+  assert.equal(ciChecksPassed([green, cancelledLater, { name: CONTEXT, conclusion: "failure" }]), true);
+});
+
 test("a non-app pass waits until every required context is green", async () => {
   const { ciGate, ciStatusesPassed, ciStatusesPending, decide, waitForCiChecks, CONTEXT, REQUIRED_CI_CONTEXTS } = await load();
   const reason = "no user path in this diff";
@@ -956,14 +992,14 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   const commit = (sha, author = "dependabot[bot]", committer = "web-flow", verification = { verified: true, reason: "valid" }) => ({
     sha, author: author ? { login: author } : null, committer: committer ? { login: committer } : null, commit: { verification },
   });
-  const pull = (login, sha = head, body = "") => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production", sha: "d".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } } });
+  const pull = (login, sha = head, body = "", baseSha = "d".repeat(40)) => ({ number: 7, state: "open", draft: false, user: { login }, title: "deps", body, base: { ref: "production", sha: baseSha }, head: { sha, repo: { full_name: "acme/app" } } });
   const lines = (files) => files.map((file) => JSON.stringify(typeof file === "string" ? { filename: file, previous_filename: null } : file)).join("\n");
-  const runResolve = async ({ login = "dependabot[bot]", body = "", files = ["package.json"], commits, second }) => {
+  const runResolve = async ({ login = "dependabot[bot]", body = "", files = ["package.json"], commits, second, baseSha }) => {
     fs.rmSync(`${dir}/request`, { recursive: true, force: true });
     fs.writeFileSync(output, "");
     const posts = [];
     const calls = [];
-    const pulls = [pull(login, head, body), second ?? pull(login, head, body)];
+    const pulls = [pull(login, head, body, baseSha), second ?? pull(login, head, body, baseSha)];
     await resolveCommand({
       event: { workflow_run: { conclusion: "success", head_sha: head, pull_requests: [{ number: 7 }] } },
       postStatus: async (row) => { posts.push(row); },
@@ -987,6 +1023,9 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     const clean = await runResolve({ commits: trusted, files: ["package.json"] });
     assert.match(clean.stop, /stop=false/);
     assert.equal(clean.written.botLogin, "dependabot[bot]");
+    assert.deepEqual([clean.written.baseSha, /base=d{40}/.test(clean.stop)], ["d".repeat(40), true]);
+    const noBase = await runResolve({ commits: trusted, baseSha: "" });
+    assert.deepEqual([/stop=true/.test(noBase.stop), noBase.written, noBase.posts], [true, null, []]);
     let planned = 0;
     const built = await planFromRequest(clean.written, { binding: { sha: head, run: "10", attempt: "1" }, ask() { planned += 1; throw new Error("model"); } });
     assert.deepEqual([planned, built.botLogin], [0, "dependabot[bot]"]);
@@ -1015,6 +1054,36 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
     assert.match(person.posts[0].description, /author model unknown/);
   } finally {
     for (const [key, value] of savedResolve) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the base lane judges its own run from its own screenshots before the comparison", async () => {
+  const { judgeBaseCommand, judgeJourneys, pickVerifier } = await load();
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const dir = fs.mkdtempSync(`${os.tmpdir()}/pv-base-`), base = path.join(dir, "base"), head = path.join(dir, "head");
+  const journey = { journey: "change:repro", actions: [{ op: "goto", path: "/inbox" }], expect: [] };
+  const run = { journey: "change:repro", steps: [{ action: journey.actions[0], ok: true, error: "" }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }] };
+  const shot = (root, body) => { fs.mkdirSync(path.join(root, "evidence", "shots"), { recursive: true }); fs.writeFileSync(path.join(root, "evidence", "shots", "0.png"), body); };
+  const saved = ["HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "PSTACK_VERIFIER_ALT_MODEL"].map((key) => [key, process.env[key]]);
+  fs.mkdirSync(path.join(base, "plan"), { recursive: true });
+  shot(base, "base-shot");
+  shot(head, "head-shot");
+  fs.writeFileSync(path.join(base, "plan", "base-plan.json"), JSON.stringify({ ...binding, actions: [], expect: [], authorFamily: "deepseek", journeys: [journey], bugfix: true }));
+  fs.writeFileSync(path.join(base, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [run] }));
+  Object.assign(process.env, { HEAD_SHA: binding.sha, GITHUB_RUN_ID: binding.run, GITHUB_RUN_ATTEMPT: binding.attempt, WORK: head, PSTACK_VERIFIER_ALT_MODEL: "grok/grok-4" });
+  try {
+    const images = [];
+    await judgeBaseCommand({ work: base, key: "k", ask: (_prompt, options) => { images.push(options.images); return { verdict: "FAIL", notes: "the bug is visible on base" }; } });
+    const baseEvidence = JSON.parse(fs.readFileSync(path.join(base, "base-evidence.json"), "utf8"));
+    assert.deepEqual([images[0], baseEvidence.journeys[0].judged], [[Buffer.from("base-shot").toString("base64")], "FAIL"]);
+    const judged = await judgeJourneys({ plan: { ...binding, actions: [], expect: [], journeys: [journey], bugfix: true, compare: true, authorFamily: "deepseek", verifierModel: "grok/grok-4" }, binding, evidence: { ...binding, journeys: [run] }, picked: pickVerifier("deepseek", "grok/grok-4"), baseEvidence, ask: () => ({ verdict: "PASS", notes: "fixed" }) });
+    assert.deepEqual([judged.verdict, judged.notes], ["PASS", ""]);
+  } finally {
+    for (const [key, value] of saved) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }

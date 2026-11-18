@@ -40,8 +40,8 @@ test("metadata changes cannot restart or skip required CI, and PR/push tests col
   assert.equal(push.env.HT_REQUIRE_PG_TESTS, "${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}");
   assert.match(push.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/ci-shard-upload\/shard-\$\{SHARD\}\.log"/);
   assert.equal(ci.jobs["ci-test"].strategy["fail-fast"], false);
-  assert.equal(String(ci.env.CI_TEST_SHARDS), "6");
-  assert.equal(String(ci.env.CI_SERIAL_SHARDS), "2");
+  assert.equal(String(ci.env.CI_TEST_SHARDS), "${{ github.event_name == 'pull_request' && '3' || '6' }}");
+  assert.equal(String(ci.env.CI_SERIAL_SHARDS), "${{ github.event_name == 'pull_request' && '1' || '2' }}");
   const plan = ci.jobs["ci-prepare"].steps.find((step) => step.name === "Write test shards");
   assert.match(plan.run, /LANES=\$\(\(CI_TEST_SHARDS \+ CI_SERIAL_SHARDS\)\)/);
   assert.match(plan.run, /--count "\$LANES" --serial-lanes "\$CI_SERIAL_SHARDS" --out "\$OUT"/);
