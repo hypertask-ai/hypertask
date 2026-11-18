@@ -79,7 +79,6 @@ Small guards share scanner work and trusted metadata:
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR smoke guards and most workflows cancel superseded runs. CI Tests and the trusted guard publish a required status and cancel a superseded run of the same pull request. `queue: max` is not set, because GitHub rejects it next to cancellation (HYCI-29, HYCI-182). The Dependabot lane cancels a superseded run of the same pull request. A sweep uses its own group key, so it does not cancel a pull request that is filing a ticket, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 - Every pull request workflow cancels a superseded run, including `ci-tests`, `pr-guards-trusted`, `feature-flag-gate`, `ux-signoff-gate`, `codex-review-gate` and `dependabot-lane`. Each group names the pull request and `cancel-in-progress` is true. `.github/scripts/pr-run-concurrency-guard.cjs` fails CI when any of those workflows loses that group or stops cancelling. `queue: max` stays off, because GitHub rejected it beside cancellation and left `ci-tests` missing (HYCI-182). `ci-images.yml` no longer has a `push` trigger on the missing seed branch `yper4-231-ghcr-ci-images`.
-- The workflows outside pull request events cancel superseded work too. `pstack-verifier-recheck.yml` groups per pull request and head sha, so only a duplicate recheck for the same head cancels; a recheck another pull request or another head waits on never does. Its schedule and dispatch links carry the run id, because a cancelled link never hands off to the next one. The dispatch-only `vercel-deploy-log`, `vercel-runtime-log` and `vercel-security-findings` workflows group per ticket, or per ref for the findings job.
 
 Static gates inside `ci-checks` share one job and run as concurrent lanes (HYCI-8):
 agent board scope, TypeScript, Oxlint, ESLint, the lint overlap guard, board
@@ -927,6 +926,8 @@ tracked in https://app.hypertask.ai/detail/project-15/7508.
 ## Production revert proposals
 
 `production-revert-pr.yml` handles failed production CI runs. It opens a revert PR, never merges or pushes production. Existing live-health rollback stays unchanged.
+
+Emergency rule, recorded as `production_revert_proposal.emergency_rule` in `docs/ci-policy.yml`: the revert goes first and takes the same required checks as any change; the fix follows the normal steps.
 
 The read-only job replays named failing Node tests twice inside network-disabled containers. A locally built scratch image mounts system binaries, dependencies, and Git objects read-only. Runner control files, credentials, and the Docker socket stay outside. The last green production commit must pass. Git history identifies the first failing commit, whose parent must pass. The same checks must pass twice after reverting only that commit on current production. Later merges remain intact. Rate-limit, network, timeout, inconsistent, unsupported setup, dependency-lock changes, and already-fixed failures produce no proposal. The history search stops at 50 commits.
 
@@ -1960,4 +1961,8 @@ lands. No new required check is added.
 
 ## Break-it review (HTPR-9408)
 
-A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. The job is report-only and never blocks a merge. It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
+A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. Each test file stays under 1200 characters and the whole model answer under 3500, because a longer answer is cut off at the model's 1200-token cap and the review cannot run.
+
+The job fails its own step when the review could not run or a break attempt found a hole, and prints the reason in the run log as well as in the comment and the status. `break-it` is not one of the required checks: per pstack's shipping playbook the one verdict on a bug fix comes from the independent verifier, so this result is that verifier's edge-case input rather than a second gate.
+
+It uses `OPENROUTER_EVAL_KEY` and `PSTACK_VERIFIER_ALT_MODEL`, which a `deepseek` author needs because the default verifier is `deepseek/deepseek-v4.1-flash`. See [`.github/workflows/break-it-review.yml`](../.github/workflows/break-it-review.yml).
