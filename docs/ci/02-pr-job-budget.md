@@ -10,7 +10,7 @@ Small guards share scanner work and trusted metadata:
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. A newer pull request event cancels the older run of that same pull request. The group is `feature-flag-gate-${{ github.event.pull_request.number || github.ref }}` with `cancel-in-progress: true`. A scheduled sweep uses the ref, so it does not cancel a pull request run. HYCI-298 replaces the legacy `feature-flag-gate-production` queue, whose orphaned run no longer responds to cancellation. The replacement no longer uses `queue: max`, because GitHub rejects that next to cancellation (HYCI-182). Gate jobs retain five-minute and ten-minute timeouts. The existing stuck-job sweep cancels flag gate runs that are queued, pending, requested, waiting or in progress for thirty minutes or more, and tries the force-cancel endpoint when GitHub refuses the plain cancel, names each run GitHub still refuses once per chained link and counts those refused runs on every tick line; cancellation publishes no verdict, so scheduled reconciliation must repair the missing status. A future scheduler-level orphan may still require GitHub intervention; job timeouts do not bound time awaiting a runner.
   The gate's `ghApi` retries HTTP 500, 502, 503, and 504 up to twice, after one and two seconds, including status posts. `GH_API_NO_WAIT` still skips rate-limit waits but does not disable these server-error retries. Read-token fallback remains separate and happens first.
-- `ux-signoff-gate.yml` evaluates only the event PR on `pull_request_target`; the hourly chain dispatches `workflow_dispatch` sweeps of all open PRs. A newer event for the same pull request cancels the older run. The group names the pull request number.
+- `ux-signoff-gate.yml` runs only as the hourly chain's `workflow_dispatch` sweep of all open PRs (HTPR-9450); a pull request event pays nothing for it. Per pull request the group is the ref, so one dispatch never cancels another.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR smoke guards and most workflows cancel superseded runs. CI Tests and the trusted guard publish a required status and cancel a superseded run of the same pull request. `queue: max` is not set, because GitHub rejects it next to cancellation (HYCI-29, HYCI-182). The Dependabot lane cancels a superseded run of the same pull request. A sweep uses its own group key, so it does not cancel a pull request that is filing a ticket, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 - Every pull request workflow cancels a superseded run, including `ci-tests`, `pr-guards-trusted`, `feature-flag-gate`, `ux-signoff-gate`, `codex-review-gate` and `dependabot-lane`. Each group names the pull request and `cancel-in-progress` is true. `.github/scripts/pr-run-concurrency-guard.cjs` fails CI when any of those workflows loses that group or stops cancelling. `queue: max` stays off, because GitHub rejected it beside cancellation and left `ci-tests` missing (HYCI-182). `ci-images.yml` no longer has a `push` trigger on the missing seed branch `yper4-231-ghcr-ci-images`.
@@ -23,7 +23,10 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **24 jobs** per synchronize and opening event
+Static normal non-draft app PR budget after HTPR-9450: **12 jobs** per synchronize
+and opening event: `ci-tests` 7 (prepare, checks, 4 test lanes, summary), the
+verifier and its request shim, `secret-scan`, `pr-guards-trusted` and
+`feature-flag-gate`. The historical count was **24 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
 required summary job; HYCI-57 takes the page tests to four shards). The browser
@@ -46,7 +49,8 @@ which this change does not introduce.
 ### PR checks follow pstack (HTPR-9450)
 
 Counted workflow jobs for a ready internal app PR.
-Assumptions include eight test shards and no reruns.
+Assumptions include four test lanes on a pull request (six pool plus two serial
+on a production push) and no reruns.
 Fixtures stay off, and one verifier journey runs.
 Repository jobs fall from 39 to 31.
 Including CodeQL's three analysis jobs, 42 becomes 34.
@@ -79,9 +83,9 @@ Everything that drives the UI left the pull request:
 
 The verifier still drives the journeys for the features a pull request touches,
 using the diff to choose them, and it boots the candidate with the same
-`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof stays
-with `bugfix-regression`, which runs the changed test on the merge base and on
-the head.
+`run-app-smoke-isolated.sh` harness App Smoke uses. A bug fix's repro proof is the
+`repro-first` job inside `ci-tests.yml`, which runs the changed test on the merge
+base and on the head.
 
 Cheap checks remain required alongside `pstack-verifier`.
 Both smoke contexts remain required PR stubs.
