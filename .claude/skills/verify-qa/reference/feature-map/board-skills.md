@@ -4,6 +4,11 @@
 
 - `save-a-workflow-from-ai-chat` Save a workflow from AI chat.
 - `a-repeated-instruction-becomes-a-skill-offer` A repeated instruction becomes a skill offer.
+- `skill-chat-followup` With `htpr-7319-skill-chat-followup` on, Ctrl+J that used a skill opens AI chat at once. The first message still says it created the ticket from your note, then adds how that skill changed the ticket.
+- `scoped-agent-skills` With `htpr-7663-scoped-agent-skills` on, a team-bound agent can list board skills on readable boards in its team without a project id. Off, that list is refused.
+- `chat-skill-drafts` With `htpr-7768-chat-skill-drafts` on, AI chat shows a full skill draft and saves it only after you approve that draft in a new message.
+- `skill-offers` With `htpr-7779-skill-offers` on, the same instruction repeated on one board can show one Skill suggestion card. Off hides the card and stops counting.
+- `skill-runs-in-sidebar` With `htpr-7800-skill-runs-in-sidebar` on, picking a `/slug` in a ticket comment runs it in the AI chat sidebar with the ticket and the comment draft. Off opens the comment skill writer.
 
 ## How to get to it (user POV)
 
@@ -22,6 +27,9 @@ a **Create skill** button; an existing skill has **Edit**, **Delete** and an
 to see the list and the save.
 
 ### Save a workflow from AI chat
+
+This approval flow is `htpr-7768-chat-skill-drafts`. Off, chat can write
+the skill on the first save, with no separate draft approval.
 
 On a private QA board, ask the sidebar chat to turn the current session
 into a skill, or ask `/chat` to create one from a plain description.
@@ -47,6 +55,9 @@ permission and write routes.
 
 ### A repeated instruction becomes a skill offer
 
+The card is `htpr-7779-skill-offers`. Off, no card appears, and chat
+does not count repeated instructions.
+
 On a private QA board, sign in as user 985 and start three separate
 sidebar chats on that board. In each chat, give the same standing
 instruction in your own words five times in total, for example "put the
@@ -66,6 +77,38 @@ follow, with nothing saved until you approve. **Save board rule** on a
 memory suggestion must fail with a clear message while board memory is
 off, and write the rule into Settings > Board > Memory once it is on.
 
+### Skill follow-up after Ctrl+J
+
+Turn `htpr-7319-skill-chat-followup` on. In Ctrl+J, run a saved `/slug`
+so the writer receives that skill, then create the ticket. AI chat
+opens before the follow-up returns. While it is loading, the thread
+shows a typing indicator and the ticket chips wait. The first assistant
+message still starts with "I created" and the ticket id "from your
+note. Want me to refine it?" and then adds the skill explanation.
+A failed follow-up leaves that generic greeting. Flag off keeps the
+generic greeting and still opens chat.
+
+### Team-bound skill list
+
+Turn `htpr-7663-scoped-agent-skills` on for a team-bound agent. Call
+`GET /api/mcp/skills` with no `project_id`, or the chat tool
+`hypertask_list_skills` with no project. The list is board skills on
+boards that the credential can read in its team. Personal skills stay out.
+The same call with the flag off returns "Account-global skills access
+denied". A call that includes `project_id` still checks access to that
+board with the flag on or off.
+
+### Run a comment skill in the sidebar
+
+On a ticket, open the comment box. `htpr-7480-comment-skill-run` and
+`htpr-7393-comment-inline-ai` must be on, or the slash menu cannot
+start a skill. Type `/` and pick a skill. With
+`htpr-7800-skill-runs-in-sidebar` on, the AI chat sidebar opens and the
+first message is `/slug` plus the current comment text. The comment
+skill writer stays closed. If chat is already sending, the toast says
+"Could not run the skill. Please try again." Flag off opens the
+comment skill writer instead.
+
 ## Gotchas
 
 - A skill pasted without a frontmatter header did not save
@@ -75,6 +118,9 @@ off, and write the rule into Settings > Board > Memory once it is on.
   fake success.
 - Agents limited to one team and account-wide skills
   ([HTPR-7663](https://app.hypertask.ai/detail/project-15/7663)).
+  With `htpr-7663-scoped-agent-skills` off, a team-bound list with no
+  project id is "Account-global skills access denied". On, that list
+  is only boards the credential can read in its team.
 
 ### What proof to collect
 
