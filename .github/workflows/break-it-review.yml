@@ -1,0 +1,58 @@
+name: Break-it review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+    branches: [production]
+
+permissions: {}
+
+concurrency:
+  group: break-it-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  break-it:
+    name: break-it
+    if: github.event.pull_request.draft == false && contains(github.event.pull_request.title, '[BUGFIX]') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          path: trusted
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: candidate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Install the candidate and the sandbox
+        id: deps
+        working-directory: candidate
+        run: |
+          command -v bwrap >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y bubblewrap; }
+          npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
+      - name: Ask another model family to break the fix
+        if: ${{ !cancelled() }}
+        working-directory: trusted
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OPENROUTER_EVAL_KEY: ${{ secrets.OPENROUTER_EVAL_KEY }}
+          PSTACK_VERIFIER_ALT_MODEL: ${{ vars.PSTACK_VERIFIER_ALT_MODEL }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          CANDIDATE: ${{ github.workspace }}/candidate
+          BREAK_IT_DEPS: ${{ steps.deps.outcome }}
+        run: node .github/scripts/break-it-review.mjs
