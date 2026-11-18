@@ -867,7 +867,7 @@ async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
   }
   let status = null;
   try {
-    const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head}/statuses`]));
+    const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head || artifact.sha}/statuses`]));
     status = (Array.isArray(statuses) ? statuses : []).find((row) => row?.context === CONTEXT) ?? null;
   } catch {
     return false;
