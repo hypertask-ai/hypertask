@@ -1,5 +1,5 @@
 const path = require("node:path");
-const { fail, parseArgs, repoRoot, run } = require("../context.cjs");
+const { baseUrl, fail, parseArgs, repoRoot, run, stateFile } = require("../context.cjs");
 
 const usage = `ht-verify login [account] - pick a QA identity and prove the state loads
 
@@ -11,7 +11,7 @@ Usage:
   --state    use this auth state instead of the account's own file. For a local run
              pass the seeded $HT_VERIFY_RUN/browser/state.json plus --base-url.
   --expect   expected user id. Defaults to the account's id; omitted for --state.
-  --base-url verify against this local origin instead of production.
+  --base-url local origin to verify against, default from the run folder env.json.
   --no-verify  print the account without calling the server. Offline, no identity proof.
 
 Wraps qa-login and qa-identity. It prints no credential and no cookie, only the
@@ -36,7 +36,7 @@ module.exports = {
     }
     const parsed = JSON.parse(selected.stdout);
     const state = values.state || parsed.stateFile;
-    const base = values["base-url"] || null;
+    const base = values["base-url"] || baseUrl();
     const expect = values.expect ?? (values.state ? undefined : parsed.userId ? String(parsed.userId) : undefined);
     const data = {
       account: parsed.account,
@@ -48,11 +48,11 @@ module.exports = {
       userId: null,
       identity: null,
     };
-    if (values["no-verify"]) return { target: base ? "local" : "production", data };
+    if (values["no-verify"]) return { target: base.includes("127.0.0.1") || base.includes("localhost") ? "local" : "production", data };
     if (!state) fail("guest has no auth state to verify", "Use guest for logged-out paths; pick flags, plain, free, byok, pro, owner or member to verify a login.", "usage", 2);
     const identity = run(
       path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"),
-      [state, ...(expect ? ["--expect", expect] : []), ...(base ? ["--base-url", new URL(base).origin] : [])],
+      [state, ...(expect ? ["--expect", expect] : []), ...(values["base-url"] ? ["--base-url", new URL(base).origin] : [])],
       { timeout: 30_000 },
     );
     const line = (identity.stdout || identity.stderr).trim().split("\n").pop();
@@ -64,6 +64,6 @@ module.exports = {
     }
     data.verified = true;
     data.userId = match ? Number(match[1]) : null;
-    return { target: base ? "local" : "production", data };
+    return { target: base.includes("127.0.0.1") || base.includes("localhost") ? "local" : "production", data };
   },
 };

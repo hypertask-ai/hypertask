@@ -1,4 +1,5 @@
 const { existsSync } = require("node:fs");
+const path = require("node:path");
 const {
   baseUrl: defaultBase,
   fail,
@@ -51,9 +52,14 @@ async function localChecks(values) {
   } else {
     checks.push(recorded({ name: "database", ok: false, detail: "no databaseUrl in the run folder env.json; run ht-verify up first" }));
   }
-  const pid = env.pid;
-  const pidAlive = pid ? run("node", ["-e", `process.kill(${pid},0)`]).status === 0 : false;
-  checks.push(recorded({ name: "dev pid", ok: pidAlive, detail: pid ? `pid ${pid} alive: ${pidAlive}` : "no dev pid recorded" }));
+  const pid = Number(env.pid);
+  let pidAlive = false;
+  try {
+    pidAlive = Number.isInteger(pid) && pid > 0 && (process.kill(pid, 0), true);
+  } catch {
+    pidAlive = false;
+  }
+  checks.push(recorded({ name: "dev pid", ok: pidAlive, detail: Number.isInteger(pid) && pid > 0 ? `pid ${pid} alive: ${pidAlive}` : "no dev pid recorded" }));
   if (values.state && !existsSync(values.state)) {
     checks.push(recorded({ name: "identity", ok: false, detail: `no auth state at ${values.state}` }));
   } else if (state && existsSync(state)) {
