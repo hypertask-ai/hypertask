@@ -26,7 +26,6 @@ test("down kills only a pid that still runs Next", async () => {
   assert.deepEqual(result.json.data.stopped, [`process group ${child.pid}`]);
   await new Promise((resolve) => setTimeout(resolve, 300));
   assert.throws(() => process.kill(child.pid, 0));
-
   writeFileSync(join(dir, "default", "dev.pid"), JSON.stringify({ pid: process.pid }));
   const skipped = await json(dir, ["down", "--keep-db"]);
   assert.deepEqual(skipped.json.data.stopped, []);
