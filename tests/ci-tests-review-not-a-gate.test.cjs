@@ -20,10 +20,11 @@ test("ci-prepare never reads review statuses and holds no statuses permission", 
   assert.equal(prepare.permissions.statuses, undefined);
 });
 
-test("the review contexts still block a merge until an administrator removes them", () => {
+test("the review contexts no longer block a merge, and the verifier reads none", () => {
   const policy = yaml.load(readFileSync("docs/ci-policy.yml", "utf8"));
   for (const context of ["ai-review", "claude-review"]) {
-    assert.equal(policy.required_checks.contexts.includes(context), true);
-    assert.equal(policy.policies.production_ruleset.required_status_checks.includes(context), true);
+    assert.equal(policy.required_checks.contexts.includes(context), false);
+    assert.equal(policy.policies.production_ruleset.required_status_checks.includes(context), false);
   }
+  assert.deepEqual(policy.required_checks.contexts, ["pstack-verifier"]);
 });

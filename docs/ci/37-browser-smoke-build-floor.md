@@ -35,8 +35,9 @@ The decision, for the two alternatives HYCI-49 offers:
   8 percent saving against a lost reload signal is not a trade to take blind;
   revisit only with a run proving a shorter window still fails the same way.
 
-Required contexts do not change: `browser-smoke` stays the required summary,
+Required contexts did not change then: `browser-smoke` was the required summary,
 `browser-smoke-desktop` and `browser-smoke-mobile` keep their names (HYCI-57 gave
 `browser-smoke-mobile` only the phone pages and split the rest into
 `browser-smoke-matrix` and `browser-smoke-flags`), and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
-config line, so the undo is that there is nothing to undo.
+config line, so the undo is that there is nothing to undo. HTPR-9450 later made
+`pstack-verifier` the only required context; the summary keeps its name.
