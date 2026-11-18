@@ -838,6 +838,17 @@ async function judgeCommand() {
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, authorFamily: verdict.authorFamily || plan.botLogin || plan.authorFamily || "", verifierModel: plan.botLogin ? "" : (plan.verifierModel || "") })}\n`, { mode: 0o600 });
 }
+export function runMinutes(startedAt, now = Date.now()) {
+  const started = Date.parse(String(startedAt ?? ""));
+  if (!Number.isFinite(started)) return null;
+  return Math.max(0, Math.round((now - started) / 60000));
+}
+export function verdictComment(verdict, notes, minutes) {
+  const time = minutes == null ? "Run time unknown." : `Run time ${minutes} min.`;
+  if (verdict === "PASS") return `${verdict}. ${time}`;
+  const detail = String(notes ?? "").replace(/\s+/g, " ").trim();
+  return `${verdict}: ${detail || "no detail"} ${time}`.replace(/\s+/g, " ").trim();
+}
 export async function postCommand(io = {}) {
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const binding = bindingNow();
@@ -860,7 +871,10 @@ export async function postCommand(io = {}) {
     description = settled.description;
   }
   await postStatus({ repo, ...binding, state, description, fetchImpl: io.fetch });
-  if (saved.verdict !== "PASS" && saved.verdict !== "PENDING") await postComment(repo, pr, redact(`${saved.verdict}: ${saved.notes}`, secretValues()), io.fetch);
+  if (saved.verdict === "PENDING") return;
+  const minutes = runMinutes(io.startedAt ?? process.env.RUN_STARTED_AT, io.now);
+  const notes = redact(saved.notes, secretValues());
+  await postComment(repo, pr, verdictComment(saved.verdict, notes, minutes), io.fetch);
 }
 async function main() {
   const command = process.argv[2];

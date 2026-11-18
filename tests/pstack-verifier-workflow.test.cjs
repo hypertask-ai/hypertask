@@ -18,7 +18,7 @@ const expected = {
   plan: { contents: "read" },
   drive: { contents: "read", packages: "read" },
   judge: { contents: "read", checks: "read", statuses: "read" },
-  post: { contents: "read", "pull-requests": "write", statuses: "write" },
+  post: { actions: "read", contents: "read", "pull-requests": "write", statuses: "write" },
   cancel: { statuses: "write" },
 };
 

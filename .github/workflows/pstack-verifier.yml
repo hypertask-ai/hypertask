@@ -95,7 +95,7 @@ jobs:
     if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.resolve.result == 'success' && needs.judge.result != 'cancelled' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions: { contents: read, pull-requests: write, statuses: write }
+    permissions: { actions: read, contents: read, pull-requests: write, statuses: write }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
@@ -103,7 +103,7 @@ jobs:
         continue-on-error: true
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/verdict" }
       - env: { GH_TOKEN: "${{ github.token }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}", PR: "${{ needs.resolve.outputs.pr }}" }
-        run: node scripts/pstack-verifier.mjs post
+        run: started="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" --jq .run_started_at || true)"; RUN_STARTED_AT="$started" node scripts/pstack-verifier.mjs post
   cancel:
     needs: [resolve, post]
     if: "${{ !cancelled() && needs.resolve.outputs.stop != 'true' && needs.post.result != 'success' }}"

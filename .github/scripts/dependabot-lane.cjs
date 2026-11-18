@@ -325,6 +325,22 @@ module.exports = async function dependabotLane({
 
   // A failed read is never read as "no ticket yet": that would file a duplicate
   // on every rate limit, and a hidden ticket is worse than a missing comment.
+  async function eventRunOwns(pull) {
+    if (context.eventName === "pull_request_target") return false;
+    const list = github.rest.actions?.listWorkflowRuns;
+    if (!list) return false;
+    try {
+      const listed = await list({
+        owner, repo, workflow_id: "dependabot-lane.yml", status: "in_progress", per_page: 50,
+      });
+      const runs = listed.data?.workflow_runs || [];
+      return runs.some(run => run.id !== context.runId && (run.pull_requests || []).some(item => item.number === pull.number));
+    } catch (error) {
+      log(`#${pull.number}: could not read in-progress lane runs (${error.message})`);
+      return false;
+    }
+  }
+
   async function fileTicket(pull) {
     if (!mcpToken) {
       problem(pull, "HYPERTASK_MCP_TOKEN is empty, so no board ticket could be filed");
@@ -389,6 +405,10 @@ module.exports = async function dependabotLane({
     }
     if (!isDependabot(pull.user?.login)) {
       log(`#${pull.number}: not a Dependabot pull request`);
+      return;
+    }
+    if (await eventRunOwns(pull)) {
+      log(`#${pull.number}: an event run is already settling it`);
       return;
     }
     const { major, reason } = laneOf(pull);
