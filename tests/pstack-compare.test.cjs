@@ -66,6 +66,16 @@ test("an unrecognized judge verdict fails closed", () => {
   assert.equal(classifyRun(okRun({ judged: "PASS+NOTES" })).state, "ok");
 });
 
+test("a journey the judge never read is unevaluated, and a broken step still fails", () => {
+  const unjudged = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun({ judged: "UNEVALUATED" }) }] });
+  assert.equal(unjudged.verdict, "UNEVALUATED");
+  assert.match(unjudged.notes, /the judge model did not answer/);
+  const broken = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun({ judged: "UNEVALUATED", steps: [{ ok: false }] }) }] });
+  assert.equal(broken.verdict, "FAIL");
+  const repro = decideComparison({ journeys: [{ journey: "change:repro", base: okRun({ judged: "UNEVALUATED" }), head: okRun() }], bugfix: true });
+  assert.equal(repro.verdict, "UNEVALUATED");
+});
+
 test("a head that regressed against a passing base fails", () => {
   const result = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun({ steps: [{ ok: true }, { ok: false }] }) }] });
   assert.equal(result.verdict, "FAIL");
