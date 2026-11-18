@@ -1,16 +1,10 @@
 name: Claude review
 
 on:
-  workflow_run:
-    workflows: ["Claude review request"]
-    types: [completed]
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
-    branches: [production]
   workflow_dispatch:
     inputs:
       pr:
-        description: Pull request number to review (backfill for an open PR)
+        description: Pull request number to review
         required: true
         type: string
 
@@ -22,24 +16,18 @@ permissions:
   checks: write
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('review-bootstrap-{0}', github.event.pull_request.number) || github.event_name == 'workflow_run' && format('review-{0}-{1}', github.event.workflow_run.pull_requests[0].number, github.event.workflow_run.head_sha) || format('review-{0}-manual', inputs.pr) }}
+  group: review-${{ inputs.pr }}
   cancel-in-progress: true
 
 jobs:
   review:
     name: Claude Sonnet reviews this pull request
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' &&
-       github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.pull_requests[0] != null) ||
-      (github.event_name == 'pull_request' && github.event.pull_request.number == 3506 &&
-       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.sha || 'production' }}
+          ref: production
           fetch-depth: 1
           sparse-checkout: .github/scripts
           persist-credentials: false
@@ -52,8 +40,7 @@ jobs:
           script: |
             const { owner, repo } = context.repo;
             const gate = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/codex-review-gate.cjs`);
-            const run = context.payload.workflow_run;
-            const number = Number(context.payload.pull_request?.number ?? run?.pull_requests?.[0]?.number ?? process.env.PR_INPUT);
+            const number = Number(process.env.PR_INPUT);
             if (!Number.isInteger(number) || number < 1) core.setFailed('no pull request number');
             const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
             const { data: issues } = await github.rest.issues.listForRepo({ owner, repo, labels: 'review-switch', state: 'open', per_page: 10 });
@@ -62,8 +49,7 @@ jobs:
             const ok = reviewer === 'claude' && pr.state === 'open' && !pr.draft
               && pr.head.repo?.full_name === `${owner}/${repo}`
               && pr.base.ref === 'production'
-              && pr.user?.login !== 'dependabot[bot]'
-              && (!run || pr.head.sha === run.head_sha);
+              && pr.user?.login !== 'dependabot[bot]';
             core.setOutput('number', String(number));
             core.setOutput('sha', pr.head.sha);
             core.setOutput('go', ok ? 'yes' : 'no');

@@ -3,7 +3,7 @@
 The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
 Small guards share scanner work and trusted metadata:
 
-- `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
+- `pr-guards.yml`: Gitleaks + TruffleHog + the NEXT_PUBLIC var scan (`secret-scan`). One scan publishes one context; the `next-public-secrets` summary job that republished the same step outcome is gone (HTPR-9450).
 - `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code. The size guard blocks agent PRs over the hand-written cap.
 - Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
 - The trusted guard publishes one existing required `pr-title` context for outside, size and title results. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
@@ -109,3 +109,34 @@ slower one. Each shard runs one quarter of the pages on `ubuntu-latest` and
 builds its own candidate from the same warm Next.js cache, so the check costs one
 build plus the slowest quarter. Four builds cost nothing on this public repo, and
 the count is 24 jobs per push: four shards plus the summary.
+
+### What the second pass took off pull requests (HTPR-9450)
+
+The first pass moved the UI drivers to nightly and made `pstack-verifier` the only
+required check. This pass applies the same rule to every remaining lane: a check
+stays on every pull request only when no journey and no cheap rule covers it.
+
+Gone from a pull request entirely, with the reason each one went:
+
+- `bugfix-regression` (report-only replay of the changed tests) and
+  `quick-check-proof` (proved the pre-push hook's own test files, which the
+  `ci-tests` shards already run).
+- `claude-review-request` and the pull-request and `workflow_run` triggers of
+  `claude-review`: a bot review is not a verdict, so the second reviewer is a
+  `workflow_dispatch` opinion now and one review bot plus the verifier carry the
+  pull request.
+- the `pull_request_target` trigger of `codex-review-gate`: it writes `ai-review`
+  from a review, a review comment or a comment, and from its ten-minute sweep,
+  never from a push.
+- `ai-evals` (baselines, not a gate) and `mcp-client-eval` (paid, 45 minutes) run
+  on production pushes and their crons only.
+- `core-smoke-seed-size` moved to the production push, where its nightly smoke
+  actually runs.
+- `production-revert-check` and `break-it-review` are `workflow_dispatch` only.
+  Both prove machinery rather than the change in front of them.
+
+Path-filtered lanes stay, because a pull request that does not touch them pays
+nothing: `node-version-guard` (the Vercel token must never share a runner with
+candidate scripts, so it cannot fold into `ci-tests`), `ship-scripts-tests`,
+`skills-evals`, `dependabot-lane`, and `parity-contract-trusted`, which now runs
+only when `config/parity/**` or its own workflow changes.

@@ -1,15 +1,7 @@
 name: Core smoke seed size
 
 on:
-  pull_request:
-    branches: [production]
-    paths:
-      - scripts/seed-core-actions-smoke.mjs
-      - scripts/lib/core-smoke-seed-plan.mjs
-      - scripts/run-app-smoke-isolated.sh
-      - .github/scripts/core-smoke-seed-size.mjs
-      - .github/workflows/core-smoke-seed-size.yml
-      - tests/core-smoke-seed-size.test.cjs
+  workflow_dispatch:
   push:
     branches: [production]
     paths:
@@ -24,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: core-smoke-seed-size-${{ github.event.pull_request.number || github.ref }}
+  group: core-smoke-seed-size-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

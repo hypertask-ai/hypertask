@@ -1,20 +1,22 @@
 name: Break-it review
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
-    branches: [production]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number to break
+        required: true
+        type: string
 
 permissions: {}
 
 concurrency:
-  group: break-it-${{ github.event.pull_request.number }}
+  group: break-it-${{ inputs.pr }}
   cancel-in-progress: true
 
 jobs:
   break-it:
     name: break-it
-    if: github.event.pull_request.draft == false && contains(github.event.pull_request.title, '[BUGFIX]') && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -22,14 +24,28 @@ jobs:
       pull-requests: write
       statuses: write
     steps:
+      - name: Resolve the pull request and its two commits
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ inputs.pr }}
+        run: |
+          set -euo pipefail
+          row=$(gh api "repos/{owner}/{repo}/pulls/$PR" --jq '[.head.sha, .base.sha, (.head.repo.full_name == .base.repo.full_name), .draft, .state] | @tsv')
+          read -r head base same_repo draft state <<<"$row"
+          test "$same_repo" = "true" || { echo "::error::PR $PR comes from a fork; nothing to break here."; exit 1; }
+          test "$draft" = "false" || { echo "::error::PR $PR is a draft."; exit 1; }
+          test "$state" = "open" || { echo "::error::PR $PR is $state."; exit 1; }
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ steps.target.outputs.base }}
           persist-credentials: false
           path: trusted
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ steps.target.outputs.head }}
           persist-credentials: false
           fetch-depth: 0
           path: candidate
@@ -50,8 +66,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           OPENROUTER_EVAL_KEY: ${{ secrets.OPENROUTER_EVAL_KEY }}
           PSTACK_VERIFIER_ALT_MODEL: ${{ vars.PSTACK_VERIFIER_ALT_MODEL }}
-          PR: ${{ github.event.pull_request.number }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ inputs.pr }}
+          HEAD_SHA: ${{ steps.target.outputs.head }}
           CANDIDATE: ${{ github.workspace }}/candidate
           BREAK_IT_DEPS: ${{ steps.deps.outcome }}
         run: node .github/scripts/break-it-review.mjs

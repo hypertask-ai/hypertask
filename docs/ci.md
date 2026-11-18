@@ -68,7 +68,7 @@ without printing them and performs no GitHub writes.
 The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
 Small guards share scanner work and trusted metadata:
 
-- `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
+- `pr-guards.yml`: Gitleaks + TruffleHog + the NEXT_PUBLIC var scan (`secret-scan`). One scan publishes one context; the `next-public-secrets` summary job that republished the same step outcome is gone (HTPR-9450).
 - `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code. The size guard blocks agent PRs over the hand-written cap.
 - Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
 - The trusted guard publishes one existing required `pr-title` context for outside, size and title results. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
@@ -175,6 +175,37 @@ builds its own candidate from the same warm Next.js cache, so the check costs on
 build plus the slowest quarter. Four builds cost nothing on this public repo, and
 the count is 24 jobs per push: four shards plus the summary.
 
+### What the second pass took off pull requests (HTPR-9450)
+
+The first pass moved the UI drivers to nightly and made `pstack-verifier` the only
+required check. This pass applies the same rule to every remaining lane: a check
+stays on every pull request only when no journey and no cheap rule covers it.
+
+Gone from a pull request entirely, with the reason each one went:
+
+- `bugfix-regression` (report-only replay of the changed tests) and
+  `quick-check-proof` (proved the pre-push hook's own test files, which the
+  `ci-tests` shards already run).
+- `claude-review-request` and the pull-request and `workflow_run` triggers of
+  `claude-review`: a bot review is not a verdict, so the second reviewer is a
+  `workflow_dispatch` opinion now and one review bot plus the verifier carry the
+  pull request.
+- the `pull_request_target` trigger of `codex-review-gate`: it writes `ai-review`
+  from a review, a review comment or a comment, and from its ten-minute sweep,
+  never from a push.
+- `ai-evals` (baselines, not a gate) and `mcp-client-eval` (paid, 45 minutes) run
+  on production pushes and their crons only.
+- `core-smoke-seed-size` moved to the production push, where its nightly smoke
+  actually runs.
+- `production-revert-check` and `break-it-review` are `workflow_dispatch` only.
+  Both prove machinery rather than the change in front of them.
+
+Path-filtered lanes stay, because a pull request that does not touch them pays
+nothing: `node-version-guard` (the Vercel token must never share a runner with
+candidate scripts, so it cannot fold into `ci-tests`), `ship-scripts-tests`,
+`skills-evals`, `dependabot-lane`, and `parity-contract-trusted`, which now runs
+only when `config/parity/**` or its own workflow changes.
+
 ## PR size check (HYCI-29)
 
 - Trusted production code counts additions and deletions against the current production commit and PR head, not the cached PR file list.
@@ -224,12 +255,12 @@ the count is 24 jobs per push: four shards plus the summary.
 
 - AI review is Codex's built-in GitHub code review (the `chatgpt-codex-connector` bot), turned on for this repository with Automatic review, Review: All PRs, and Review trigger: On every push. It posts a standard pull request review with one inline comment per finding, each carrying a priority badge such as P1 or P2 ([OpenAI Codex GitHub integration](https://developers.openai.com/codex/integrations/github), which redirects to https://learn.chatgpt.com/docs/third-party/github).
 - The required review gate is GitHub AI Review (`ai-review`). The legacy `claude-review` context stays in the live ruleset, and the gate sets both to the same state.
-- [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on every push to a pull request (opened, reopened, synchronize, ready for review) so the head gets its pending status and one review request at once, wakes on a Codex review, review comment or issue comment, and sweeps every open PR on a ten minute timer that GitHub runs only every few hours (22 runs in 5.5 days, HYCI-415). It loads its script from the `production` branch and reads PR content only as data.
+- [Codex review gate](../.github/workflows/codex-review-gate.yml) turns the bot's review into that commit status. It runs on GitHub-hosted `ubuntu-latest` with the built-in workflow token only, wakes on a Codex review, review comment or issue comment, and sweeps every open PR on a ten minute timer that GitHub runs only every few hours (22 runs in 5.5 days, HYCI-415). It does not wake on a push (HTPR-9450): a bot review is not a verdict, so the pull request pays no job for one and a reviewer asks for a review with `@codex review` or `Review the current head <sha>`. Its sweep still gives an unanswered head its pending status. It loads its script from the `production` branch and reads PR content only as data.
 - The gate reads every PR through REST: an event or a single-PR run reads only its own PR, and the timer sweep pages through the open production PRs. Nothing reads PRs through GraphQL, which exhausted the 5,000-point installation quota (HYCI-293). Reviews, inline comments, issue comments and current-head statuses are read in full, so a late-page P1 still fails the gate. Before it publishes a success, the gate re-reads that PR and publishes nothing when the review state changed in between, so a sweep cannot overwrite a newer P1 verdict.
 - If a non-draft PR has no current-head review or running current-head summary, the sweep requests `@codex review` once per head, with a trusted workflow comment marker. It rechecks the head before requesting and leaves both required statuses pending; the request itself is never approval.
 - Codex also keeps one summary comment per PR with a hidden `codex-review-state:v1` JSON block naming the reviewed commit, a status (`running` or `completed`) and whether there were findings. Reactions and timestamps are never used, because they cannot say which commit they cover.
 - Rules for each open same-repository PR to `production`, using the current head commit only (a review of an older commit never counts by itself). Each inline comment is counted by its own commit as well as by the commit of the review that carries it. A comment whose own commit is older is not attributed to the head. Every comment inside a review of the head counts wherever it sits, so a P0 or P1 there still fails. A later clean head review clears only earlier submitted reviews; missing or equal timestamps fail closed. A P0 or P1 that GitHub has moved onto the head from an older review still fails until the head has been reviewed. The head has been reviewed when a Codex review is on that commit, or the summary for that commit is `completed` with no findings or no unresolved findings, or that summary is `completed` and a Codex pull-request comment says it found no major issues for that commit (the comment names the commit after "Reviewed commit"). After the head has been reviewed, those older comments no longer fail the gate. Success: the head has been reviewed and no comment that still counts has a P0 or P1 badge, or the summary block for that head says `completed` with no findings, or `completed` with no unresolved findings, or `completed` with unresolved findings when no comment that still counts carries a P0 or P1 badge (the summary alone cannot raise priority). P2 and lower findings do not fail the gate. Failure: a comment that still counts has a P0 or P1 badge, or no badge at all, or an older review left more comments unread than the gate could page through while the head had no review of its own. Pending: Codex has not answered for that head. A new push gets a fresh review, but on 2026-11-08 two pushes drew none in ten minutes and `@codex review` started one within seconds, so a PR still waiting needs that comment.
-- Claude review: while a `review-switch` issue names `claude`, Claude reviews every non-draft same-repository PR on a GitHub-hosted runner, one run per PR, all PRs in parallel, no queue and no daily cap. It runs in two stages. [Claude review request](../.github/workflows/claude-review-request.yml) runs on `pull_request` with no secret and no checkout. [Claude review](../.github/workflows/claude-review.yml) then runs on `workflow_run` from the `production` branch with the Claude subscription token (`CLAUDE_CODE_OAUTH_TOKEN`), so the review never executes code from the PR. It reads the PR number from the event, takes the diff from the GitHub API for that exact head, and skips a stale head, a fork and Dependabot. It never falls back to a paid API key. It posts one comment per head with a `claude-review:v1` marker and then sets `ai-review` and `claude-review` for that head itself, so the gate does not have to wake. A clean verdict clears a P0 or P1 that GitHub moved onto the head from an older Codex review; a P0 or P1 on a Codex review of the head itself still fails. When Claude has findings on the head, both checks report that review, so a head stays red on the active reviewer's finding and never on an older Codex one. A `workflow_dispatch` run with a `pr` number backfills an open PR. One transitional `pull_request` path in the trusted workflow covers PR 3506 only, because a `workflow_run` workflow cannot review the PR that introduces it; remove it after that PR merges.
+- Claude review: while a `review-switch` issue names `claude`, Claude reviews every non-draft same-repository PR on a GitHub-hosted runner, one run per PR, all PRs in parallel, no queue and no daily cap. It is a `workflow_dispatch` opinion only (HTPR-9450): one review bot plus the verifier carry a pull request, so no request stage runs on `pull_request` and no `workflow_run` fires on a push. [Claude review](../.github/workflows/claude-review.yml) runs from the `production` branch with the Claude subscription token (`CLAUDE_CODE_OAUTH_TOKEN`) and never executes code from the PR. It reads the PR number from the dispatch input, takes the diff from the GitHub API for that exact head, and skips a stale head, a fork, a draft and Dependabot. It never falls back to a paid API key. It posts one comment per head with a `claude-review:v1` marker and then sets `ai-review` and `claude-review` for that head itself, so the gate does not have to wake. A clean verdict clears a P0 or P1 that GitHub moved onto the head from an older Codex review; a P0 or P1 on a Codex review of the head itself still fails. When Claude has findings on the head, both checks report that review, so a head stays red on the active reviewer's finding and never on an older Codex one. A `workflow_dispatch` run with a `pr` number is the only way it starts.
 - Owner + QA visual release: when the current head already has a successful `feature-flag-gate` for an Owner + QA default that gates the changed UI, `ai-review` ignores Codex P0/P1 findings that only demand `defaultMode: "EVERYONE"`. Everyone is still required after independent design QA widens the flag; that switch stays outside this gate.
 - On success it posts one `APPROVE` comment naming `reviewed-commit: <head sha>` and the review link. Auto-merge keeps its `REQUIRED` list, including `ai-review`, and still requires that exact-head `APPROVE` comment. DeepSeek-produced PRs keep the `hold` label until a trusted release session removes it.
 - Retired: the self-hosted reviewer (`hypertask-ai/reviewer` on `contabo-1`), its 30-second dispatch timer, the `reviewdispatch` and `aireviewer` accounts, and the manual `repository_dispatch` retry. Do not re-enable them: CI work on the shared server is forbidden.
@@ -933,7 +964,7 @@ The read-only job replays named failing Node tests twice inside network-disabled
 
 The separate publisher executes no candidate code. It rechecks production, pushes one deterministic branch per culprit, and leaves auto-merge off. The existing `AUTOMERGE_TOKEN` lets the proposal trigger normal required checks. No new credential or runner is needed.
 
-Relevant PRs also replay the recorded incident without publishing. Manual dispatch accepts a failed CI run ID. It replays that historical head without opening a PR. For the 25 October source-regex incident, use run `40201291546`: the expected culprit is `73cc4b70870fb411935a3a169779a8fb8b49f168` (PR #2129). Hosted fixtures also prove publication against a disposable local Git remote, not production.
+Manual dispatch of `production-revert-check.yml` replays the recorded incident without publishing; it no longer runs on the pull request that touches the revert machinery (HTPR-9450). Manual dispatch accepts a failed CI run ID. It replays that historical head without opening a PR. For the 25 October source-regex incident, use run `40201291546`: the expected culprit is `73cc4b70870fb411935a3a169779a8fb8b49f168` (PR #2129). Hosted fixtures also prove publication against a disposable local Git remote, not production.
 
 ## Task writer and chip quality baseline
 
@@ -1216,30 +1247,6 @@ network, `CORE_APP_SMOKE`) and no network, so this artifact cannot serve it.
 
 Docs-only PRs skip the build and every heavy step, as before.
 
-## Bugfix regression report (HYCI-14)
-
-Unit 1 of [HYCI-14](https://app.hypertask.ai/detail/project-11514/14) adds a
-report-only job for bug fixes. It signals on the pull request title tag, so
-only `HTPR`, `HYFA`, `YPER4` and `HYCI` titles carrying `[BUGFIX]` are evaluated. Set
-the `no-regression-test` label and write the reason in the pull request body to
-be exempt; a reason inside an HTML comment does not count, because reviewers
-cannot see it.
-
-The job replays every changed test in `tests/` twice: on the merge base and on
-the pull request head. A test that passes on the head but also passes on the
-merge base does not reproduce the bug, and the job names that file in a warning
-and in the run summary. A test that fails on the head is named for the same
-reason. Tests outside `tests/` (for example `*.test.mjs` beside a ship script)
-are reported as unreplayable rather than missing. Dependency, lockfile or Prisma
-schema changes make the replay unproven: the base would run with the fixed
-dependencies.
-
-`bugfix-regression` is not a required check, never blocks a merge, and changes
-no release permission. Its workflow states this in
-[`tests/bugfix-regression-check.test.cjs`](../tests/bugfix-regression-check.test.cjs).
-The job also runs `.github/scripts/bugfix-regression-check.mjs --backtest <n>`
-by hand to summarise how recent merged bugfix pull requests would have fared.
-
 ## CI failure log (HYCI-17)
 
 `CI Failure Log` (`.github/workflows/ci-failure-log.yml`) records one line per
@@ -1332,10 +1339,11 @@ The hook reads Git's ref updates and passes the push without checking when the
 pushed commit is not the checked-out one, because the tools read the working
 copy.
 
-`.github/workflows/quick-check-proof.yml` measures the real hook on hosted
-Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull
-requests. It fails the run when the measured run reaches 10 seconds and proves
-that a file with a type error stops the push.
+`The hook's own tests, `tests/quick-check.test.cjs` and
+`tests/install-git-hooks.test.cjs`, run in the `ci-tests` shards. The separate
+`quick-check-proof.yml` lane measured the same hook on hosted Ubuntu and proved a
+type error stops the push; it re-ran a subset of those shards and is gone
+(HTPR-9450).
 
 ## Session ledger guard (HYCI-16)
 
@@ -1961,7 +1969,7 @@ lands. No new required check is added.
 
 ## Break-it review (HTPR-9408)
 
-A `[BUGFIX]` pull request gets up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one `break-it` status. Each test file stays under 1200 characters and the whole model answer under 3500, because a longer answer is cut off at the model's 1200-token cap and the review cannot run.
+`workflow_dispatch` with a pull request number gives that pull request up to three edge-case tests from another model family than its `Author-Model` line, run by the base-commit script inside a sandbox with no network and no secrets after a `npm ci --ignore-scripts` install, then one comment and one break-it status. It no longer starts on a pull request event (HTPR-9450): the verifier drives the base and the head of every pull request, so this paid lane runs when a person asks for it.
 
 The job fails its own step when the review could not run or a break attempt found a hole, and prints the reason in the run log as well as in the comment and the status. `break-it` is not one of the required checks: per pstack's shipping playbook the one verdict on a bug fix comes from the independent verifier, so this result is that verifier's edge-case input rather than a second gate.
 

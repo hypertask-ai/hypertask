@@ -1,7 +1,6 @@
 name: AI evals
 
 on:
-  pull_request:
   push:
     branches: [production]
   workflow_dispatch:
@@ -11,7 +10,7 @@ permissions:
 
 concurrency:
   group: ai-evals-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   ai-evals:

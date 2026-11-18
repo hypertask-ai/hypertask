@@ -1,18 +1,14 @@
 name: Production Revert Check
 
 on:
-  pull_request:
-    paths:
-      - .github/scripts/production-revert-pr.mjs
-      - .github/workflows/production-revert-*.yml
-      - tests/production-revert-pr.test.cjs
+  workflow_dispatch:
 
 permissions:
   contents: read
   actions: read
 
 concurrency:
-  group: production-revert-check-${{ github.event.pull_request.number }}
+  group: production-revert-check-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

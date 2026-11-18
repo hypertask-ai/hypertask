@@ -40,7 +40,8 @@ The hook reads Git's ref updates and passes the push without checking when the
 pushed commit is not the checked-out one, because the tools read the working
 copy.
 
-`.github/workflows/quick-check-proof.yml` measures the real hook on hosted
-Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull
-requests. It fails the run when the measured run reaches 10 seconds and proves
-that a file with a type error stops the push.
+`The hook's own tests, `tests/quick-check.test.cjs` and
+`tests/install-git-hooks.test.cjs`, run in the `ci-tests` shards. The separate
+`quick-check-proof.yml` lane measured the same hook on hosted Ubuntu and proved a
+type error stops the push; it re-ran a subset of those shards and is gone
+(HTPR-9450).

@@ -4,6 +4,9 @@ on:
   pull_request_target:
     branches: [production]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - config/parity/**
+      - .github/workflows/parity-contract-trusted.yml
 
 permissions:
   contents: read

@@ -3,20 +3,11 @@ name: MCP client eval
 on:
   schedule:
     - cron: "0 6 * * 1"
-  pull_request:
-    paths:
-      - "evals/mcp-client/**"
-      - "src/lib/mcp-server/**"
-      - "src/lib/mcp/**"
-      - "src/app/api/mcp/**"
-      - "src/app/mcp/**"
-      - "src/lib/mcpClientEval/**"
-      - ".github/workflows/mcp-client-eval.yml"
   workflow_dispatch:
 
 concurrency:
-  group: mcp-client-eval-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: mcp-client-eval-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   mcp-client-eval:
