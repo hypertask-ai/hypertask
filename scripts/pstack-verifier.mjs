@@ -937,7 +937,7 @@ function baseRunFor(plan, journey, baseEvidence) {
   if (fresh) return fresh;
   const item = (plan.journeys ?? []).find((entry) => entry.journey === journey);
   if (!item?.base) return null;
-  return { journey, steps: item.base.steps, expects: item.base.expects, navigations: item.base.navigations, offOrigin: item.base.offOrigin, judged: item.base.judged?.verdict ?? "" };
+  return { journey, apiOnly: item.base.apiOnly === true, steps: item.base.steps, expects: item.base.expects, navigations: item.base.navigations, offOrigin: item.base.offOrigin, judged: item.base.judged?.verdict ?? "" };
 }
 export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askModel, key = process.env.OPENROUTER_EVAL_KEY }) {
   const journeys = [];
