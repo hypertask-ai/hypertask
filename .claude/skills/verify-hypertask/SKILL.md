@@ -342,6 +342,11 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-hypertask/bin/ht-verify login [account]` | the chosen QA account's state loads as the expected user |
 | `.claude/skills/verify-hypertask/bin/ht-verify seed` | the disposable database seeds and the local state loads as a real user |
 | `.claude/skills/verify-hypertask/bin/ht-verify shot <url> --out <png>` | the page renders signed in, never a login landing |
+| `.claude/skills/verify-hypertask/bin/ht-verify session start` | one persistent browser the later `open`, `click`, `fill` and `shot --session` share |
+| `.claude/skills/verify-hypertask/bin/ht-verify click <selector>` | a real click lands and the page reacts |
+| `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text>` | a field accepts typed input on the real page |
+| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path>` | an authenticated API call answers through the run's own cookies, writes behind `--confirm` |
+| `.claude/skills/verify-hypertask/bin/ht-verify logs` | the dev or browser log shows what happened |
 | `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
 | `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |
 | `.claude/skills/verify-qa/scripts/qa-teams` | the free, pro and byok team accounts load on their own plan and AI usage answers |
