@@ -78,6 +78,67 @@ test("the parser accepts one honest test and refuses the ways a model answer goe
   assert.throws(() => parseBreakTests("not json at all"), /was not JSON/);
 });
 
+test("the parser reads JSON that arrives fenced, wrapped in prose, or both", async () => {
+  const { parseBreakTests } = await load();
+  const payload = JSON.stringify({ tests: [{ name: "empty-title", code: good }] });
+  const files = ["break-it-empty-title.test.cjs"];
+  for (const answer of [
+    "```json\n" + payload + "\n```",
+    `Here are the tests I would run.\n\n${payload}\n\nEach one fails on the old code.`,
+    `Sure.\n\`\`\`json\n${payload}\n\`\`\`\nLet me know if you want a fourth {test}.`,
+    `Note {"tests":"not an array"} then\n\`\`\`json\n${payload}\n\`\`\``,
+  ]) assert.deepEqual(parseBreakTests(answer).map((item) => item.file), files, answer);
+});
+
+async function runWithAnswers(answers) {
+  const { main } = await load();
+  const posts = [], lines = [];
+  let calls = 0;
+  const fetchImpl = async (url, init) => {
+    if (String(url).includes("openrouter")) {
+      const content = answers[Math.min(calls, answers.length - 1)];
+      calls += 1;
+      return { ok: true, json: async () => ({ choices: [{ message: { content } }] }) };
+    }
+    posts.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
+    return { ok: true, json: async () => ({}) };
+  };
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
+  try {
+    const status = await main({
+      fetch: fetchImpl,
+      git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"),
+      gh: () => JSON.stringify(pull("Author-Model: claude")),
+      spawn: () => ({ status: 0, stdout: "", stderr: "" }),
+      log: (line) => lines.push(line),
+      warn: () => {},
+    });
+    return { status, posts, lines, calls: () => calls };
+  } finally {
+    delete process.env.OPENROUTER_EVAL_KEY;
+    delete process.env.GH_TOKEN;
+  }
+}
+
+const fenced = (code = good) => "```json\n" + JSON.stringify({ tests: [{ name: "blank-title", code }] }) + "\n```";
+
+test("an answer that arrives as prose is asked for once more and the reason is printed", async () => {
+  const run = await runWithAnswers(["My plan: read the title validator and then decide.", fenced()]);
+  const comments = run.posts.filter((entry) => String(entry.url).endsWith("/issues/7/comments"));
+  assert.deepEqual([run.calls(), run.status.state], [2, "success"]);
+  assert.equal(run.lines.join("\n").includes("could not be read"), true);
+  assert.equal(run.lines.join("\n").includes("asking once more"), true);
+  assert.equal(comments.length, 1);
+  assert.equal(/HELD blank-title/.test(comments[0].body.body), true);
+});
+
+test("a second unreadable answer fails the step with the reason and asks no third time", async () => {
+  const run = await runWithAnswers(["no json here", "still", fenced()]);
+  assert.deepEqual([run.calls(), run.status.state], [2, "failure"]);
+  assert.equal(run.lines.join("\n").includes("asking once more"), true);
+  assert.equal(/could not run: model answer was not JSON/.test(run.status.text), true);
+});
+
 test("broken attempts are named as broken, held attempts as held, and the rest unproven", async () => {
   const { breakSummary } = await load();
   const tests = [{ name: "one", file: "break-it-one.test.cjs" }, { name: "two", file: "break-it-two.test.cjs" }];
