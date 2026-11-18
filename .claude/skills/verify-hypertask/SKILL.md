@@ -336,6 +336,7 @@ Every script below is executable and is invoked exactly as shown.
 
 | Helper | What it proves |
 |---|---|
+| `.claude/skills/verify-hypertask/bin/ht-verify up` | the disposable local stack starts and answers 200 on /login |
 | `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
 | `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |
 | `.claude/skills/verify-qa/scripts/qa-teams` | the free, pro and byok team accounts load on their own plan and AI usage answers |
