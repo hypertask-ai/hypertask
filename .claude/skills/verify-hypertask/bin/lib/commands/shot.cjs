@@ -1,12 +1,14 @@
 const { existsSync } = require("node:fs");
 const path = require("node:path");
 const { dryRun, fail, localEnv, parseArgs, repoRoot, run, stateFile } = require("../context.cjs");
+const { withPage } = require("../session.cjs");
 
 const usage = `ht-verify shot <url> --out <absolute.png> - signed-in screenshot with a landing check
 
 Usage:
   ht-verify shot <url> --out /abs/out.png [--state PATH | --account flags] [--viewport 390x844]
                        [--theme porcelain|graphite|graphite-2|amoled|dia] [--allow-redirect] [--dry-run]
+  ht-verify shot --session --out /abs/out.png
 
   <url>             full URL, scheme included. Local runs use the env.json base URL.
   --out             absolute PNG path. Relative paths are refused.
@@ -17,6 +19,7 @@ Usage:
   --theme           set the theme cookie before load.
   --allow-redirect  accept a redirect away from the requested path, labelled UNVERIFIED.
   --dry-run         print the exact helper command and take no shot.
+  --session         shoot the persistent session's page instead of a new browser.
 
 Wraps .claude/skills/verify-on-phone/scripts/phone-shot.sh, which refuses a login
 landing and a missing state. A redirect away from the requested path is a failure
@@ -46,12 +49,18 @@ module.exports = {
   summary: "signed-in screenshot with a login and redirect landing check",
   usage,
   async run(argv) {
-    const { values, positionals } = parseArgs(argv, { out: "value", state: "value", account: "value", viewport: "value", theme: "value", "allow-redirect": "bool", "dry-run": "bool" });
+    const { values, positionals } = parseArgs(argv, { out: "value", state: "value", account: "value", viewport: "value", theme: "value", session: "bool", "allow-redirect": "bool", "dry-run": "bool" });
     const url = positionals[0];
-    if (!url) fail("shot needs a URL", "Pass the page to shoot, for example ht-verify shot http://127.0.0.1:3000/project?id=7049 --out /tmp/board.png.", "usage", 2);
-    if (!/^https?:\/\//.test(url)) fail(`no scheme in ${url}`, "Pass the full URL, scheme included, for example https://app.hypertask.ai/my-tasks.", "usage", 2);
+    if (!values.session && !url) fail("shot needs a URL", "Pass the page to shoot, for example ht-verify shot http://127.0.0.1:3000/project?id=7049 --out /tmp/board.png.", "usage", 2);
+    if (url && !/^https?:\/\//.test(url) && !values.session) fail(`no scheme in ${url}`, "Pass the full URL, scheme included, for example https://app.hypertask.ai/my-tasks.", "usage", 2);
     if (!values.out) fail("shot needs --out", "Pass an absolute PNG path, for example --out /tmp/board.png.", "usage", 2);
     if (!path.isAbsolute(values.out)) fail(`--out must be absolute, got ${values.out}`, "Prefix it with $PWD, for example --out \"$PWD/board.png\".", "usage", 2);
+    if (values.session) {
+      return withPage(async (page, session) => {
+        await page.screenshot({ path: values.out, type: "png" });
+        return { target: session.base.includes("127.0.0.1") ? "local" : "production", data: { file: values.out, url: page.url(), viewport: `${session.viewport.width}x${session.viewport.height}`, verified: true, session: true }, evidence: [values.out] };
+      });
+    }
     const runState = stateFile();
     let state = values.state;
     if (!state) {
