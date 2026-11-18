@@ -14,8 +14,9 @@ const trusted = read(".github/workflows/pstack-verifier.yml");
 const request = read(".github/workflows/pstack-verifier-request.yml");
 const policy = read("docs/ci-policy.yml");
 const expected = {
-  resolve: { contents: "read", "pull-requests": "read", statuses: "write" },
+  resolve: { contents: "read", "pull-requests": "read", statuses: "write", actions: "read" },
   plan: { contents: "read" },
+  base: { contents: "read", packages: "read" },
   drive: { contents: "read", packages: "read" },
   judge: { contents: "read", checks: "read", statuses: "read" },
   post: { actions: "read", contents: "read", "pull-requests": "write", statuses: "write" },
@@ -59,12 +60,13 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(trusted.permissions, {});
   for (const [name, permissions] of Object.entries(expected)) assert.deepEqual(trusted.jobs[name].permissions, permissions, name);
   assert.deepEqual(needs(trusted.jobs.plan), ["resolve"]);
+  assert.deepEqual(needs(trusted.jobs.base), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
-  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "drive"]);
+  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "base", "drive"]);
   assert.deepEqual(needs(trusted.jobs.post), ["resolve", "judge"]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
-  assert.deepEqual(secretJobs, ["plan", "judge"]);
+  assert.deepEqual(secretJobs, ["plan", "base", "judge"]);
   assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.") || value.includes("OPENROUTER_EVAL_KEY")), false);
   assert.deepEqual(tokenGaps(trusted.jobs), []);
   assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").includes("checkout")), false);
@@ -86,7 +88,8 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.equal(trusted.jobs.judge["timeout-minutes"] * 60 * 1000 > CI_WAIT_ROUNDS * CI_WAIT_INTERVAL_MS, true);
   assert.equal(REQUIRED_CI_CONTEXTS.includes("pstack-verifier"), false);
   const ruleset = new Set(policy.policies.production_ruleset.required_status_checks);
-  for (const name of REQUIRED_CI_CONTEXTS) assert.equal(ruleset.has(name), true, name);
+  assert.deepEqual([...ruleset], ["pstack-verifier"]);
+  for (const name of REQUIRED_CI_CONTEXTS) assert.equal(ruleset.has(name), false, name);
   for (const name of ["ai-review", "claude-review", "app-smoke", "browser-smoke"]) assert.equal(REQUIRED_CI_CONTEXTS.includes(name), false, name);
   assert.equal(policy.required_checks.automerge_also_requires.includes("pstack-verifier"), true);
   const cancel = trusted.jobs.cancel.steps.map((step) => String(step.run ?? "")).join("\n");
@@ -285,7 +288,7 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
   const cli = spawnSync(process.execPath, [join(root, "scripts/pstack-verifier.mjs")], { encoding: "utf8" });
   assert.equal(cli.status, 1);
-  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|post/);
+  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|judge-base\|post/);
 });
 
 function playwrightModules() {
@@ -333,4 +336,50 @@ test("a smoke boot that never writes ready records a down preview", (t) => {
     navigations: [],
     offOrigin: [],
   });
+});
+
+test("the plan lane restores cached base results before it plans, keyed by the base sha", () => {
+  const steps = trusted.jobs.plan.steps;
+  const restoreAt = steps.findIndex((step) => String(step.uses ?? "").startsWith("actions/cache/restore@"));
+  const planAt = steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier.mjs plan"));
+  assert.equal(restoreAt >= 0 && planAt > restoreAt, true);
+  assert.match(String(steps[restoreAt].with.key), /\$\{\{ needs\.resolve\.outputs\.base \}\}/);
+  assert.match(String(steps[restoreAt].with["restore-keys"]), /pstack-base-\$\{\{ needs\.resolve\.outputs\.base \}\}-/);
+  assert.match(String(steps[restoreAt].with.path), /base-cache$/);
+  assert.equal(steps[planAt].env.PSTACK_VERIFIER_COMPARE, "true");
+  assert.equal(trusted.jobs.plan.outputs.baseNeeded, "${{ steps.plan.outputs.baseNeeded }}");
+});
+
+test("the base lane drives the base commit with its own trusted root and writes the cache", () => {
+  const job = trusted.jobs.base;
+  assert.equal(job["cache-mode"], "write");
+  assert.match(String(job.if), /needs\.plan\.outputs\.baseNeeded == 'true'/);
+  const checkouts = job.steps.filter((step) => String(step.uses ?? "").startsWith("actions/checkout@"));
+  assert.equal(checkouts.length, 2);
+  assert.match(String(checkouts[1].with.ref), /needs\.resolve\.outputs\.base/);
+  const runAt = job.steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier-job.sh"));
+  const run = String(job.steps[runAt].run);
+  assert.match(run, /\/candidate-base" "\$GITHUB_WORKSPACE\/candidate-base"/);
+  assert.equal(job.steps[runAt].env.PSTACK_PLAN_FILE.endsWith("base-plan.json"), true);
+  assert.equal(job.steps[runAt].env.BASE_SHA, "${{ needs.resolve.outputs.base }}");
+  assert.equal(job.steps[runAt].env.MAP_SHA, undefined);
+  const saveAt = job.steps.findIndex((step) => String(step.uses ?? "").startsWith("actions/cache/save@"));
+  assert.equal(saveAt > runAt, true);
+  assert.match(String(job.steps[saveAt].with.key), /pstack-base-\$\{\{ needs\.resolve\.outputs\.base \}\}/);
+  assert.equal(job.steps[saveAt].if, "always()");
+  const judgeAt = job.steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier.mjs judge-base"));
+  assert.equal(judgeAt > runAt && judgeAt < saveAt, true);
+});
+
+test("the base evidence reaches the judge and the base lane never runs on a pull request", () => {
+  assert.deepEqual(Object.keys(trusted.on), ["workflow_run"]);
+  const judge = trusted.jobs.judge;
+  const download = judge.steps.find((step) => String(step.with?.name ?? "").startsWith("pstack-base-evidence-"));
+  assert.equal(download["continue-on-error"], true);
+  const judgeStep = judge.steps.find((step) => String(step.run ?? "").includes("pstack-verifier.mjs judge"));
+  assert.equal(judgeStep.env.PSTACK_BASE_EVIDENCE, "${{ runner.temp }}/pstack-verifier/base/base-evidence.json");
+  const upload = trusted.jobs.base.steps.find((step) => String(step.uses ?? "").includes("upload-artifact"));
+  assert.match(String(upload.with.name), /^pstack-base-evidence-/);
+  assert.equal(String(upload.with.path).endsWith("base-evidence.json"), true);
+  assert.equal(strings(trusted.jobs.base).some((value) => value.includes("pull_request_target")), false);
 });

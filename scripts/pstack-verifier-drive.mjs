@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { attachGuard, cookiesFromHeader, previewDownBody, readPlan, readSmokeEnv, recordNav, runJourneys, smokeDriveIds, waitForPreview } from "./pstack-verifier.mjs";
+import { attachGuard, BASE_CACHE_DIR, cookiesFromHeader, previewDownBody, readPlan, readSmokeEnv, recordNav, runJourneys, smokeDriveIds, waitForPreview, writeBaseCache } from "./pstack-verifier.mjs";
 
 const work = process.env.WORK;
 const binding = { sha: process.env.HEAD_SHA, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
@@ -20,7 +20,8 @@ if (!(await waitForPreview(ready.url))) {
   writeEvidence(previewDownBody(binding));
   process.exit(1);
 }
-const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
+const planFile = process.env.PSTACK_PLAN_FILE || path.join(work, "plan", "plan.json");
+const plan = readPlan(readFileSync(planFile, "utf8"), binding);
 const shotsDir = path.join(evidenceDir, "shots");
 mkdirSync(shotsDir, { recursive: true });
 const offOrigin = [];
@@ -39,6 +40,10 @@ try {
   });
   const run = await runJourneys({ page, plan, base: ready.url, ...smokeDriveIds(seeded), shotsRoot: shotsDir, offOrigin, nextNavigations: () => (current.navigations = []) });
   writeEvidence({ ...binding, journeys: run.journeys, steps: run.steps, expects: run.expects, navigations: run.navigations, offOrigin: run.offOrigin });
+  if (process.env.PSTACK_BASE_CACHE && process.env.BASE_SHA) {
+    const written = writeBaseCache({ plan, evidence: { journeys: run.journeys }, dir: path.join(work, BASE_CACHE_DIR), baseSha: process.env.BASE_SHA, mapSha: process.env.GITHUB_SHA });
+    console.log(`base cache entries written: ${written}`);
+  }
 } finally {
   await context?.close();
   await browser.close();

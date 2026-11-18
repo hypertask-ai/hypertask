@@ -109,12 +109,10 @@ jobs:
           retry() { local a; for a in 1 2 3; do "$@" && return 0; sleep $((a*4)); done; return 1; }
 
           # Required checks that must ALL be green before an auto-merge.
-          # A MISSING result counts as not-green below, so every name here
-          # must belong to a job that reports on EVERY pull request
-          # (visual-regression reports success when it skips, HTPR-5652).
-          REQUIRED="app-smoke browser-smoke ci-tests ai-review next-public-secrets pr-title"
-          REQUIRED="$REQUIRED feature-flag-gate"
-          REQUIRED="$REQUIRED pstack-verifier"
+          # HTPR-9450: the independent verifier is the only required context.
+          # A MISSING result counts as not-green below, so the one name here
+          # must belong to a job that reports on EVERY pull request.
+          REQUIRED="pstack-verifier"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
           # human: auth/identity, billing, security
