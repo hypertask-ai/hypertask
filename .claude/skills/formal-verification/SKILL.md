@@ -1,6 +1,6 @@
 ---
 name: formal-verification
-description: "Model-check the state machine where a bug costs money: seat quantity reconciliation under the Redis lease. Use for /formal-verification, 'is the seat billing still correct', 'recheck the model', or any change to the files listed under Checks."
+description: "Model-check the state machines where a bug costs money or loses a customer's event: seat quantity reconciliation under the Redis lease, and board webhook delivery retries. Use for /formal-verification, 'is the seat billing still correct', 'recheck the model', or any change to the files listed under Checks."
 ---
 
 # Formal verification
@@ -10,11 +10,11 @@ TLC, the TLA+ model checker, walks every order of steps in a small model of the 
 ## Run
 
 ```sh
-node scripts/formal-verification/run.mjs              # the check
+node scripts/formal-verification/run.mjs              # every check
 node scripts/formal-verification/run.mjs seat-billing # one check
 ```
 
-TLC runs once for each property, on its own generated config, so a property expected to hold is explored to the end of the state space. A full run takes about 10 seconds.
+TLC runs once for each property, on its own generated config, so a property expected to hold is explored to the end of the state space. A full run takes about 15 seconds.
 
 Exit 0 means every property matches its record in `verification/formal/checks.json`. Exit 1 prints the property that changed and its counterexample. Exit 2 means an unknown check name.
 
@@ -29,6 +29,7 @@ Read every result, pass or fail, with the pstack `/statechart` skill. It turns e
 | Check | Model | Covers | Confirmed against |
 |---|---|---|---|
 | seat-billing | `verification/formal/seat-billing/SeatBilling.tla` | `src/lib/syncSeatBilling.ts`, `src/lib/seatBillingLock.ts` | `616b6c73f8` |
+| webhook-retry | `verification/formal/webhook-retry/BoardWebhook.tla` | `src/lib/mcp/webhooks/outboxDelivery.ts`, `src/lib/mcp/webhooks/queue.ts`, `src/lib/mcp/webhooks/events.ts` | `616b6c73f8` |
 
 ### seat-billing
 
@@ -54,6 +55,30 @@ Each model action stands for one call in the code:
 `LeaseExcludesOverlap` fails like this: a run loses its lease, the code keeps running it until the next `assertHeld` throws, and a second run acquires the lease, so both sit in the window. The lock serializes runs only while it is held.
 
 Bounds: one team with one subscription item, seat counts 1 and 2, two runs. The lease is atomic and `assertHeld` throws where the code calls it; seat edits happen only inside a run, because every seat path calls `mutateAndSyncSeatBilling`. Not covered: pointer repair, pending-cancellation repair, the snapshot refresh, proration choice, Stripe idempotency keys, Redis, comped teams.
+
+### webhook-retry
+
+| Property | State | In plain words |
+|---|---|---|
+| `AttemptsBound` | holds | A delivery row never records more attempts than `BOARD_WEBHOOK_MAX_ATTEMPTS`. |
+| `PostsWithinCap` | violated, recorded finding | A delivery is never posted to the subscriber more times than the cap allows. |
+| `SuccessNotReportedFailed` | violated, recorded finding | A delivery whose endpoint answered 2xx is never marked failed. |
+
+| Action | Code |
+|---|---|
+| `Claim` | the `updateMany` that takes the row while it is pending, retrying, or processing with a stale lease |
+| `PostOk`, `PostFail` | `postSignedWebhook`, returning 2xx or a failure |
+| `Record` | the fenced `updateMany` whose `processingAt` is still this claim's time, then the attempt row |
+| `FenceMiss` | the same write when the lease went stale or another claim took the row, so the fence matches nothing |
+| `LeaseStale`, `Sweep` | `PROCESSING_LEASE_MS` passing, then the sweep that returns the row to `retrying` with one more attempt |
+| `Exhaust` | the sweep marking rows failed once `attemptCount` reaches the cap |
+| `PostPastBound` | the model stops counting posts at `MaxPosts`, so a stuck claim cannot grow the state space |
+
+`SuccessNotReportedFailed` fails like this: a worker claims the row and posts, the endpoint answers 2xx, and the 5 minute lease goes stale before the worker writes. The sweep returns the row to `retrying`, the worker's fenced write matches no row, so the success is dropped. A later post fails, the attempts reach the cap, and the row ends `failed` although the endpoint received the event.
+
+`PostsWithinCap` fails like this: while the sweep has not run yet, a stale `processing` row can be claimed again by another worker, which posts and is fenced out in turn, so the endpoint receives more posts than the cap while `attemptCount` stands still.
+
+Bounds: one delivery row, two workers, two attempts, three posts, no retry delays (a claim is allowed whenever the row is pending or retrying). The post is not gated on the lease, because the code posts first and fences only the write. Not covered: the 30 day retention delete, authorization and cancellation, the retry queue publish (the sweep is the backup), `src/lib/agentWebhooks/delivery.ts`, and the sweep lease in `src/pages/api/queues/sweep.ts`.
 
 ## When a covered file changes
 

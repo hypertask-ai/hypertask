@@ -10,9 +10,18 @@
       "spec": "verification/formal/seat-billing/SeatBilling.tla",
       "config": "verification/formal/seat-billing/SeatBilling.cfg",
       "properties": [
-        { "name": "JoinNeverDecreases", "expect": "holds" },
-        { "name": "ReconcileMatchesSeats", "expect": "violated", "witness": ["TimedOut", "Landed"] },
-        { "name": "LeaseExcludesOverlap", "expect": "violated", "witness": ["LeaseLost", "Acquire"] }
+        {"name": "JoinNeverDecreases", "expect": "holds"},
+        {"name": "ReconcileMatchesSeats", "expect": "violated", "witness": ["TimedOut", "Landed"]},
+        {"name": "LeaseExcludesOverlap", "expect": "violated", "witness": ["LeaseLost", "Acquire"]}
+      ]
+    },
+    "webhook-retry": {
+      "spec": "verification/formal/webhook-retry/BoardWebhook.tla",
+      "config": "verification/formal/webhook-retry/BoardWebhook.cfg",
+      "properties": [
+        {"name": "AttemptsBound", "expect": "holds"},
+        {"name": "PostsWithinCap", "expect": "violated", "witness": ["PostOk", "Record", "PostOk"]},
+        {"name": "SuccessNotReportedFailed", "expect": "violated", "witness": ["PostOk", "Sweep", "PostFail"]}
       ]
     }
   }
