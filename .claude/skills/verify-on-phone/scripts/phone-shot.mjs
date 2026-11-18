@@ -33,7 +33,7 @@ try {
     await page.waitForTimeout(3000);
     const landed = page.url();
     if (/login|signin|sign-in/.test(landed)) {
-      throw new Error(`The browser landed on a login page (${landed}), so the auth state at ${statePath} is stale and the shot is not evidence. Do this next: Refresh that state file with the login recipe in .claude/skills/verify-qa/SKILL.md 'Logins', then re-run.`);
+      throw new Error(`The browser landed on a login page (${landed}), so the auth state at ${statePath} is stale and the shot is not evidence. Do this next: Refresh that state file with the login recipe in .claude/skills/verify-qa/reference/logins.md, then re-run.`);
     }
     if (!landed.includes(requestedPath) && allowRedirect !== "yes") {
       throw new Error(`Asked for ${url} but the browser landed on ${landed}, so ${out} would show a different screen. Do this next: Check this account has access to that page. If the redirect is expected, re-run with --allow-redirect and say so when you post the shot.`);
