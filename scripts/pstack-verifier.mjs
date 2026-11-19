@@ -832,6 +832,34 @@ export async function runJourneys({ page, plan, base, projectId, taskId, bearer,
   const change = journeys.find((run) => run.journey.startsWith("change:")) ?? journeys[0] ?? { steps: [], expects: [], navigations: [] };
   return { journeys, steps: change.steps, expects: change.expects, navigations: change.navigations, offOrigin: change.offOrigin ?? [] };
 }
+export function driveViewportOptions(viewport) {
+  return (VIEWPORTS.find((item) => item.name === viewport) ?? VIEWPORTS[0]).options;
+}
+async function driveLane({ browser, viewport, plan, base, shotsRoot, evidenceDir, origin, cookies, projectId, taskId, bearer, archivedProjectId }) {
+  const options = driveViewportOptions(viewport);
+  const video = evidenceDir ? { recordVideo: { dir: path.join(evidenceDir, "video", viewport || "plain"), size: options.viewport } } : {};
+  const offOrigin = [];
+  const lane = { navigations: [] };
+  const context = await browser.newContext({ ...options, serviceWorkers: "block", ...video });
+  try {
+    await attachGuard(context, origin ?? base, offOrigin);
+    if (Array.isArray(cookies) && cookies.length) await context.addCookies(cookies);
+    const page = await context.newPage();
+    page.on("response", (response) => {
+      const request = response.request();
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) recordNav(lane.navigations, response.url(), response.status());
+    });
+    const run = await runJourneys({ page, plan, base, projectId, taskId, bearer, archivedProjectId, shotsRoot: viewportShotsDir(shotsRoot, viewport), offOrigin, nextNavigations: () => (lane.navigations = []) });
+    return { ...run, journeys: run.journeys.map((item) => (viewport ? { ...item, viewport } : item)), offOrigin };
+  } finally {
+    await context.close();
+  }
+}
+export async function drivePlan({ browser, plan, base, shotsRoot, evidenceDir = "", origin = base, cookies = [], offOrigin = [], projectId, taskId, bearer, archivedProjectId }) {
+  const lanes = await Promise.all(planViewports(plan).map((viewport) => driveLane({ browser, viewport, plan, base, shotsRoot, evidenceDir, origin, cookies, projectId, taskId, bearer, archivedProjectId })));
+  const first = lanes[0] ?? { steps: [], expects: [], navigations: [], offOrigin: [] };
+  return { journeys: lanes.flatMap((lane) => lane.journeys), steps: first.steps, expects: first.expects, navigations: first.navigations, offOrigin: [...offOrigin, ...lanes.flatMap((lane) => lane.offOrigin)] };
+}
 export function githubEnv(base = process.env) {
   if (!base.GH_TOKEN) throw new Error("gh token is missing");
   const env = { ...base };
@@ -1194,6 +1222,7 @@ export async function planFromRequest(request, deps = {}) {
     if (journeys.unevaluated) plan.unevaluated = journeys.unevaluated;
     if (compare && plan.journeys.length) plan.compare = true;
   }
+  if (driveNeeded(plan)) plan.viewports = [...VIEWPORT_NAMES];
   return plan;
 }
 export async function planJourneys({ request, pages, entries, ask, key, model, models, mapSha, baseSha, bugfix = false, compare = false, reach = [] }) {
