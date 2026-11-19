@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { driveBaseAllowed } from './drive-grade.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '../../../..');
 const { chromium } = createRequire(path.join(root, 'package.json'))('playwright');
@@ -14,7 +15,7 @@ const STATE = flag('state') || process.env.VERIFY_QA_STATE_FILE || '';
 const BROKEN = flag('break');
 const dir = positional[0] || path.join(os.tmpdir(), `ai-chat-drive-${Date.now()}`);
 const fail = (message) => { console.error(message); process.exit(2); };
-if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(BASE)) fail('ai-chat drive refuses a non-loopback base: it drives a disposable seeded stack, never production');
+if (!driveBaseAllowed(BASE)) fail('ai-chat drive refuses a base other than a disposable loopback stack (production needs VERIFY_QA_ALLOW_LIVE=1)');
 if (!STATE) fail('ai-chat drive needs --state <storageState.json> (or VERIFY_QA_STATE_FILE)');
 const fixture = flag('board') ? {} : JSON.parse(await fs.readFile(path.join(root, 'e2e/smoke/.state/card-fixture.json'), 'utf8').catch(() => '{}'));
 const BOARD = flag('board') || fixture.boardPath

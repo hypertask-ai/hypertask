@@ -1,8 +1,14 @@
 export const THEMES = ["porcelain", "graphite", "amoled", "graphite-2"];
 
+export const LIVE_BASE = "https://app.hypertask.ai";
+
+export const driveBaseAllowed = (base) =>
+  /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base || "") ||
+  (process.env.VERIFY_QA_ALLOW_LIVE === "1" && base === LIVE_BASE);
+
 export function requireLoopback(base, label) {
-  if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base || "")) {
-    console.error(`${label} refuses a non-loopback base: it drives a disposable seeded stack, never production`);
+  if (!driveBaseAllowed(base)) {
+    console.error(`${label} refuses a base other than a disposable loopback stack (production needs VERIFY_QA_ALLOW_LIVE=1 and ${LIVE_BASE})`);
     return false;
   }
   return true;
