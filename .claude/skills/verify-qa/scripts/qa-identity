@@ -57,6 +57,7 @@ async function main() {
   }
 
   const cookies = [];
+  const hosts = [appHost, new URL(baseUrl).hostname];
   const now = Date.now() / 1000;
   let expiredAppCookies = 0;
   for (const cookie of state.cookies) {
@@ -68,9 +69,9 @@ async function main() {
       return finish('identity unreadable: invalid storage-state cookie', 2);
     }
     const domain = cookie.domain.toLowerCase();
-    const matchesDomain = domain.startsWith('.')
-      ? appHost === domain.slice(1) || appHost.endsWith(domain)
-      : appHost === domain;
+    const matchesDomain = hosts.some((host) => (domain.startsWith('.')
+      ? host === domain.slice(1) || host.endsWith(domain)
+      : host === domain));
     const matchesPath = endpoint === cookie.path ||
       endpoint.startsWith(cookie.path.endsWith('/') ? cookie.path : `${cookie.path}/`);
     if (matchesDomain && matchesPath) {

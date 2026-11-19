@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createSign, randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -16,6 +16,9 @@ export const BASE_CACHE_DIR = "base-cache";
 export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
 export const CONTEXT = "pstack-verifier";
+const APP_ID = 5264284;
+const APP_LOGIN = "hypertask-runners[bot]";
+const heldSecrets = [];
 const KEYS = ["Escape", "Enter", "Tab", "Backspace", "ArrowDown", "ArrowUp"];
 export const CLICK_ROLES = ["link", "button", "menuitem", "menuitemcheckbox", "checkbox", "radio", "tab", "option", "switch", "combobox"];
 const LAND_ROLES = [...CLICK_ROLES, "textbox"];
@@ -86,11 +89,34 @@ export function normalizeVerdict(verdict, notes = "") {
   if (value === "FAIL") return "FAIL";
   return "";
 }
+export function jsonObjects(text) {
+  const objects = [];
+  let error = null;
+  for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
+    let depth = 0, inString = false, escaped = false;
+    for (let at = start; at < text.length; at++) {
+      const char = text[at];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === "{") depth++;
+      else if (char === "}" && --depth === 0) {
+        try { objects.push(JSON.parse(text.slice(start, at + 1))); } catch (failure) { error = error ?? failure; }
+        break;
+      }
+    }
+  }
+  return { objects, error };
+}
 function jsonObject(text) {
-  const raw = String(text ?? "").trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-  const start = raw.indexOf("{"), end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("model answer was not JSON");
-  return JSON.parse(raw.slice(start, end + 1));
+  const raw = String(text ?? "").replace(/```(?:json)?/gi, " ");
+  const { objects, error } = jsonObjects(raw);
+  if (!objects.length) throw new Error(`model answer was not JSON${error ? `: ${error.message}` : ""}`);
+  return objects[0];
 }
 export function parseAnswer(text) {
   const body = jsonObject(text);
@@ -153,11 +179,26 @@ export function authorGate(body) {
   const author = authorFamily(body);
   return author ? { stop: false, author } : { stop: true, verdict: "FAIL", notes: "author model unknown" };
 }
+const FAMILY_PATTERNS = [
+  ["claude", /claude|anthropic|opus|sonnet|haiku/i],
+  ["deepseek", /deepseek/i],
+  ["grok", /grok|x-ai|xai/i],
+  ["codex", /gpt|openai|codex|o[134]\b/i],
+];
+export function modelFamily(model) {
+  const id = String(model ?? "");
+  return FAMILY_PATTERNS.find(([, pattern]) => pattern.test(id))?.[0] ?? "other";
+}
+export function verifierModels(author, alt) {
+  const models = author === "deepseek" ? [] : [assertFlashModel(FLASH)];
+  const candidate = String(alt ?? "").trim();
+  const usable = candidate && candidate.length <= 80 && /^[^/\s]+\/[^/\s]+$/.test(candidate) && modelFamily(candidate) !== author;
+  if (usable && !models.includes(candidate)) models.push(candidate);
+  return models;
+}
 export function pickVerifier(author, alt) {
-  if (author !== "deepseek") return { model: assertFlashModel(FLASH) };
-  const model = String(alt ?? "").trim();
-  if (!model || model.length > 80 || !/^[^/\s]+\/[^/\s]+$/.test(model) || model.startsWith("deepseek/")) return { fail: "no other-family verifier configured" };
-  return { model };
+  const models = verifierModels(author, alt);
+  return models.length ? { model: models[0], models } : { fail: "no other-family verifier configured" };
 }
 function parseLimited(text, limit) {
   if (typeof text !== "string" || text.length > limit) throw new Error("schema/binding mismatch");
@@ -194,7 +235,7 @@ export function readVerdict(text, binding) {
   if (typeof text !== "string" || text.length < 2 || text.length > 8000) return fail("schema/binding mismatch");
   let body;
   try { body = JSON.parse(text); } catch { return fail("schema/binding mismatch"); }
-  if (!sameBinding(body, binding) || !["PASS", "PASS+NOTES", "FAIL", "PENDING"].includes(body.verdict)) return fail("schema/binding mismatch");
+  if (!sameBinding(body, binding) || !["PASS", "PASS+NOTES", "FAIL", "PENDING", "UNEVALUATED"].includes(body.verdict)) return fail("schema/binding mismatch");
   return { verdict: body.verdict, notes: String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500), sha: binding.sha, run: String(binding.run), attempt: String(binding.attempt), baseSha: String(body.baseSha ?? "").slice(0, 40), tree: String(body.tree ?? "").slice(0, 40), authorFamily: String(body.authorFamily ?? "").slice(0, 40), verifierModel: String(body.verifierModel ?? "").slice(0, 80) };
 }
 function sameSeries(seen, planned, key) {
@@ -205,6 +246,7 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
   let parsed;
   try { parsed = readPlan(plan, binding); } catch { return { verdict: "FAIL", notes: "schema/binding mismatch" }; }
   if (evidence?.preview === "down") return { verdict: "FAIL", notes: "preview did not start" };
+  if (parsed.unevaluated) return { verdict: "UNEVALUATED", notes: String(parsed.unevaluated).slice(0, 500) };
   if (parsed.fail) return { verdict: "FAIL", notes: String(parsed.fail).slice(0, 500) };
   if (!parsed.actions.length) {
     const reason = String(parsed.reason ?? "").replace(/\s+/g, " ").trim();
@@ -227,6 +269,7 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
   const badNav = seen.navigations.some((item) => !(Number(item.status) >= 200 && Number(item.status) < 400));
   if ((!apiOnly && !seen.navigations.length) || badNav) problems.push("document status");
   if (problems.length) return { verdict: "FAIL", notes: [model.notes, ...problems].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().slice(0, 500) };
+  if (model.unevaluated) return { verdict: "UNEVALUATED", notes: String(model.unevaluated).slice(0, 500) };
   const verdict = normalizeVerdict(model.verdict, model.notes);
   if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict: "FAIL", notes: String(model.notes || "model verdict missing").slice(0, 500) };
   return { verdict, notes: String(model.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500) };
@@ -512,8 +555,9 @@ export function openWaitStartedAt(statuses) {
   const waits = window.filter((status) => status.state === "pending" && status.description === "waiting for required checks" && status.created_at);
   return waits.length ? waits[waits.length - 1].created_at : null;
 }
-export function statusDescription({ verdict, authorFamily = "", verifierModel = "" } = {}) {
+export function statusDescription({ verdict, notes = "", authorFamily = "", verifierModel = "" } = {}) {
   if (verdict === "PENDING") return "waiting for required checks";
+  if (verdict === "UNEVALUATED") return `verifier could not evaluate: ${String(notes || "the model did not answer")}`.slice(0, 140);
   return `${verdict}: author ${authorFamily || "unknown"}, verifier ${verifierModel || "none"}`.slice(0, 140);
 }
 export function settleWaiting({ runs, statuses, authorFamily = "", verifierModel = "", now = Date.now(), limitMs = WAIT_LIMIT_MS } = {}) {
@@ -528,7 +572,8 @@ export function settleWaiting({ runs, statuses, authorFamily = "", verifierModel
 export function cancelKeepsStatus(status, ownUrl) {
   if (!status || status.target_url !== ownUrl) return false;
   if (status.state === "success" || status.state === "failure") return true;
-  return status.state === "pending" && status.description === "waiting for required checks";
+  if (status.state === "pending" && status.description === "waiting for required checks") return true;
+  return status.state === "error" && String(status.description ?? "").startsWith("verifier could not evaluate:");
 }
 export async function collectCheckRuns(readPage, pages = 5) {
   const runs = [];
@@ -698,14 +743,19 @@ export function githubEnv(base = process.env) {
   delete env.GITHUB_TOKEN;
   return env;
 }
-export function githubHeaders(env = process.env) {
-  return { Authorization: `Bearer ${githubEnv(env).GH_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+export function githubHeaders(env = process.env, token) {
+  return { Authorization: `Bearer ${token ?? githubEnv(env).GH_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
 }
 export function attemptUrl(repo, run, attempt) {
   return `https://github.com/${repo}/actions/runs/${run}/attempts/${attempt}`;
 }
+function holdSecret(value, mask = true) {
+  if (!value) return;
+  heldSecrets.push(String(value));
+  if (mask) process.stdout.write(`::add-mask::${value}\n`);
+}
 function secretValues() {
-  return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN].filter(Boolean);
+  return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN, process.env.HYPERTASK_RUNNERS_KEY, ...heldSecrets].filter(Boolean);
 }
 function block(label, text, limit, fence) {
   return `${fence}${label}\n${String(text ?? "").slice(0, limit).split(fence).join("")}\n${fence}`;
@@ -767,6 +817,22 @@ export async function askModel(prompt, options, read) {
     throw new Error("model output invalid after retry");
   }
 }
+export class EvaluationError extends Error {
+  constructor(reason) {
+    super(String(reason || "the model did not answer"));
+    this.name = "EvaluationError";
+    this.unevaluated = true;
+  }
+}
+export async function askVerifier(prompt, { models = [], model, ...options } = {}, read) {
+  const list = [...new Set([...(Array.isArray(models) ? models : []), model].filter(Boolean))];
+  let last = "";
+  for (const each of list) {
+    try { return await askModel(prompt, { ...options, model: each }, read); }
+    catch (error) { last = failureText(error, 200); console.log(`verifier model ${each}: ${last}`); }
+  }
+  throw new EvaluationError(last || "no other-family verifier configured");
+}
 function requireRepo(repo) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? "")) throw new Error("repository is not a name");
   return repo;
@@ -794,8 +860,36 @@ function guardSha(sha) {
 function bindingNow(sha = process.env.HEAD_SHA) {
   return { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
 }
-async function postStatus({ repo, sha, run, attempt, state, description, fetchImpl = fetch }) {
-  const response = await fetchImpl(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: githubHeaders(), body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
+function appJwt(pem, now = Date.now()) {
+  const iat = Math.floor(now / 1000) - 60, encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const data = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({ iat, exp: iat + 540, iss: APP_ID })}`, sign = createSign("RSA-SHA256");
+  sign.update(data);
+  sign.end();
+  return `${data}.${sign.sign(pem).toString("base64url")}`;
+}
+export async function mintStatusToken(fetchImpl = fetch, now = Date.now()) {
+  const encoded = String(process.env.HYPERTASK_RUNNERS_KEY ?? "");
+  const pem = Buffer.from(encoded, "base64").toString("utf8");
+  if (!pem.includes("PRIVATE KEY")) throw new Error("token HTTP 0");
+  const jwt = appJwt(pem, now);
+  holdSecret(pem, false);
+  for (const value of [encoded, jwt]) holdSecret(value);
+  const headers = { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" };
+  const install = await fetchImpl("https://api.github.com/repos/hypertask-ai/hypertask/installation", { headers });
+  if (!install.ok) throw new Error(`installation HTTP ${install.status}`);
+  const id = Number((await install.json())?.id);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error("installation HTTP missing");
+  const response = await fetchImpl(`https://api.github.com/app/installations/${id}/access_tokens`, { method: "POST", headers, body: JSON.stringify({ repositories: ["hypertask"], permissions: { statuses: "write" } }) });
+  if (!response.ok) throw new Error(`token HTTP ${response.status}`);
+  const token = (await response.json())?.token;
+  if (!token) throw new Error("token HTTP missing");
+  holdSecret(token);
+  console.log(`installation ${id} HTTP ${install.status} token HTTP ${response.status} permissions {"statuses":"write"}`);
+  return token;
+}
+async function postStatus({ repo, sha, run, attempt, state, description, fetchImpl = fetch, token }) {
+  const appToken = token || await mintStatusToken(fetchImpl);
+  const response = await fetchImpl(`https://api.github.com/repos/${repo}/statuses/${sha}`, { method: "POST", headers: githubHeaders(process.env, appToken), body: JSON.stringify({ state, context: CONTEXT, description: String(description).slice(0, 140), target_url: attemptUrl(repo, run, attempt) }) });
   if (!response.ok) throw new Error(`status HTTP ${response.status}`);
 }
 async function postComment(repo, pr, body, fetchImpl = fetch) {
@@ -826,9 +920,14 @@ function imagesIn(dir) {
 export function eligiblePull(item, repo, sha) {
   return !!item && item.state === "open" && item.draft === false && item.base?.ref === "production" && item.head?.sha === sha && item.head?.repo?.full_name === repo;
 }
-function ownsVerifierStatus(statuses, repo, run, attempt) {
-  const newest = (Array.isArray(statuses) ? statuses : []).find((status) => status?.context === CONTEXT);
-  return newest?.target_url === attemptUrl(repo, run, attempt);
+function appStatuses(statuses) {
+  return (Array.isArray(statuses) ? statuses : []).filter((status) => status?.context === CONTEXT && status?.creator?.login === APP_LOGIN);
+}
+function ownsAppStatus(statuses, run, attempt, allowFirst = false) {
+  const newest = appStatuses(statuses)[0];
+  const target = /\/runs\/(\d+)\/attempts\/(\d+)$/.exec(String(newest?.target_url ?? ""));
+  if (!target) return allowFirst;
+  return Number(run) > Number(target[1]) || (Number(run) === Number(target[1]) && Number(attempt) >= Number(target[2]));
 }
 function pullUrl(repo, number) {
   return `repos/${repo}/pulls/${number}`;
@@ -855,58 +954,51 @@ async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
   try {
     comments = JSON.parse(call(["api", "--paginate", `repos/${repo}/issues/${item.number}/comments?per_page=100`]));
   } catch {
-    return false;
+    return null;
   }
   const markers = compareLib.summaryMarkers({ comments, logins: VERIFIER_LOGINS });
   const marker = markers.at(-1);
-  if (!marker) return false;
+  if (!marker) return null;
   let artifact = null;
   try {
     const dir = path.join(process.env.RUNNER_TEMP || "/tmp", `pstack-reuse-${marker.run}`);
     call(["run", "download", marker.run, "--name", `pstack-verdict-${marker.run}-${marker.attempt}`, "--dir", dir]);
     artifact = JSON.parse(readFileSync(path.join(dir, "verdict.json"), "utf8"));
   } catch {
-    return false;
+    return null;
   }
   let status = null;
   try {
     const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head || artifact.sha}/statuses`]));
-    status = (Array.isArray(statuses) ? statuses : []).find((row) => row?.context === CONTEXT) ?? null;
+    status = appStatuses(statuses)[0] ?? null;
   } catch {
-    return false;
+    return null;
   }
   const decision = reusePayload({ item, sha, tree, diff, patchId, comments, artifact, status, repo });
   if (!decision.reuse) {
     console.log(`reuse skipped: ${decision.reason}`);
-    return false;
-  }
-  const send = io.postStatus ?? postStatus;
-  try {
-    await send({ repo, sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT), state: "success", description: statusDescription({ verdict: decision.verdict, authorFamily: artifact.authorFamily, verifierModel: artifact.verifierModel }) });
-  } catch {
-    return false;
+    return null;
   }
   console.log(decision.notes);
-  return true;
+  return { verdict: decision.verdict, authorFamily: artifact.authorFamily, verifierModel: artifact.verifierModel };
 }
 
 export async function resolveCommand(io = {}) {
   const call = io.gh ?? gh;
-  const send = io.postStatus ?? postStatus;
   const event = io.event ?? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
   const run = event.workflow_run ?? {};
   const repo = requireRepo(process.env.GITHUB_REPOSITORY);
   const sha = String(run.head_sha ?? "");
   const bound = { sha, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
-  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true" }); return; }
+  if (run.conclusion !== "success" || !/^[0-9a-f]{40}$/.test(sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let number = String(run.pull_requests?.[0]?.number ?? "");
   if (!/^[0-9]+$/.test(number)) {
     const matches = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/pulls`])).filter((item) => eligiblePull(item, repo, sha));
-    if (matches.length !== 1) { output({ stop: "true" }); return; }
+    if (matches.length !== 1) { output({ stop: "true", mark: "skip", sha }); return; }
     number = String(matches[0].number);
   }
   const item = JSON.parse(call(["api", pullUrl(repo, number)]));
-  if (!eligiblePull(item, repo, sha)) { output({ stop: "true" }); return; }
+  if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
   if (BOT_LOGINS.has(item.user?.login)) {
@@ -915,19 +1007,17 @@ export async function resolveCommand(io = {}) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const commitsKnown = Array.isArray(commits) ? commits : [];
     const lastSha = commitsKnown.at(-1)?.sha;
-    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true" }); return; }
+    if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
       const gate = authorGate(item.body);
       if (gate.stop) {
-        await send({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
-        output({ stop: "true" });
+        output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
         return;
       }
     } else if (listed.filesTruncated || !botFilesAllowed(listed.files)) {
       const description = listed.filesTruncated ? "FAIL: file list truncated" : `FAIL: author ${item.user.login}, bot changed a user path`;
-      await send({ repo, ...bound, state: "failure", description: description.slice(0, 140) });
-      output({ stop: "true" });
+      output({ stop: "true", mark: "failure", description: description.slice(0, 140), sha });
       return;
     } else {
       botLogin = item.user.login;
@@ -935,8 +1025,7 @@ export async function resolveCommand(io = {}) {
   }
   const gate = authorGate(item.body);
   if (!botLogin && gate.stop) {
-    await send({ repo, ...bound, state: "failure", description: "FAIL: author model unknown" });
-    output({ stop: "true" });
+    output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
   }
   if (!listed) listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
@@ -948,27 +1037,27 @@ export async function resolveCommand(io = {}) {
   const headTree = String(JSON.parse(call(["api", `repos/${repo}/commits/${headSha}`]))?.commit?.tree?.sha ?? "");
   const fullDiff = call(["api", "-H", "Accept: application/vnd.github.diff", pullUrl(repo, number)]);
   const patchId = patchIdOf(fullDiff, io.spawn ?? spawnSync);
-  if (await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId })) { output({ stop: "true" }); return; }
-  if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true" }); return; }
+  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId });
+  if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused), sha }); return; }
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip", sha }); return; }
   const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   if (botLogin) request.botLogin = botLogin;
   writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });
-  await send({ repo, ...bound, state: "pending", description: "Planning a user check" });
-  output({ stop: "false", pr: String(item.number), sha, base: baseSha, files: listed.files.join("\n"), author: request.author });
+  output({ stop: "false", mark: "pending", description: "Planning a user check", pr: String(item.number), sha, base: baseSha, files: listed.files.join("\n"), author: request.author });
 }
 export async function planFromRequest(request, deps = {}) {
-  const ask = deps.ask ?? askModel;
+  const ask = deps.ask ?? askVerifier;
   const binding = deps.binding ?? bindingNow();
   if (request.sha !== binding.sha || String(request.run) !== String(binding.run) || String(request.attempt) !== String(binding.attempt)) throw new Error("schema/binding mismatch");
   const botLogin = BOT_LOGINS.has(request.botLogin) ? request.botLogin : "";
   const picked = pickVerifier(request.author, deps.altModel ?? process.env.PSTACK_VERIFIER_ALT_MODEL);
   const listed = planFileList(request);
-  const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, baseSha: request.baseSha || "", tree: request.tree || "", patchId: request.patchId || "", diffSha256: request.diffSha256 || "", claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
-  const selected = botLogin || plan.fail ? null : selectPlan(listed.files, listed.filesTruncated);
+  const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: "", unevaluated: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, baseSha: request.baseSha || "", tree: request.tree || "", patchId: request.patchId || "", diffSha256: request.diffSha256 || "", claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
+  const selected = botLogin || plan.unevaluated ? null : selectPlan(listed.files, listed.filesTruncated);
   if (botLogin) { plan.reason = "no user path"; plan.botLogin = botLogin; }
-  else if (!plan.fail && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
+  else if (!plan.unevaluated && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
   else if (selected) Object.assign(plan, selected);
-  else if (!plan.fail) {
+  else if (!plan.unevaluated) {
     const bugfix = bugfixTitle(request.title);
     const compare = deps.compare ?? process.env.PSTACK_VERIFIER_COMPARE === "true";
     const journeys = await planJourneys({
@@ -978,6 +1067,7 @@ export async function planFromRequest(request, deps = {}) {
       ask,
       key: deps.key ?? process.env.OPENROUTER_EVAL_KEY,
       model: picked.model,
+      models: picked.models,
       mapSha: deps.mapSha ?? process.env.GITHUB_SHA,
       baseSha: request.baseSha,
       bugfix,
@@ -988,12 +1078,12 @@ export async function planFromRequest(request, deps = {}) {
     plan.actions = journeys.actions;
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
-    if (journeys.fail) plan.fail = journeys.fail;
+    if (journeys.unevaluated) plan.unevaluated = journeys.unevaluated;
     if (compare && plan.journeys.length) plan.compare = true;
   }
   return plan;
 }
-export async function planJourneys({ request, pages, entries, ask, key, model, mapSha, baseSha, bugfix = false, compare = false }) {
+export async function planJourneys({ request, pages, entries, ask, key, model, models, mapSha, baseSha, bugfix = false, compare = false }) {
   const items = [];
   const chosen = compare ? journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages }) : [];
   for (const item of chosen) {
@@ -1006,9 +1096,9 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
     }
     let parsed;
     try {
-      parsed = await ask(buildPrompt({ kind: "page", page: page?.text ?? "", boardPath: request.boardPath, taskPath: request.taskPath }), { key, model }, parsePlan);
+      parsed = await ask(buildPrompt({ kind: "page", page: page?.text ?? "", boardPath: request.boardPath, taskPath: request.taskPath }), { key, model, models }, parsePlan);
     } catch (error) {
-      return { items: [], actions: [], expect: [], reason: "", fail: failureText(error, 160) };
+      return { items: [], actions: [], expect: [], reason: "", unevaluated: failureText(error, 160) };
     }
     if (!parsed.actions.length) continue;
     items.push({ journey, page: item.page, actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true });
@@ -1016,12 +1106,12 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
   const journey = `change:${bugfix ? "repro" : "primary"}`;
   let parsed;
   try {
-    parsed = await ask(buildPrompt({ kind: "plan", ...request }), { key, model }, parsePlan);
+    parsed = await ask(buildPrompt({ kind: "plan", ...request }), { key, model, models }, parsePlan);
   } catch (error) {
-    return { items, actions: [], expect: [], reason: "", fail: failureText(error, 160) };
+    return { items: [], actions: [], expect: [], reason: "", unevaluated: failureText(error, 160) };
   }
   const change = parsed.actions.length ? [{ journey, page: "", actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true }] : [];
-  return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "" };
+  return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "", unevaluated: "" };
 }
 export const driveNeeded = (plan) => !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
 async function planCommand() {
@@ -1044,18 +1134,18 @@ function baseRunFor(plan, journey, baseEvidence) {
   if (!item?.base) return null;
   return { journey, apiOnly: item.base.apiOnly === true, steps: item.base.steps, expects: item.base.expects, navigations: item.base.navigations, offOrigin: item.base.offOrigin, judged: item.base.judged?.verdict ?? "" };
 }
-export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askModel, key = process.env.OPENROUTER_EVAL_KEY }) {
+export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey) ?? null;
     let judged = head ? String(head.judged ?? "") : "";
     if (head && !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/)) {
       try {
-        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: head }), { key, model: picked.model, images: imagesIn(shotsDirFor(path.join(workDir(), "evidence", "shots"), index)) }, parseAnswer);
+        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: head }), { key, model: picked.model, models: picked.models, images: imagesIn(shotsDirFor(path.join(workDir(), "evidence", "shots"), index)) }, parseAnswer);
         judged = parsed.verdict;
         console.log(`journey ${item.journey}: ${parsed.verdict} ${parsed.notes}`);
       } catch (error) {
-        judged = "FAIL";
+        judged = "UNEVALUATED";
         console.log(`journey ${item.journey}: ${failureText(error, 160)}`);
       }
     }
@@ -1063,7 +1153,7 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
   }
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true });
 }
-export async function judgeBaseCommand({ work = workDir(), ask = askModel, key = process.env.OPENROUTER_EVAL_KEY } = {}) {
+export async function judgeBaseCommand({ work = workDir(), ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY } = {}) {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(work, "plan", "base-plan.json"), "utf8"), binding);
   let evidence = null;
@@ -1073,17 +1163,15 @@ export async function judgeBaseCommand({ work = workDir(), ask = askModel, key =
   for (const [index, item] of (plan.journeys ?? []).entries()) {
     const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey) ?? null;
     let judged = "";
-    let unusable = false;
     if (run && picked.model && !compareLib.classifyRun(run, item).state.match(/failed|unavailable/)) {
       try {
-        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, images: imagesIn(shotsDirFor(path.join(work, "evidence", "shots"), index)) }, parseAnswer);
+        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, models: picked.models, images: imagesIn(shotsDirFor(path.join(work, "evidence", "shots"), index)) }, parseAnswer);
         judged = parsed.verdict;
       } catch (error) {
-        unusable = true;
+        judged = "UNEVALUATED";
         console.log(`base journey ${item.journey}: ${failureText(error, 160)}`);
       }
     }
-    if (unusable) continue;
     journeys.push({ journey: item.journey, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
   }
   writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
@@ -1110,9 +1198,9 @@ async function judgeCommand() {
     compared = await judgeJourneys({ plan, binding, evidence, picked, baseEvidence });
   } else if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
-      const parsed = await askModel(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
+      const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
       model = { verdict: parsed.verdict, notes: parsed.notes };
-    } catch (error) { model = { verdict: "FAIL", notes: failureText(error, 220) }; }
+    } catch (error) { model = { unevaluated: failureText(error, 220) }; }
   }
   let checksPassed = false;
   let checksPending = false;
@@ -1156,13 +1244,14 @@ export async function postCommand(io = {}) {
   catch { saved = { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" }; }
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
-  if (!eligiblePull(item, repo, binding.sha) || !ownsVerifierStatus(statuses, repo, binding.run, binding.attempt)) return;
+  if (!eligiblePull(item, repo, binding.sha)) return;
+  if (!ownsAppStatus(statuses, binding.run, binding.attempt)) { console.log("not owner"); return; }
   if (saved.baseSha && compareLib.baseMoved({ item, plan: { sha: guardSha(binding.sha), baseSha: saved.baseSha } }).moved) {
-    await postStatus({ repo, ...binding, state: "pending", description: "waiting for required checks", fetchImpl: io.fetch });
+    await postStatus({ repo, ...binding, state: "pending", description: "waiting for required checks", fetchImpl: io.fetch, token: io.token });
     console.log("the base or the head moved during the run; the recheck will drive it again");
     return;
   }
-  let state = saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : "failure";
+  let state = saved.verdict === "PASS" || saved.verdict === "PASS+NOTES" ? "success" : saved.verdict === "UNEVALUATED" ? "error" : "failure";
   let description = statusDescription(saved);
   if (saved.verdict === "PENDING") {
     const runs = await collectCheckRuns(async (page) => JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`])));
@@ -1171,12 +1260,32 @@ export async function postCommand(io = {}) {
     state = settled.state;
     description = settled.description;
   }
-  await postStatus({ repo, ...binding, state, description, fetchImpl: io.fetch });
-  if (saved.verdict === "PENDING") return;
+  await postStatus({ repo, ...binding, state, description, fetchImpl: io.fetch, token: io.token });
+  if (saved.verdict === "PENDING" || saved.verdict === "UNEVALUATED") return;
   const minutes = runMinutes(io.startedAt ?? process.env.RUN_STARTED_AT, io.now);
   const notes = redact(saved.notes, secretValues());
   const marker = saved.tree && saved.baseSha ? compareLib.buildMarker({ run: binding.run, attempt: binding.attempt, head: binding.sha, tree: saved.tree, base: saved.baseSha }) : "";
   await postComment(repo, pr, marker ? `${verdictComment(saved.verdict, notes, minutes)}\n\n${marker}` : verdictComment(saved.verdict, notes, minutes), io.fetch);
+}
+export async function markCommand(io = {}) {
+  const mode = String(process.env.MARK ?? "");
+  if (!["pending", "failure", "success"].includes(mode)) return;
+  const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+  const binding = bindingNow();
+  const statuses = JSON.parse((io.gh ?? gh)(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
+  if (!ownsAppStatus(statuses, binding.run, binding.attempt, true)) { console.log("not owner"); return; }
+  const description = process.env.MARK_DESCRIPTION || (mode === "pending" ? "Planning a user check" : "FAIL: author model unknown");
+  await postStatus({ repo, ...binding, state: mode, description, fetchImpl: io.fetch, token: io.token });
+}
+export async function cancelCommand(io = {}) {
+  const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+  const binding = bindingNow();
+  const statuses = JSON.parse((io.gh ?? gh)(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
+  if (!ownsAppStatus(statuses, binding.run, binding.attempt, true)) { console.log("not owner"); return; }
+  const newest = appStatuses(statuses)[0];
+  if (cancelKeepsStatus(newest, attemptUrl(repo, binding.run, binding.attempt))) return;
+  await postStatus({ repo, ...binding, state: "failure", description: "FAIL: The verifier did not finish.", fetchImpl: io.fetch, token: io.token });
+  throw new Error("verifier did not finish");
 }
 async function main() {
   const command = process.argv[2];
@@ -1184,8 +1293,10 @@ async function main() {
   else if (command === "plan") await planCommand();
   else if (command === "judge") await judgeCommand();
   else if (command === "judge-base") await judgeBaseCommand();
+  else if (command === "mark") await markCommand();
   else if (command === "post") await postCommand();
-  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|judge-base|post");
+  else if (command === "cancel") await cancelCommand();
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|judge-base|mark|post|cancel");
 }
 const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
 if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

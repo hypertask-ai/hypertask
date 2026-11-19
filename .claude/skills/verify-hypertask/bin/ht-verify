@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+const { readdirSync } = require("node:fs");
+const path = require("node:path");
+const { CliError, runDir } = require("./lib/context.cjs");
+
+const directory = path.join(__dirname, "lib/commands");
+const commands = Object.fromEntries(
+  readdirSync(directory)
+    .filter((file) => file.endsWith(".cjs"))
+    .map((file) => require(path.join(directory, file)))
+    .map((command) => [command.name, command])
+    .sort(([left], [right]) => left.localeCompare(right)),
+);
+
+const overview = `ht-verify - one JSON-first command that drives Hypertask the way a user does.
+
+Every command prints one JSON object on stdout:
+  { command, ok, target, run, data, evidence, error }
+  error is null, or { code, message, next } with next holding the command to run instead.
+Exit codes: 0 ok, 1 the check failed, 2 usage or unreadable environment, 3 identity expired.
+
+Commands:
+${Object.entries(commands).map(([name, command]) => `  ${name.padEnd(8)} ${command.summary}`).join("\n")}
+Shared state: ${runDir()} (override with HT_VERIFY_RUN). up writes env.json, dev.log and dev.pid there, so later commands need no repeated flags.
+
+Examples:
+  ht-verify up
+Run ht-verify help <command> for its flags.`;
+
+function printHelp(name) {
+  if (!name) {
+    process.stdout.write(`${overview}\n`);
+    return;
+  }
+  const command = commands[name];
+  if (!command) {
+    throw new CliError(`unknown command ${name}`, { code: "usage", next: "Run ht-verify --help for the command list.", exit: 2 });
+  }
+  process.stdout.write(`${command.usage}\n`);
+}
+
+async function main(argv) {
+  const [name, ...rest] = argv;
+  if (!name || name === "--help" || name === "-h" || name === "help") {
+    printHelp(name === "help" ? rest[0] : undefined);
+    return;
+  }
+  const command = commands[name];
+  if (!command) {
+    throw new CliError(`unknown command ${name}`, { code: "usage", next: `Run ht-verify --help. It lists ${Object.keys(commands).length} commands.`, exit: 2 });
+  }
+  if (rest.includes("--help") || rest.includes("-h")) {
+    process.stdout.write(`${command.usage}\n`);
+    return;
+  }
+  const result = await command.run(rest);
+  process.stdout.write(`${JSON.stringify({
+    command: name,
+    ok: result.ok !== false,
+    target: result.target ?? null,
+    run: runDir(),
+    data: result.data ?? {},
+    evidence: result.evidence ?? [],
+    error: result.error ?? null,
+  })}\n`);
+  if (result.ok === false) process.exitCode = 1;
+}
+
+main(process.argv.slice(2)).catch((error) => {
+  const known = error instanceof CliError;
+  process.stdout.write(`${JSON.stringify({
+    command: process.argv[2] ?? null,
+    ok: false,
+    target: null,
+    run: runDir(),
+    data: known ? error.data : {},
+    evidence: [],
+    error: {
+      code: known ? error.code : "failed",
+      message: error.message,
+      next: known ? error.next : "Read the message, fix the named input, and retry.",
+    },
+  })}\n`);
+  process.exitCode = known ? error.exit : 1;
+});

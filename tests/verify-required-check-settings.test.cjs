@@ -22,7 +22,8 @@ const endpoints = [
 function runSettings({
   event = "pull_request", file = ".github/workflows/ci-tests.yml",
   diffStatus = 0, fetchStatus = 0, httpStatus = 200, resetSeconds = 0,
-  liveContexts = contexts, proof = null, integrationId = 15368, omitIntegration = false,
+  liveContexts = contexts, proof = null,
+  integrationFor = (context) => context === "pstack-verifier" ? 5264284 : 15368,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "required-check-settings-"));
   const log = join(directory, "calls");
@@ -108,7 +109,7 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
           conditions: { ref_name: { include: ["refs/heads/production"], exclude: [] } },
           rules: [{ type: "required_status_checks", parameters: {
             required_status_checks: liveContexts.map((context) => (
-              omitIntegration ? { context } : { context, integration_id: integrationId }
+              { context, integration_id: integrationFor(context) }
             )),
           } }],
         }),
@@ -137,6 +138,7 @@ function assertVerified(result, expectedEndpoints = endpoints, expectedContexts 
     defaultBranch: "production",
     rulesetId: 42,
     contexts: [...expectedContexts].sort(),
+    integrations: Object.fromEntries([...expectedContexts].sort().map((context) => [context, context === "pstack-verifier" ? 5264284 : 15368])),
     verifiedAt: result.stored.verifiedAt,
   });
   assert.ok(Number.isFinite(Date.parse(result.stored.verifiedAt)), result.stored.verifiedAt);
@@ -250,13 +252,16 @@ for (const httpStatus of [404, 403]) {
   });
 }
 
-test("a required check without Actions integration_id 15368 fails", () => {
-  const missing = runSettings({ omitIntegration: true });
+test("a required check without an integration pin fails", () => {
+  const missing = runSettings({ integrationFor: () => undefined });
   assertRejected(missing);
-  assert.match(missing.output, /integration_id 15368/);
-  const other = runSettings({ integrationId: 1 });
+  assert.match(missing.output, /integration must be 5264284/);
+  const other = runSettings({ integrationFor: () => 1 });
   assertRejected(other);
-  assert.match(other.output, /integration_id 15368/);
+  assert.match(other.output, /integration must be 5264284/);
+  const pinned = runSettings({ integrationFor: () => 15368 });
+  assertRejected(pinned);
+  assert.match(pinned.output, /pstack-verifier integration must be 5264284/);
 });
 
 test("the old ten-context ruleset fails the monitor now the live one is verifier-only", () => {

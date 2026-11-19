@@ -42,6 +42,7 @@ function classifyRun(run, plan) {
   if (!apiOnlyRun(run, plan) && navigations.length === 0) return { state: "failed", failIndex: tail };
   const judgedField = run.judged && typeof run.judged === "object" ? run.judged.verdict : run.judged;
   const judged = String(judgedField ?? "").trim().toUpperCase();
+  if (judged === "UNEVALUATED") return { state: "unjudged", failIndex: -1 };
   if (judged && !PASS_VERDICTS.includes(judged)) return { state: "failed", failIndex: tail };
   return { state: "ok", failIndex: -1 };
 }
@@ -55,10 +56,12 @@ function decideComparison({ journeys, bugfix = false } = {}) {
   if (!list.length) return { verdict: "FAIL", notes: "no journey was planned" };
   const problems = [];
   const notes = [];
+  const unjudged = [];
   const reproId = bugfix ? (list.find((item) => item.journey === "change:repro")?.journey ?? "change:repro") : "";
   for (const { journey, base, head } of list) {
     if (base.state === "unavailable") problems.push(`${journey}: the base comparison did not run`);
     else if (head.state === "unavailable") problems.push(`${journey}: the head comparison did not run`);
+    else if (base.state === "unjudged" || head.state === "unjudged") unjudged.push(journey);
     else if (head.state === "ok" && base.state === "ok") continue;
     else if (head.state === "ok" && journey === reproId) continue;
     else if (head.state === "ok") notes.push(`${journey} works now, it did not on base`);
@@ -68,13 +71,16 @@ function decideComparison({ journeys, bugfix = false } = {}) {
   }
   if (bugfix) {
     const repro = list.find((item) => item.journey === "change:repro");
+    const waiting = repro && (repro.base.state === "unjudged" || repro.head.state === "unjudged");
     if (!repro) problems.push("the bug fix has no repro journey");
+    else if (waiting) unjudged.push(repro.journey);
     else if (repro.base.state === "ok") problems.push("the repro passes on base, so it does not reproduce the bug");
     else if (repro.base.state === "unavailable") problems.push("the repro did not run on base");
     else if (repro.head.state !== "ok") problems.push("the repro still fails on head");
   }
-  const verdict = problems.length ? "FAIL" : notes.length ? "PASS+NOTES" : "PASS";
-  return { verdict, notes: [...problems, ...notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 480) };
+  const notesOut = [...new Set(unjudged.map((journey) => `${journey}: the judge model did not answer`))];
+  const verdict = problems.length ? "FAIL" : notesOut.length ? "UNEVALUATED" : notes.length ? "PASS+NOTES" : "PASS";
+  return { verdict, notes: [...problems, ...notesOut, ...notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 480) };
 }
 
 function buildMarker({ run, attempt = 1, head, tree, base } = {}) {

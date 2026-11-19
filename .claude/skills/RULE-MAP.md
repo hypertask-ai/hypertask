@@ -12,29 +12,29 @@ ones, so older comments that cite them still point at the same rule.
 | 10 | Never bypass branch protection, and never toggle a label to force a merge. | fix-bug |
 | 11 | If checks are green but GitHub still blocks, rerun only the cancelled duplicate required jobs, one at a time. | fix-bug |
 | 12 | Never open a duplicate pull request. Recover the existing branch. | fix-bug |
-| 16 | A bug fix deploys to production. Verify it there afterwards. | fix-bug, verify-qa |
+| 16 | A bug fix deploys to production. Verify it there afterwards. | fix-bug, verify-hypertask |
 | 16b | New behaviour stays behind the Owner + QA flag. | ship-feature-behind-flag |
 | 17 | Fix the reported bug. File an optional improvement as its own ticket. | fix-bug |
 | 23 | If `gh pr edit` fails, PATCH the pull request with a JSON file. Never interpolate the body into shell code. | fix-bug |
 | 26 | Run the affected tests on CI's Node major, plus a fresh typecheck. Do not convert TypeScript to JavaScript to satisfy an import. | fix-bug |
 | 27 | Re-read the ticket's latest comments before merging. A green CI run does not override a later correction. | fix-bug |
 | 28 | Tests exercise the real implementation or its real boundary, not a copy plus a string match. | fix-bug |
-| 29 | A UI pass needs a meaningful ready or empty state. A 200, an unchanged URL, or a fixed sleep is not proof. | verify-on-phone, verify-qa |
-| 30 | Compare against a baseline when a blank page might be the correct empty state. | verify-on-phone |
-| 32 | Screenshots show the acceptance criteria, not merely that a page loaded. | verify-on-phone, verify-qa |
-| 34 | Never print cookies or a storage-state file. | verify-on-phone, verify-qa |
-| 35 | Mobile and responsive changes need a real 390x844 screenshot on production. Anything less is not a pass. | verify-on-phone, verify-qa |
+| 29 | A UI pass needs a meaningful ready or empty state. A 200, an unchanged URL, or a fixed sleep is not proof. | verify-hypertask |
+| 30 | Compare against a baseline when a blank page might be the correct empty state. | verify-hypertask |
+| 32 | Screenshots show the acceptance criteria, not merely that a page loaded. | verify-hypertask |
+| 34 | Never print cookies or a storage-state file. | verify-hypertask |
+| 35 | Mobile and responsive changes need a real 390x844 screenshot on production. Anything less is not a pass. | verify-hypertask |
 | 42 | Acceptance criteria decide done. An optional nice-to-have is a new ticket, filed in Bugs or Features. | fix-bug |
-| 45 | Archive only fixtures you created, through the product UI, never SQL. | verify-qa |
-| 58 | Ticket references are full URLs, including inside comments. | verify-qa |
-| 59 | The final comment says the user-visible problem, what works now, and what the user will notice. | verify-qa |
+| 45 | Archive only fixtures you created, through the product UI, never SQL. | verify-hypertask |
+| 58 | Ticket references are full URLs, including inside comments. | verify-hypertask |
+| 59 | The final comment says the user-visible problem, what works now, and what the user will notice. | verify-hypertask |
 | 63 | A `cli` ticket is fixed in `~/projects/hypertask-cli-zig` (`hypertask-ai/cli`, pull requests base `main`). Do not fix it in this app repo. | fix-bug |
 | 67 | Never `git stash`. Never reset, check out, or revert files you did not change. | fix-bug |
 | 68 | Before committing, run `git status --short --branch` and keep other sessions' dirty files out of the commit. | fix-bug |
 | 69 | While a preview is building, poll with `curl` or `gh pr checks`. Do not reload a browser tab. | fix-bug |
-| 70 | Never read or write ticket content through Prisma, SQL, or a database client. | fix-bug, verify-qa |
-| 71 | Comments are HTML block tags. Link other tickets with `<a href>`. | verify-qa |
-| 72 | Do not mix plain text and HTML in one `--text` value. | verify-qa |
+| 70 | Never read or write ticket content through Prisma, SQL, or a database client. | fix-bug, verify-hypertask |
+| 71 | Comments are HTML block tags. Link other tickets with `<a href>`. | verify-hypertask |
+| 72 | Do not mix plain text and HTML in one `--text` value. | verify-hypertask |
 | 76 | No pull request without a ticket. | fix-bug |
 | 77 | Branch off `origin/production` of `hypertask-ai/hypertask`. The pull request targets `production`. | fix-bug |
 | 78 | `open-pr.sh` leaves auto-merge off. The session merges after required checks are green. | fix-bug |
@@ -51,16 +51,16 @@ ones, so older comments that cite them still point at the same rule.
 | 90 | When a flagged feature is live, comment on the ticket, @mention Valentin, name the flag, and link `https://app.hypertask.ai/admin/flags`. | ship-feature-behind-flag |
 | 92 | Pull request title is `HTPR-NNNN [TYPE] ...`. | fix-bug |
 | 93 | An additive migration behind a flag stays In Progress while the runner works it (Valentin, 2026-10-10). A destructive migration, and money, auth, security, or irreversible data, go to Valentin Review. Auto-merge stays off. | fix-bug, `open-pr.sh` |
-| 95 | Claim and comment as `vcc`, never as userId 6. | verify-qa |
-| 97 | Never assign userId 6 for any reason. If Valentin assigned himself or moved the ticket by hand, leave it. | verify-qa, `open-pr.sh` |
-| 98 | When Valentin @mentions the session, the reply @mentions him back with the editor's mention markup. | verify-qa |
+| 95 | Claim and comment as `vcc`, never as userId 6. | verify-hypertask |
+| 97 | Never assign userId 6 for any reason. If Valentin assigned himself or moved the ticket by hand, leave it. | verify-hypertask, `open-pr.sh` |
+| 98 | When Valentin @mentions the session, the reply @mentions him back with the editor's mention markup. | verify-hypertask |
 | 99 | A `cli` label routes to `hypertask-ai/cli`, not the retired Node package. | fix-bug |
-| 100 | Reproduce the acceptance criteria on the deployed production revision before any verdict. | verify-qa |
-| 101 | A UI ticket gets a real 390x844 production screenshot attached with `vcc comment add --attach`. | verify-qa |
-| 102 | PASS moves the ticket to Done with the evidence attached. | verify-qa |
-| 103 | FAIL moves the ticket back to In Progress and names the exact case. The same session fixes and ships again. | verify-qa |
-| 104 | Never assign anyone on the verdict, and never assign userId 6. | verify-qa |
-| 105 | When Valentin @mentions the session, the reply @mentions him back. | verify-qa |
+| 100 | Reproduce the acceptance criteria on the deployed production revision before any verdict. | verify-hypertask |
+| 101 | A UI ticket gets a real 390x844 production screenshot attached with `vcc comment add --attach`. | verify-hypertask |
+| 102 | PASS moves the ticket to Done with the evidence attached. | verify-hypertask |
+| 103 | FAIL moves the ticket back to In Progress and names the exact case. The same session fixes and ships again. | verify-hypertask |
+| 104 | Never assign anyone on the verdict, and never assign userId 6. | verify-hypertask |
+| 105 | When Valentin @mentions the session, the reply @mentions him back. | verify-hypertask |
 | 108 | A small follow-up does not restart a full review. Review the delta. | fix-bug |
 | 109 | Every docs `.mdx` page has `title` and `description` frontmatter. A page with an import is `.mdx`. | update-docs |
 | 110 | Docs descriptions and code examples use HTML. | update-docs |
@@ -70,7 +70,7 @@ ones, so older comments that cite them still point at the same rule.
 | 114 | Changelog entries are newest first, each linked to its ticket URL. | update-docs |
 | 116 | A user-visible change updates the matching docs page in `hypertask-ai/docs` before or alongside the app pull request. | update-docs, fix-bug, ship-feature-behind-flag |
 | 117 | New behaviour sets `defaultMode: "EVERYONE"` unless `releaseRisk.highRisk` is set or kind is `internal`; existing flags keep their current mode; developers never widen an existing flag. Bugfix flags default Everyone except saved-data/security/crash fixes. Widening an existing flag goes to Valentin Review. | fix-bug, ship-feature-behind-flag |
-| 118 | `verify-qa` checks Owner + QA for features and Everyone for bugfix flags; saved-data/security/crash fixes have no flag. | verify-qa |
+| 118 | `verify-hypertask` checks Owner + QA for features and Everyone for bugfix flags; saved-data/security/crash fixes have no flag. | verify-hypertask |
 | 119 | UI work reuses an existing component. A new component needs a reason on the ticket and in the pull request summary. | reuse-existing-ui |
 | 120 | After the change works, simplify the diff in a separate commit. Do not change behaviour. | simplify-before-pr |
 | 123 | A scanner finding is a candidate until you confirm it by reading the route or curling a local build. A confirmed security fix uses `--lane valentin-review`. | fix-bug, `reference/security-findings.md` |
