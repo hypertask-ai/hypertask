@@ -1016,7 +1016,7 @@ pstack_verifier:
   workflow: .github/workflows/pstack-verifier.yml
   context: pstack-verifier
   required: true
-  note: https://app.hypertask.ai/detail/project-15/9411
+  note: app 5264284 writes it from environment pstack-verifier on production
 
 pstack_verifier_eval:
   ticket: https://app.hypertask.ai/detail/project-15/9409

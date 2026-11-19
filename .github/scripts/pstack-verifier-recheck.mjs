@@ -9,7 +9,10 @@ const VERIFIER_LOGINS = ["github-actions[bot]", "hypertask-runners[bot]"];
 export const VERIFIER_WORKFLOW = ".github/workflows/pstack-verifier.yml";
 export const SOURCE_WORKFLOWS = ["CI Tests", "PR Guards"];
 export const RERUN_LIMIT = 10;
-export const WAITING = "waiting for required checks";
+const WAITING_DESCRIPTION = "waiting for required checks";
+export const WAITING = WAITING_DESCRIPTION;
+export const UNEVALUATED_PREFIX = "verifier could not evaluate:";
+export const UNEVALUATED_LIMIT = 3;
 
 export function sourceStartsRecheck(name) {
   return SOURCE_WORKFLOWS.includes(name);
@@ -20,11 +23,24 @@ export function runIsVerifier(run) {
 }
 
 export function exactWaiting(status) {
-  return !!status && status.context === "pstack-verifier" && status.state === "pending" && status.description === WAITING;
+  return !!status && status.context === "pstack-verifier" && status.state === "pending" && status.description === WAITING_DESCRIPTION;
 }
 
-export function shouldRerun(status, run) {
-  return exactWaiting(status) && runIsVerifier(run);
+export function unevaluated(status) {
+  return !!status && status.context === "pstack-verifier" && (status.state === "error" || status.state === "pending") && String(status.description ?? "").startsWith(UNEVALUATED_PREFIX);
+}
+
+export function evaluationAttempts(statuses) {
+  return (Array.isArray(statuses) ? statuses : []).filter(unevaluated).length;
+}
+
+export function retryable(status, statuses) {
+  if (exactWaiting(status)) return true;
+  return unevaluated(status) && evaluationAttempts(statuses) < UNEVALUATED_LIMIT;
+}
+
+export function shouldRerun(status, run, statuses) {
+  return retryable(status, statuses) && runIsVerifier(run);
 }
 
 export function workflowRunSha(event) {
@@ -86,13 +102,13 @@ function runIdFromUrl(url) {
 export function rerunRequest(repo, sha, call) {
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/statuses`]));
   const status = newestVerifierStatus(statuses);
-  if (!exactWaiting(status)) {
-    console.log(`skip ${sha}: description is not waiting for required checks`);
+  if (!retryable(status, statuses)) {
+    console.log(`skip ${sha}: ${unevaluated(status) ? "evaluation retries exhausted" : "description is not waiting for required checks"}`);
     return false;
   }
   const runId = runIdFromUrl(status.target_url);
   const run = runId ? JSON.parse(call(["api", `repos/${repo}/actions/runs/${runId}`])) : null;
-  if (!shouldRerun(status, run)) {
+  if (!shouldRerun(status, run, statuses)) {
     console.log(`skip ${sha}: foreign target_url`);
     return false;
   }
@@ -115,10 +131,10 @@ async function sweep(repo, call) {
     if (!/^[0-9a-f]{40}$/.test(String(sha ?? ""))) continue;
     const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${sha}/statuses`]));
     const status = newestVerifierStatus(statuses);
-    if (!exactWaiting(status)) continue;
+    if (!retryable(status, statuses)) continue;
     const runId = runIdFromUrl(status.target_url);
     const run = runId ? JSON.parse(call(["api", `repos/${repo}/actions/runs/${runId}`])) : null;
-    if (!shouldRerun(status, run)) {
+    if (!shouldRerun(status, run, statuses)) {
       console.log(`skip ${sha}: foreign target_url`);
       continue;
     }
