@@ -452,8 +452,8 @@ export function readBaseCache(dir) {
     });
 }
 export const pageHash = (text) => journeyLib.sha256(text);
-export function cachedJourney(entries, { baseSha, mapSha, journey, page }) {
-  return (Array.isArray(entries) ? entries : []).find((entry) => entry.baseSha === baseSha && entry.mapSha === mapSha && entry.journey === journey && entry.pageHash === pageHash(page?.text ?? "")) ?? null;
+export function cachedJourney(entries, { baseSha, mapSha, journey, page, viewport = "" }) {
+  return (Array.isArray(entries) ? entries : []).find((entry) => entry.baseSha === baseSha && entry.mapSha === mapSha && entry.journey === journey && runViewport(entry) === viewport && entry.pageHash === pageHash(page?.text ?? "")) ?? null;
 }
 export function bugfixTitle(title) {
   return /\[BUGFIX\]/i.test(String(title ?? ""));
@@ -776,6 +776,7 @@ export function cacheEntryFor({ plan, run, baseSha, mapSha }) {
     baseSha,
     mapSha,
     journey: run.journey,
+    viewport: runViewport(run),
     scriptHash: journeyLib.scriptHash(item.actions, item.expect ?? []),
     pageHash: item.page ? pageHash((readFeaturePages().find((page) => page.name === item.page) ?? { text: "" }).text) : "",
     apiOnly: run.apiOnly === true,
@@ -794,16 +795,14 @@ export function writeBaseCache({ plan, evidence, dir, baseSha, mapSha }) {
     if (run.journey.startsWith("change:")) continue;
     const entry = cacheEntryFor({ plan, run, baseSha, mapSha });
     if (!entry || !entry.pageHash) continue;
-    writeFileSync(path.join(dir, `${entry.journey.replace(/[^a-z0-9-]/gi, "-")}-${entry.scriptHash.slice(0, 12)}.json`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
+    writeFileSync(path.join(dir, `${entry.journey.replace(/[^a-z0-9-]/gi, "-")}-${entry.viewport || "plain"}-${entry.scriptHash.slice(0, 12)}.json`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
     written += 1;
   }
   return written;
 }
-export async function runJourneys({ page, plan, base, projectId, taskId, bearer, archivedProjectId, shotsRoot, offOrigin = [], nextNavigations = () => [], run = runPlan }) {
-  const items = Array.isArray(plan.journeys) && plan.journeys.length ? plan.journeys : [{ journey: "change:primary", actions: plan.actions ?? [], expect: plan.expect ?? [] }];
+async function driveJourneys({ items, page, offOrigin, nextNavigations, shotsRoot, run, base, projectId, taskId, bearer, archivedProjectId }) {
   const journeys = [];
   for (const [index, item] of items.entries()) {
-    if (!item.actions.length) continue;
     const shotsDir = shotsDirFor(shotsRoot, index);
     mkdirSync(shotsDir, { recursive: true });
     const navigations = nextNavigations();
@@ -811,8 +810,37 @@ export async function runJourneys({ page, plan, base, projectId, taskId, bearer,
     const result = await run({ page, plan: { actions: item.actions, expect: item.expect ?? [] }, base, projectId, taskId, bearer, archivedProjectId, shotsDir, navigations });
     journeys.push({ journey: item.journey, apiOnly: item.actions.every((action) => action.op === "api"), steps: result.steps, expects: result.expects, navigations, offOrigin: offOrigin.slice(before) });
   }
+  return journeys;
+}
+function tagged(run, viewport) {
+  return viewport ? { ...run, viewport } : run;
+}
+function assembleLanes(lanes) {
+  const journeys = [];
+  const runs = Math.max(0, ...lanes.map((lane) => lane.journeys.length));
+  for (let index = 0; index < runs; index += 1) {
+    for (const lane of lanes) {
+      const run = lane.journeys[index];
+      if (run) journeys.push(tagged(run, lane.viewport));
+    }
+  }
   const change = journeys.find((run) => run.journey.startsWith("change:")) ?? journeys[0] ?? { steps: [], expects: [], navigations: [] };
   return { journeys, steps: change.steps, expects: change.expects, navigations: change.navigations, offOrigin: change.offOrigin ?? [] };
+}
+export async function runJourneys({ page, plan, base, projectId, taskId, bearer, archivedProjectId, shotsRoot, offOrigin = [], nextNavigations = () => [], run = runPlan, viewports = [], openLane = null }) {
+  const items = Array.isArray(plan.journeys) && plan.journeys.length ? plan.journeys : [{ journey: "change:primary", actions: plan.actions ?? [], expect: plan.expect ?? [] }];
+  const active = items.filter((item) => item.actions.length);
+  const drive = (lane) => driveJourneys({ items: active, page: lane.page, offOrigin: lane.offOrigin ?? [], nextNavigations: lane.nextNavigations ?? (() => []), shotsRoot: lane.shotsRoot, run, base, projectId, taskId, bearer, archivedProjectId });
+  if (!viewports.length) return assembleLanes([{ viewport: "", journeys: await drive({ page, offOrigin, nextNavigations, shotsRoot }) }]);
+  const lanes = await Promise.all(viewports.map(async (viewport) => {
+    const lane = await openLane({ viewport, shotsRoot: viewportShotsDir(shotsRoot, viewport) });
+    try {
+      return { viewport, journeys: await drive({ ...lane, shotsRoot: lane.shotsRoot ?? viewportShotsDir(shotsRoot, viewport) }) };
+    } finally {
+      if (typeof lane.close === "function") await lane.close();
+    }
+  }));
+  return assembleLanes(lanes);
 }
 export function githubEnv(base = process.env) {
   if (!base.GH_TOKEN) throw new Error("gh token is missing");
@@ -1161,7 +1189,7 @@ export async function planFromRequest(request, deps = {}) {
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
     if (journeys.unevaluated) plan.unevaluated = journeys.unevaluated;
-    if (compare && plan.journeys.length) plan.compare = true;
+    if (compare && plan.journeys.length) { plan.compare = true; plan.viewports = VIEWPORT_NAMES; }
   }
   return plan;
 }
@@ -1172,9 +1200,10 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
   for (const item of chosen) {
     const page = pages.find((candidate) => candidate.name === item.page);
     const journey = `area:${item.page}`;
-    const hit = cachedJourney(entries, { baseSha, mapSha, journey, page });
-    if (hit) {
-      items.push({ journey, page: item.page, actions: hit.steps.map((step) => step.action), expect: hit.expects.map((expect) => expect.expect), scriptHash: hit.scriptHash, base: hit, planned: false });
+    const bases = Object.fromEntries(VIEWPORT_NAMES.map((viewport) => [viewport, cachedJourney(entries, { baseSha, mapSha, journey, page, viewport })]));
+    if (VIEWPORT_NAMES.every((viewport) => bases[viewport])) {
+      const hit = bases[VIEWPORT_NAMES[0]];
+      items.push({ journey, page: item.page, actions: hit.steps.map((step) => step.action), expect: hit.expects.map((expect) => expect.expect), scriptHash: hit.scriptHash, base: hit, bases, planned: false });
       continue;
     }
     let parsed;

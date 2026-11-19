@@ -140,11 +140,13 @@ function parseCacheEntry(value) {
   if (body.offOrigin.length) return null;
   if (!HEX64.test(String(body.pageHash ?? ""))) return null;
   if (typeof body.pageHash !== "string" || body.pageHash.length !== 64) return null;
+  if (body.viewport != null && (typeof body.viewport !== "string" || !/^[a-z][a-z0-9-]{0,15}$/.test(body.viewport))) return null;
   const judged = body.judged && typeof body.judged === "object" ? body.judged : {};
   return {
     baseSha: body.baseSha,
     mapSha: body.mapSha,
     journey: body.journey,
+    viewport: typeof body.viewport === "string" ? body.viewport : "",
     scriptHash: body.scriptHash,
     pageHash: body.pageHash,
     apiOnly: body.apiOnly === true,

@@ -15,7 +15,7 @@ const page = (name, text) => ({ name, text });
 const INBOX_PAGE = "# Inbox\nInbox rows from `src/pages/api/queues/inboxReminder.ts`.";
 const pagePlan = (reason = "page") => ({ actions: [{ op: "goto", path: "/inbox" }], expect: [{ text: "Inbox" }], reason });
 const changePlan = () => ({ actions: [{ op: "goto", path: "/all-tasks" }], expect: [{ text: "All tasks" }], reason: "" });
-const cachedArea = (overrides = {}) => ({ baseSha: BASE, mapSha: MAP, journey: "area:inbox", scriptHash: scriptHash(pagePlan().actions, pagePlan().expect), pageHash: sha256(INBOX_PAGE), ok: true, judged: { verdict: "PASS" }, steps: [{ action: { op: "goto", path: "/inbox" }, ok: true }], expects: [{ expect: { text: "Inbox" }, ok: true }], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }], offOrigin: [], ...overrides });
+const cachedArea = (overrides = {}) => ({ baseSha: BASE, mapSha: MAP, journey: "area:inbox", viewport: "desktop", scriptHash: scriptHash(pagePlan().actions, pagePlan().expect), pageHash: sha256(INBOX_PAGE), ok: true, judged: { verdict: "PASS" }, steps: [{ action: { op: "goto", path: "/inbox" }, ok: true }], expects: [{ expect: { text: "Inbox" }, ok: true }], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }], offOrigin: [], ...overrides });
 
 test("a mapped page gets its own journey from the page text, then the change journey", async () => {
   const prompts = [];
@@ -38,9 +38,11 @@ test("a mapped page gets its own journey from the page text, then the change jou
   assert.deepEqual(plan.actions, changePlan().actions);
 });
 
+const cachedBoth = (overrides = {}) => [cachedArea(overrides), cachedArea({ ...overrides, viewport: "phone" })];
 const areaCases = [
-  ["a cached area journey is adopted with no model call for that page", INBOX_PAGE, [cachedArea()], 1, [false, true]],
-  ["a cached area journey for another base, map or page text is not adopted", `${INBOX_PAGE} changed`, [cachedArea(), cachedArea({ baseSha: "d".repeat(40) }), cachedArea({ mapSha: "e".repeat(40) })], 2, [true, null]],
+  ["a cached area journey is adopted with no model call for that page", INBOX_PAGE, cachedBoth(), 1, [false, true]],
+  ["a cached area journey for another base, map or page text is not adopted", `${INBOX_PAGE} changed`, [...cachedBoth(), ...cachedBoth({ baseSha: "d".repeat(40) }), ...cachedBoth({ mapSha: "e".repeat(40) })], 2, [true, null]],
+  ["a cached area journey that covered only desktop is planned again", INBOX_PAGE, [cachedArea()], 2, [true, null]],
 ];
 for (const [name, text, entries, calls, want] of areaCases) test(name, async () => {
   const asked = [];
