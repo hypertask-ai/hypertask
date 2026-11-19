@@ -1,0 +1,26 @@
+[
+ {
+  "source": "run 44424882653 PR 3718 area:agents-board-access",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "kind": "page",
+  "answer": "{\"actions\":[{\"op\":\"goto\",\"path\":\"/agents\"},{\"op\":\"click\",\"text\":\"Board access\"},{\"op\":\"shot\",\"name\":\"board_access_expanded\"}],\"expect\":[{\"text\":\"Board access\"}],\"reason\":\"User POV: open Agents at /agents, pick an owned agent, and expand Board access to verify the page renders the agent access controls.\"}"
+ },
+ {
+  "source": "run 44424882653 PR 3718 area:board-member-list",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "kind": "page",
+  "answer": "{\"actions\":[{\"op\":\"goto\",\"path\":\"/project?id={id}\"},{\"op\":\"click\",\"text\":\"Settings\"},{\"op\":\"click\",\"text\":\"Board\"},{\"op\":\"click\",\"text\":\"Members\"},{\"op\":\"shot\",\"name\":\"board-members\"},{\"op\":\"click\",\"text\":\"Team\"},{\"op\":\"click\",\"text\":\"Members\"},{\"op\":\"shot\",\"name\":\"team-members\"},{\"op\":\"api\",\"method\":\"GET\",\"path\":\"/api/members/getAll?projectId={id}&teamMembers=true&teamId=1\"},{\"op\":\"api\",\"method\":\"GET\",\"path\":\"/api/members/getAll?projectId={id}&teamMembers=true&teamId=999999\"},{\"op\":\"api\",\"method\":\"GET\",\"path\":\"/api/members/getAll?projectId=abc\"},{\"op\":\"shot\",\"name\":\"after\"}],\"expect\":[{\"text\":\"Board member list\"}],\"reason\":\"Read-only check of the board member list feature: open the board, view Settings > Board > Members and Settings > Team > Members, then compare the getAll teamMembers responses for the board's team versus another team id and an invalid projectId, per HTPR-7170.\"}"
+ },
+ {
+  "source": "run 44424882653 PR 3718 area:board-invites",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "kind": "page",
+  "answer": "{\"actions\":[{\"op\":\"goto\",\"path\":\"/project?id=7283\"},{\"op\":\"click\",\"text\":\"Settings\"},{\"op\":\"click\",\"text\":\"Team\"},{\"op\":\"click\",\"text\":\"Members\"},{\"op\":\"click\",\"text\":\"Invite\"},{\"op\":\"fill\",\"text\":\"valentin+qa-invite@hypertask.ai\"},{\"op\":\"click\",\"text\":\"Send invite\"},{\"op\":\"shot\",\"name\":\"pending-invite-before\"},{\"op\":\"click\",\"text\":\"Resend\"},{\"op\":\"shot\",\"name\":\"pending-invite-after-resend\"},{\"op\":\"api\",\"method\":\"POST\",\"path\":\"/api/invite/reSendInvite\",\"body\":{\"projectId\":7283,\"email\":\"valentin+qa-invite@hypertask.ai\"}},{\"op\":\"api\",\"method\":\"POST\",\"path\":\"/api/invite/cancelInvite\",\"body\":{\"projectId\":7283,\"email\":\"valentin+qa-invite@hypertask.ai\"}}],\"expect\":[{\"text\":\"QA Team Board\"},{\"text\":\"Resend\"},{\"text\":\"Cancel\"}],\"reason\":\"Owner 4036 invites a throwaway address, verifies the pending row survives Resend, and checks outsider authorization on the resend and cancel routes per HTPR-7176.\"}"
+ },
+ {
+  "source": "run 44424882653 PR 3718 area:ai-feedback-reports",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "kind": "page",
+  "answer": "{\"actions\":[{\"op\":\"goto\",\"path\":\"/project?id={id}\"},{\"op\":\"click\",\"text\":\"Bugs\"},{\"op\":\"shot\",\"name\":\"board-before\"},{\"op\":\"api\",\"method\":\"POST\",\"path\":\"/mcp\",\"body\":\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"method\\\":\\\"tools/call\\\",\\\"params\\\":{\\\"name\\\":\\\"hypertask_tasks\\\",\\\"arguments\\\":{\\\"action\\\":\\\"list\\\",\\\"nonsense_field\\\":\\\"probe\\\"}}}\"},{\"op\":\"shot\",\"name\":\"mcp-reply\"},{\"op\":\"goto\",\"path\":\"/project?id={id}\"},{\"op\":\"click\",\"text\":\"Bugs\"},{\"op\":\"shot\",\"name\":\"board-after\"}],\"expect\":[{\"text\":\"Remove unsupported fields nonsense_field from input\"}],\"reason\":\"Live refusal probe: call the MCP endpoint with an undocumented field, confirm the refusal text, and compare board-15 ticket counts before and after to verify no ticket is filed.\"}"
+ }
+]
