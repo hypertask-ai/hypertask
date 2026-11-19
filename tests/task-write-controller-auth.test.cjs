@@ -312,6 +312,7 @@ function loadUpdateController(
       },
     },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
     "@/lib/mcp/tasks/agentMutationFence": {
       TaskTeamScopeError: class extends Error {}, AgentMutationLeaseConflictError: class extends Error {},
       assertAgentAssignmentChangeAllowed: acquireTaskFence,
@@ -957,6 +958,7 @@ function loadMoveController({
       autoAssignForSection: async () => "ready",
     },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
   };
   const { moveTaskToDifferentBoard } = execute(
     compile("src/utils/controllers/tasks/moveToDifferentBoard.ts"),

@@ -208,6 +208,7 @@ function loadCreateRoute() {
       taskWriteAccessWhere: () => ({}),
     },
     "@/utils/controllers/projects/archivedBoardTickets": {
+      assertBoardTakesNewTickets: async () => undefined,
       archivedBoardTicketRefusal: async () => null,
     },
     "@/utils/controllers/tasks/addRelatedTasks": {

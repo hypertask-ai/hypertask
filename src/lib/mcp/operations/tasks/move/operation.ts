@@ -214,7 +214,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const targetAccess = await validateProjectAccess(target_project_id, user.id, ctx.agentId, ctx.teamScope);
+    const targetAccess = await validateProjectAccess(target_project_id, user.id, ctx.agentId, ctx.teamScope, { refuseArchivedBoard: true });
     if (targetAccess.error) {
       return NextResponse.json(
         {

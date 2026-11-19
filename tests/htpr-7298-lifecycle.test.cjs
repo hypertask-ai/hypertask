@@ -234,6 +234,7 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
     "@/lib/api/errorMessage": { toErrorMessage: (body, fallback) => body?.message ?? fallback },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
     "@/utils/controllers/projects/getAllIncludes": stubs["@/utils/controllers/projects/getAllIncludes"],
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
   });
   const pageService = load("src/utils/controllers/pages/pageService.ts", {
     "@/lib/prisma": stubs["@/lib/prisma"],
