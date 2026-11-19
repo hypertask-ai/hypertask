@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
-# Merges queued or labelled pull requests whose required pstack-verifier status is success.
-# One pass, one JSON document on stdout. Never passes --admin; the merge is pinned to the head
-# whose verifier status was read, so a push during the pass refuses instead of merging unverified.
-#   pr-merge-pass --queue <file>          numbers, one per line; merged or closed lines are removed
-#   pr-merge-pass --label <label>         open PRs carrying the label
-#   pr-merge-pass --pr 123 --pr 456       explicit numbers
-# Options: --repo, --context, --app-login, --dry-run, --limit.
-# Exit: 0 all handled, 1 a merge was refused or a PR could not be read, 2 bad input.
-# SHIP_REPO sets the default repository.
+# Merges queued or labelled pull requests whose pstack-verifier status from the verifier app is
+# success. One JSON document per pass. Never passes --admin; the merge is pinned to the head whose
+# status was read, so a push during the pass refuses instead of merging unverified work.
+#   --queue <file>  numbers, one per line; merged or closed lines are removed
+#   --label <l>     open PRs carrying the label     --pr <n>  explicit number, repeatable
+#   --repo, --context, --app-login, --dry-run, --limit. Exit: 0 all handled, 1 refused or
+#   unreadable, 2 bad input. SHIP_REPO sets the default repository.
 import argparse
 import json
 import os

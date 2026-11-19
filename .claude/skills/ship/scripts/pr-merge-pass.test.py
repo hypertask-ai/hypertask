@@ -111,22 +111,18 @@ class MergePassTests(unittest.TestCase):
                                           "--match-head-commit", SHA]])
         self.assertFalse(any("--admin" in call or "--auto" in call for call in self.merges()))
 
-    def test_refuses_a_success_from_another_app(self):
+    def test_only_the_verifier_app_speaks_for_the_verifier(self):
         self.pr(123)
         self.success(login="github-actions[bot]")
         result, payload = self.run_pass("--pr", "123")
-        self.assertEqual(payload["results"][0]["action"], "skipped")
-        self.assertEqual(payload["results"][0]["verifier"], "missing")
-        self.assertEqual(self.merges(), [])
-
-    def test_a_later_status_does_not_stand_in_for_the_app(self):
-        self.pr(123)
+        self.assertEqual([payload["results"][0]["action"], payload["results"][0]["verifier"]],
+                         ["skipped", "missing"])
         self.statuses([
             dict(context="pstack-verifier", state="failure", creator={"login": APP}),
             dict(context="pstack-verifier", state="success", creator={"login": "someone"}),
         ])
         result, payload = self.run_pass("--pr", "123")
-        self.assertEqual(payload["results"][0]["reason"].startswith("verifier failure"), True)
+        self.assertTrue(payload["results"][0]["reason"].startswith("verifier failure"))
         self.assertEqual(self.merges(), [])
 
     def test_pending_and_missing_verifier_never_merge(self):
@@ -139,22 +135,18 @@ class MergePassTests(unittest.TestCase):
         self.assertEqual([item["verifier"] for item in payload["results"]], ["pending", "missing"])
         self.assertEqual(self.merges(), [])
 
-    def test_an_unreadable_status_fails_closed(self):
+    def test_unreadable_answers_fail_closed_without_a_crash(self):
         self.pr(123)
         (self.home / "api-fail").write_text("1")
         result, payload = self.run_pass("--pr", "123")
         self.assertEqual(payload["results"][0]["verifier"], "unreadable")
         self.assertIn("HTTP 403", payload["results"][0]["reason"])
         self.assertEqual(self.merges(), [])
-
-    def test_unreadable_prs_never_crash_the_pass(self):
-        self.write("raw-view-123.json", "not json")
-        (self.home / "api-fail").write_text("1")
-        result, payload = self.run_pass("--pr", "123")
+        self.write("raw-view-456.json", "not json")
+        result, payload = self.run_pass("--pr", "456")
         self.assertEqual(result.returncode, 1)
         self.assertEqual(payload["results"][0]["action"], "error")
         self.assertIn("other than JSON", payload["results"][0]["reason"])
-        self.assertEqual(self.merges(), [])
 
     def test_queue_drops_merged_and_closed_numbers_and_keeps_the_rest(self):
         self.pr(1)
@@ -203,8 +195,7 @@ class MergePassTests(unittest.TestCase):
         self.success()
         result, payload = self.run_pass("--pr", "123", "--dry-run", queue="123\n")
         self.assertEqual(payload["results"][0]["action"], "would-merge")
-        self.assertEqual(payload["dry_run"], True)
-        self.assertEqual(self.merges(), [])
+        self.assertEqual([payload["dry_run"], self.merges()], [True, []])
         self.assertEqual(self.queue.read_text(), "123\n")
 
     def test_bad_input_prints_json_and_exits_two(self):
@@ -216,11 +207,9 @@ class MergePassTests(unittest.TestCase):
         self.pr(123)
         self.success()
         self.env["SHIP_REPO"] = "valentinyeo/other"
-        self.write("statuses-" + SHA + ".json", [dict(context="pstack-verifier", state="success",
-                                                      creator={"login": APP})])
         result, payload = self.run_pass("--pr", "123")
+        self.assertEqual(self.merges()[0][4], payload["repo"])
         self.assertEqual(payload["repo"], "valentinyeo/other")
-        self.assertEqual(self.merges()[0][4], "valentinyeo/other")
 
 
 if __name__ == "__main__":
