@@ -21,11 +21,14 @@ jobs:
         with: { fetch-depth: 1, persist-credentials: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: { node-version: "^24.22.1", check-latest: true }
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
       - name: Self check without model calls
         env: { PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL || 'openai/gpt-5' }}" }
         run: |
           set -o pipefail
           node --test tests/pstack-verifier-eval.test.cjs
+          node --test tests/pstack-verifier-drive.test.cjs
           node scripts/pstack-verifier-eval.mjs --replay correct
           if node scripts/pstack-verifier-eval.mjs --replay blind; then
             echo "a verifier stuck on FAIL was accepted, so the eval cannot fail" >&2

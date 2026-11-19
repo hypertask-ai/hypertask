@@ -1,7 +1,10 @@
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FLASH, buildPrompt, completeWithOpenRouter, judgeJourneys, parseAnswer, parsePlan, pickVerifier, redact } from "./pstack-verifier.mjs";
+import { chromium } from "playwright";
+import { FLASH, buildPrompt, completeWithOpenRouter, drivePlan, judgeJourneys, parseAnswer, parsePlan, pickVerifier, readJourneyEvidence, redact } from "./pstack-verifier.mjs";
 
 export { FLASH };
 export const EVAL_BINDING = { sha: "b".repeat(40), run: "1", attempt: "1" };
@@ -55,6 +58,61 @@ export const CASES = [
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
 ];
+
+const FIXTURE_FORM = `
+<button type="button">Add field</button>
+<label>Field name <input type="text" name="field"></label>
+<p id="saved-field">Renewal date</p>`;
+const fixturePage = (style) => `<!doctype html>
+<html lang="en">
+<head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${style}</style></head>
+<body>${FIXTURE_FORM}</body>
+</html>`;
+
+export const PHONE_ONLY_BUG_HTML = fixturePage("#saved-field { display: none; } @media (min-width: 600px) { #saved-field { display: block; } }");
+export const FIELD_ON_EVERY_SIZE_HTML = fixturePage("#saved-field { display: block; }");
+
+export const DRIVEN_CASE = {
+  ...CASES.find((item) => item.name === "planted-phone-bug"),
+  name: "planted-phone-bug-driven",
+  why: "The page hides the saved field below 600px, so the real drive passes at desktop and fails on the phone lane.",
+};
+
+export async function fixtureServer(html) {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  return { base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((done) => server.close(done)) };
+}
+
+export function drivenPlan(item = DRIVEN_CASE, model = FLASH) {
+  const plan = item.plan ?? { actions: [], expect: [] };
+  const actions = plan.actions.map((action) => (action.op === "goto" ? { ...action, path: "/" } : action));
+  return evalPlan(item, model, { ...plan, actions });
+}
+
+export async function driveEvalEvidence({ item = DRIVEN_CASE, html = PHONE_ONLY_BUG_HTML, work = "" } = {}) {
+  const root = work || mkdtempSync(path.join(tmpdir(), "pstack-drive-"));
+  const server = await fixtureServer(html);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const drive = await drivePlan({ browser, projectId: "1", plan: drivenPlan(item), base: server.base, shotsRoot: path.join(root, "shots"), origin: server.base });
+    return readJourneyEvidence(JSON.stringify({ ...EVAL_BINDING, ...drive }), EVAL_BINDING);
+  } finally {
+    await browser.close();
+    await server.close();
+    if (!work) rmSync(root, { recursive: true, force: true });
+  }
+}
+
+export async function judgeDrivenCase({ item = DRIVEN_CASE, model = FLASH, ask = async () => ({ verdict: "PASS", notes: "The saved field is visible." }) } = {}) {
+  const evidence = await driveEvalEvidence({ item });
+  const baseEvidence = await driveEvalEvidence({ item, html: FIELD_ON_EVERY_SIZE_HTML });
+  const result = await judgeJourneys({ plan: drivenPlan(item, model), binding: EVAL_BINDING, evidence, baseEvidence, picked: { model }, ask, work: "" });
+  return { case: item.name, model, expected: "FAIL", verdict: result.verdict, notes: result.notes, ok: result.verdict === "FAIL", evidence };
+}
 
 export function evalModels(alt) {
   const primary = pickVerifier("grok", alt);
