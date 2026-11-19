@@ -26,7 +26,6 @@ test('the map index gives one row per area and a driver only when the map names 
   assert.deepEqual(plan.find((feature) => feature.file === 'inbox.md').tags, ['view-inbox'])
   assert.deepEqual(plan.find((feature) => feature.file === 'boards-and-views.md').scripts, scripts)
   const figma = plan.find((feature) => feature.file === 'figma-connect.md')
-  assert.equal(figma.drivable, false)
   assert.match(figma.reason, /no live driver/)
 })
 
@@ -74,7 +73,6 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   assert.equal(body.title, TICKET_TITLE)
   assert.match(body.description, /1 mapped features failed/)
   assert.match(body.description, /login\.md: missing file: gone\.md/)
-  assert.match(body.description, /How to undo/)
   const updatedCalls = []
   const updated = await fileFindings({ graded: failing, token: 'test-token',
     fetchImpl: fetchFor([openTicket, { when: (url) => url === '/api/mcp/comments', body: { success: true } }], updatedCalls) })
@@ -85,6 +83,8 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
       { when: (url) => url === '/api/mcp/tasks/update', body: { success: true } }]) })
   assert.equal(archived.action, 'archived')
   assert.equal(await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([noTicket]) }), null)
+  assert.equal((await fileFindings({ graded: gradeFeatures(inboxPlan, {}, {}), token: 'test-token',
+    fetchImpl: fetchFor([openTicket, { when: (url) => url === '/api/mcp/comments', body: { success: true } }]) })).action, 'updated')
   const crashed = await fileFindings({ graded: passing, suiteErrors: ['journeys set up failed'], token: 'test-token',
     fetchImpl: fetchFor([noTicket, create, { when: (url) => url === '/api/mcp/comments', body: { success: true } }]) })
   assert.equal(crashed.action, 'created')

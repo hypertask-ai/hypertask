@@ -128,7 +128,8 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
   const existing = await findOpenWeeklyTicket(TICKET_TITLE, options)
   const comment = (ticket, text) => api('comments', { ...options, method: 'POST',
     body: { ticket_number: ticket.ticketNumber, project_id: BOARD.projectId, text, content_type: 'html' } })
-  if (!failing && !problems.length && !suiteErrors.length) {
+  const passing = graded.some((feature) => feature.verdict === 'pass')
+  if (!failing && passing && !problems.length && !suiteErrors.length) {
     if (!existing) return null
     await comment(existing, `<p>Every mapped feature passed the daily live pass on ${now.toISOString().slice(0, 10)}. Archived.</p>`)
     await api('tasks/update', { ...options, method: 'POST', body: { task_id: existing.id, status: 'Archive' } })
@@ -195,7 +196,8 @@ async function main() {
   const problems = graded.flatMap((feature) => feature.missing.map((token) => `${feature.file}: missing drive script: ${token}`))
 
   writeFileSync(path.join(dir, 'result.json'), JSON.stringify({ runUrl, tagStatus, scriptStatus, graded, problems, suiteErrors }, null, 2))
-  const ticket = await fileFindings({ graded, problems, suiteErrors, runUrl }).catch((error) => ({ url: '', action: `filing failed: ${error.message}` }))
+  if (!process.env.HYPERTASK_MCP_TOKEN) throw new Error('HYPERTASK_MCP_TOKEN is missing; no failure ticket can be filed')
+  const ticket = await fileFindings({ graded, problems, suiteErrors, runUrl })
   const lines = summaryLines(graded, { problems, suiteErrors, ticketUrl: ticket?.url ?? '' })
   if (ticket) lines.push('', `Ticket ${ticket.action}: ${ticket.url || 'none'}`)
   const text = `${lines.join('\n')}\n`
