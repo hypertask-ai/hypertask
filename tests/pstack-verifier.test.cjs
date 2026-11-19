@@ -833,7 +833,7 @@ test("the drive fills archived, board and task ids in an api body", async () => 
     shotsDir: "/tmp",
     navigations: [],
   });
-  assert.deepEqual(calls, [{ projectId: "2", taskId: "7", openId: "4" }]);
+  assert.deepEqual(calls, [{ projectId: 2, taskId: 7, openId: 4 }]);
   assert.equal(run.steps[0].ok, true);
   const blocked = [];
   const missing = await runPlan({
