@@ -385,6 +385,7 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
     - python3 .claude/skills/ship/scripts/pr-drain-pick.test.py
+    - python3 .claude/skills/ship/scripts/pr-merge-pass.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
     - python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
