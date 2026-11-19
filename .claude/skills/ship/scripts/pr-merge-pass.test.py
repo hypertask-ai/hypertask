@@ -25,7 +25,11 @@ def fixture(name, default):
     path = home / name
     return json.loads(path.read_text()) if path.exists() else default
 if args[:2] == ["pr", "view"]:
+    raw = home / ("raw-view-" + args[2] + ".json")
     path = home / ("view-" + args[2] + ".json")
+    if raw.exists():
+        print(raw.read_text())
+        sys.exit(0)
     if not path.exists():
         print("no such pull request", file=sys.stderr)
         sys.exit(1)
@@ -33,6 +37,9 @@ if args[:2] == ["pr", "view"]:
 if args[:2] == ["pr", "list"]:
     emit(fixture("list.json", []))
 if args[:1] == ["api"]:
+    if (home / "api-fail").exists():
+        print("HTTP 403: rate limited", file=sys.stderr)
+        sys.exit(1)
     match = re.search(r"commits/([0-9a-f]{40})/statuses", args[1])
     emit(fixture("statuses-" + (match.group(1) if match else "") + ".json", []))
 if args[:2] == ["pr", "merge"]:
@@ -134,8 +141,19 @@ class MergePassTests(unittest.TestCase):
 
     def test_an_unreadable_status_fails_closed(self):
         self.pr(123)
+        (self.home / "api-fail").write_text("1")
         result, payload = self.run_pass("--pr", "123")
-        self.assertEqual(payload["results"][0]["verifier"], "missing")
+        self.assertEqual(payload["results"][0]["verifier"], "unreadable")
+        self.assertIn("HTTP 403", payload["results"][0]["reason"])
+        self.assertEqual(self.merges(), [])
+
+    def test_unreadable_prs_never_crash_the_pass(self):
+        self.write("raw-view-123.json", "not json")
+        (self.home / "api-fail").write_text("1")
+        result, payload = self.run_pass("--pr", "123")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(payload["results"][0]["action"], "error")
+        self.assertIn("other than JSON", payload["results"][0]["reason"])
         self.assertEqual(self.merges(), [])
 
     def test_queue_drops_merged_and_closed_numbers_and_keeps_the_rest(self):

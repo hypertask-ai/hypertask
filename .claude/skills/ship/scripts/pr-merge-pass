@@ -53,7 +53,17 @@ def labelled(repo, label, limit):
                         "--limit", str(limit), "--json", "number")
     if code != 0:
         die("cannot list PRs labelled " + label, err.strip())
-    return [str(item["number"]) for item in json.loads(out or "[]")]
+    listed = read_json(out)
+    if not isinstance(listed, list):
+        die("gh pr list printed something other than JSON")
+    return [str(item["number"]) for item in listed]
+
+
+def read_json(text):
+    try:
+        return json.loads(text or "[]")
+    except ValueError:
+        return None
 
 
 def view(repo, number):
@@ -61,14 +71,20 @@ def view(repo, number):
                         "--json", "number,state,isDraft,headRefOid,mergeStateStatus,url")
     if code != 0:
         return None, err.strip() or "gh pr view failed"
-    return json.loads(out), None
+    pr = read_json(out)
+    if not isinstance(pr, dict):
+        return None, "gh pr view printed something other than JSON"
+    return pr, None
 
 
 def verifier_state(repo, sha, context, app_login):
     code, out, err = gh("api", "repos/%s/commits/%s/statuses?per_page=100" % (repo, sha))
     if code != 0:
         return "unreadable", err.strip()
-    ours = [status for status in json.loads(out or "[]")
+    statuses = read_json(out)
+    if not isinstance(statuses, list):
+        return "unreadable", "gh api printed something other than JSON"
+    ours = [status for status in statuses
             if status.get("context") == context
             and (status.get("creator") or {}).get("login") == app_login]
     if not ours:
@@ -79,7 +95,9 @@ def verifier_state(repo, sha, context, app_login):
 def drop(queue, numbers):
     kept = [line for line in queue.read_text().splitlines()
             if line.split("#", 1)[0].strip() not in numbers]
-    queue.write_text("\n".join(kept) + ("\n" if kept else ""))
+    temporary = queue.with_name(queue.name + ".tmp")
+    temporary.write_text("\n".join(kept) + ("\n" if kept else ""))
+    temporary.replace(queue)
 
 
 def run_one(repo, number, context, app_login, dry_run):
