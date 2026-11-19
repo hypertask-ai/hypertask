@@ -57,9 +57,10 @@ function decideComparison({ journeys, bugfix = false } = {}) {
   const problems = [];
   const notes = [];
   const unjudged = [];
+  const uncompared = [];
   const reproId = bugfix ? (list.find((item) => item.journey === "change:repro")?.journey ?? "change:repro") : "";
   for (const { journey, base, head } of list) {
-    if (base.state === "unavailable") problems.push(`${journey}: the base comparison did not run`);
+    if (base.state === "unavailable") uncompared.push(`${journey}: the base comparison did not run`);
     else if (head.state === "unavailable") problems.push(`${journey}: the head comparison did not run`);
     else if (base.state === "unjudged" || head.state === "unjudged") unjudged.push(journey);
     else if (head.state === "ok" && base.state === "ok") continue;
@@ -75,10 +76,10 @@ function decideComparison({ journeys, bugfix = false } = {}) {
     if (!repro) problems.push("the bug fix has no repro journey");
     else if (waiting) unjudged.push(repro.journey);
     else if (repro.base.state === "ok") problems.push("the repro passes on base, so it does not reproduce the bug");
-    else if (repro.base.state === "unavailable") problems.push("the repro did not run on base");
+    else if (repro.base.state === "unavailable") uncompared.push("the repro did not run on base");
     else if (repro.head.state !== "ok") problems.push("the repro still fails on head");
   }
-  const notesOut = [...new Set(unjudged.map((journey) => `${journey}: the judge model did not answer`))];
+  const notesOut = [...new Set([...uncompared, ...unjudged.map((journey) => `${journey}: the judge model did not answer`)])];
   const verdict = problems.length ? "FAIL" : notesOut.length ? "UNEVALUATED" : notes.length ? "PASS+NOTES" : "PASS";
   return { verdict, notes: [...problems, ...notesOut, ...notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 480) };
 }

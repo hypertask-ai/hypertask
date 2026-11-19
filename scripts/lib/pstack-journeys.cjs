@@ -33,6 +33,7 @@ const GENERIC_BASENAMES = new Set([
   "SKILL.md",
 ]);
 const DISTINCTIVE_BASENAME = /^[a-z0-9]+(?:-[a-z0-9]+){1,}\.(?:tsx|ts|jsx|js|scss|md)$/;
+const TEST_PATH = /^tests?\//;
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const SLOTS = ["primary", "repro"];
@@ -60,6 +61,7 @@ function apiPathOf(file) {
 function pageScore(page, { files, flagKeys, sharedDirs }) {
   let best = 0;
   for (const file of files) {
+    if (TEST_PATH.test(file)) continue;
     const base = file.slice(file.lastIndexOf("/") + 1);
     const flagFile = FLAG_FILE.exec(file);
     const dir = file.slice(0, file.lastIndexOf("/") + 1);
@@ -76,9 +78,16 @@ function pageScore(page, { files, flagKeys, sharedDirs }) {
   return best;
 }
 
+function changedLines(diff) {
+  return String(diff ?? "")
+    .split("\n")
+    .filter((line) => /^[+-]/.test(line) && !/^(?:\+\+\+|---)/.test(line))
+    .join("\n");
+}
+
 function pagesForFiles({ files, diff = "", pages } = {}) {
   const list = uniqueSorted((Array.isArray(files) ? files : []).map(String));
-  const flagKeys = uniqueSorted(String(diff).match(FLAG_KEY) ?? []);
+  const flagKeys = uniqueSorted(changedLines(diff).match(FLAG_KEY) ?? []);
   const sharedDirs = new Set(SHARED_DIRS);
   return normalizePages(pages)
     .map((page) => ({ page: page.name, score: pageScore(page, { files: list, flagKeys, sharedDirs }) }))
