@@ -56,6 +56,16 @@ Nobody prompts a runner again after its turn ends. Ending the turn while CI, rev
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
 
+## The autonomous-run loop
+
+An agent driving more than one PR owns its loop from this repo. No lead session nudges it.
+
+1. Write the exit predicate before the first round: a check a machine can run, such as "these N PRs are merged, the verifier is green, the live behaviour is proven". Keep iterating until it passes. A plateau is not the end; change approach instead.
+2. Watch events first. A merge, a check verdict or a ref move wakes the loop, so run that watcher in the background.
+3. Fall back to an hourly heartbeat when no event can wake it. Never re-check a merge pass more often than hourly.
+4. Write one decision row per round in the ticket's checkpoint file: what changed, whether the predicate moved, what runs next.
+5. Merge through `scripts/pr-merge-pass --queue <file>` or `--label <label>`. It merges only when the pstack-verifier status from the verifier app is success, pins the merge to the head it read, never passes `--admin`, and prints one JSON document per round. Re-read its output before the next round.
+
 ## Scripted chores
 
 Use `scripts/ship-chores rebase` in a clean ticket worktree. It honors `SHIP_BASE` and restores the original branch on conflicts. Use `scripts/ship-chores live --url https://app.hypertask.ai/login --expect 'Sign in'` for bounded HTTP health. No redirects or credentials; feature QA remains separate.
