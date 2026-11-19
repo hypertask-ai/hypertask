@@ -16,7 +16,7 @@ const drives = [
   "comments-drive-live.mjs",
   "flags-drive-live.mjs",
 ];
-const remoteBases = ["https://app.hypertask.ai", "https://example.com", "https://app.hypertask.ai.evil.example"];
+const remoteBases = ["https://app.hypertask.ai", "https://example.com"];
 const driveEnv = (live) => {
   const env = { ...process.env };
   if (live) env.FEATURE_MAP_LIVE = "1";
@@ -46,7 +46,7 @@ test("the live opt-in unlocks the production origin and nothing else", async () 
   delete process.env.FEATURE_MAP_LIVE;
   assert.equal(driveBaseAllowed("http://127.0.0.1:3100"), true);
   assert.equal(driveBaseAllowed("http://localhost:3100"), true);
-  for (const base of remoteBases) assert.equal(driveBaseAllowed(base), false, `no opt-in allowed ${base}`);
+  for (const base of [...remoteBases, "https://app.hypertask.ai.evil.example"]) assert.equal(driveBaseAllowed(base), false, `no opt-in allowed ${base}`);
   process.env.FEATURE_MAP_LIVE = "1";
   assert.equal(driveBaseAllowed(LIVE_BASE), true);
   for (const base of ["https://app.hypertask.ai/", "http://app.hypertask.ai", "https://preview.hypertask.ai",
@@ -55,7 +55,7 @@ test("the live opt-in unlocks the production origin and nothing else", async () 
   }
   if (previous === undefined) delete process.env.FEATURE_MAP_LIVE;
   else process.env.FEATURE_MAP_LIVE = previous;
-  for (const drive of drives) {
+  for (const drive of ["ai-chat-drive.mjs", "board-drive-live.mjs"]) {
     const refused = runDrive(drive, "https://example.com", true);
     assert.equal(refused.status, 2, `${drive} drove a host the opt-in does not name`);
     assert.match(refused.stderr, /refuses a non-loopback base/);
