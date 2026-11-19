@@ -1276,7 +1276,8 @@ export async function judgeBaseCommand({ work = workDir(), ask = askVerifier, ke
           console.log(`base journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
         }
       }
-      journeys.push({ journey: item.journey, viewport, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
+      const taggedRun = viewport ? { journey: item.journey, viewport } : { journey: item.journey };
+      journeys.push({ ...taggedRun, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
     }
   }
   writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
