@@ -13,6 +13,24 @@ const compareLib = libRequire("./lib/pstack-compare.cjs");
 export const FEATURE_MAP_DIR = ".claude/skills/verify-qa/reference/feature-map";
 export const BASE_CACHE_DIR = "base-cache";
 export const AREA_JOURNEY_LIMIT = 6;
+export const JOURNEY_RUN_LIMIT = (AREA_JOURNEY_LIMIT + 2) * 2;
+
+export const VIEWPORTS = [
+  { name: "desktop", options: { viewport: { width: 1440, height: 900 } } },
+  { name: "phone", options: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+];
+export const VIEWPORT_NAMES = VIEWPORTS.map((item) => item.name);
+
+export function viewportShotsDir(shotsRoot, viewport) {
+  return viewport ? path.join(shotsRoot, viewport) : shotsRoot;
+}
+export function planViewports(plan) {
+  const listed = Array.isArray(plan?.viewports) ? plan.viewports.filter((name) => VIEWPORT_NAMES.includes(name)) : [];
+  return listed.length ? listed : [""];
+}
+export function runViewport(run) {
+  return typeof run?.viewport === "string" ? run.viewport : "";
+}
 
 export const FLASH = "deepseek/deepseek-v4.1-flash";
 export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
@@ -260,6 +278,7 @@ export function readPlan(value, binding) {
   const body = typeof value === "string" ? parseLimited(value, 80000) : value;
   if (!sameBinding(body, binding) || !Array.isArray(body.actions) || body.actions.length > 12 || !Array.isArray(body.expect) || body.expect.length > 12) throw new Error("schema/binding mismatch");
   if (body.actions.some((action) => !action || typeof action.op !== "string")) throw new Error("schema/binding mismatch");
+  if (body.viewports != null && (!Array.isArray(body.viewports) || body.viewports.length > VIEWPORT_NAMES.length || body.viewports.some((name) => !VIEWPORT_NAMES.includes(name)))) throw new Error("schema/binding mismatch");
   return body;
 }
 export function readEvidence(value, binding) {
@@ -272,9 +291,11 @@ export function readEvidence(value, binding) {
 export function readJourneyEvidence(value, binding) {
   const body = typeof value === "string" ? parseLimited(value, 80000) : value;
   if (!sameBinding(body, binding) || !Array.isArray(body.journeys)) throw new Error("schema/binding mismatch");
-  if (body.journeys.length > 6) throw new Error("schema/binding mismatch");
+  const journeys = new Set(body.journeys.map((run) => String(run?.journey ?? "")));
+  if (body.journeys.length > JOURNEY_RUN_LIMIT || journeys.size > AREA_JOURNEY_LIMIT + 2) throw new Error("schema/binding mismatch");
   for (const run of body.journeys) {
-    if (typeof run?.journey !== "string" || !Array.isArray(run.steps) || !Array.isArray(run.expects)) throw new Error("schema/binding mismatch");
+    if (typeof run?.journey !== "string" || !run.journey || !Array.isArray(run.steps) || !Array.isArray(run.expects)) throw new Error("schema/binding mismatch");
+    if (run.viewport != null && !VIEWPORT_NAMES.includes(run.viewport)) throw new Error("schema/binding mismatch");
     if (run.steps.some((step) => typeof step?.ok !== "boolean") || run.expects.some((step) => typeof step?.ok !== "boolean")) throw new Error("schema/binding mismatch");
   }
   return body;
@@ -286,6 +307,11 @@ export function readVerdict(text, binding) {
   try { body = JSON.parse(text); } catch { return fail("schema/binding mismatch"); }
   if (!sameBinding(body, binding) || !["PASS", "PASS+NOTES", "FAIL", "PENDING", "UNEVALUATED"].includes(body.verdict)) return fail("schema/binding mismatch");
   return { verdict: body.verdict, notes: String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500), sha: binding.sha, run: String(binding.run), attempt: String(binding.attempt), baseSha: String(body.baseSha ?? "").slice(0, 40), tree: String(body.tree ?? "").slice(0, 40), authorFamily: String(body.authorFamily ?? "").slice(0, 40), verifierModel: String(body.verifierModel ?? "").slice(0, 80) };
+}
+export function failingViewports(evidence) {
+  const runs = Array.isArray(evidence?.journeys) ? evidence.journeys : [];
+  const names = runs.filter((run) => runViewport(run) && compareLib.classifyRun(run, null).state === "failed").map((run) => runViewport(run));
+  return [...new Set(names)];
 }
 function sameSeries(seen, planned, key) {
   if (seen.length !== planned.length) return false;
@@ -316,6 +342,8 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
   const problems = [];
   if (!sameSeries(seen.steps, parsed.actions, "action") || !sameSeries(seen.expects, parsed.expect, "expect")) problems.push("evidence does not match the plan");
   if (seen.steps.some((step) => step.ok !== true) || seen.expects.some((step) => step.ok !== true)) problems.push("a step failed");
+  const failing = failingViewports(seen);
+  if (failing.length) problems.push(`a step failed at ${failing.join(", ")}`);
   if (seen.offOrigin.length) problems.push("off-origin request");
   const apiOnly = parsed.actions.every((action) => action.op === "api");
   const badNav = seen.navigations.some((item) => !(Number(item.status) >= 200 && Number(item.status) < 400));
@@ -1214,29 +1242,47 @@ async function planCommand() {
   console.log(`base journeys: ${basePlan.journeys.map((item) => item.journey).join(", ") || "(none)"}`);
   output({ empty: driveNeeded(plan) ? "false" : "true", model: plan.verifierModel, baseNeeded: basePlan.journeys.length ? "true" : "false" });
 }
-function baseRunFor(plan, journey, baseEvidence) {
-  const fresh = (baseEvidence?.journeys ?? []).find((run) => run.journey === journey);
-  if (fresh) return fresh;
-  const item = (plan.journeys ?? []).find((entry) => entry.journey === journey);
-  if (!item?.base) return null;
-  return { journey, apiOnly: item.base.apiOnly === true, steps: item.base.steps, expects: item.base.expects, navigations: item.base.navigations, offOrigin: item.base.offOrigin, judged: item.base.judged?.verdict ?? "" };
+export function cachedBaseFor(item, viewport) {
+  if (!item) return null;
+  const bases = item.bases && typeof item.bases === "object" ? item.bases : item.base ? { desktop: item.base } : {};
+  return bases[viewport || "desktop"] ?? null;
 }
-export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY }) {
+function baseRunFor(plan, journey, viewport, baseEvidence) {
+  const fresh = (baseEvidence?.journeys ?? []).find((run) => run.journey === journey && runViewport(run) === viewport);
+  if (fresh) return fresh;
+  const cached = cachedBaseFor((plan.journeys ?? []).find((entry) => entry.journey === journey), viewport);
+  if (!cached) return null;
+  return { journey, viewport: runViewport(cached), apiOnly: cached.apiOnly === true, steps: cached.steps, expects: cached.expects, navigations: cached.navigations, offOrigin: cached.offOrigin, judged: cached.judged?.verdict ?? "" };
+}
+export function shotDirFor(work, viewport, index) {
+  return shotsDirFor(viewportShotsDir(path.join(work, "evidence", "shots"), viewport), index);
+}
+function judgePrompt(plan, item, head, work, viewport, index) {
+  return {
+    prompt: buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: head }),
+    options: { images: imagesIn(shotDirFor(work, viewport, index)) },
+  };
+}
+export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY, work = workDir() }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
-    const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey) ?? null;
-    let judged = head ? String(head.judged ?? "") : "";
-    if (head && !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/)) {
-      try {
-        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: head }), { key, model: picked.model, models: picked.models, images: imagesIn(shotsDirFor(path.join(workDir(), "evidence", "shots"), index)) }, parseAnswer);
-        judged = parsed.verdict;
-        console.log(`journey ${item.journey}: ${parsed.verdict} ${parsed.notes}`);
-      } catch (error) {
-        judged = "UNEVALUATED";
-        console.log(`journey ${item.journey}: ${failureText(error, 160)}`);
+    for (const viewport of planViewports(plan)) {
+      const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey && runViewport(run) === viewport) ?? null;
+      let judged = head ? String(head.judged ?? "") : "";
+      const worthAsking = !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/);
+      if (head && worthAsking) {
+        try {
+          const { prompt, options } = judgePrompt(plan, item, head, work, viewport, index);
+          const parsed = await ask(prompt, { key, model: picked.model, models: picked.models, ...options }, parseAnswer);
+          judged = parsed.verdict;
+          console.log(`journey ${item.journey} [${viewport || "plain"}]: ${parsed.verdict} ${parsed.notes}`);
+        } catch (error) {
+          judged = "UNEVALUATED";
+          console.log(`journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
+        }
       }
+      journeys.push({ journey: item.journey, viewport, plan: item, base: baseRunFor(plan, item.journey, viewport, baseEvidence), head: head ? { ...head, judged } : null });
     }
-    journeys.push({ journey: item.journey, plan: item, base: baseRunFor(plan, item.journey, baseEvidence), head: head ? { ...head, judged } : null });
   }
   const hasRepro = (plan.journeys ?? []).some((item) => item.journey === "change:repro");
   return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true, bugfixUnevaluated: plan.bugfix && !hasRepro ? String(plan.reason ?? "") : "" });
@@ -1249,21 +1295,25 @@ export async function judgeBaseCommand({ work = workDir(), ask = askVerifier, ke
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   const journeys = [];
   for (const [index, item] of (plan.journeys ?? []).entries()) {
-    const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey) ?? null;
-    let judged = "";
-    if (run && picked.model && !compareLib.classifyRun(run, item).state.match(/failed|unavailable/)) {
-      try {
-        const parsed = await ask(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan: item, evidence: run }), { key, model: picked.model, models: picked.models, images: imagesIn(shotsDirFor(path.join(work, "evidence", "shots"), index)) }, parseAnswer);
-        judged = parsed.verdict;
-      } catch (error) {
-        judged = "UNEVALUATED";
-        console.log(`base journey ${item.journey}: ${failureText(error, 160)}`);
+    for (const viewport of planViewports(plan)) {
+      const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey && runViewport(entry) === viewport) ?? null;
+      let judged = "";
+      if (run && picked.model && !compareLib.classifyRun(run, item).state.match(/failed|unavailable/)) {
+        try {
+          const { prompt, options } = judgePrompt(plan, item, run, work, viewport, index);
+          const parsed = await ask(prompt, { key, model: picked.model, models: picked.models, ...options }, parseAnswer);
+          judged = parsed.verdict;
+        } catch (error) {
+          judged = "UNEVALUATED";
+          console.log(`base journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
+        }
       }
+      const taggedRun = viewport ? { journey: item.journey, viewport } : { journey: item.journey };
+      journeys.push({ ...taggedRun, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
     }
-    journeys.push({ journey: item.journey, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
   }
   writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
-  console.log(`base evidence: ${journeys.map((item) => `${item.journey} ${item.judged || compareLib.classifyRun(item).state}`).join(", ")}`);
+  console.log(`base evidence: ${journeys.map((item) => `${item.journey}${item.viewport ? ` [${item.viewport}]` : ""} ${item.judged || compareLib.classifyRun(item).state}`).join(", ")}`);
 }
 export const comparisonMode = (plan) => plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
 async function judgeCommand() {
