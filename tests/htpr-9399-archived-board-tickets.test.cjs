@@ -267,3 +267,55 @@ test("MCP create still reports a missing board and a permission failure in their
   assert.equal(forbidden.body.code, "forbidden");
   assert.equal(forbidden.body.message, "User does not have permission to create tasks in this project");
 });
+
+function appCreateRoute(board, flagEnabled) {
+  const { load } = require("./task-route-loader.cjs");
+  const sharedRoute = load("src/lib/api/task-writes/route.ts", {
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
+    "@/lib/auth/agentScope": {
+      withAgentScopeRequest: (_request, run) => run(),
+      prepareAgentScope: async () => {},
+    },
+    "@/lib/auth/session": {},
+  });
+  const { POST } = load("src/lib/api/task-writes/create.ts", {
+    "./route": sharedRoute,
+    "./create-fullscreen": { createFullScreenTaskAndReturn: async () => ({ id: 42 }) },
+    "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async () => ({ id: 6 }) },
+    "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
+    "@/lib/media/inlineAgentImages.server": {},
+    "@/lib/flags": { isFeatureEnabled: async () => flagEnabled },
+    "@/lib/flags/keys": { HTPR_7740_CREATE_RESPONSE_FLAG: "htpr-7740-create-response" },
+    "@/lib/prisma": {
+      default: {
+        project: { findFirst: async () => board },
+        section: { findFirst: async () => null },
+        task: { findFirst: async () => null },
+      },
+    },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/tasks/create": { default: async () => { throw new Error("create must not run"); } },
+    "@/lib/realtime/server": { broadcastBoardChange: async () => undefined },
+  });
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => POST });
+  return async function request() {
+    let response;
+    await handler(
+      { method: "POST", headers: {}, body: { title: "A ticket", projectId: 11514 } },
+      { setHeader() {}, status: (status) => ({ json: (body) => { response = { status, body }; } }) },
+    );
+    return response;
+  };
+}
+
+test("a board with no sections but archived status names the board instead of a missing section", async () => {
+  const response = await appCreateRoute({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" }, true)();
+  assert.equal(response.status, 400);
+  assert.equal(response.body.message, ARCHIVED_MESSAGE);
+});
+
+test("a board with no sections that is not archived still reports the missing section", async () => {
+  const response = await appCreateRoute({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Normal" }, true)();
+  assert.equal(response.status, 404);
+  assert.equal(response.body.message, "No active section found");
+});
