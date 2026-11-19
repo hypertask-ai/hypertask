@@ -39,9 +39,8 @@ test("a bug that only shows at phone width fails and names the phone viewport", 
   assert.equal(result.results.length, 2);
   for (const row of result.results) {
     assert.equal(row.verdict, "FAIL");
-    assert.match(row.notes, /\[phone\]: regression at step/);
-    assert.doesNotMatch(row.notes, /\[desktop\]: regression/);
-    assert.match(row.notes, /\[desktop\] works now/);
+    assert.match(row.notes, /change:primary \[phone\]: regression at step/);
+    assert.doesNotMatch(row.notes, /\[desktop\]/);
   }
 });
 

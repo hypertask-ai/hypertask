@@ -33,6 +33,7 @@ export const CASES = [
     why: "The saved field name is not on the page, so the claimed behaviour is broken.",
     claim,
     pageShows: { desktop: false, phone: false },
+    baseShows: { desktop: true, phone: true },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
   {
@@ -41,6 +42,7 @@ export const CASES = [
     why: "The saved field name is on the desktop page and missing at phone width, which is the planted phone bug.",
     claim,
     pageShows: { desktop: true, phone: false },
+    baseShows: { desktop: true, phone: true },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
   {
@@ -49,6 +51,7 @@ export const CASES = [
     why: "The saved field name is on the page at desktop and phone width, so the claimed behaviour works.",
     claim,
     pageShows: { desktop: true, phone: true },
+    baseShows: { desktop: false, phone: false },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
 ];
@@ -93,34 +96,37 @@ export function planCoversFixture(plan, value = "Renewal date") {
   return fillsField && watchesField;
 }
 
-function showsField(item, viewport) {
-  if (item.pageShows && typeof item.pageShows === "object") return item.pageShows[viewport] === true;
-  return item.pageShowsField === true;
+function showsOn(shown, viewport) {
+  if (shown && typeof shown === "object") return shown[viewport] === true;
+  return shown === true;
 }
 
-function evalRun(item, plan, viewport) {
-  const shown = showsField(item, viewport);
+function evalRun(item, plan, viewport, shown) {
+  const visible = showsOn(shown, viewport);
   const failedStep = Number.isInteger(item.stepFailure) ? item.stepFailure : -1;
   return {
     journey: EVAL_JOURNEY,
     viewport,
     apiOnly: false,
     steps: plan.actions.map((action, index) => (index === failedStep ? { action, ok: false, error: "step was not actionable" } : { action, ok: true, error: "" })),
-    expects: plan.expect.map((expect) => ({ expect, ok: shown, error: shown ? "" : "text not visible" })),
+    expects: plan.expect.map((expect) => ({ expect, ok: visible, error: visible ? "" : "text not visible" })),
     navigations,
     offOrigin: [],
-    judged: shown ? "PASS" : "",
+    judged: visible ? "PASS" : "",
   };
 }
 
-export function evalEvidence(item, plan = item.plan) {
-  const runs = EVAL_VIEWPORTS.map((viewport) => evalRun(item, plan, viewport));
+function evidenceFor(item, plan, shown) {
+  const runs = EVAL_VIEWPORTS.map((viewport) => evalRun(item, plan, viewport, shown));
   return { ...EVAL_BINDING, journeys: runs, steps: runs[0].steps, expects: runs[0].expects, navigations, offOrigin: [] };
 }
 
+export function evalEvidence(item, plan = item.plan) {
+  return evidenceFor(item, plan, item.pageShows ?? item.pageShowsField);
+}
+
 export function evalBaseEvidence(item, plan = item.plan) {
-  const runs = EVAL_VIEWPORTS.map((viewport) => ({ ...evalRun({ ...item, pageShows: {} }, plan, viewport), judged: "" }));
-  return { ...EVAL_BINDING, journeys: runs, steps: runs[0].steps, expects: runs[0].expects, navigations, offOrigin: [] };
+  return evidenceFor({ ...item, stepFailure: undefined }, plan, item.baseShows ?? {});
 }
 
 export function answerFor(mode, item) {

@@ -64,7 +64,7 @@ test("the judge is asked once per viewport and reports the one that broke", asyn
     plan,
     binding,
     evidence: { ...binding, journeys: runs(true, false) },
-    baseEvidence: { ...binding, journeys: runs(false, false) },
+    baseEvidence: { ...binding, journeys: runs(false, true) },
     picked: { model: plan.verifierModel },
     ask: async () => { asked.push(1); return { verdict: "PASS", notes: "saw the field" }; },
     work: "",
