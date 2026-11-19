@@ -164,7 +164,8 @@ const apiBase = cachedPlan([{ action: { op: "api", method: "POST", path: "/api/m
 const judgeCases = [
   ["a repro that failed on base and passes on head is a pass", {}, "PASS"],
   ["a repro that also passed on base is not proof, so it fails", { baseEvidence: { ...binding, journeys: [headRun(true)] } }, "FAIL", /does not reproduce the bug/],
-  ["a head journey that fails is a fail even when the model would pass it", { evidence: { ...binding, journeys: [headRun(false)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }, "FAIL"],
+  ["a head journey that fails against a passing base is a fail even when the model would pass it", { evidence: { ...binding, journeys: [headRun(false)] }, baseEvidence: { ...binding, journeys: [headRun(true)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }, "FAIL", /regression at step 1/],
+  ["a head journey that fails the same way as base could not be evaluated", { evidence: { ...binding, journeys: [headRun(false)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }, "UNEVALUATED", /same failure is on base/],
   ["no base evidence could not be evaluated instead of passing it", { baseEvidence: null }, "UNEVALUATED", /base comparison did not run/],
   ["a cached base result stands in for a base run", { plan: cachedPlan([{ action: { op: "goto", path: "/inbox" }, ok: false }]), baseEvidence: null }, "PASS"],
   ["a cached api-only base that passed means the repro did not reproduce", { plan: apiBase, evidence: { ...binding, journeys: [{ ...apiBase.journeys[0].base, apiOnly: true }] }, baseEvidence: null }, "FAIL", /does not reproduce the bug/],

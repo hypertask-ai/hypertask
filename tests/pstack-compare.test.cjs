@@ -96,7 +96,34 @@ test("a journey that broke earlier than base did fails even when both failed", (
   const head = okRun({ steps: [{ ok: false }, { ok: true }, { ok: false }] });
   const result = decideComparison({ journeys: [{ journey: "area:inbox", base, head }] });
   assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /regression at step 1, base reached step 4/);
+  assert.match(result.notes, /regression at step 1, base failed at step 3/);
+  assert.doesNotMatch(result.notes, /base reached/);
+});
+
+test("the same failure at the same step on base and head is pre-existing, not a regression", () => {
+  const captured = (name) => JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "pstack-verifier", `${name}-evidence.json`), "utf8"));
+  const replay = (name) => captured(name).journeys.map((run) => ({ journey: run.journey, base: { ...run, judged: "" }, head: { ...run, judged: "PASS" } }));
+  const result = decideComparison({ journeys: replay("44445936703") });
+  assert.equal(result.verdict, "PASS+NOTES");
+  assert.match(result.notes, /fails the same way on base/);
+  assert.doesNotMatch(result.notes, /regression/);
+});
+
+test("a different error at the same step is still a regression", () => {
+  const action = { op: "click", text: "Save" };
+  const steps = (error) => [{ action: { op: "goto", path: "/" }, ok: true }, { action, ok: false, error }];
+  const result = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun({ steps: steps("not actionable") }), head: okRun({ steps: steps("api status 500") }) }] });
+  assert.equal(result.verdict, "FAIL");
+  assert.match(result.notes, /base failed differently at the same step/);
+});
+
+test("a repro that fails the same way on both sides could not evaluate the change", () => {
+  const captured = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "pstack-verifier", "44450409918-evidence.json"), "utf8"));
+  const journeys = captured.journeys.map((run) => ({ journey: run.journey, base: { ...run, judged: "" }, head: { ...run, judged: "PASS" } }));
+  const result = decideComparison({ journeys, bugfix: true });
+  assert.equal(result.verdict, "UNEVALUATED");
+  assert.match(result.notes, /change:repro: the same failure is on base/);
+  assert.doesNotMatch(result.notes, /regression|repro still fails/);
 });
 
 test("a journey that got further than base and still fails is a note, not a fail", () => {
@@ -136,7 +163,11 @@ test("a bug fix needs its repro to fail on base and pass on head", () => {
   assert.equal(reproPassesOnBase.verdict, "FAIL");
   assert.match(reproPassesOnBase.notes, /does not reproduce the bug/);
   const stillFails = decideComparison({ journeys: [{ journey: "change:repro", base: failsOnBase, head: failsOnBase }], bugfix: true });
-  assert.equal(stillFails.verdict, "FAIL");
+  assert.equal(stillFails.verdict, "UNEVALUATED");
+  assert.match(stillFails.notes, /the same failure is on base/);
+  const brokeLater = decideComparison({ journeys: [{ journey: "change:repro", base: okRun({ steps: [{ ok: false, error: "not actionable" }] }), head: okRun({ steps: [{ ok: true }, { ok: false, error: "api status 500" }] }) }], bugfix: true });
+  assert.equal(brokeLater.verdict, "FAIL");
+  assert.match(brokeLater.notes, /the repro still fails on head/);
 });
 
 test("a cached base result carries its judged verdict as an object", () => {
@@ -233,4 +264,14 @@ test("only this verifier's own markers are read for base drift", () => {
   const mine = comment();
   const theirs = comment({ user: { login: "someone" }, body: buildMarker({ run: 7, attempt: 1, head: OTHER, tree: TREE, base: OTHER }) });
   assert.deepEqual(summaryMarkers({ comments: [mine, theirs], logins: BOTS }).map((marker) => marker.run), ["4242"]);
+});
+
+test("a bug fix with no repro and a stated reason could not be evaluated", () => {
+  const result = decideComparison({
+    journeys: [{ journey: "area:inbox", base: okRun(), head: okRun() }],
+    bugfix: true,
+    bugfixUnevaluated: "the archived board cannot be reached by any write route",
+  });
+  assert.equal(result.verdict, "UNEVALUATED");
+  assert.match(result.notes, /no repro journey: the archived board cannot be reached/);
 });

@@ -548,7 +548,7 @@ test('the replacement queue leaves the wedged legacy group and keeps bounded job
 function openPullFleet(pull) {
   const pulls = [];
   const statuses = {};
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 32; index += 1) {
     const skip = {
       number: 3000 + index,
       state: "open",
@@ -560,7 +560,7 @@ function openPullFleet(pull) {
     pulls.push(skip);
     statuses[skip.head.sha] = [featureFlagStatus(skip)];
   }
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 32; index += 1) {
     pulls.push({
       number: 4000 + index,
       state: "open",
@@ -573,7 +573,7 @@ function openPullFleet(pull) {
   return { pulls, statuses };
 }
 
-test("reconcile: skipped and evaluated pull requests list open pulls twice and do not re-read each one", (t) => {
+test("reconcile: 32 skipped and 33 evaluated pull requests list open pulls twice and do not re-read each one", (t) => {
   const { result, output, calls } = runWorkflow(t, {
     extraPulls: (pull) => openPullFleet(pull).pulls,
     statuses: (pull) => openPullFleet(pull).statuses,
@@ -587,12 +587,12 @@ test("reconcile: skipped and evaluated pull requests list open pulls twice and d
     posts: calls.filter((call) => call.args.includes("POST")).length,
   };
   assert.equal(result.status, 2, output);
-  assert.match(output, /evaluated 4, skipped 3/);
+  assert.match(output, /evaluated 33, skipped 32/);
   assert.equal(counts.statuses, 0, JSON.stringify(counts));
   assert.equal(counts.graphql, 1, JSON.stringify(counts));
   assert.equal(counts.list, 2, JSON.stringify(counts));
   assert.equal(counts.perPull, 0, JSON.stringify(counts));
-  assert.equal(counts.posts, 4, JSON.stringify(counts));
+  assert.equal(counts.posts, 33, JSON.stringify(counts));
 });
 
 test('a genuine evaluation error is not hidden by rate limiting its error-status post', (t) => {
