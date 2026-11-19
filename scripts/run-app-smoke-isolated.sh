@@ -113,7 +113,7 @@ docker run -d --name "$volume_keeper" \
 
 use_trusted_dependencies=false
 dependencies_mount=$dependencies
-if [ "${CORE_SMOKE_TRUSTED_DEPENDENCIES:-false}" = true ] && [ -d "$trusted_root/node_modules" ]; then
+if [ "${CORE_SMOKE_TRUSTED_DEPENDENCIES:-false}" = true ] && [ -f "$trusted_root/node_modules/.package-lock.json" ]; then
   inputs_match=true
   for trusted_input in package.json package-lock.json .npmrc prisma.config.ts src/prisma; do
     if [ ! -e "$candidate_root/$trusted_input" ] && [ ! -e "$trusted_root/$trusted_input" ]; then

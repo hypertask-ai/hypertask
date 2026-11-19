@@ -231,6 +231,52 @@ function assertRelayOwnsHostPort(log) {
   assert.equal(lines.some((line) => line.startsWith("network connect ht-smoke-net-") && line.includes(" ht-smoke-relay-")), true);
 }
 
+function runBaseSmoke(t, installed) {
+  const dir = mkdtempSync(join(tmpdir(), "pstack-base-deps-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "bin");
+  const dockerLog = join(dir, "docker.log");
+  const nodeLog = join(dir, "node.log");
+  mkdirSync(bin);
+  const app = join(dir, "candidate-base");
+  mkdirSync(join(app, "scripts"), { recursive: true });
+  if (installed) {
+    mkdirSync(join(app, "node_modules"), { recursive: true });
+    writeFileSync(join(app, "node_modules", ".package-lock.json"), "{}\n");
+  }
+  writeFileSync(join(bin, "docker"), dockerStub(dockerLog), { mode: 0o755 });
+  writeFileSync(join(bin, "node"), nodeStub(nodeLog), { mode: 0o755 });
+  const result = spawnSync("bash", [join(root, "scripts/run-app-smoke-isolated.sh"), app, app], {
+    encoding: "utf8",
+    timeout: 20000,
+    env: {
+      PATH: `${bin}:/usr/bin:/bin`,
+      PSTACK_VERIFIER_HOLD: "1",
+      PSTACK_VERIFIER_READY: join(dir, "ready.env"),
+      PSTACK_VERIFIER_STOP: join(dir, "stop"),
+      PREVIEW_UP: "1",
+      RUNNER_TEMP: dir,
+      CORE_SMOKE_TRUSTED_DEPENDENCIES: "true",
+      TMPDIR: dir,
+    },
+  });
+  return { result, dockerLog, app };
+}
+
+test("a base checkout with an empty node_modules installs its own dependencies", (t) => {
+  const { result, dockerLog } = runBaseSmoke(t, false);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  assert.equal(readFileSync(dockerLog, "utf8").includes("run --rm --name ht-smoke-install-"), true);
+});
+
+test("a base checkout reuses dependencies only when they are installed", (t) => {
+  const { result, dockerLog, app } = runBaseSmoke(t, true);
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const log = readFileSync(dockerLog, "utf8");
+  assert.equal(log.includes("run --rm --name ht-smoke-install-"), false);
+  assert.equal(log.includes(`${join(app, "node_modules")}:/app/node_modules:ro`), true);
+});
+
 test("the held smoke publishes the relay on the host and fails closed when the preview check fails", (t) => {
   const { result, dockerLog, nodeLog, ready } = runHeldSmoke(t, false);
   assert.equal(result.status, 1, `${result.stdout}\n${result.stderr}`);
@@ -366,7 +412,7 @@ test("the plan lane restores cached base results before it plans, keyed by the b
   assert.equal(trusted.jobs.plan.outputs.baseNeeded, "${{ steps.plan.outputs.baseNeeded }}");
 });
 
-test("the base lane drives the base commit with its own trusted root and writes the cache", () => {
+test("the base lane boots the base commit with the workspace as its trusted root and writes the cache", () => {
   const job = trusted.jobs.base;
   assert.equal(job["cache-mode"], "write");
   assert.match(String(job.if), /needs\.plan\.outputs\.baseNeeded == 'true'/);
@@ -375,7 +421,9 @@ test("the base lane drives the base commit with its own trusted root and writes 
   assert.match(String(checkouts[1].with.ref), /needs\.resolve\.outputs\.base/);
   const runAt = job.steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier-job.sh"));
   const run = String(job.steps[runAt].run);
-  assert.match(run, /\/candidate-base" "\$GITHUB_WORKSPACE\/candidate-base"/);
+  const [, trustedRoot, candidateRoot] = /pstack-verifier-job\.sh "([^"]+)" "([^"]+)"/.exec(run);
+  assert.equal(trustedRoot, "$GITHUB_WORKSPACE");
+  assert.equal(candidateRoot, "$GITHUB_WORKSPACE/candidate-base");
   assert.equal(job.steps[runAt].env.PSTACK_PLAN_FILE.endsWith("base-plan.json"), true);
   assert.equal(job.steps[runAt].env.BASE_SHA, "${{ needs.resolve.outputs.base }}");
   assert.equal(job.steps[runAt].env.MAP_SHA, undefined);

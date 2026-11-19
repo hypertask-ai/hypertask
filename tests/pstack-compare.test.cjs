@@ -28,10 +28,19 @@ const okRun = (overrides = {}) => ({
   ...overrides,
 });
 
-test("a preview that never started is unavailable, never a failed repro", () => {
+test("a preview that never started is unavailable, so the comparison could not be evaluated", () => {
   assert.deepEqual(classifyRun({ preview: "down", steps: [], expects: [], navigations: [], offOrigin: [] }), { state: "unavailable", failIndex: -1 });
   assert.deepEqual(classifyRun(null), { state: "unavailable", failIndex: -1 });
-  assert.equal(decideComparison({ journeys: [{ journey: "change:repro", base: { preview: "down" }, head: okRun() }], bugfix: true }).verdict, "FAIL");
+  assert.equal(decideComparison({ journeys: [{ journey: "change:repro", base: { preview: "down" }, head: okRun() }], bugfix: true }).verdict, "UNEVALUATED");
+});
+
+test("a real regression still fails when another journey could not be compared", () => {
+  const result = decideComparison({ journeys: [
+    { journey: "area:inbox", base: null, head: okRun() },
+    { journey: "area:boards", base: okRun(), head: okRun({ steps: [{ ok: true }, { ok: false }] }) },
+  ] });
+  assert.equal(result.verdict, "FAIL");
+  assert.match(result.notes, /area:boards: regression at step 2/);
 });
 
 test("a failing step, a failing expect and a bad document status each fail a run", () => {
@@ -98,9 +107,9 @@ test("a journey that got further than base and still fails is a note, not a fail
   assert.match(result.notes, /got further than base/);
 });
 
-test("a missing base comparison fails, and never claims a pass", () => {
+test("a missing base comparison could not be evaluated, and never claims a pass", () => {
   const result = decideComparison({ journeys: [{ journey: "area:inbox", base: null, head: okRun() }] });
-  assert.equal(result.verdict, "FAIL");
+  assert.equal(result.verdict, "UNEVALUATED");
   assert.match(result.notes, /the base comparison did not run/);
 });
 

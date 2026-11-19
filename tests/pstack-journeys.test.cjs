@@ -90,6 +90,27 @@ test("pages carry a score and are ordered by it, then by name", () => {
   assert.deepEqual(chosen.map((item) => item.page), ["boards-and-views", "inbox"]);
 });
 
+test("a test file alone never selects a page", () => {
+  const tested = [
+    { name: "agent-runs", text: "Verification: `tests/agent-runs.test.cjs` covers the run timeline.\n" },
+    { name: "billing-and-plans", text: "Verification: `tests/billing-and-plans.test.cjs` covers checkout.\n" },
+  ];
+  assert.deepEqual(pagesForFiles({ files: ["tests/agent-runs.test.cjs", "tests/billing-and-plans.test.cjs"], pages: tested }), []);
+});
+
+test("a page that names a test keeps working when the source beside it changes", () => {
+  const tested = [{ name: "inbox", text: "Notifications land here from `src/pages/api/queues/inboxReminder.ts`.\n`tests/inbox.test.cjs` covers it.\n" }];
+  assert.deepEqual(pagesForFiles({ files: ["tests/inbox.test.cjs"], pages: tested }), []);
+  assert.deepEqual(pagesForFiles({ files: ["src/pages/api/queues/inboxReminder.ts"], pages: tested }).map((item) => item.page), ["inbox"]);
+});
+
+test("a flag-looking test filename is not a flag key, a changed flag line still is", () => {
+  const flags = [{ name: "save-limits", text: "With `htpr-9106-save-limit` on, a save stops at the agent deadline.\n" }];
+  const header = "diff --git a/tests/htpr-9106-save-limit.test.cjs b/tests/htpr-9106-save-limit.test.cjs\n--- a/tests/htpr-9106-save-limit.test.cjs\n+++ b/tests/htpr-9106-save-limit.test.cjs\n@@ -1 +1 @@\n-const budget = 30;\n+const budget = 60;\n";
+  assert.deepEqual(pagesForFiles({ files: [], diff: header, pages: flags }), []);
+  assert.deepEqual(pagesForFiles({ files: [], diff: "+  if (flags.htpr-9106-save-limit) return;\n", pages: flags }).map((item) => item.page), ["save-limits"]);
+});
+
 test("an app change that matches no page returns nothing, so the run falls back", () => {
   assert.deepEqual(pagesForFiles({ files: ["src/lib/api/task-writes/create-global.ts"], diff: "htpr-9399-archived-board-tickets", pages }), []);
 });
