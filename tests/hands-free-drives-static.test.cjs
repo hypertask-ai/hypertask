@@ -7,6 +7,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => readFileSync(path.join(root, file), "utf8");
+const driveDir = ".claude/skills/verify-qa/scripts";
 const drives = [
   "ai-chat-drive.mjs",
   "ctrl-j-drive.mjs",
@@ -15,16 +16,48 @@ const drives = [
   "comments-drive-live.mjs",
   "flags-drive-live.mjs",
 ];
+const remoteBases = ["https://app.hypertask.ai", "https://example.com", "https://app.hypertask.ai.evil.example"];
+const driveEnv = (live) => {
+  const env = { ...process.env };
+  if (live) env.FEATURE_MAP_LIVE = "1";
+  else delete env.FEATURE_MAP_LIVE;
+  return env;
+};
+const runDrive = (drive, base, live) => spawnSync(process.execPath, [
+  path.join(driveDir, drive), path.join(tmpdir(), `drive-check-${process.pid}`), "--base", base,
+  "--state", path.join(tmpdir(), "never-read-state.json"),
+], { cwd: root, encoding: "utf8", timeout: 30_000, env: driveEnv(live) });
 
 test("hands-free drives parse and refuse any non-loopback base", () => {
   for (const drive of drives) {
-    const file = path.join(".claude/skills/verify-qa/scripts", drive);
+    const file = path.join(driveDir, drive);
     assert.equal(spawnSync(process.execPath, ["--check", file], { cwd: root, encoding: "utf8" }).status, 0, `${drive} does not parse`);
-    const refused = spawnSync(process.execPath, [
-      file, path.join(tmpdir(), `drive-check-${process.pid}`), "--base", "https://app.hypertask.ai",
-      "--state", path.join(tmpdir(), "never-read-state.json"),
-    ], { cwd: root, encoding: "utf8", timeout: 30_000 });
-    assert.equal(refused.status, 2, `${drive} did not refuse a remote base`);
+    for (const base of remoteBases) {
+      const refused = runDrive(drive, base, false);
+      assert.equal(refused.status, 2, `${drive} did not refuse ${base}`);
+      assert.match(refused.stderr, /refuses a non-loopback base/, `${drive} refused ${base} with the wrong reason`);
+    }
+  }
+});
+
+test("the live opt-in unlocks the production origin and nothing else", async () => {
+  const previous = process.env.FEATURE_MAP_LIVE;
+  const { driveBaseAllowed, LIVE_BASE } = await import(path.join(root, driveDir, "drive-grade.mjs"));
+  delete process.env.FEATURE_MAP_LIVE;
+  assert.equal(driveBaseAllowed("http://127.0.0.1:3100"), true);
+  assert.equal(driveBaseAllowed("http://localhost:3100"), true);
+  for (const base of remoteBases) assert.equal(driveBaseAllowed(base), false, `no opt-in allowed ${base}`);
+  process.env.FEATURE_MAP_LIVE = "1";
+  assert.equal(driveBaseAllowed(LIVE_BASE), true);
+  for (const base of ["https://app.hypertask.ai/", "http://app.hypertask.ai", "https://preview.hypertask.ai",
+    "https://app.hypertask.ai.evil.example", "https://example.com"]) {
+    assert.equal(driveBaseAllowed(base), false, `the opt-in allowed ${base}`);
+  }
+  if (previous === undefined) delete process.env.FEATURE_MAP_LIVE;
+  else process.env.FEATURE_MAP_LIVE = previous;
+  for (const drive of drives) {
+    const refused = runDrive(drive, "https://example.com", true);
+    assert.equal(refused.status, 2, `${drive} drove a host the opt-in does not name`);
     assert.match(refused.stderr, /refuses a non-loopback base/);
   }
 });

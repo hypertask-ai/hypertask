@@ -163,7 +163,7 @@ function runDrive(name, dir) {
   mkdirSync(folder, { recursive: true })
   const child = spawnSync(process.execPath, [path.join(DRIVE_DIR, name), folder, '--base', APP,
     '--state', QA_STATE, '--board', QA_BOARD_PATH], {
-    cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000, env: { ...process.env, VERIFY_QA_ALLOW_LIVE: '1' },
+    cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000,
   })
   writeFileSync(path.join(folder, 'drive.log'), `${child.stdout ?? ''}${child.stderr ?? ''}`)
   return child.status === 0 ? 'ok' : 'failed'

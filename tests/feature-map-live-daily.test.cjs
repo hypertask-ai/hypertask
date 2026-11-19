@@ -91,14 +91,14 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
 })
 
 test('drives reach production only when the live switch is on', () => {
-  const previous = process.env.VERIFY_QA_ALLOW_LIVE
-  delete process.env.VERIFY_QA_ALLOW_LIVE
+  const previous = process.env.FEATURE_MAP_LIVE
+  delete process.env.FEATURE_MAP_LIVE
   assert.equal(driveBaseAllowed('http://127.0.0.1:3100'), true)
   assert.equal(driveBaseAllowed('https://app.hypertask.ai'), false)
   assert.equal(driveBaseAllowed('https://example.com'), false)
-  process.env.VERIFY_QA_ALLOW_LIVE = '1'
+  process.env.FEATURE_MAP_LIVE = '1'
   assert.equal(driveBaseAllowed('https://app.hypertask.ai'), true)
   assert.equal(driveBaseAllowed('https://preview.hypertask.ai'), false)
-  if (previous === undefined) delete process.env.VERIFY_QA_ALLOW_LIVE
-  else process.env.VERIFY_QA_ALLOW_LIVE = previous
+  if (previous === undefined) delete process.env.FEATURE_MAP_LIVE
+  else process.env.FEATURE_MAP_LIVE = previous
 })
