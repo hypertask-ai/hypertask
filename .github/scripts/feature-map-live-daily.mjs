@@ -22,14 +22,11 @@ const SUITES = [
 ]
 const RANK = { passed: 0, skipped: 1, failed: 2, timedOut: 2, interrupted: 2 }
 
-export function readMapRows(markdown) {
-  return markdown.split('\n').flatMap((line) => {
-    const cells = line.trim().split('|').map((cell) => cell.trim())
-    const link = /^\[[^\]]*\]\(([^)\s]+\.md)\)$/.exec(cells[2] ?? '')
-    if (cells.length < 5 || !link) return []
-    return [{ area: cells[1], file: link[1], tokens: [...cells[3].matchAll(/`([^`]+)`/g)].map((match) => match[1].trim()) }]
-  })
-}
+export const readMapRows = (markdown) => markdown.split('\n').flatMap((line) => {
+  const cells = line.trim().split('|').map((cell) => cell.trim())
+  const link = /^\[[^\]]*\]\(([^)\s]+\.md)\)$/.exec(cells[2] ?? '')
+  return cells.length < 5 || !link ? [] : [{ area: cells[1], file: link[1], tokens: [...cells[3].matchAll(/`([^`]+)`/g)].map((match) => match[1].trim()) }]
+})
 
 export function driveScriptName(token, scripts) {
   const name = /([\w.-]+\.mjs)$/.exec(token)?.[1]
@@ -49,16 +46,13 @@ export function planFeatures(rows, { tags, scripts }) {
 
 export function tagStatuses(report) {
   const statuses = {}
-  const mark = (id, status) => {
-    if (!(id in statuses) || (RANK[status] ?? 2) > (RANK[statuses[id]] ?? 2)) statuses[id] = status
-  }
+  const mark = (id, status) => { if (!(id in statuses) || (RANK[status] ?? 2) > (RANK[statuses[id]] ?? 2)) statuses[id] = status }
   const walk = (suite) => {
     for (const spec of suite.specs ?? []) {
       const results = (spec.tests ?? []).map((test) => test.results?.at(-1)?.status ?? test.status ?? 'failed')
       const status = results.sort((a, b) => (RANK[b] ?? 2) - (RANK[a] ?? 2))[0] ?? (spec.ok ? 'passed' : 'failed')
-      for (const tag of [...(spec.tags ?? []), ...(spec.tests ?? []).flatMap((test) => test.tags ?? [])]) {
-        if (String(tag).startsWith('id:')) mark(String(tag).slice(3), status)
-      }
+      const tags = [...(spec.tags ?? []), ...(spec.tests ?? []).flatMap((test) => test.tags ?? [])]
+      for (const tag of tags.filter((tag) => String(tag).startsWith('id:'))) mark(String(tag).slice(3), status)
     }
     for (const child of suite.suites ?? []) walk(child)
   }
@@ -72,8 +66,8 @@ export function mergeTagStatus(into, from) {
   }
 }
 
-export const verdictOf = (status) => status === 'passed' || status === 'ok' ? 'pass'
-  : status === 'skipped' || status === 'not-run' ? 'not-drivable' : 'fail'
+export const verdictOf = (status) =>
+  status === 'passed' || status === 'ok' ? 'pass' : status === 'skipped' || status === 'not-run' ? 'not-drivable' : 'fail'
 
 export function gradeFeatures(plan, tagStatus, scriptStatus) {
   return plan.map((feature) => {
@@ -91,9 +85,10 @@ export function gradeFeatures(plan, tagStatus, scriptStatus) {
 export const brokenTargets = (feature) => feature.targets
   .filter((entry) => verdictOf(entry.status) === 'fail').map((entry) => `${entry.target} (${entry.status})`)
 
+const driver = (feature) => [...feature.tags.map((id) => `@id:${id}`), ...feature.scripts].join(', ') || feature.reason
+
 export function summaryLines(graded, { problems = [], ticketUrl = '', suiteErrors = [] } = {}) {
   const counts = Object.groupBy(graded, (feature) => feature.verdict)
-  const driver = (feature) => [...feature.tags.map((id) => `@id:${id}`), ...feature.scripts].join(', ') || feature.reason
   const lines = ['## Daily feature-map live pass', '', `Mapped features: ${graded.length}`, `Pass: ${(counts.pass ?? []).length}`,
     `Fail: ${(counts.fail ?? []).length}`, `Not drivable: ${(counts['not-drivable'] ?? []).length}`]
   if (ticketUrl) lines.push(`Ticket: ${ticketUrl}`)
@@ -146,11 +141,9 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
 function runSuite(suite, dir) {
   const report = path.join(dir, `${suite.project}.json`)
   const child = spawnSync('npx', ['playwright', 'test', '-c', 'playwright.config.smoke.ts', suite.file,
-    '--project', suite.project, '--grep', '@id:', '--reporter=json'], {
-    cwd: root, encoding: 'utf8', timeout: 12 * 60 * 1000,
+    '--project', suite.project, '--grep', '@id:', '--reporter=json'], { cwd: root, encoding: 'utf8', timeout: 12 * 60 * 1000,
     env: { ...process.env, ...SMOKE_FIXTURES, SMOKE_BASE_URL: APP, SMOKE_POSTDEPLOY: '1', HT_QA_JOURNEYS: '1',
-      PLAYWRIGHT_JSON_OUTPUT_NAME: report, PLAYWRIGHT_JSON_OUTPUT_DIR: dir },
-  })
+      PLAYWRIGHT_JSON_OUTPUT_NAME: report, PLAYWRIGHT_JSON_OUTPUT_DIR: dir } })
   let parsed = { suites: [], errors: [] }
   try { parsed = JSON.parse(readFileSync(report, 'utf8')) } catch {}
   writeFileSync(path.join(dir, `${suite.project}.log`), `${child.stdout ?? ''}${child.stderr ?? ''}`)
@@ -162,9 +155,7 @@ function runDrive(name, dir) {
   const folder = path.join(dir, name.replace(/\.mjs$/, ''))
   mkdirSync(folder, { recursive: true })
   const child = spawnSync(process.execPath, [path.join(DRIVE_DIR, name), folder, '--base', APP,
-    '--state', QA_STATE, '--board', QA_BOARD_PATH], {
-    cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000,
-  })
+    '--state', QA_STATE, '--board', QA_BOARD_PATH], { cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000 })
   writeFileSync(path.join(folder, 'drive.log'), `${child.stdout ?? ''}${child.stderr ?? ''}`)
   return child.status === 0 ? 'ok' : 'failed'
 }
@@ -178,8 +169,7 @@ async function main() {
   const { GITHUB_SERVER_URL: server, GITHUB_REPOSITORY: repository, GITHUB_RUN_ID: runId } = process.env
   const runUrl = server && repository && runId ? `${server}/${repository}/actions/runs/${runId}` : ''
 
-  const tagStatus = {}
-  const suiteErrors = []
+  const tagStatus = {}, suiteErrors = []
   for (const suite of SUITES) {
     const run = runSuite(suite, dir)
     mergeTagStatus(tagStatus, tagStatuses(run.report))

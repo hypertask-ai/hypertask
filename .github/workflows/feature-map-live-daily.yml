@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   live-pass:
-    name: live-pass
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -24,14 +23,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ^24.22.1
-          check-latest: true
           cache: npm
       - name: Install dependencies, Prisma client and Chromium
         timeout-minutes: 20
-        run: |
-          npm ci --no-audit --no-fund
-          npx prisma generate
-          bash .github/scripts/install-chromium.sh
+        run: npm ci --no-audit --no-fund && npx prisma generate && bash .github/scripts/install-chromium.sh
       - name: Drive every mapped feature live
         env:
           QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}

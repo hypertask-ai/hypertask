@@ -3,20 +3,15 @@ export const THEMES = ["porcelain", "graphite", "amoled", "graphite-2"];
 export const LIVE_BASE = "https://app.hypertask.ai";
 
 export const LIVE_OPT_IN = "FEATURE_MAP_LIVE";
-
-export const driveBaseAllowed = (base) =>
-  /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base || "") ||
+export const driveBaseAllowed = (base) => /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base || "") ||
   (process.env[LIVE_OPT_IN] === "1" && base === LIVE_BASE);
-
 export const refusalText = (label) =>
   `${label} refuses a non-loopback base: drives stay on a disposable loopback stack, and reach ${LIVE_BASE} only with ${LIVE_OPT_IN}=1`;
 
 export function requireLoopback(base, label) {
-  if (!driveBaseAllowed(base)) {
-    console.error(refusalText(label));
-    return false;
-  }
-  return true;
+  if (driveBaseAllowed(base)) return true;
+  console.error(refusalText(label));
+  return false;
 }
 
 export function themeLanded(requested, actual) {

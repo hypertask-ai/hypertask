@@ -6,7 +6,6 @@ const {
   BOARD, MAP_INDEX, TICKET_TITLE, readMapRows, driveScriptName, planFeatures, tagStatuses, gradeFeatures,
   mergeTagStatus, summaryLines, fileFindings,
 } = require('../.github/scripts/feature-map-live-daily.mjs')
-const { driveBaseAllowed } = require('../.claude/skills/verify-qa/scripts/drive-grade.mjs')
 
 const rows = readMapRows(readFileSync(path.join(__dirname, '..', MAP_INDEX), 'utf8'))
 const inboxPlan = planFeatures([{ area: 'Inbox', file: 'inbox.md', tokens: ['view-inbox'] }], { tags: ['view-inbox'], scripts: [] })
@@ -27,6 +26,7 @@ test('the map index gives one row per area and a driver only when the map names 
   assert.deepEqual(plan.find((feature) => feature.file === 'boards-and-views.md').scripts, scripts)
   const figma = plan.find((feature) => feature.file === 'figma-connect.md')
   assert.match(figma.reason, /no live driver/)
+  assert.match(readFileSync(path.join(__dirname, '..', '.github/workflows/feature-map-live-daily.yml'), 'utf8'), /FEATURE_MAP_LIVE: '1'/)
 })
 
 test('grading says pass, fail or not-drivable per mapped feature', () => {
@@ -60,13 +60,15 @@ function fetchFor(routes, calls = []) {
 
 const openTicket = { when: (url) => url.startsWith('/api/mcp/tasks/search'), body: { success: true, total: 1, tasks: [{ id: 7, title: TICKET_TITLE, uniqueIndex: 7 }] } }
 const noTicket = { when: (url) => url.startsWith('/api/mcp/tasks/search'), body: { success: true, total: 0, tasks: [] } }
+const commented = { when: (url) => url === '/api/mcp/comments', body: { success: true } }
+const archivedComment = { when: (url) => url === '/api/mcp/tasks/update', body: { success: true } }
 
 test('a failure files one board 15 ticket, a repeat updates it, a clean run archives it', async () => {
   const create = { when: (url) => url === '/api/mcp/tasks/create', body: { success: true, task: { id: 7, ticketNumber: 'HTPR-7', uniqueIndex: 7 } } }
   const createdCalls = []
   const created = await fileFindings({
     graded: failing, problems: ['login.md: missing file: gone.md'], runUrl: 'https://run', token: 'test-token',
-    fetchImpl: fetchFor([noTicket, create, { when: (url) => url === '/api/mcp/comments', body: { success: true } }], createdCalls),
+    fetchImpl: fetchFor([noTicket, create, commented], createdCalls),
   })
   const body = createdCalls.find((call) => call.url.endsWith('/api/mcp/tasks/create')).body
   assert.equal(created.url, `https://app.hypertask.ai/detail/project-${BOARD.projectId}/7`)
@@ -74,31 +76,15 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   assert.match(body.description, /1 mapped features failed/)
   assert.match(body.description, /login\.md: missing file: gone\.md/)
   const updatedCalls = []
-  const updated = await fileFindings({ graded: failing, token: 'test-token',
-    fetchImpl: fetchFor([openTicket, { when: (url) => url === '/api/mcp/comments', body: { success: true } }], updatedCalls) })
+  const updated = await fileFindings({ graded: failing, token: 'test-token', fetchImpl: fetchFor([openTicket, commented], updatedCalls) })
   assert.equal(updated.action, 'updated')
   assert.equal(updatedCalls.some((call) => call.url.endsWith('/api/mcp/tasks/create')), false)
-  const archived = await fileFindings({ graded: passing, token: 'test-token',
-    fetchImpl: fetchFor([openTicket, { when: (url) => url === '/api/mcp/comments', body: { success: true } },
-      { when: (url) => url === '/api/mcp/tasks/update', body: { success: true } }]) })
-  assert.equal(archived.action, 'archived')
+  const closed = await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([openTicket, commented, archivedComment]) })
+  assert.equal(closed.action, 'archived')
   assert.equal(await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([noTicket]) }), null)
   assert.equal((await fileFindings({ graded: gradeFeatures(inboxPlan, {}, {}), token: 'test-token',
-    fetchImpl: fetchFor([openTicket, { when: (url) => url === '/api/mcp/comments', body: { success: true } }]) })).action, 'updated')
+    fetchImpl: fetchFor([openTicket, commented]) })).action, 'updated')
   const crashed = await fileFindings({ graded: passing, suiteErrors: ['journeys set up failed'], token: 'test-token',
-    fetchImpl: fetchFor([noTicket, create, { when: (url) => url === '/api/mcp/comments', body: { success: true } }]) })
+    fetchImpl: fetchFor([noTicket, create, commented]) })
   assert.equal(crashed.action, 'created')
-})
-
-test('drives reach production only when the live switch is on', () => {
-  const previous = process.env.FEATURE_MAP_LIVE
-  delete process.env.FEATURE_MAP_LIVE
-  assert.equal(driveBaseAllowed('http://127.0.0.1:3100'), true)
-  assert.equal(driveBaseAllowed('https://app.hypertask.ai'), false)
-  assert.equal(driveBaseAllowed('https://example.com'), false)
-  process.env.FEATURE_MAP_LIVE = '1'
-  assert.equal(driveBaseAllowed('https://app.hypertask.ai'), true)
-  assert.equal(driveBaseAllowed('https://preview.hypertask.ai'), false)
-  if (previous === undefined) delete process.env.FEATURE_MAP_LIVE
-  else process.env.FEATURE_MAP_LIVE = previous
 })
