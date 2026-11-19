@@ -102,7 +102,7 @@ jobs:
           node --test .claude/skills/verify-design/scripts/design-check.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
           node --test .claude/skills/verify-qa/scripts/fixture-cleanup.test.mjs
-          node --test .claude/skills/verify-hypertask/bin/*.test.mjs .claude/skills/verify-hypertask/bin/lib/commands/*.test.mjs
+          node --test .claude/skills/verify-hypertask/bin/*.test.mjs .claude/skills/verify-hypertask/bin/lib/*.test.mjs .claude/skills/verify-hypertask/bin/lib/commands/*.test.mjs
 
       - name: Replay incident grouping and claim collision checks
         env:

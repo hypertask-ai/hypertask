@@ -1,5 +1,5 @@
 const { spawn } = require("node:child_process");
-const { closeSync, lstatSync, openSync } = require("node:fs");
+const { closeSync, lstatSync, openSync, readFileSync, unlinkSync } = require("node:fs");
 const path = require("node:path");
 const {
   ensureRunDir,
@@ -13,6 +13,7 @@ const {
   runDir,
   writeJson,
 } = require("../context.cjs");
+const { escapingSymlink, fatalLine } = require("../up-guards.cjs");
 
 const usage = `ht-verify up - start the disposable local stack (Postgres, migrations, Next dev)
 
@@ -24,6 +25,8 @@ Usage:
   --dry-run   Print the exact commands and write nothing.
 
 Repeat runs reuse the container and server and wait up to 240s for /login 200.
+A symlinked node_modules, a dead dev server or a fatal line in dev.log stops it
+in seconds instead of at the timeout, before any later command reuses the run.
 State lands in the run folder: env.json, dev.log, dev.pid. Secrets are
 placeholders. Needs Docker and node_modules here; a symlink fails Next.
 Known limit: the board view waits on the premerge realtime stack and stays at
@@ -32,8 +35,29 @@ Known limit: the board view waits on the premerge realtime stack and stays at
 Example:
   ht-verify up`;
 const dbName = "hypertask-verify-db";
+const readyTimeout = 240_000;
 function nodeModulesSymlinked() {
   try { return lstatSync(path.join(repoRoot, "node_modules")).isSymbolicLink(); } catch { return false; }
+}
+
+function devAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+function readText(file) {
+  try { return readFileSync(file, "utf8"); } catch { return ""; }
+}
+
+async function waitForLogin(baseUrl, pid, logFile, deadline) {
+  while (Date.now() < deadline) {
+    if ((await httpStatus(`${baseUrl}/login`)) === 200) return { ready: true };
+    const fatal = fatalLine(readText(logFile));
+    if (fatal) return { ready: false, reason: fatal, logFile };
+    if (!devAlive(pid)) return { ready: false, reason: `the dev server (pid ${pid}) exited`, logFile };
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  return { ready: false, reason: `Next dev did not answer 200 on ${baseUrl}/login within ${readyTimeout / 1000}s`, logFile };
 }
 
 async function poll(check, deadline, interval) {
@@ -101,6 +125,11 @@ module.exports = {
       `npx next dev -p ${port}`,
     ];
     if (values["dry-run"]) return { target: "local", data: { dryRun: true, steps: plan, baseUrl, databaseUrl } };
+    const symlink = escapingSymlink(path.join(repoRoot, "node_modules"), repoRoot);
+    if (symlink) {
+      try { unlinkSync(path.join(runDir(), "env.json")); } catch {}
+      fail(`node_modules is a symlink to ${symlink}; Next resolves from this checkout and cannot find next/package.json`, "Run npm ci in this checkout so node_modules is a real install here, then run ht-verify up.", "node-modules-symlink", 2);
+    }
     ensureRunDir();
     if (run("docker", ["info"]).status !== 0) fail("Docker is not reachable on this machine", "Start Docker, then re-run ht-verify up.", "unreadable", 2);
     docker(["volume", "create", dbName], "Run ht-verify up --dry-run and check each docker command by hand.");
@@ -122,8 +151,12 @@ module.exports = {
     const reused = (await httpStatus(`${baseUrl}/login`)) === 200;
     const pid = reused ? pidFile.pid ?? null : startDev(env, port);
     writeJson(path.join(runDir(), "env.json"), { baseUrl, databaseUrl, dbContainer: dbName, port, dbPort, pid, nodeModulesSymlink: nodeModulesSymlinked() });
-    if (!reused && !(await poll(async () => (await httpStatus(`${baseUrl}/login`)) === 200, Date.now() + 240_000, 2_000))) {
-      fail(`Next dev did not answer 200 on ${baseUrl}/login within 240s`, `Read ${path.join(runDir(), "dev.log")} for the first error; a node_modules symlink needs npm ci in this checkout first.`, "not-ready");
+    if (!reused) {
+      const outcome = await waitForLogin(baseUrl, pid, path.join(runDir(), "dev.log"), Date.now() + readyTimeout);
+      if (!outcome.ready) {
+        try { unlinkSync(path.join(runDir(), "env.json")); } catch {}
+        fail(`Next dev is not serving: ${outcome.reason}`, `Read ${outcome.logFile} for the first error, fix it, then run ht-verify up again.`, "not-ready");
+      }
     }
     return { target: "local", data: { baseUrl, databaseUrl, dbContainer: dbName, pid, reused, log: path.join(runDir(), "dev.log") } };
   },

@@ -53,7 +53,10 @@ State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), s
 
 A bare `ht-verify up` board view waits on the premerge realtime stack and stays at
 "Loading board..."; the task detail and `/my-tasks` do render. Shoot the board
-against production with the QA identity read-only.
+against production with the QA identity read-only. `up` refuses a `node_modules`
+symlink that resolves outside this checkout and stops in seconds on a fatal line
+in `dev.log`, so a stack that cannot serve never waits out the 240s timeout or
+leaves `env.json` behind for the next command.
 
 ## Launch
 
