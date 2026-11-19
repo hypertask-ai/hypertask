@@ -943,7 +943,7 @@ test("one bad model reply is retried and two bad replies are unevaluated, not a 
     binding,
   });
   assert.equal(unevaluated.verdict, "UNEVALUATED");
-  assert.equal(unevaluated.notes, "model output invalid after retry");
+  assert.match(unevaluated.notes, /^model output invalid after retry: /);
   const real = decide({
     model: { verdict: "FAIL", notes: "the page shows the empty state" },
     plan: plan([{ op: "goto", path: "/" }]),
@@ -974,6 +974,62 @@ test("one bad model reply is retried and two bad replies are unevaluated, not a 
     (error) => error.message === "model HTTP 500: busy",
   );
   assert.equal(httpCalls, 1);
+});
+
+test("captured planner answers with drifted actions are read, not rejected", async () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const { parsePlan } = await load();
+  const captured = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "pstack-planner-answers.json"), "utf8"));
+  const bySource = (name) => parsePlan(captured.find((item) => item.source.endsWith(name)).answer);
+  assert.deepEqual(bySource("area:agents-board-access").actions[2], { op: "shot", name: "board-access-expanded" });
+  const members = bySource("area:board-member-list");
+  assert.equal(members.actions.length, 12);
+  assert.deepEqual(members.actions.filter((action) => action.op === "api"), [
+    { op: "api", method: "GET", path: "/api/members/getAll?projectId={id}&teamMembers=true&teamId=1", body: {}, expectStatus: 200, expectText: "" },
+    { op: "api", method: "GET", path: "/api/members/getAll?projectId={id}&teamMembers=true&teamId=999999", body: {}, expectStatus: 200, expectText: "" },
+    { op: "api", method: "GET", path: "/api/members/getAll?projectId=abc", body: {}, expectStatus: 200, expectText: "" },
+  ]);
+  const invites = bySource("area:board-invites");
+  assert.deepEqual(invites.actions[5], { op: "fill", label: "valentin+qa-invite@hypertask.ai", value: "" });
+  assert.equal(invites.actions.filter((action) => action.op === "api").every((action) => action.expectStatus === 200), true);
+  assert.deepEqual(invites.expect, [{ text: "QA Team Board" }, { text: "Resend" }, { text: "Cancel" }]);
+  const feedback = bySource("area:ai-feedback-reports");
+  assert.equal(feedback.actions.length, 7);
+  assert.equal(feedback.actions.some((action) => action.op === "api"), false);
+  assert.deepEqual(feedback.expect, [{ text: "Remove unsupported fields nonsense_field from input" }]);
+});
+
+test("an area plan that cannot be read is skipped and the change journey is kept", async () => {
+  const { planJourneys } = await load();
+  const request = { ...binding, author: "grok", title: "t", body: "", diff: "src/app/boards/page.tsx", files: ["src/app/boards/page.tsx"], filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const pages = [{ name: "boards-and-views", text: "Boards and views live at src/app/boards/page.tsx" }];
+  const seen = [];
+  const ask = async (prompt) => {
+    seen.push(prompt.includes("DATA: FEATURE PAGE") ? "page" : "change");
+    if (prompt.includes("DATA: FEATURE PAGE")) throw new Error("model output invalid after retry: shot name is not allowed");
+    return { actions: [{ op: "goto", path: "/project?id={id}" }], expect: [], reason: "open the board" };
+  };
+  const planned = await planJourneys({ request, pages, entries: [], ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"], mapSha: "a".repeat(40), baseSha: request.baseSha, bugfix: false, compare: true });
+  assert.deepEqual(seen, ["page", "change"]);
+  assert.equal(planned.unevaluated, "");
+  assert.deepEqual(planned.items.map((item) => item.journey), ["change:primary"]);
+  assert.equal(planned.reason, "open the board");
+});
+
+test("at most six matched pages are planned and the rest are left for a later base", async () => {
+  const { planJourneys, AREA_JOURNEY_LIMIT } = await load();
+  const request = { ...binding, author: "grok", title: "t", body: "", diff: "src/app/boards/page.tsx", files: ["src/app/boards/page.tsx"], filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const pages = Array.from({ length: 9 }, (_unused, index) => ({ name: `page-${index}`, text: "Boards live at src/app/boards/page.tsx" }));
+  let pageCalls = 0;
+  const ask = async (prompt) => {
+    if (prompt.includes("DATA: FEATURE PAGE")) pageCalls += 1;
+    return { actions: [{ op: "goto", path: "/project?id={id}" }], expect: [], reason: "" };
+  };
+  const planned = await planJourneys({ request, pages, entries: [], ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"], mapSha: "a".repeat(40), baseSha: request.baseSha, bugfix: false, compare: true });
+  assert.equal(AREA_JOURNEY_LIMIT, 6);
+  assert.equal(pageCalls, 6);
+  assert.equal(planned.items.filter((item) => item.journey.startsWith("area:")).length, 6);
 });
 
 test("a fenced or prose-wrapped answer is read by the verifier and by break-it", async () => {
