@@ -30,10 +30,10 @@ export async function json(dir, args) {
   return { status: result.code ?? 0, stdout: result.stdout, json: result.stdout?.startsWith("{") ? JSON.parse(result.stdout) : null };
 }
 
-export function serve(status) {
+export function serve(status, userId = 985) {
   const server = createServer((request, response) => {
     response.writeHead(request.url === "/login" ? status : 200, { "Content-Type": "application/json" });
-    response.end(request.url === "/api/users/getById" ? JSON.stringify({ id: 985 }) : "ok");
+    response.end(request.url === "/api/users/getById" ? JSON.stringify({ id: userId }) : "ok");
   });
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
 }
