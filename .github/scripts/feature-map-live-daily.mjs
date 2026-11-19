@@ -196,10 +196,11 @@ async function main() {
   const problems = graded.flatMap((feature) => feature.missing.map((token) => `${feature.file}: missing drive script: ${token}`))
 
   writeFileSync(path.join(dir, 'result.json'), JSON.stringify({ runUrl, tagStatus, scriptStatus, graded, problems, suiteErrors }, null, 2))
-  if (!process.env.HYPERTASK_MCP_TOKEN) throw new Error('HYPERTASK_MCP_TOKEN is missing; no failure ticket can be filed')
-  const ticket = await fileFindings({ graded, problems, suiteErrors, runUrl })
+  let filing = ''
+  const ticket = await fileFindings({ graded, problems, suiteErrors, runUrl }).catch((error) => { filing = error.message; return null })
   const lines = summaryLines(graded, { problems, suiteErrors, ticketUrl: ticket?.url ?? '' })
   if (ticket) lines.push('', `Ticket ${ticket.action}: ${ticket.url || 'none'}`)
+  if (filing) lines.push('', `Ticket filing failed: ${filing}`)
   const text = `${lines.join('\n')}\n`
   writeFileSync(path.join(dir, 'summary.md'), text)
   process.stdout.write(text)
@@ -207,7 +208,7 @@ async function main() {
 
   const failing = graded.filter((feature) => feature.verdict === 'fail').length
   const passing = graded.filter((feature) => feature.verdict === 'pass').length
-  if (failing || !passing || problems.length || suiteErrors.length) {
+  if (failing || !passing || problems.length || suiteErrors.length || filing) {
     throw new Error(`feature map live pass: ${failing} failing, ${passing} passing, ${problems.length} stale, ${suiteErrors.length} suite errors`)
   }
 }
