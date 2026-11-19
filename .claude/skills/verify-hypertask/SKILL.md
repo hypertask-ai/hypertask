@@ -18,6 +18,43 @@ preview, an open PR or a local build is not live proof. Never build or run tests
 because CI does that; a local run killed with exit 137 is not a blocker. Admin pages are not
 agent-testable.
 
+## ht-verify
+
+One command wraps the helpers below. It prints one JSON object on stdout,
+`{ command, ok, target, run, data, evidence, error }`, where `error` holds
+`{ code, message, next }` and `next` is what to run instead. Exit codes: 0 ok,
+1 the check failed, 2 usage or unreadable environment, 3 identity expired.
+State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), so
+`up`, `seed` and `login` compose without repeating flags. `--help` is canonical.
+
+| Command | What it proves |
+|---|---|
+| `.claude/skills/verify-hypertask/bin/ht-verify up [--port] [--db-port] [--dry-run]` | the disposable Postgres, migrations and Next dev start and `/login` answers 200 |
+| `.claude/skills/verify-hypertask/bin/ht-verify down [--keep-db] [--dry-run]` | only this run's dev process group, container and volume stop |
+| `.claude/skills/verify-hypertask/bin/ht-verify doctor [--target local\|production] [--ticket HTPR-N]` | local: page, database, dev pid and seeded identity; production: the merge deployment and the QA identity |
+| `.claude/skills/verify-hypertask/bin/ht-verify seed [--visual] [--all-flags-on] [--dry-run]` | the disposable database seeds and the local state loads as a real user |
+| `.claude/skills/verify-hypertask/bin/ht-verify login [account] [--state] [--expect] [--base-url]` | the chosen QA account's state loads as the expected user |
+| `.claude/skills/verify-hypertask/bin/ht-verify shot <url> --out <png> [--account] [--viewport] [--theme]` | the page renders signed in and lands where asked, never on a login page |
+| `.claude/skills/verify-hypertask/bin/ht-verify session start\|status\|stop [--state] [--base] [--viewport]` | one persistent headless browser for the commands below |
+| `.claude/skills/verify-hypertask/bin/ht-verify open <path> [--wait <selector>]` | the page loads in the session and reports URL, status and title |
+| `.claude/skills/verify-hypertask/bin/ht-verify click <selector> [--double]` | a real click lands and the page reacts |
+| `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text> [--submit]` | a field accepts typed input on the real page |
+| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path> [--data] [--confirm] [--dry-run]` | an authenticated call through the run's cookies; a write needs `--confirm` |
+| `.claude/skills/verify-hypertask/bin/ht-verify logs [--dev\|--browser] [--lines] [--grep]` | the dev or browser log shows what happened |
+| `.claude/skills/verify-hypertask/bin/ht-verify flags list\|show <key>\|set ...` | flag state, and a switch only through ht-flag's approval path, never Off |
+| `.claude/skills/verify-hypertask/bin/ht-verify drive <area> [--base] [--state] [--board]` | one hands-free area (board, task, comments, flags, ctrl-j, ai-chat, inbox) step by step |
+
+```bash
+.claude/skills/verify-hypertask/bin/ht-verify up && .claude/skills/verify-hypertask/bin/ht-verify seed
+.claude/skills/verify-hypertask/bin/ht-verify session start
+.claude/skills/verify-hypertask/bin/ht-verify open /my-tasks
+.claude/skills/verify-hypertask/bin/ht-verify shot --session --out "$PWD/my-tasks.png"
+```
+
+A bare `ht-verify up` board view waits on the premerge realtime stack and stays at
+"Loading board..."; the task detail and `/my-tasks` do render. Shoot the board
+against production with the QA identity read-only.
+
 ## Launch
 
 Pick one target per run: local before the PR, a PR's Visual Regression comparison, or
