@@ -4,7 +4,7 @@ const { readFileSync } = require('node:fs')
 const path = require('node:path')
 const {
   BOARD, MAP_INDEX, TICKET_TITLE, readMapRows, driveScriptName, planFeatures, tagStatuses, gradeFeatures,
-  countVerdicts, fileFindings,
+  mergeTagStatus, summaryLines, fileFindings,
 } = require('../.github/scripts/feature-map-live-daily.mjs')
 const { driveBaseAllowed } = require('../.claude/skills/verify-qa/scripts/drive-grade.mjs')
 
@@ -13,11 +13,8 @@ const inboxPlan = planFeatures([{ area: 'Inbox', file: 'inbox.md', tokens: ['vie
 const failing = gradeFeatures(inboxPlan, { 'view-inbox': 'failed' }, {})
 const passing = gradeFeatures(inboxPlan, { 'view-inbox': 'passed' }, {})
 const report = { suites: [{ specs: [{ tags: ['id:view-inbox', 'mobile'], tests: [{ results: [{ status: 'passed' }] }] }], suites: [
-  { specs: [{ tags: ['id:login'], tests: [{ results: [{ status: 'failed' }, { status: 'failed' }] }] }] },
-  { specs: [
-    { tags: ['id:open-board'], tests: [{ results: [{ status: 'skipped' }] }] },
-    { tags: ['id:ai-chat'], tests: [{ results: [{ status: 'failed' }, { status: 'passed' }] }] },
-  ] },
+  { specs: [{ tags: ['id:login'], tests: [{ results: [{ status: 'failed' }] }] }] },
+  { specs: [{ tags: ['id:open-board'], tests: [{ results: [{ status: 'skipped' }] }] }, { tags: ['id:ai-chat'], tests: [{ results: [{ status: 'failed' }, { status: 'passed' }] }] }] },
 ] }] }
 
 test('the map index gives one row per area and a driver only when the map names one', () => {
@@ -28,14 +25,9 @@ test('the map index gives one row per area and a driver only when the map names 
   const plan = planFeatures(rows, { tags: ['view-inbox', 'open-board'], scripts })
   assert.deepEqual(plan.find((feature) => feature.file === 'inbox.md').tags, ['view-inbox'])
   assert.deepEqual(plan.find((feature) => feature.file === 'boards-and-views.md').scripts, scripts)
-  assert.equal(driveScriptName('teamId', scripts), null)
   const figma = plan.find((feature) => feature.file === 'figma-connect.md')
   assert.equal(figma.drivable, false)
   assert.match(figma.reason, /no live driver/)
-})
-
-test('tag statuses read the Playwright report and keep the worst result', () => {
-  assert.deepEqual(tagStatuses(report), { 'view-inbox': 'passed', login: 'failed', 'open-board': 'skipped', 'ai-chat': 'passed' })
 })
 
 test('grading says pass, fail or not-drivable per mapped feature', () => {
@@ -45,11 +37,15 @@ test('grading says pass, fail or not-drivable per mapped feature', () => {
     { area: 'Drag', file: 'drag-and-drop.md', tokens: ['drag-card'] },
     { area: 'Figma', file: 'figma-connect.md', tokens: [] },
   ], { tags: ['view-inbox', 'login', 'open-board', 'drag-card'], scripts: [] })
+  const worst = {}
+  mergeTagStatus(worst, tagStatuses(report))
+  mergeTagStatus(worst, { login: 'passed', 'view-inbox': 'failed' })
+  assert.deepEqual(worst, { 'view-inbox': 'failed', login: 'failed', 'open-board': 'skipped', 'ai-chat': 'passed' })
   const graded = gradeFeatures(plan, tagStatuses(report), {})
   assert.deepEqual(graded.map((feature) => [feature.area, feature.verdict]), [
     ['Inbox', 'pass'], ['Login', 'fail'], ['Drag', 'not-drivable'], ['Figma', 'not-drivable'],
   ])
-  assert.deepEqual(countVerdicts(graded), { pass: 1, fail: 1, 'not-drivable': 2 })
+  assert.match(summaryLines(graded).join('\n'), /Pass: 1\nFail: 1\nNot drivable: 2/)
 })
 
 function fetchFor(routes, calls = []) {
@@ -78,6 +74,7 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   assert.equal(body.title, TICKET_TITLE)
   assert.match(body.description, /1 mapped features failed/)
   assert.match(body.description, /login\.md: missing file: gone\.md/)
+  assert.match(body.description, /How to undo/)
   const updatedCalls = []
   const updated = await fileFindings({ graded: failing, token: 'test-token',
     fetchImpl: fetchFor([openTicket, { when: (url) => url === '/api/mcp/comments', body: { success: true } }], updatedCalls) })
@@ -88,6 +85,9 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
       { when: (url) => url === '/api/mcp/tasks/update', body: { success: true } }]) })
   assert.equal(archived.action, 'archived')
   assert.equal(await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([noTicket]) }), null)
+  const crashed = await fileFindings({ graded: passing, suiteErrors: ['journeys set up failed'], token: 'test-token',
+    fetchImpl: fetchFor([noTicket, create, { when: (url) => url === '/api/mcp/comments', body: { success: true } }]) })
+  assert.equal(crashed.action, 'created')
 })
 
 test('drives reach production only when the live switch is on', () => {

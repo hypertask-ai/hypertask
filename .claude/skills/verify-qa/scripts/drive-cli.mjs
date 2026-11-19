@@ -56,9 +56,8 @@ export async function driveMain(area, argv, breaks, run) {
       const storage = JSON.parse(await fs.readFile(state, "utf8"));
       if (base !== LIVE_BASE) storage.cookies = storage.cookies.filter(cookie => ["127.0.0.1", "localhost"].includes(cookie.domain)).map(cookie => ({ ...cookie, domain: "app.hypertask.ai" }));
       await fs.writeFile(cleanupState, JSON.stringify(storage), { mode: 0o600 });
-      const cleanupArgs = [path.join(root, ".claude/skills/verify-qa/scripts/fixture-cleanup"), cleanupState, String(task.id)];
-      if (base !== LIVE_BASE) cleanupArgs.push("--base-url", base.replace("localhost", "127.0.0.1"));
-      const cleanup = spawnSync(process.execPath, cleanupArgs, { encoding: "utf8", timeout: 30_000 });
+      const cleanup = spawnSync(process.execPath, [path.join(root, ".claude/skills/verify-qa/scripts/fixture-cleanup"), cleanupState, String(task.id),
+        ...(base === LIVE_BASE ? [] : ["--base-url", base.replace("localhost", "127.0.0.1")])], { encoding: "utf8", timeout: 30_000 });
       await fs.rm(path.dirname(cleanupState), { recursive: true });
       step("fixture cleaned", cleanup.status === 0, { output: cleanup.stdout, error: cleanup.stderr });
     }

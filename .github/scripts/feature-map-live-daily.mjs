@@ -66,6 +66,12 @@ export function tagStatuses(report) {
   return statuses
 }
 
+export function mergeTagStatus(into, from) {
+  for (const [id, status] of Object.entries(from)) {
+    if (!(id in into) || (RANK[status] ?? 2) > (RANK[into[id]] ?? 2)) into[id] = status
+  }
+}
+
 export const verdictOf = (status) => status === 'passed' || status === 'ok' ? 'pass'
   : status === 'skipped' || status === 'not-run' ? 'not-drivable' : 'fail'
 
@@ -82,20 +88,14 @@ export function gradeFeatures(plan, tagStatus, scriptStatus) {
   })
 }
 
-export function countVerdicts(graded) {
-  const counts = { pass: 0, fail: 0, 'not-drivable': 0 }
-  for (const feature of graded) counts[feature.verdict] += 1
-  return counts
-}
-
 export const brokenTargets = (feature) => feature.targets
   .filter((entry) => verdictOf(entry.status) === 'fail').map((entry) => `${entry.target} (${entry.status})`)
 
 export function summaryLines(graded, { problems = [], ticketUrl = '', suiteErrors = [] } = {}) {
-  const counts = countVerdicts(graded)
+  const counts = Object.groupBy(graded, (feature) => feature.verdict)
   const driver = (feature) => [...feature.tags.map((id) => `@id:${id}`), ...feature.scripts].join(', ') || feature.reason
-  const lines = ['## Daily feature-map live pass', '', `Mapped features: ${graded.length}`, `Pass: ${counts.pass}`,
-    `Fail: ${counts.fail}`, `Not drivable: ${counts['not-drivable']}`]
+  const lines = ['## Daily feature-map live pass', '', `Mapped features: ${graded.length}`, `Pass: ${(counts.pass ?? []).length}`,
+    `Fail: ${(counts.fail ?? []).length}`, `Not drivable: ${(counts['not-drivable'] ?? []).length}`]
   if (ticketUrl) lines.push(`Ticket: ${ticketUrl}`)
   lines.push('', '| Area | Verdict | Driver |', '|---|---|---|',
     ...graded.map((feature) => `| ${feature.area} | ${feature.verdict} | ${driver(feature)} |`))
@@ -111,9 +111,8 @@ function ticketDescription({ graded, problems = [], suiteErrors = [], runUrl = '
   return [
     `<p><strong>What's wrong or wanted:</strong> ${failures.length} mapped features failed the daily live pass.</p>`,
     `<p><strong>Who it affects:</strong> internal only. Customers see the pages these features drive.</p>`,
-    '<p><strong>Recommended course and why:</strong> fix or re-map each entry below.</p><hr>',
-    '<h2>Problem</h2>',
-    '<hr><h2>Problem</h2>',
+    '<p><strong>Recommended course and why:</strong> fix or re-map each entry below.</p>',
+    '<p><strong>How to undo:</strong> turn the daily schedule off.</p><hr><h2>Problem</h2>',
     failures.length ? list(failures.map((feature) => `${feature.area}: ${brokenTargets(feature).join(', ')}`)) : '',
     problems.length ? list(problems) : '',
     suiteErrors.length ? list(suiteErrors) : '',
@@ -129,7 +128,7 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
   const existing = await findOpenWeeklyTicket(TICKET_TITLE, options)
   const comment = (ticket, text) => api('comments', { ...options, method: 'POST',
     body: { ticket_number: ticket.ticketNumber, project_id: BOARD.projectId, text, content_type: 'html' } })
-  if (!failing && !problems.length) {
+  if (!failing && !problems.length && !suiteErrors.length) {
     if (!existing) return null
     await comment(existing, `<p>Every mapped feature passed the daily live pass on ${now.toISOString().slice(0, 10)}. Archived.</p>`)
     await api('tasks/update', { ...options, method: 'POST', body: { task_id: existing.id, status: 'Archive' } })
@@ -139,7 +138,7 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
   const ticket = existing ?? (await api('tasks/create', { ...options, method: 'POST',
     idempotencyKey: `feature-map-live-daily-${now.toISOString().slice(0, 10)}`,
     body: { project_id: BOARD.projectId, section_id: BOARD.sectionId, title: TICKET_TITLE, description, content_type: 'html' } })).task
-  await comment(ticket, description)
+  if (existing) await comment(ticket, description)
   return { url: `${APP}/detail/project-${BOARD.projectId}/${ticket.uniqueIndex}`, action: existing ? 'updated' : 'created' }
 }
 
@@ -182,7 +181,7 @@ async function main() {
   const suiteErrors = []
   for (const suite of SUITES) {
     const run = runSuite(suite, dir)
-    Object.assign(tagStatus, tagStatuses(run.report))
+    mergeTagStatus(tagStatus, tagStatuses(run.report))
     suiteErrors.push(...run.errors)
     if (run.status !== 0 && !(run.report.suites ?? []).length) suiteErrors.push(`${suite.file}: run exited ${run.status}`)
   }
@@ -204,9 +203,10 @@ async function main() {
   process.stdout.write(text)
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, text)
 
-  const counts = countVerdicts(graded)
-  if (counts.fail || counts.pass === 0 || problems.length || suiteErrors.length) {
-    throw new Error(`feature map live pass: ${counts.fail} failing, ${counts.pass} passing, ${problems.length} stale, ${suiteErrors.length} suite errors`)
+  const failing = graded.filter((feature) => feature.verdict === 'fail').length
+  const passing = graded.filter((feature) => feature.verdict === 'pass').length
+  if (failing || !passing || problems.length || suiteErrors.length) {
+    throw new Error(`feature map live pass: ${failing} failing, ${passing} passing, ${problems.length} stale, ${suiteErrors.length} suite errors`)
   }
 }
 
