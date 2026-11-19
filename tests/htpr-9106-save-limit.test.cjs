@@ -111,10 +111,8 @@ test("HTPR-9106 the app save stops at the agent deadline", { timeout: 4_000 }, a
 });
 
 test("HTPR-9106 a shared budget never starts another phase after expiry", async () => {
-  let now = 1_000;
-  const budget = save.taskSaveBudget(1_060, () => now);
-  assert.equal(await budget.run(async () => "first phase"), "first phase");
-  now = 1_060;
+  const budget = save.taskSaveBudget(Date.now() + 30);
+  await assert.rejects(budget.run(() => new Promise(() => {})), { message: save.TASK_SAVE_TOO_LONG });
   let started = false;
   await assert.rejects(budget.run(async () => { started = true; }), { message: save.TASK_SAVE_TOO_LONG });
   assert.equal(started, false);
