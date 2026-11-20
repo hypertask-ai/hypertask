@@ -1,7 +1,7 @@
 import dynamic from "next/dynamic";
 import { instrumentedDynamicImport } from "@/lib/analytics/taskDetailPhaseTimings";
 import { TaskRelations, ICycle } from "@/models/model";
-import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatSidebarWidthPxAtom } from "@/store";
+import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatSidebarWidthPxAtom, tasksPlayListAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8994_CLEAR_WAITING_AGENT_FLAG } from "@/lib/flags/definitions/htpr-8994-clear-waiting-agent";
@@ -18,7 +18,6 @@ import { Suspense, useEffect, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { useRecoilState, useRecoilValue } from "@/lib/state";
-import { tasksPlayListAtom } from "@/store";
 import { inboxPlaylistHoldsTask } from "@/lib/inbox/inboxTasksPlaylist";
 import InboxPlaylistRestorer from "@/lib/inbox/InboxPlaylistRestorer";
 

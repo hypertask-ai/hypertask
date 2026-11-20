@@ -13,7 +13,7 @@
               "box": {
                 "x": 258,
                 "y": 36,
-                "width": 832,
+                "width": 736,
                 "height": 37
               }
             },
@@ -778,7 +778,7 @@
     "ticket/Mobile": "https://app.hypertask.ai/detail/project-15/8991",
     "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-15/6940",
     "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-15/6940",
-    "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
+    "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/9387",
     "board/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
     "inbox/Desktop": "https://app.hypertask.ai/detail/project-15/7298",
     "app-shell/Desktop": "https://app.hypertask.ai/detail/project-15/7298"
