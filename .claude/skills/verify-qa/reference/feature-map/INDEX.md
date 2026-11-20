@@ -17,21 +17,21 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 <!-- shared-list rows: one file per row in rows/, rebuilt by node scripts/shared-lists/build.mjs --write -->
 | Area | File | e2e/smoke id |
 |---|---|---|
-| Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags, core inbox; synthetic accounts excluded |
-| Agent chat roster ordering | [agent-chat-roster.md](agent-chat-roster.md) | standalone roster, owned API recency, desktop/phone reload |
-| Board agent rooms | [agent-rooms.md](agent-rooms.md) | read-only room listing, authentication, desktop/phone reload |
-| Agent run lifecycle | [agent-runs.md](agent-runs.md) | read-only QA 985 lifecycle discovery, run reads and authentication refusals |
-| Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
-| Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
-| AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey); `ai-chat-drive.mjs` hands-free drive |
-| Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | live MCP call with an invented field, board count before and after, no ticket |
-| Team AI usage | [ai-usage.md](ai-usage.md) | read-only customer key error and successful report checks |
-| Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
-| Billing and plans | [billing-and-plans.md](billing-and-plans.md) | no payment journey; open checkout and cancel without payment |
-| Board invites | [board-invites.md](board-invites.md) | no smoke id; owner resend 200, outsider 403 on `/api/invite/reSendInvite` and `cancelInvite` |
-| Board member list | [board-member-list.md](board-member-list.md) | no smoke id; query `teamId` ignored on `/api/members/getAll` |
-| Board skills | [board-skills.md](board-skills.md) | no smoke id; create one skill from the textarea, prove POST /api/ai/skills 201 and the reload, delete it |
-| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `node .claude/skills/verify-qa/scripts/board-drive-live.mjs` |
+| Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags and cron refusals; `feature-map-drive.mjs activation-analytics` |
+| Agent chat roster ordering | [agent-chat-roster.md](agent-chat-roster.md) | `feature-map-drive.mjs agent-chat-roster`; standalone roster at desktop and phone |
+| Board agent rooms | [agent-rooms.md](agent-rooms.md) | `feature-map-drive.mjs agent-rooms`; read-only room listing with the auto-create blocked |
+| Agent run lifecycle | [agent-runs.md](agent-runs.md) | `feature-map-drive.mjs agent-runs`; read-only lifecycle discovery, run reads and refusals |
+| Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | `ci-checks` lane `agent-board-scope` log; throwaway PR negative control, no app writes |
+| Agents and board access | [agents-board-access.md](agents-board-access.md) | `feature-map-drive.mjs agents-board-access`; 24/24 picker opens and the self-access 403 need throwaway agents |
+| AI chat | [ai-chat.md](ai-chat.md) | `feature-map-drive.mjs ai-chat` read-only; `ai-chat-drive.mjs` hands-free write journey |
+| Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | `feature-map-drive.mjs ai-feedback-reports`; MCP refusal with an invented field and the board-15 count |
+| Team AI usage | [ai-usage.md](ai-usage.md) | `feature-map-drive.mjs ai-usage`; read-only key-error and successful report checks |
+| Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | `feature-map-drive.mjs announcements-admin-api`; no-login 401 checks on the admin routes |
+| Billing and plans | [billing-and-plans.md](billing-and-plans.md) | `feature-map-drive.mjs billing-and-plans`; open checkout and cancel without payment |
+| Board invites | [board-invites.md](board-invites.md) | `feature-map-drive.mjs board-invites`; owner resend 200, outsider 403 |
+| Board member list | [board-member-list.md](board-member-list.md) | `feature-map-drive.mjs board-member-list`; query `teamId` ignored |
+| Board skills | [board-skills.md](board-skills.md) | `feature-map-drive.mjs board-skills`; create a throwaway skill, prove 201 and the reload, delete it |
+| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `feature-map-drive.mjs boards-and-views`; `board-drive-live.mjs` hands-free |
 | CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | live repository visibility, trusted workflow rejection, title binding |
 | Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | historical first/final CLI replay, server helper and owner-review routing |
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
@@ -87,6 +87,18 @@ own `name` field. "No write journey" means don't invent a test id that
 doesn't exist; verify that action by hand.
 
 ## Driving the app for verification
+
+One read-only production drive covers the whole map:
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs all --dir /tmp/feature-map-drive
+```
+
+It takes one feature slug or `all`, refuses any base except `https://app.hypertask.ai`, uses the
+`qa-login` identities, prints `PASS`/`FAIL` per step, and writes `result.json` plus screenshots.
+It creates only what its own cleanup removes: one board skill on 7049 and one invite on 7283.
+Each area file repeats its own one-line invocation. Writes that spend money (AI chat messages,
+key tests) and destructive bulk actions stay with the loopback drives named per area.
 
 Prefer `agent-browser`, headless, straight against production:
 `https://app.hypertask.ai/...?realtime=on`, the same param

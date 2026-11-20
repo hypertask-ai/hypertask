@@ -22,6 +22,16 @@ test("api refuses a write without --confirm and prints a dry run instead", async
   assert.deepEqual(preview.json.data.steps[0], { method: "POST", url: "http://127.0.0.1:9/api/tasks/create", data: { title: "x" } });
 });
 
+test("api resolves --account through qa-login and refuses an unknown one before any request", async () => {
+  const dir = home();
+  seeded(dir);
+  const unknown = await json(dir, ["api", "GET", "/api/flags", "--base", "https://app.hypertask.ai", "--account", "nope"]);
+  assert.equal(unknown.status, 2);
+  assert.equal(unknown.json.error.code, "usage");
+  assert.match(unknown.json.error.message, /unknown account nope/);
+  assert.match(unknown.json.error.next, /--state/);
+});
+
 test("api needs a path and never prints the cookie", async () => {
   const missing = await json(home(), ["api"]);
   assert.equal(missing.status, 2);

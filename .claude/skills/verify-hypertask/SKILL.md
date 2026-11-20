@@ -390,6 +390,7 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
 | `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |
 | `.claude/skills/verify-qa/scripts/qa-teams` | the free, pro and byok team accounts load on their own plan and AI usage answers |
+| `.claude/skills/verify-qa/scripts/feature-map-drive.mjs <feature>` | one feature-map area driven read-only on production, `PASS`/`FAIL` per step plus screenshots |
 | `.claude/skills/verify-on-phone/scripts/phone-shot.sh <url> <out.png>` | one headless shot at 390x844, refusing a login landing |
 | `.claude/skills/verify-design/scripts/design-check doctor` | QA state, QA identity, board 7049 and the theme cookie |
 | `.claude/skills/verify-design/scripts/design-check run <TICKET> <url> --frame <png>` | per-theme live shot, score, purple, sparkle and corner audit |
