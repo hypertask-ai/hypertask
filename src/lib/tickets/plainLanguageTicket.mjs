@@ -49,8 +49,9 @@ export function ticketOpening(html) {
     const raw = tag.match(/^<(script|style|textarea)(?=[\s>])/i);
     if (raw) {
       const close = html.toLowerCase().indexOf(`</${raw[1].toLowerCase()}`, cursor);
-      if (close === -1) break;
-      html = `${html.slice(0, start)} ${html.slice(close)}`;
+      const shut = close === -1 ? -1 : html.indexOf(">", close);
+      if (shut === -1) break;
+      html = `${html.slice(0, start)} ${html.slice(shut + 1)}`;
       cursor = start + 1;
     }
   }
