@@ -33,28 +33,28 @@ test("journey evidence carries its viewport and refuses one the verifier cannot 
   assert.throws(() => readJourneyEvidence(JSON.stringify(body(Array.from({ length: JOURNEY_RUN_LIMIT + 1 }, () => ({ journey: "area:inbox", steps: [], expects: [] })))), binding), /schema\/binding mismatch/);
 });
 
-test("a regression that only shows at phone width fails and names the phone viewport", () => {
-  const result = compare.decideComparison({ journeys: [
-    { journey: "area:inbox", viewport: "desktop", base: okRun(), head: okRun() },
-    { journey: "area:inbox", viewport: "phone", base: okRun(), head: okRun({ steps: [{ action: goto("/inbox"), ok: true }, { action: goto("/inbox"), ok: false }] }) },
+test("a failure that only shows at phone width fails and names the phone viewport", () => {
+  const result = compare.decideHeadOnly({ journeys: [
+    { journey: "area:inbox", viewport: "desktop", head: okRun() },
+    { journey: "area:inbox", viewport: "phone", head: okRun({ steps: [{ action: goto("/inbox"), ok: true }, { action: goto("/inbox"), ok: false }] }) },
   ] });
   assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /area:inbox \[phone\]: regression at step 2/);
-  assert.doesNotMatch(result.notes, /area:inbox \[desktop\]: regression/);
+  assert.match(result.notes, /area:inbox \[phone\]: failed at step 2/);
+  assert.doesNotMatch(result.notes, /area:inbox \[desktop\]:/);
 });
 
-test("a phone lane that never ran fails the day rather than passing on desktop alone", () => {
-  const result = compare.decideComparison({ journeys: [
-    { journey: "area:inbox", viewport: "desktop", base: okRun(), head: okRun() },
-    { journey: "area:inbox", viewport: "phone", base: okRun(), head: null },
+test("a phone lane that never ran could not be evaluated rather than passing on desktop alone", () => {
+  const result = compare.decideHeadOnly({ journeys: [
+    { journey: "area:inbox", viewport: "desktop", head: okRun() },
+    { journey: "area:inbox", viewport: "phone", head: null },
   ] });
-  assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /area:inbox \[phone\]: the head comparison did not run/);
+  assert.equal(result.verdict, "UNEVALUATED");
+  assert.match(result.notes, /area:inbox \[phone\]: the run did not finish/);
 });
 
 test("the judge is asked once per viewport and reports the one that broke", async () => {
   const { judgeJourneys } = await load();
-  const plan = { ...binding, compare: true, authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash", viewports: ["desktop", "phone"], actions: [goto("/inbox")], expect: [{ text: "Inbox" }], journeys: [{ journey: "change:primary", actions: [goto("/inbox")], expect: [{ text: "Inbox" }], base: null, planned: true }] };
+  const plan = { ...binding, authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash", viewports: ["desktop", "phone"], actions: [goto("/inbox")], expect: [{ text: "Inbox" }], journeys: [{ journey: "change:primary", actions: [goto("/inbox")], expect: [{ text: "Inbox" }] }] };
   const runs = (desktop, phone) => [
     { journey: "change:primary", viewport: "desktop", ...okRun({ expects: [{ expect: { text: "Inbox" }, ok: desktop }] }) },
     { journey: "change:primary", viewport: "phone", ...okRun({ expects: [{ expect: { text: "Inbox" }, ok: phone }] }) },
@@ -62,16 +62,14 @@ test("the judge is asked once per viewport and reports the one that broke", asyn
   const asked = [];
   const judged = await judgeJourneys({
     plan,
-    binding,
     evidence: { ...binding, journeys: runs(true, false) },
-    baseEvidence: { ...binding, journeys: runs(false, true) },
     picked: { model: plan.verifierModel },
     ask: async () => { asked.push(1); return { verdict: "PASS", notes: "saw the field" }; },
     work: "",
   });
   assert.equal(judged.verdict, "FAIL");
-  assert.match(judged.notes, /change:primary \[phone\]: regression at step/);
-  assert.match(judged.notes, /change:primary \[desktop\] works now/);
+  assert.match(judged.notes, /change:primary \[phone\]: failed at step/);
+  assert.doesNotMatch(judged.notes, /change:primary \[desktop\]/);
   assert.equal(asked.length, 1);
 });
 

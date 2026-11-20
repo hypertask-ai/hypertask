@@ -20,14 +20,29 @@ Open `https://app.hypertask.ai/search` (or use the existing `/` search shortcut)
 
 ## Driving it with agent-browser
 
-Search layout is on for everyone, with no layout flag: suggestions are one in-flow list aligned with the input instead of the floating 18rem box. Empty bar shows Recent searches once, then Tips below them. Typing shows Ask AI, matching operators, then people (name plus email), labels or boards with matched letters bold. Entity values get grey inline completion (`from:Val` shows `entin Yeo`); Tab accepts into a chip. No live results while typing: results load only after accepting a suggestion or recent, pressing Enter, or loading a `searchTerm` URL. Verify the off path with user 2343 (old floating box) and the on path with user 985.
+Search layout is on for everyone, with no layout flag: suggestions are one in-flow list aligned with the input instead of the floating 18rem box. Empty bar shows Recent searches once, then Tips below them. Typing shows Ask AI, matching operators, then people (name plus email), labels or boards with matched letters bold. Entity values get grey inline completion (`from:Val` shows `entin Yeo`); Tab accepts into a chip. No live results while typing: results load only after accepting a suggestion or recent, pressing Enter, or loading a `searchTerm` URL. The old floating box has no live switch left: `SearchComp.tsx` hardcodes `layoutEnabled` true, so the off path is the committed tests, not a user 2343 run.
+
+Live drive on production, 2026-11-20, QA 985:
+
+```bash
+ht-verify open /search --wait "#search-input"
+ht-verify probe body --text        # Recent searches, then Tips (from:, commenter:, assignee:, in:, board:, label:, is:, before:, after:, on:, has:, type:, priority:)
+ht-verify fill "#search-input" fr  # Ask AI, from:, then boards with counts; no result rows yet
+ht-verify press Tab --wait 600     # from: accepted, people replies follow (Valentin Yeo, valentin.yeo@gmail.com, ...)
+ht-verify open "/search?searchTerm=login%20is%3Aopen" --wait "#tasks-list"   # full page load: results, board tabs and counts from the server
+ht-verify probe mark --count       # 68 on this query: matching title/snippet words are marked
+ht-verify shot --session --out search.png
+```
+
+Every flag named below reads EVERYONE live (`ht-verify flags show <key>`), so an off
+state is a committed-test proof, not a live one.
 
 Label scope is permanent for everyone: positive board chips scope labels, muted ticket counts put unused labels last, unscoped same-name labels combine and filter by name, and Ask AI shows readable chip names.
 Match highlights apply for everyone: verify from/assignee amber inbox name pills, matching label/board pills, safely marked title/snippet words and comment author before the snippet; desktop stays one truncated line, phone stacks, light/dark inherit inbox colours.
 
 With search layout on for everyone and `htpr-6994-search-esc-leaves` off: Esc with suggestions closed restores the previous search in this tab, or empty recents + tips; empty searches always show that list, and board chips omit the extra text `#` while the icon and typed `#` picker remain.
 
-1. Focus an empty bar: Search tips lists all eleven operators (`from`, `commenter`, `assignee`, `in`, `board`, `label`, `is`, `has`, `after`, `before`, `on`), each with an example and meaning. Click a tip, or use arrows then Tab/Enter: only its operator is inserted, ready for a value.
+1. Focus an empty bar: Search tips lists the operators (`from`, `commenter`, `assignee`, `in`, `board`, `label`, `is`, `before`, `after`, `on`, `has`, plus `type`, `priority` and, per the parser, `phrase` and `exclude`), each with an example and meaning. Click a tip, or use arrows then Tab/Enter: only its operator is inserted, ready for a value.
 2. Type `fr`, `la`, `is`, `as`, `in`, `ha`, `af`, `be`, `bo`, `on`. Matching operators appear with grey inline completion. Refocusing an unfinished status, `has:` or date filter reopens its values; accepting a value keeps writing focus even after results return. Keyboard selection scrolls hidden tips into view. For `a`, arrows switch between `assignee:` and `after:` and update the ghost; Tab or Enter accepts. With `htpr-6994-search-esc-leaves` on, Escape returns to the page search was opened from, even with suggestions or tips open; with `htpr-7563-search-esc-footer` also on, the footer says "Esc to go back". With either flag off, the footer keeps "Esc to close". Only with `htpr-6994-search-esc-leaves` off does Escape dismiss the list without clearing text or leaving search; a second Escape follows the existing navigation behavior, including search-history restoration when search layout is enabled.
 3. Accept `from:`/`assignee:`/`in:`/`board:`/`label:` and choose an existing, accessible value. These retain the existing permission-scoped people/board/label lookup and `@`/`#` shortcuts. Selecting a row uses its ID, not its display name, and preserves any free text and `-` exclusion.
 4. `is:` offers only `open`, `done`, `archived`. `has:` offers `attachment`, `comment`, `due`, `due-date` (the last two mean the same thing). Every operator works with arrows and Tab/Enter, without a mouse.

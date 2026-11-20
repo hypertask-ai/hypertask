@@ -16,8 +16,9 @@ with the heading `<board> - Trash`. `Go to trash` calls `redirectToTrash` in
 `Go to archived tasks` pushes `/archived`.
 
 A task lands there when it is deleted: `#` on a board, Delete in the task card
-menu, or the CLI. Deleting is a 30-day move, not a removal. Pressing `#` again
-inside the trash removes it for good.
+menu, or the CLI. Deleting is a 30-day move, not a removal. Inside the trash,
+`Shift+3` recovers the selected row and `Ctrl+Shift+3` permanently deletes it;
+`#` on its own never removes a row for good. The recover tooltip still shows `#`.
 
 ## Driving it with agent-browser
 
@@ -35,10 +36,12 @@ same calls the page drives, in this order.
    Each row carries id `trash-<index>`, so the first row is `#trash-0`, and
    shows creator, board ticket id, title and the permanent-delete date.
 4. Keys, from `src/lib/contexts/Trash/handleKeyboardFunctions.ts`: `j` and `k`
-   move the selection, `Escape` goes back to the board, `Shift+3` recovers, and
-   `Ctrl+Shift+3` permanently deletes. The two icon buttons appear only on the
-   selected row and ask for a confirm dialog reading "Clicking confirm will
-   permanently delete this task. This action cannot be reverted."
+   move the selection, `Escape` goes back to the board (`router.back()`),
+   `Shift+3` recovers, and `Ctrl+Shift+3` permanently deletes. Both icon buttons
+   are in the DOM on every row and only visible on the selected row, so assert
+   visibility, not presence. The permanent delete opens the `ConfirmDialog`
+   `#confirmTaskDelete` with `Delete task` and `Cancel` (Enter and Escape); it is
+   not a command list, and Escape closes it and leaves the row in place.
 5. Recover with `POST /api/tasks/recoverTask` and body `{taskId}`
    (`src/lib/api/task-writes/recover.ts`): the row leaves the trash, the task is
    back on its board as `Normal`, and the scheduled delete job is cancelled.
@@ -61,8 +64,32 @@ deleted".
 
 Row `#trash-0` is the newest deleted task, it carries the selection on load,
 and only the selected row shows the two icon buttons: `Trash2` first, then
-`RotateCcw`. The confirm dialog is a command list, `Delete task` with ENTER and
-`Cancel` with ESC, so ESC closes it and leaves the row in place.
+`RotateCcw`. The confirm dialog is `ConfirmDialog` `#confirmTaskDelete`.
+
+Worked on production, 2026-11-20, QA 985, a disposable task on board 7049:
+
+```bash
+ht-verify api POST /api/queues/tasks/taskDeleteReminder --data '{"taskId":<task>}' --confirm --state "$QA_STATE"
+# 200 {"id":<task>,"projectId":7049,"subTasks":[],"parentTask":null}
+ht-verify open /trash/7049 --wait "#trash-0"
+ht-verify probe "#trash-0" --text   # creator, QASA-<n>, title, "Sun, Dec 20, 10:46 AM"
+ht-verify shot --session --out trash-row.png
+ht-verify api DELETE "/api/tasks/deleteTask?taskId=<live-task>" --confirm --state "$QA_STATE"
+# 409 {"message":"Task is not in the trash"}
+ht-verify api POST /api/tasks/recoverTask --data '{"taskId":<task>}' --confirm --state "$QA_STATE"   # 200
+ht-verify open /trash/7049        # the row is gone; the task is back on its board
+ht-verify api POST /api/queues/tasks/taskDeleteReminder --data '{"taskId":<task>}' --confirm --state "$QA_STATE"
+ht-verify api DELETE "/api/tasks/deleteTask?taskId=<task>" --confirm --state "$QA_STATE"   # 200 {"message":"Success"}
+ht-verify api DELETE "/api/tasks/deleteTask?taskId=<task>" --confirm --state "$QA_STATE"   # 404 Task not found or access denied
+ht-verify api DELETE "/api/tasks/deleteTask?taskId=999999999" --confirm --state "$QA_STATE"  # 404
+ht-verify open /archived --wait body       # Tasks Archive / Inbox Archive, Active boards · All boards · Archived boards
+ht-verify open "/archived?inbox=true"     # Inbox Archive selected, "All projects · <count>"
+```
+
+Agent routes (`/api/mcp/tasks/archive`, `/api/mcp/tasks/delete`) are
+`verified-unreachable: agent bearer token; tried both routes without one and got
+401`. `htpr-8231-agent-archive-done` reads OWNER_AND_QA and the delete of a
+Done-column ticket stays 403.
 
 ## Gotchas
 

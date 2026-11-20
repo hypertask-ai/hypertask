@@ -21,12 +21,12 @@ Bring your own key is Settings > Team > AI > Bring your own key. The Baseten row
 ## Driving it with agent-browser
 
 1. Use QA BYOK user 3412 and its comped team `977c0c91-c14f-47b0-b8bc-933cc751f19d`. Confirm the selected team in the actual request.
-2. Read the production report status before diagnosing a saved key. A 401 means rejected authentication; a 403 means insufficient report permissions, not proof of revocation.
+2. Read the production report status before diagnosing a saved key. A 401 means rejected authentication; a 403 means insufficient report permissions, not proof of revocation. A 502 names the gateway failure, for example `Your team's AI Gateway key was rejected. Check it in Settings` for the BYOK team, which is the expected UNAVAILABLE line in `qa-teams` (`src/app/api/settings/ai-usage/route.ts`).
 3. With `htpr-8008-gateway-key-errors` on, rejected customer keys show a Settings > Bring your own key instruction. Insufficient reporting rights show a permissions instruction. Reload keeps the correct message.
 4. Check a successful report on an available QA team: model breakdown and allowance display remain present. Managed/shared failures must not blame a customer's key. Never edit keys, spend funds, change plans or replace a capped key for this check.
 5. Check desktop 1440x900 and phone 390x844 in Porcelain, Graphite, AMOLED and Dia. The existing Gateway card must contain readable copy, without moving the settings shell.
 6. Off retains the generic failure. Exercise rollback and 403 fixtures in the isolated route/component tests; never flip production modes merely to manufacture coverage.
-7. For `htpr-7788-team-ai-breakdown`, open AI usage as a team owner. Count one card per owned team. Open By model, By feature, and Most active boards only when that card’s response has rows. Confirm By member is absent for a non-owner and for a team on its own key. Do not change teams.
+7. For `htpr-7788-team-ai-breakdown`, open AI usage as a team owner. Count one card per owned team. Open By model, By feature, and Most active boards only when that card’s response has rows. Confirm By member is absent for a non-owner and for a team on its own key. Do not change teams. Live on 2026-11-20 QA 985 saw two `MYTEAM` cards (2% and 1%), each with By model, By feature, Most active boards and By member, plus a third `HYPERTASK` card reading `AI usage is currently unavailable`.
 8. For `htpr-7732-baseten-byok` and `htpr-8049-always-use-this-key`, open Bring your own key on a paid team as the owner. Confirm the Baseten row and the Always use this key switch are visible. Do not save a key, run a test, or turn the switch on. A free plan hides the whole screen.
 9. For `htpr-8207-qwen-max-byok`, open the model picker and confirm GLM-5.3 and Gemini 3.1 Pro Preview are listed. Do not run the Alibaba connection test.
 10. For `htpr-7751-own-key-rejected`, do not provoke a provider rejection. The on-state copy is “Your {provider} key was rejected. Update it in Settings, AI, Bring your own key.” Retry is the only action on that assistant message.
@@ -37,6 +37,16 @@ Bring your own key is Settings > Team > AI > Bring your own key. The Baseten row
 `htpr-7919-allowance-percent` keeps the existing monthly percentage bar, reset date, projection, warning colours and at-limit recovery controls. It removes the allowance dollar line and the dollar prefix from automatic-feature usage. The trial comparison table's Pro allowance perk also stops promising a dollar value or overage price. Subscription prices and enforced allowance caps remain unchanged. The money-classified preview defaults to Owner + QA; never widen it to create a test fixture.
 
 As QA 985, compare `/settings/ai-usage` against its actual successful `/api/settings/ai-usage` response: displayed percentage and reset date must match. Reload and capture desktop and phone in every theme. Check 0%, near-limit and capped fixtures through the component regression suite; never spend a real allowance to manufacture a state. Off retains both dollar lines. The Free account can verify its actual cap but does not see the restricted preview; the comped Pro fixture's missing managed key makes its live success path unavailable until that separate issue is repaired.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs ai-usage --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`ai-usage ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

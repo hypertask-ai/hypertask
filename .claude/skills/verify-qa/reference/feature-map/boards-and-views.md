@@ -47,7 +47,9 @@
 
 ## How to get to it (user POV)
 
-`https://app.hypertask.ai/detail/project-<id>` for a board (real selector:
+`https://app.hypertask.ai/project?id=<id>` for a board; `/detail/project-<id>` is a task-detail
+path that redirects there (`src/lib/boardRoutePath.ts:11-24`,
+`src/app/detail/[...slug]/page.tsx:74-78`). Real selector:
 `.kanban-column-title`, `src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx`,
 per `e2e/smoke/prod.spec.ts`), `/all-tasks` for the task list (`#users-list`),
 or the board/table/calendar view switcher inside a board. Switching boards
@@ -62,7 +64,13 @@ Calendar is where Google Calendar connects. G then B is Go to task board.
 
 `agent-browser`, headless, `?realtime=on` on the board URL. Open a board,
 switch views, then switch to a second board and back, since the bugs below
-cluster around what happens on that second switch, not the first load.
+cluster around what happens on that second switch, not the first load. The
+rail switches views by accessible name: Board layout, Table layout, Go to
+calendar (`src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx:254,271,301`).
+The table view is a div grid, not a `<table>`, so assert its header row
+(`TICKET TITLE ASSIGNEE`) and the `surface=table` address rather than a tag.
+The first draw can still say `Loading Board controls`, so wait for a saved-view
+tab before reading the board.
 
 ### Table grouping and group actions
 
@@ -156,6 +164,16 @@ Open actions colour: with `htpr-8961-selection-bar-button` on, select a card. Op
 Calm cards: with `htpr-8970-calm-cards` on, a card has 4px corners, one avatar stack, at most two tags, no brain- or design-pass tag, and no In inbox pill. Off, the pill and the third tag return.
 
 Table sort and columns: with `htpr-8973-table-sort-columns` on, use the table Sort button and a column header. Both change the same stack. Reload the view and the stack and the visible columns remain. Off, Sort opens the board sort, and columns stay the shared browser set. Restore the QA view's sort and columns.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs boards-and-views --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`boards-and-views ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 
