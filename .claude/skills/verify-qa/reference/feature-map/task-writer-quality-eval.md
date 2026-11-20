@@ -26,10 +26,10 @@ Agent creates that must follow the plain-language block or the house writing rul
 ## Driving it with agent-browser
 
 1. Confirm the merge's Production deployment succeeded.
-2. Dispatch Task writer live eval on `production`.
+2. Dispatch Task writer live eval on `production` (Actions > Task writer live eval > Run workflow), or read the newest scheduled run. The scheduled run on production is the same replay, without spending a dispatch.
 3. Require QA identity 985 and all 22 cases.
 4. Read score and cleanup artifacts, not only the job badge.
-5. Replay the committed baseline with `node scripts/task-writer-eval.cjs --verify-baseline`.
+5. Replay the committed baseline with `node scripts/task-writer-eval.cjs` (no flag; the no-argument path compares against the committed baseline and prints the diff). `--verify-baseline` is not a flag the script reads and is silently ignored.
 
 Board format, old structure, urgency, brain tag, and the duplicate sentence:
 
@@ -51,7 +51,24 @@ Plain language and house writing rules:
 Timing and board memory:
 
 17. Save a Ctrl+J New Task. On `app_task_create_latency`, `ai_task_writer_ms` is set when the writer step ran. On the New Task window, `ai_title_ms` is set when a title was generated. Off leaves the measurement that did not run null. See `src/lib/analytics/productPerformance.ts`.
-18. On the New Task window, accept a Task Writer draft that changes the title or priority, then save. The browser POSTs `task_writer_field_diff` to POST /api/ai/project/memory. The note is at most 2,000 characters. Changed fields are title, priority, size, labels, status, due date, and start date. If board memory is off, the response has enabled false and an empty learned list. A note with an email, a phone number, a street address, or a secret is not learned. Off does not post.
+18. On the New Task window, accept a Task Writer draft that changes the title or priority, then save. The browser POSTs `task_writer_field_diff` to POST /api/ai/project/memory. The client caps the note at 2,000 characters (`src/lib/ai/boardMemoryClient.ts:5,137`); the route itself accepts up to 20,000 (`src/app/api/ai/project/memory/route.ts:63`). Changed fields are title, priority, size, labels, status, due date, and start date. If board memory is off, the response has enabled false and an empty learned list. A note with an email, a phone number, a street address, or a secret is not learned. Off does not post.
+
+Read-only live evidence, 2026-11-20: scheduled run
+[44531722737](https://github.com/hypertask-ai/hypertask/actions/runs/44531722737) on
+production sha `503253315064cb65e98791327cf3415a448827ea` succeeded, its
+`task-writer-live` job ran both `tests/task-writer-eval.test.cjs` and "Replay live
+writer and chips as QA 985", and artifact `task-writer-live-scores` held
+`live.json.status.json` with `{"completed":22,"pendingTaskIds":[]}`. A fresh
+dispatch needs the repo's QA login secrets and a model key; without them the UI
+half below is the reachable drive and the eval is
+`verified-unreachable: Actions secrets QA_LOGIN_EMAIL/QA_LOGIN_PASSWORD and a model key; tried
+reading the newest production run and its score artifact (done)`.
+
+Ctrl+J on a board you can write on (board 7049 as QA 985) opens the New Task
+window; `ht-verify press "Control+j"` then `ht-verify probe body --text`. The
+empty window shows the writer box and the draft is not requested until you send
+a note, so do not send one just to prove the window opens. The writer flags read
+EVERYONE live (`ht-verify flags show <key>`), so flag-off proofs are the named tests.
 
 ## Gotchas
 

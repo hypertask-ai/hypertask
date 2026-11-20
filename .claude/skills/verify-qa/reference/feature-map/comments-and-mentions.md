@@ -31,20 +31,49 @@ comment or description author, and on a mention in the thread.
 
 ## Driving it with agent-browser
 
-`agent-browser`, headless, `?realtime=on` on the task. Post a comment, edit
-your own comment, and if the ticket touches mentions, `@` a user and confirm
-the picker resolves and the mention renders as a link/chip, not plain text.
+**Production, QA 985 (verified 2026-11-20).** Create a throwaway task on board
+7049, then drive the real composer:
 
-**Hands-free drive:**
+```bash
+H=.claude/skills/verify-hypertask/bin/ht-verify
+S=~/.config/hypertask-videos/storageState-qa.json
+$H api POST /api/tasks/create --state $S --confirm --data '{"title":"[qa-9515] comments probe","projectId":7049,"sectionId":19409,"userId":985}'
+$H session start --base https://app.hypertask.ai --viewport 1440x900
+$H open /detail/project-7049/<uniqueIndex>
+$H click '#comment-input'
+$H fill '#comment-input .ProseMirror[contenteditable="true"]' 'qa probe note'
+```
+
+Send with Ctrl+Enter (Cmd+Enter on Apple). Require `POST /api/comments/create`
+200, the text visible outside the composer, and
+`[data-testid="ticket-comment"]` count increased. Reload and require the same
+comment, same formatting. For a mention type `@` and require `.mention_container`
+to open with a People and an Agents group; a saved mention renders
+`a[data-type="mention"]` or `span[data-type="mention"]`.
+
+Clean up through the product APIs and
+`.claude/skills/verify-qa/scripts/fixture-cleanup <state> <taskId>`:
+
+```bash
+$H api GET '/api/comments/getByTask?taskId=<id>' --state $S
+$H api POST /api/comments/deleteCommentById --state $S --confirm --data '{"id":<commentId>}'
+$H api GET '/api/comments/getByTask?taskId=<id>' --state $S   # marker absent
+```
+
+**Hands-free drive (loopback only):**
 `node .claude/skills/verify-qa/scripts/comments-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
-Posts, reloads and deletes a comment.
-Prints PASS/FAIL per step and `comments ok`. Loopback only.
-`--break post` must print `negative control ok`.
-Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
+Posts, reloads and deletes a comment, using `#comment-input`,
+`#comment-input .ProseMirror[contenteditable='true']`,
+`[data-testid="ticket-comment"]`, `POST /api/comments/create` and
+`POST /api/comments/deleteCommentById`. Prints PASS/FAIL per step and
+`comments ok`. `--break post` must print `negative control ok`. Run hosted with
+`scripts/verify-qa <branch> hands-free-drives`.
 
-On a phone, with `htpr-6555-idle-comment-mic` on, tap the microphone on the
+With `htpr-6555-idle-comment-mic` on, tap the microphone on the
 closed comment bar and confirm dictation starts before the editor is open.
-On desktop, confirm that bar has no microphone.
+On desktop, confirm that bar has no microphone. The phone idle mic and the
+desktop composer mic share the id `create-comment-audio-button`, so prove
+absence with the phone placeholder (`_mbl`) or by viewport, never by id alone.
 
 With `htpr-7724-blocker-comment` on, mark one real comment, reload, and
 confirm the red outline. Unmark it. An activity row has no blocker command.
@@ -182,7 +211,11 @@ UNREACHABLE rather than claiming rendering proof.
 ### Agent writing rules
 
 Agent comments need `kind: question`, `qa` or `done` to appear in the
-people thread. Untyped text goes to the agent log, including mentions and
+people thread. With `htpr-9063-comment-audience` on (EVERYONE), any agent POST
+without `kind` is refused first with 400 `missing_field`/`kind`, before the log
+routing runs; the log-routing checks below hold only with that flag off, which
+no mode currently gives a normal account. Untyped text otherwise goes to the
+agent log, including mentions and
 replies. A note the log cannot take is never published: a board with no
 agent log answers 400 naming `kind`, an agent outside the board answers 403
 naming board access, and only a log that fails while opening answers 503

@@ -41,7 +41,7 @@ export function countSteps(result) {
   return { pass, fail: steps.length - pass, total: steps.length, verdict: result?.verdict || 'FAIL' }
 }
 
-async function api(route, { token, fetchImpl = fetch, method = 'GET', body, idempotencyKey } = {}) {
+export async function api(route, { token, fetchImpl = fetch, method = 'GET', body, idempotencyKey } = {}) {
   if (!token) throw new Error('HYPERTASK_MCP_TOKEN is missing')
   const response = await fetchImpl(`${APP}/api/mcp/${route}`, {
     method,
@@ -63,12 +63,13 @@ async function api(route, { token, fetchImpl = fetch, method = 'GET', body, idem
 }
 
 export async function findOpenWeeklyTicket(title, options = {}) {
+  const projectId = options.projectId ?? PROJECT_ID
   let cursor
   let total
   let searched = 0
   const cursors = new Set()
   do {
-    const query = `project_id=${PROJECT_ID}&status=open&limit=50&q=${encodeURIComponent(title)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+    const query = `project_id=${projectId}&status=open&limit=50&q=${encodeURIComponent(title)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
     const search = await api(`tasks/search?${query}`, options)
     if (!Array.isArray(search.tasks) || search.partial || !Number.isInteger(search.total) || search.total < 0 ||
       (total !== undefined && search.total !== total) ||

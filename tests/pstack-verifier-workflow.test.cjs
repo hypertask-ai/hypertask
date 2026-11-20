@@ -16,9 +16,8 @@ const policy = read("docs/ci-policy.yml");
 const expected = {
   resolve: { contents: "read", "pull-requests": "read", actions: "read" },
   plan: { contents: "read" },
-  base: { contents: "read", packages: "read" },
   drive: { contents: "read", packages: "read" },
-  judge: { contents: "read", checks: "read", statuses: "read" },
+  judge: { contents: "read", checks: "read", statuses: "read", actions: "read" },
   mark: { contents: "read", statuses: "read" },
   post: { actions: "read", contents: "read", "pull-requests": "write", statuses: "read" },
   cancel: { contents: "read", statuses: "read" },
@@ -61,13 +60,12 @@ test("each verifier job has the declared permissions, key and token", async () =
   assert.deepEqual(trusted.permissions, {});
   for (const [name, permissions] of Object.entries(expected)) assert.deepEqual(trusted.jobs[name].permissions, permissions, name);
   assert.deepEqual(needs(trusted.jobs.plan), ["resolve"]);
-  assert.deepEqual(needs(trusted.jobs.base), ["resolve", "plan"]);
   assert.deepEqual(needs(trusted.jobs.drive), ["resolve", "plan"]);
-  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "base", "drive"]);
+  assert.deepEqual(needs(trusted.jobs.judge), ["resolve", "plan", "drive"]);
   assert.deepEqual([needs(trusted.jobs.mark), needs(trusted.jobs.post)], [["resolve"], ["resolve", "judge", "mark"]]);
   assert.deepEqual(needs(trusted.jobs.cancel), ["resolve", "post"]);
   const secretJobs = Object.entries(trusted.jobs).filter(([, job]) => strings(job).some((value) => value.includes("secrets."))).map(([name]) => name);
-  assert.deepEqual(secretJobs, ["plan", "base", "judge", "mark", "post", "cancel"]);
+  assert.deepEqual(secretJobs, ["plan", "judge", "mark", "post", "cancel"]);
   assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.") || value.includes("OPENROUTER_EVAL_KEY")), false);
   assert.deepEqual(tokenGaps(trusted.jobs), []);
   assert.equal(trusted.jobs.cancel.steps.some((step) => String(step.uses ?? "").startsWith("actions/checkout")), true);
@@ -231,14 +229,14 @@ function assertRelayOwnsHostPort(log) {
   assert.equal(lines.some((line) => line.startsWith("network connect ht-smoke-net-") && line.includes(" ht-smoke-relay-")), true);
 }
 
-function runBaseSmoke(t, installed) {
-  const dir = mkdtempSync(join(tmpdir(), "pstack-base-deps-"));
+function runCandidateSmoke(t, installed) {
+  const dir = mkdtempSync(join(tmpdir(), "pstack-candidate-deps-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const bin = join(dir, "bin");
   const dockerLog = join(dir, "docker.log");
   const nodeLog = join(dir, "node.log");
   mkdirSync(bin);
-  const app = join(dir, "candidate-base");
+  const app = join(dir, "candidate");
   mkdirSync(join(app, "scripts"), { recursive: true });
   if (installed) {
     mkdirSync(join(app, "node_modules"), { recursive: true });
@@ -263,14 +261,14 @@ function runBaseSmoke(t, installed) {
   return { result, dockerLog, app };
 }
 
-test("a base checkout with an empty node_modules installs its own dependencies", (t) => {
-  const { result, dockerLog } = runBaseSmoke(t, false);
+test("a candidate checkout with an empty node_modules installs its own dependencies", (t) => {
+  const { result, dockerLog } = runCandidateSmoke(t, false);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   assert.equal(readFileSync(dockerLog, "utf8").includes("run --rm --name ht-smoke-install-"), true);
 });
 
-test("a base checkout reuses dependencies only when they are installed", (t) => {
-  const { result, dockerLog, app } = runBaseSmoke(t, true);
+test("a candidate checkout reuses dependencies only when they are installed", (t) => {
+  const { result, dockerLog, app } = runCandidateSmoke(t, true);
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
   const log = readFileSync(dockerLog, "utf8");
   assert.equal(log.includes("run --rm --name ht-smoke-install-"), false);
@@ -350,7 +348,7 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
   const cli = spawnSync(process.execPath, [join(root, "scripts/pstack-verifier.mjs")], { encoding: "utf8" });
   assert.equal(cli.status, 1);
-  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|judge-base\|mark\|post\|cancel/);
+  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|mark\|post\|cancel/);
 });
 
 function playwrightModules() {
@@ -400,50 +398,22 @@ test("a smoke boot that never writes ready records a down preview", (t) => {
   });
 });
 
-test("the plan lane restores cached base results before it plans, keyed by the base sha", () => {
+test("the plan lane plans the head only and nothing restores a base result", () => {
   const steps = trusted.jobs.plan.steps;
-  const restoreAt = steps.findIndex((step) => String(step.uses ?? "").startsWith("actions/cache/restore@"));
-  const planAt = steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier.mjs plan"));
-  assert.equal(restoreAt >= 0 && planAt > restoreAt, true);
-  assert.match(String(steps[restoreAt].with.key), /\$\{\{ needs\.resolve\.outputs\.base \}\}/);
-  assert.match(String(steps[restoreAt].with["restore-keys"]), /pstack-base-\$\{\{ needs\.resolve\.outputs\.base \}\}-/);
-  assert.match(String(steps[restoreAt].with.path), /base-cache$/);
-  assert.equal(steps[planAt].env.PSTACK_VERIFIER_COMPARE, "true");
-  assert.equal(trusted.jobs.plan.outputs.baseNeeded, "${{ steps.plan.outputs.baseNeeded }}");
+  assert.equal(steps.some((step) => String(step.uses ?? "").startsWith("actions/cache/")), false);
+  const planStep = steps.find((step) => String(step.run ?? "").includes("pstack-verifier.mjs plan"));
+  assert.equal(planStep.env.PSTACK_VERIFIER_COMPARE, undefined);
+  assert.equal(planStep.env.BASE_SHA, undefined);
+  assert.equal(trusted.jobs.plan.outputs.baseNeeded, undefined);
+  assert.deepEqual(Object.keys(trusted.jobs), ["resolve", "plan", "drive", "judge", "mark", "post", "cancel"]);
 });
 
-test("the base lane boots the base commit with the workspace as its trusted root and writes the cache", () => {
-  const job = trusted.jobs.base;
-  assert.equal(job["cache-mode"], "write");
-  assert.match(String(job.if), /needs\.plan\.outputs\.baseNeeded == 'true'/);
-  const checkouts = job.steps.filter((step) => String(step.uses ?? "").startsWith("actions/checkout@"));
-  assert.equal(checkouts.length, 2);
-  assert.match(String(checkouts[1].with.ref), /needs\.resolve\.outputs\.base/);
-  const runAt = job.steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier-job.sh"));
-  const run = String(job.steps[runAt].run);
-  const [, trustedRoot, candidateRoot] = /pstack-verifier-job\.sh "([^"]+)" "([^"]+)"/.exec(run);
-  assert.equal(trustedRoot, "$GITHUB_WORKSPACE");
-  assert.equal(candidateRoot, "$GITHUB_WORKSPACE/candidate-base");
-  assert.equal(job.steps[runAt].env.PSTACK_PLAN_FILE.endsWith("base-plan.json"), true);
-  assert.equal(job.steps[runAt].env.BASE_SHA, "${{ needs.resolve.outputs.base }}");
-  assert.equal(job.steps[runAt].env.MAP_SHA, undefined);
-  const saveAt = job.steps.findIndex((step) => String(step.uses ?? "").startsWith("actions/cache/save@"));
-  assert.equal(saveAt > runAt, true);
-  assert.match(String(job.steps[saveAt].with.key), /pstack-base-\$\{\{ needs\.resolve\.outputs\.base \}\}/);
-  assert.equal(job.steps[saveAt].if, "always()");
-  const judgeAt = job.steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier.mjs judge-base"));
-  assert.equal(judgeAt > runAt && judgeAt < saveAt, true);
-});
-
-test("the base evidence reaches the judge and the base lane never runs on a pull request", () => {
+test("the judge reads the nightly live pass and no base evidence", () => {
   assert.deepEqual(Object.keys(trusted.on), ["workflow_run"]);
   const judge = trusted.jobs.judge;
-  const download = judge.steps.find((step) => String(step.with?.name ?? "").startsWith("pstack-base-evidence-"));
-  assert.equal(download["continue-on-error"], true);
+  assert.equal(judge.permissions.actions, "read");
+  assert.equal(judge.steps.some((step) => String(step.with?.name ?? "").includes("base-evidence")), false);
   const judgeStep = judge.steps.find((step) => String(step.run ?? "").includes("pstack-verifier.mjs judge"));
-  assert.equal(judgeStep.env.PSTACK_BASE_EVIDENCE, "${{ runner.temp }}/pstack-verifier/base/base-evidence.json");
-  const upload = trusted.jobs.base.steps.find((step) => String(step.uses ?? "").includes("upload-artifact"));
-  assert.match(String(upload.with.name), /^pstack-base-evidence-/);
-  assert.equal(String(upload.with.path).endsWith("base-evidence.json"), true);
-  assert.equal(strings(trusted.jobs.base).some((value) => value.includes("pull_request_target")), false);
+  assert.equal(judgeStep.env.PSTACK_BASE_EVIDENCE, undefined);
+  assert.equal(strings(judge).some((value) => value.includes("base-evidence") || value.includes("PSTACK_BASE_CACHE")), false);
 });
