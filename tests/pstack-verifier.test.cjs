@@ -55,6 +55,46 @@ test("an empty plan logs its reason and passes only for a non-app change with gr
   assert.equal(ciChecksPassed([{ name: CONTEXT, conclusion: "failure" }]), false);
 });
 
+test("a server-only bug fix passes on green checks and a changed test that fails on the old code", async () => {
+  const { decide, reproFirstPassed, reproFirstWaiting, REPRO_FIRST_JOB } = await load();
+  const reason = "no user path: this only changes server startup instrumentation";
+  const server = plan([], { reason, files: ["src/lib/startup/register.ts", "tests/startup-register.test.cjs"], filesTruncated: false, bugfix: true });
+  const proved = decide({ model: {}, plan: server, evidence: null, binding, checksPassed: true, reproFirstPassed: true });
+  assert.equal(proved.verdict, "PASS+NOTES");
+  assert.match(proved.notes, /^no user path: repro-first shows a changed test failing on the old code and passing here: /);
+  assert.match(proved.notes, /server startup instrumentation/);
+  const unproved = decide({ model: {}, plan: server, evidence: null, binding, checksPassed: true });
+  assert.equal(unproved.verdict, "FAIL");
+  assert.match(unproved.notes, /^the bug fix has no changed test that fails on the old code: /);
+  assert.match(unproved.notes, /server startup instrumentation/);
+  assert.equal(decide({ model: {}, plan: server, evidence: null, binding, checksPassed: false, reproFirstPassed: true }).verdict, "FAIL");
+  assert.equal(decide({ model: {}, plan: server, evidence: null, binding, checksPassed: true, checksPending: true }).verdict, "PENDING");
+  assert.equal(decide({ model: {}, plan: plan([], { ...server, bugfix: false }), evidence: null, binding, checksPassed: true, reproFirstPassed: true }).verdict, "FAIL");
+  assert.equal(reproFirstPassed([{ name: REPRO_FIRST_JOB, conclusion: "success" }]), true);
+  assert.equal(reproFirstPassed([{ name: REPRO_FIRST_JOB, conclusion: "failure" }]), false);
+  assert.equal(reproFirstPassed([{ name: REPRO_FIRST_JOB, conclusion: null }]), false);
+  assert.equal(reproFirstPassed([{ name: "ci-tests", conclusion: "success" }]), false);
+  assert.equal(reproFirstPassed([]), false);
+  const rerun = [
+    { name: REPRO_FIRST_JOB, conclusion: "failure", created_at: "2026-01-01T00:00:00Z" },
+    { name: REPRO_FIRST_JOB, conclusion: "success", created_at: "2026-01-01T00:10:00Z" },
+  ];
+  assert.equal(reproFirstPassed(rerun), true);
+  assert.equal(reproFirstWaiting([{ name: REPRO_FIRST_JOB, conclusion: null }]), true);
+  assert.equal(reproFirstWaiting([{ name: REPRO_FIRST_JOB, conclusion: "failure" }]), false);
+  assert.equal(reproFirstWaiting([]), false);
+});
+
+test("a bug fix with a planned user journey still decides from the evidence", async () => {
+  const { decide } = await load();
+  const body = plan([{ op: "goto", path: "/project?id=1" }], { bugfix: true });
+  const ok = decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding, checksPassed: false, reproFirstPassed: false });
+  assert.equal(ok.verdict, "PASS");
+  const broken = decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ steps: [{ ok: false, error: "missing" }] }), binding, checksPassed: true, reproFirstPassed: true });
+  assert.equal(broken.verdict, "FAIL");
+  assert.equal(broken.notes, "a step failed");
+});
+
 test("a truncated file list cannot take the non-app pass", async () => {
   const { decide, takeFileList, planFileList } = await load();
   const names = [...Array.from({ length: 100 }, (_, index) => `docs/a${index}.md`), "src/app/page.tsx"];
@@ -814,8 +854,9 @@ test("the drive fills archived, board and task ids in an api body", async () => 
     [ARCHIVED_SMOKE_PROJECT_ENV]: "2",
     CORE_SMOKE_TASK_ID: "7",
     CORE_SMOKE_MCP_TOKEN: "smoke-token",
+    CORE_SMOKE_AGENT_TOKEN: "agent-token",
   });
-  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token" });
+  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token", agentBearer: "agent-token" });
   const calls = [];
   const action = {
     op: "api",
@@ -850,10 +891,73 @@ test("the drive fills archived, board and task ids in an api body", async () => 
   assert.match(missing.steps[0].error, /archived project id is not allowed/);
   const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
   assert.match(prompt, /\{archived\} is the seeded archived board/);
+  assert.match(prompt, /seeded agent token/);
+  assert.match(prompt, /agent inbox is empty/);
   } finally {
     if (savedToken === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = savedToken;
   }
+});
+
+test("the seed mints an agent token for the seeded agent and exports it", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile("scripts/seed-core-actions-smoke.mjs", "utf8");
+  assert.match(source, /createMcpToken\(user\.id, user\.email, undefined, agent\.id\)/);
+  assert.match(source, /agentTokenCredentialFields\(agentToken\)/);
+  assert.match(source, /CORE_SMOKE_AGENT_TOKEN: agentToken/);
+  assert.match(source, /prisma\.chatSession\.create\(/);
+  assert.match(source, /replyToMessageId: lastQuestion\.id/);
+});
+
+test("an agent-only route is called with the seeded agent token", async () => {
+  const { parsePlan, runPlan, smokeDriveIds } = await load();
+  const ids = smokeDriveIds({ CORE_SMOKE_PROJECT_ID: "4", CORE_SMOKE_TASK_ID: "7", CORE_SMOKE_MCP_TOKEN: "smoke-token", CORE_SMOKE_AGENT_TOKEN: "agent-token" });
+  const action = parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "GET", path: "/api/mcp/chat/pending?unanswered=true", body: {}, expectStatus: 200, expectText: "success" }],
+  })).actions;
+  assert.deepEqual(action[0].path, "/api/mcp/chat/pending?unanswered=true");
+  const sent = [];
+  const page = {
+    request: { async fetch(url, options) { sent.push({ url, headers: options.headers }); return { status: () => 200, async text() { return '{"success":true,"messages":[]}'; } }; } },
+  };
+  const run = await runPlan({
+    page,
+    plan: plan(action),
+    base: "http://127.0.0.1:3100",
+    shotsDir: "/tmp",
+    navigations: [],
+    ...ids,
+  });
+  assert.equal(run.steps[0].ok, true);
+  assert.deepEqual(sent, [{ url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer agent-token" } }]);
+  const account = plan([{ op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "ok" }]);
+  const mixed = [];
+  await runPlan({
+    page: { request: { async fetch(url, options) { mixed.push(options.headers); return { status: () => 200, async text() { return '{"ok":true}'; } }; } } },
+    plan: account,
+    base: "http://127.0.0.1:3100",
+    shotsDir: "/tmp",
+    navigations: [],
+    ...ids,
+  });
+  assert.deepEqual(mixed, [{ Authorization: "Bearer smoke-token" }]);
+  const declared = parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "GET", path: "/api/mcp/inbox", body: {}, auth: "agent", expectStatus: 200, expectText: "ok" }],
+  })).actions;
+  assert.equal(declared[0].auth, "agent");
+  assert.throws(() => parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "GET", path: "/api/mcp/inbox", body: {}, auth: "cookie", expectStatus: 200, expectText: "ok" }],
+  })), /auth is not allowed/);
+  const missing = await runPlan({
+    page: { request: { async fetch() { return { status: () => 200, async text() { return "success"; } }; } } },
+    plan: plan(action),
+    base: "http://127.0.0.1:3100",
+    projectId: "4",
+    bearer: "smoke-token",
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.equal(missing.steps[0].ok, false);
 });
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
@@ -1010,14 +1114,14 @@ test("an area plan that cannot be read is skipped and the change journey is kept
     if (prompt.includes("DATA: FEATURE PAGE")) throw new Error("model output invalid after retry: shot name is not allowed");
     return { actions: [{ op: "goto", path: "/project?id={id}" }], expect: [], reason: "open the board" };
   };
-  const planned = await planJourneys({ request, pages, entries: [], ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"], mapSha: "a".repeat(40), baseSha: request.baseSha, bugfix: false, compare: true });
+  const planned = await planJourneys({ request, pages, ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"] });
   assert.deepEqual(seen, ["page", "change"]);
   assert.equal(planned.unevaluated, "");
   assert.deepEqual(planned.items.map((item) => item.journey), ["change:primary"]);
   assert.equal(planned.reason, "open the board");
 });
 
-test("at most six matched pages are planned and the rest are left for a later base", async () => {
+test("at most six matched pages are planned", async () => {
   const { planJourneys, AREA_JOURNEY_LIMIT } = await load();
   const request = { ...binding, author: "grok", title: "t", body: "", diff: "src/app/boards/page.tsx", files: ["src/app/boards/page.tsx"], filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   const pages = Array.from({ length: 9 }, (_unused, index) => ({ name: `page-${index}`, text: "Boards live at src/app/boards/page.tsx" }));
@@ -1026,7 +1130,7 @@ test("at most six matched pages are planned and the rest are left for a later ba
     if (prompt.includes("DATA: FEATURE PAGE")) pageCalls += 1;
     return { actions: [{ op: "goto", path: "/project?id={id}" }], expect: [], reason: "" };
   };
-  const planned = await planJourneys({ request, pages, entries: [], ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"], mapSha: "a".repeat(40), baseSha: request.baseSha, bugfix: false, compare: true });
+  const planned = await planJourneys({ request, pages, ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"] });
   assert.equal(AREA_JOURNEY_LIMIT, 6);
   assert.equal(pageCalls, 6);
   assert.equal(planned.items.filter((item) => item.journey.startsWith("area:")).length, 6);
@@ -1055,7 +1159,6 @@ test("a plan that cannot be read from any model is unevaluated, not a change ver
       binding,
       altModel: "openai/gpt-5",
       pages: [],
-      entries: [],
       ask: (_prompt, options) => { seen.push(options); throw new Error("model output invalid after retry"); },
     });
   } finally {
@@ -1298,32 +1401,32 @@ test("docs and bot shortcuts skip the model only for the sets decide accepts", a
   }
 });
 
-test("the base lane judges its own run from its own screenshots before the comparison", async () => {
-  const { judgeBaseCommand, judgeJourneys, pickVerifier } = await load();
+test("the head lane judges from its own screenshots, and a page red in nightly does not block", async () => {
+  const { judgeJourneys, pickVerifier } = await load();
   const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
-  const dir = fs.mkdtempSync(`${os.tmpdir()}/pv-base-`), base = path.join(dir, "base"), head = path.join(dir, "head");
-  const journey = { journey: "change:repro", actions: [{ op: "goto", path: "/inbox" }], expect: [] };
-  const run = { journey: "change:repro", steps: [{ action: journey.actions[0], ok: true, error: "" }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }] };
-  const shot = (root, body) => { fs.mkdirSync(path.join(root, "evidence", "shots"), { recursive: true }); fs.writeFileSync(path.join(root, "evidence", "shots", "0.png"), body); };
-  const saved = ["HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "PSTACK_VERIFIER_ALT_MODEL"].map((key) => [key, process.env[key]]);
-  fs.mkdirSync(path.join(base, "plan"), { recursive: true });
-  shot(base, "base-shot");
-  shot(head, "head-shot");
-  fs.writeFileSync(path.join(base, "plan", "base-plan.json"), JSON.stringify({ ...binding, actions: [], expect: [], authorFamily: "deepseek", journeys: [journey], bugfix: true }));
-  fs.writeFileSync(path.join(base, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [run] }));
-  Object.assign(process.env, { HEAD_SHA: binding.sha, GITHUB_RUN_ID: binding.run, GITHUB_RUN_ATTEMPT: binding.attempt, WORK: head, PSTACK_VERIFIER_ALT_MODEL: "grok/grok-4" });
+  const dir = fs.mkdtempSync(`${os.tmpdir()}/pv-judge-`);
+  const journey = { journey: "area:inbox", actions: [{ op: "goto", path: "/inbox" }], expect: [] };
+  const run = (ok) => ({ journey: "area:inbox", steps: [{ action: journey.actions[0], ok, error: ok ? "" : "not actionable" }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }] });
+  const plan = { ...binding, actions: [], expect: [], journeys: [journey], authorFamily: "deepseek", verifierModel: "grok/grok-4" };
+  fs.mkdirSync(path.join(dir, "evidence", "shots"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "evidence", "shots", "0.png"), "head-shot");
   try {
     const images = [];
-    await judgeBaseCommand({ work: base, key: "k", ask: (_prompt, options) => { images.push(options.images); return { verdict: "FAIL", notes: "the bug is visible on base" }; } });
-    const baseEvidence = JSON.parse(fs.readFileSync(path.join(base, "base-evidence.json"), "utf8"));
-    assert.deepEqual([images[0], baseEvidence.journeys[0].judged], [[Buffer.from("base-shot").toString("base64")], "FAIL"]);
-    const judged = await judgeJourneys({ plan: { ...binding, actions: [], expect: [], journeys: [journey], bugfix: true, compare: true, authorFamily: "deepseek", verifierModel: "grok/grok-4" }, binding, evidence: { ...binding, journeys: [run] }, picked: pickVerifier("deepseek", "grok/grok-4"), baseEvidence, ask: () => ({ verdict: "PASS", notes: "fixed" }) });
-    assert.deepEqual([judged.verdict, judged.notes], ["PASS", ""]);
+    const judged = await judgeJourneys({ plan, evidence: { ...binding, journeys: [run(true)] }, picked: pickVerifier("deepseek", "grok/grok-4"), ask: (_prompt, options) => { images.push(options.images); return { verdict: "PASS", notes: "saw the inbox" }; }, work: dir });
+    assert.deepEqual([judged.verdict, images[0]], ["PASS", [Buffer.from("head-shot").toString("base64")]]);
+    const asked = [];
+    const excused = await judgeJourneys({ plan, evidence: { ...binding, journeys: [run(false)] }, picked: pickVerifier("deepseek", "grok/grok-4"), redFeatures: ["inbox"], ask: () => { asked.push(1); return { verdict: "PASS", notes: "" }; }, work: dir });
+    assert.equal(excused.verdict, "PASS+NOTES");
+    assert.match(excused.notes, /already red on production/);
+    assert.deepEqual(asked, []);
+    const bugPlan = { ...plan, bugfix: true, reason: "no user path: server startup only" };
+    const proved = await judgeJourneys({ plan: bugPlan, evidence: { ...binding, journeys: [run(true)] }, picked: pickVerifier("deepseek", "grok/grok-4"), bugfixProved: true, ask: () => ({ verdict: "PASS", notes: "" }), work: dir });
+    assert.equal(proved.verdict, "PASS+NOTES");
+    assert.match(proved.notes, /no user path, and repro-first shows a changed test failing on the old code/);
+    const unproved = await judgeJourneys({ plan: bugPlan, evidence: { ...binding, journeys: [run(true)] }, picked: pickVerifier("deepseek", "grok/grok-4"), ask: () => ({ verdict: "PASS", notes: "" }), work: dir });
+    assert.equal(unproved.verdict, "UNEVALUATED");
+    assert.match(unproved.notes, /no repro journey: no user path: server startup only/);
   } finally {
-    for (const [key, value] of saved) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
