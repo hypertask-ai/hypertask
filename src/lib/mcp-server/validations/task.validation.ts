@@ -440,6 +440,14 @@ export function getUpdateTaskBaseSchema() {
         .optional()
         .describe('Due date in ISO 8601 format (e.g. "2026-03-10"). Pass null to clear/remove the due date.'),
       assignee: z.array(z.number().int().positive()).optional(),
+      remove_agents: z
+        .array(z.string().trim().min(1).max(120))
+        .min(1)
+        .max(20)
+        .optional()
+        .describe(
+          'Agent ids or display names to remove from this ticket. Removes only those agent assignees; people stay assigned. Use hypertask_list_project_members to resolve a name to an agent id.'
+        ),
       parent_task_id: z
       .number()
       .optional()
@@ -502,13 +510,14 @@ export function getUpdateTaskInputSchema() {
           data.labels !== undefined ||
           data.due_date !== undefined ||
           data.assignee !== undefined ||
+          data.remove_agents !== undefined ||
           data.parent_task_id !== undefined ||
           data.attachments !== undefined;
         return hasUpdateFields;
       },
       {
-        message: 'At least one update field (title, description, priority, estimate, status, sectionId, labels, due_date, assignee, parent_task_id, attachments) must be provided',
-        path: ['title', 'description', 'priority', 'estimate', 'status', 'sectionId', 'labels', 'due_date', 'assignee', 'parent_task_id', 'attachments'],
+        message: 'At least one update field (title, description, priority, estimate, status, sectionId, labels, due_date, assignee, remove_agents, parent_task_id, attachments) must be provided',
+        path: ['title', 'description', 'priority', 'estimate', 'status', 'sectionId', 'labels', 'due_date', 'assignee', 'remove_agents', 'parent_task_id', 'attachments'],
       }
     );
 }

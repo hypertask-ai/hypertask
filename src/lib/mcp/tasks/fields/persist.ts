@@ -19,6 +19,7 @@ import { updateTaskLabels } from './labels';
 import { updateTaskContract } from './contract';
 import { updateTaskPullRequest } from './pullRequest';
 import { updateTaskAssignees } from './assignees';
+import { removeTaskAgents } from './removeAgents';
 
 function isCallerRefusal(error: unknown): error is Error & { status: number; code: string; field?: string } {
     const { status, code } = (error ?? {}) as { status?: unknown; code?: unknown }
@@ -62,6 +63,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
             await updateTaskContract(context, task);
             await updateTaskPullRequest(context, task);
             await updateTaskAssignees(context, task);
+            await removeTaskAgents(context, task);
 
             return { success: true, taskId: task.id }
         } catch (error) {

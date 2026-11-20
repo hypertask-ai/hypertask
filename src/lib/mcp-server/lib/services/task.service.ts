@@ -827,6 +827,7 @@ export class TaskService {
         taskUpdate.labels !== undefined ||
         taskUpdate.due_date !== undefined ||
         taskUpdate.assignee !== undefined ||
+        taskUpdate.remove_agents !== undefined ||
         taskUpdate.parent_task_id !== undefined;
 
       let response: UpdateTaskResponse;

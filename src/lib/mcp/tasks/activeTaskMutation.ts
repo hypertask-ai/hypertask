@@ -3,6 +3,7 @@ export const ACTIVE_TASK_MUTATION_STATUS = 'Normal' as const
 interface ActiveTaskMutationInput {
   sectionId?: number
   assignee?: readonly number[]
+  remove_agents?: readonly string[]
 }
 
 export function isActiveTaskMutationTarget(status: string): boolean {
@@ -10,7 +11,7 @@ export function isActiveTaskMutationTarget(status: string): boolean {
 }
 
 export function hasActiveTaskOnlyMutation(input: ActiveTaskMutationInput): boolean {
-  return input.sectionId !== undefined || input.assignee !== undefined
+  return input.sectionId !== undefined || input.assignee !== undefined || input.remove_agents !== undefined
 }
 
 export function assigneeLookupStatusFilter(

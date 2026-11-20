@@ -66,6 +66,27 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         assigneeUserIds = parsed.ids;
     }
     
+    let removeAgentRefs: string[] | undefined;
+    if (requestBody.remove_agents !== undefined) {
+        const raw = requestBody.remove_agents;
+        const invalid = !Array.isArray(raw) || raw.length === 0 || raw.length > 20 ||
+            raw.some((ref) => typeof ref !== 'string' || ref.trim().length === 0 || ref.length > 120);
+        if (invalid) {
+            return NextResponse.json(
+                {
+                    ...buildFieldError(
+                        'invalid_field',
+                        'remove_agents',
+                        'remove_agents must be a list of 1-20 agent ids or display names'
+                    ),
+                    ...(dryRun && { valid: false })
+                },
+                { status: 400 }
+            );
+        }
+        removeAgentRefs = [...new Set(raw.map((ref) => ref.trim()))];
+    }
+
     const hasLabels = requestBody.labels !== undefined && Array.isArray(requestBody.labels);
     const hasLabelMutation =
         Array.isArray(requestBody.add_labels) || Array.isArray(requestBody.remove_labels);
@@ -99,6 +120,7 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
     }
     const hasDueDate = requestBody.due_date !== undefined;
     const hasAssigneeField = requestBody.assignee !== undefined;
+    const hasRemoveAgents = removeAgentRefs !== undefined;
     const hasDescriptionUpdate = requestBody.description !== undefined;
     const hasTextOrParentUpdate = hasSingleTaskUpdate(requestBody);
     const hasPullRequestUpdate = requestBody.pull_request_url !== undefined;
@@ -128,7 +150,7 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         }
         contractFieldUpdates = parsedContractFields.value;
     }
-    if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasContractFieldUpdate && !hasPullRequestUpdate) {
+    if (!hasTextOrParentUpdate && requestBody.estimate === undefined && requestBody.priority === undefined && !requestBody.sectionId && !requestBody.status && !hasLabels && !hasLabelMutation && !hasDueDate && !hasAssigneeField && !hasRemoveAgents && !hasContractFieldUpdate && !hasPullRequestUpdate) {
         console.log('[MCP Update Task] Validation failed: No fields to update')
         return NextResponse.json(
             {
@@ -213,5 +235,5 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         }
     }
 
-    return { assigneeUserIds, hasLabels, hasLabelMutation, hasDueDate, hasAssigneeField, hasDescriptionUpdate, hasTextOrParentUpdate, hasPullRequestUpdate, hasContractFieldUpdate, contractFieldUpdates, parsedPullRequest };
+    return { assigneeUserIds, removeAgentRefs, hasLabels, hasLabelMutation, hasDueDate, hasAssigneeField, hasDescriptionUpdate, hasTextOrParentUpdate, hasPullRequestUpdate, hasContractFieldUpdate, contractFieldUpdates, parsedPullRequest };
 }
