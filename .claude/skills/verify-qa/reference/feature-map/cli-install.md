@@ -7,24 +7,29 @@
 
 ## How to get to it (user POV)
 
-- Settings, CLI tab: `https://app.hypertask.ai/settings/cli` (`CliSection.tsx`).
-- Command menu "Install CLI" opens `CliInstallModal`.
-- Onboarding "connect your agent" step email and the guest demo board's CLI task (`completeOnboardingStep.ts`, `guestSeedTasks.ts`).
-- `https://app.hypertask.ai/llms.txt` for AI agents.
-- After install, `hypertask login --token <agent token>`; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).
-- Settings, Connect, Management keys: `https://app.hypertask.ai/settings/management-keys` (`src/components/Modals/Settings/ManagementKeysSection.tsx`). Create and list use `GET /api/mcp/admin/keys` and `POST /api/mcp/admin/keys`.
+- Settings, Connect, CLI: `https://app.hypertask.ai/settings/cli` (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`).
+- Command menu "Install CLI" opens `CliInstallModal` (`#cliInstallModal`).
+- Onboarding "connect your agent" step email and the guest demo board's CLI task (`completeOnboardingStep.ts`, `guestSeedTasks.ts`) print the same install command, but the onboarding text still tells the reader bare `hypertask login` does not sign in and prescribes `hypertask login --token <agent token>`. The Settings page and the modal both say `hypertask login` opens the browser to authorize; that is the shipped path today.
+- `https://app.hypertask.ai/llms.txt` for AI agents: `curl -fsSL https://hypertask.ai/install | sh`, then `hypertask login`, plus the PowerShell line.
+- After install the CLI signs in with `hypertask login` (browser authorize) or `hypertask login --token <agent token>` for agents; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).
+- Settings, Connect, Management keys: `https://app.hypertask.ai/settings/management-keys` (`src/components/Modals/Settings/ManagementKeysSection.tsx`). Create and list use `GET /api/mcp/admin/keys` and `POST /api/mcp/admin/keys`; revoke uses `DELETE /api/mcp/admin/keys`.
+
+The Windows note is printed by `llms.txt` and by Settings while
+`htpr-7033-cli-install-command` is on. The Ctrl+K modal does not print it.
 
 Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note sits behind `htpr-7033-cli-install-command`.
 
 ## Driving it with agent-browser
 
-1. Shoot `/settings/cli` with `phone-shot.sh` (390x844) and at 1440x900 with the QA state; read the command text from the page, not the source.
-2. `curl -fsS https://app.hypertask.ai/llms.txt` and check both commands.
-3. Run the shown commands for real into a scratch folder: `HYPERTASK_INSTALL_DIR=<scratch> sh -c 'curl -fsSL https://hypertask.ai/install | sh'`, then `<scratch>/hypertask --version`. For Windows, run `irm https://hypertask.ai/install.ps1 | iex` in PowerShell (pwsh on Linux works with `HYPERTASK_INSTALL_DIR` set) and compare the exe's SHA-256 with the release `checksums.txt`.
-4. With a QA agent of account 985 and a temporary `HOME`, run `hypertask login --token <agent token>` in default JSON and `--human` modes. Never print tokens. Require `signedInAs` / "Signed in as" to identify the agent name and "agent of <owner>", the newest board across all boards the token can see with its URL (not just the first 50; a missing title falls back to the short name), and the server's next steps: 3 for write agents, 2 for read-only agents (list and playbook, no create). With no board, `--human` must say "No board yet. Create one in your Hypertask web app." Require each login to finish within 5 s.
-5. Repeat with a trailing slash in `--api-url`. The CLI waits at most about 1.5 s for the guide. Use a local failure/delay endpoint: any hello failure or no response within about 1.5 s must print the old saved output in both modes, exit 0 and keep the token saved. Do not point failure injection at production.
-6. Reuse `node ~/.local/state/vcc-evidence/HTPR-7519/live-check.mjs` with env inputs `HT_QA_AGENT_TOKEN`, `CLI_BIN`, `API_URL` (API base including `/api`) and optionally `MCP_URL` (default `https://mcp.hypertask.ai/mcp`). It uses temporary homes, calls MCP `tools/list` with the same token, checks that each step tool and action is advertised, checks role-dependent step counts when the role is exposed (otherwise accepts 2 or 3 with list and playbook required), asserts each login finishes within 5 s, and runs only list/playbook reads. Never run the create step against production. The CLI prints the server's steps; with MCP v2 (on for Everyone), those advertise `hypertask_tasks` with `{"action":"list","input":{"project_id":ID}}` or `{"action":"create","input":{"project_id":ID,"title":"My first task"}}`, and `hypertask_projects` with `{"action":"playbook","input":{"project_id":ID}}`. Legacy catalogs retain the old tool names and top-level arguments. Check no-board, fallback and trailing-slash cases separately.
-7. With `htpr-6542-team-scoped-management-keys` on, open `/settings/management-keys`. The Team row lists Whole account and each team the account can use. Choosing a team disables Full access. A Usage key can be limited only to a team the account owns. The hint under the row says whether the key is account-wide, reads usage for any owned team, reads usage for the selected team, manages agents and keys across the account, or manages them only in the selected team. Existing keys show Whole account or the team title. A team-limited key is prefixed `httk_`. An account key is prefixed `htmk_`. Do not create a key on a shared account. On a disposable account, revoke any key you create before leaving. With the flag off, the Team row is absent, and `POST /api/mcp/admin/keys` with a `teamId` returns 403 and `Team-scoped management keys are not enabled.` A presented `httk_` key then fails auth. Approving a claimed device pairing also returns 403 `access_denied` while the flag is off, because that approval creates a team-scoped agent. Do not approve a pairing to prove the on path. It creates a team and a board.
+1. Shoot `/settings/cli` with `phone-shot.sh` (390x844) and at 1440x900 with the QA state. Read the visible text, not the source: the page shows `curl -fsSL https://hypertask.ai/install | sh`, `hypertask login`, `Windows (PowerShell): irm https://hypertask.ai/install.ps1 | iex` while `htpr-7033-cli-install-command` is on, and `Read the CLI docs`.
+2. `curl -fsS https://app.hypertask.ai/llms.txt | sed -n '11,12p'` shows the same two commands plus the Windows line.
+3. Open Ctrl+K, type `install cli`, open the `Install CLI` row. `#cliInstallModal` shows `Hypertask CLI`, `1. Install`, `2. Sign in`, and `Opens your browser to authorize the CLI for your account.` The two commands sit in read-only inputs (`.value`), so read the inputs, not `innerText`. The modal has no Windows line.
+4. Run the shown command for real into a scratch folder: `HYPERTASK_INSTALL_DIR=<scratch> sh -c 'curl -fsSL https://hypertask.ai/install | sh'`, then `<scratch>/hypertask --version`. Verified 2026-11-20: `hypertask 0.2.68 (zig)`.
+5. `ht-verify flags show htpr-7033-cli-install-command` and `ht-verify flags show htpr-6542-team-scoped-management-keys` confirm the modes before judging the screens.
+6. With `htpr-6542-team-scoped-management-keys` on, open `/settings/management-keys`: the `CREATE KEY` form has Scope (Management, Usage, Full access) and Team (`Whole account` plus each team). Choosing a team disables Full access. Do not create a key on a shared account.
+7. With a QA agent of account 985 and a temporary `HOME`, run `hypertask login --token <agent token>` in default JSON and `--human` modes. Never print tokens. Require `signedInAs` / "Signed in as" to name the agent and "agent of <owner>", the newest visible board with its URL, and 3 next steps for a write agent or 2 (list and playbook, no create) for a read-only agent; no board prints "No board yet. Create one in your Hypertask web app." and each login finishes within 5 s.
+8. Repeat with a trailing slash in `--api-url`, and test failure injection only against a local endpoint: a hello failure or no response within about 1.5 s must print the saved output, exit 0 and keep the token saved. Never point failure injection at production, and never run the create step there.
+9. The hosted guided-start checker is `node ~/.local/state/vcc-evidence/HTPR-7519/live-check.mjs` with `HT_QA_AGENT_TOKEN`, `CLI_BIN`, `API_URL` (including `/api`) and optional `MCP_URL`. It uses temporary homes, calls MCP `tools/list`, requires the advertised `hypertask_tasks` list/create actions and `hypertask_projects` playbook, and runs only list/playbook reads.
 
 ## Gotchas
 
@@ -33,6 +38,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 - Hello errors or timeouts turn a successful token save into a failed or hanging login.
 - Test fixtures in `tests/fixtures/cli-install/legacy.json` holding the old command.
 - A team-limited key (`httk_`), or an agent token that carries a team id, is refused while `htpr-6542-team-scoped-management-keys` is off.
+- The Settings page, the Ctrl+K modal and `llms.txt` all print bare `hypertask login`, while the onboarding agent step (HTPR-7549 flag) says bare login does not sign in and prescribes `--token`. Treat the Settings/modal text as shipped and the onboarding sentence as a product copy gap.
 
 ### What proof to collect
 

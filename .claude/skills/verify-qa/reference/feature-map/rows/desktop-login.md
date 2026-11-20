@@ -1,1 +1,1 @@
-| Desktop human CLI login | [desktop-login.md](desktop-login.md) | QA 985 bearer exchange, shared and legacy route checks, isolated task save, cookie/flag-off/permission controls |
+| Desktop human CLI login | [desktop-login.md](desktop-login.md) | `/cli-auth` consent and cancel, `/login/agent` code, human bearer sessions and revoke, no-token 401 |

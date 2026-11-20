@@ -1,1 +1,1 @@
-| Board task templates | [task-templates.md](task-templates.md) | QA 985 settings edit, authoring, saved reload and permission controls |
+| Board task templates | [task-templates.md](task-templates.md) | flag OFF: `ht-verify` GET/POST/DELETE `/api/task-templates` and PATCH 403; settings section absent |

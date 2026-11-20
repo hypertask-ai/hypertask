@@ -1,1 +1,1 @@
-| Themes | [themes.md](themes.md) | Settings and Ctrl+K selection, reload, all-theme desktop/phone comparison |
+| Themes | [themes.md](themes.md) | `ht-verify` Appearance pick, `html[data-theme]` + `theme` cookie, Ctrl+K switch, AMOLED switch inner span |

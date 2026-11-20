@@ -10,9 +10,19 @@ The rocket-digest agent (agent-fleet `workers/rocket-digest`) reads and posts th
 
 ## Driving it with agent-browser
 
-Without any login, probe all four method/route combinations against https://app.hypertask.ai. Each must answer JSON `{"error":"Unauthorized"}` with status 401, never Vercel's HTML 500 page (`x-matched-path: /500`). Also send `Authorization: Bearer not-a-real-firebase-token` to `postAnnouncement`: 401 JSON proves a safe denial, not that Firebase Admin loaded: import or initialization failures also return 401. With an authorized admin QA account, a valid Firebase admin ID token must succeed on the read-only announcements GET to prove that auth path works; if unavailable, record that proof as unreachable. Never use the owner credential for writes from QA; the agent's next scheduled run (cron `23 7 */2 * *`) is the end-to-end proof.
+Without any login, probe all four method/route combinations against https://app.hypertask.ai. Each must answer JSON `{"error":"Unauthorized"}` with status 401, never Vercel's HTML 500 page (`x-matched-path: /500`). The routes are Pages API files, not App Router: `src/pages/api/admin/announcements/getAnnouncements.ts:14-20`, `src/pages/api/admin/announcements/updateAnnouncement.ts:19-52`, `src/pages/api/admin/postAnnouncement.ts:20-30`, with the owner secret checked before Firebase in `src/lib/admin/requireAnnouncementAdmin.ts:4-44`. Also send `Authorization: Bearer not-a-real-firebase-token` to `postAnnouncement`: 401 JSON proves a safe denial, not that Firebase Admin loaded: import or initialization failures also return 401. With an authorized admin QA account, a valid Firebase admin ID token must succeed on the read-only announcements GET to prove that auth path works; if unavailable, record that proof as unreachable. Never use the owner credential for writes from QA; the agent's next scheduled run (cron `23 7 */2 * *`) is the end-to-end proof.
 
 Locally, `node --no-experimental-require-module -e "require('firebase-admin/auth')"` reproduces Vercel's module loading: it must not throw `ERR_REQUIRE_ESM`.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs announcements-admin-api --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`announcements-admin-api ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

@@ -26,8 +26,8 @@ test("the planted phone only bug fails through the real drive, not through the m
   const result = await judgeDrivenCase({ ask: async () => ({ verdict: "PASS", notes: "The saved field is visible." }) });
   assert.equal(result.verdict, "FAIL");
   assert.equal(result.ok, true);
-  assert.match(result.notes, /change:primary \[phone\]: regression at step \d+/);
-  assert.doesNotMatch(result.notes, /change:primary \[desktop\]: regression/);
+  assert.match(result.notes, /change:primary \[phone\]: failed at step \d+/);
+  assert.doesNotMatch(result.notes, /change:primary \[desktop\]:/);
   const desktop = result.evidence.journeys.find((run) => run.viewport === "desktop");
   const phone = result.evidence.journeys.find((run) => run.viewport === "phone");
   assert.ok(desktop.expects.every((expect) => expect.ok));

@@ -169,8 +169,8 @@ test('CLI fails for ops drift and weekly reports its moved recipe', t => {
 
 test('repo paths strip citations, punctuation, commands and anchors; ignore globs, placeholders and explicit external-repo scopes', t => {
   const f = fixture(t);
-  const markdown = '`src/shared.ts:1#anchor`, `e2e/smoke/`. `.claude/tool run args` `docs/a.md:2:3-8`; `scripts/*.sh` `public/<name>.png` `prisma/{a,b}` `src/x?.ts` (installers live in the `other/project` repo, `public/install.sh`). `src/a.ts src/b.ts`';
-  assert.deepEqual(repoPaths(markdown), ['.claude/tool', 'docs/a.md', 'e2e/smoke', 'src/a.ts', 'src/b.ts', 'src/shared.ts']);
+  const markdown = '`src/shared.ts:1#anchor`, `e2e/smoke/`. `.claude/tool run args` `docs/a.md:2:3-8`; `scripts/*.sh` `public/<name>.png` `prisma/{a,b}` `src/x?.ts` (installers live in the `other/project` repo, `public/install.sh`). `src/a.ts src/b.ts` `docs/b.md:457,559` `docs/c.md:15,45-53,60`';
+  assert.deepEqual(repoPaths(markdown), ['.claude/tool', 'docs/a.md', 'docs/b.md', 'docs/c.md', 'e2e/smoke', 'src/a.ts', 'src/b.ts', 'src/shared.ts']);
   for (const name of repoPaths(markdown)) f.put(name);
   f.put(`${mapPath}/area-00.md`, markdown);
   assert.deepEqual(checkFeatureMap(f.repo), []);
