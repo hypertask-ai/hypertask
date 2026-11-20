@@ -2,12 +2,12 @@ import { strict as assert } from "node:assert";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { home, json } from "../test-helpers.mjs";
+import { home, json, serve } from "../test-helpers.mjs";
 
-function seeded(dir) {
+function seeded(dir, port = 9) {
   mkdirSync(join(dir, "default", "browser"), { recursive: true });
   writeFileSync(join(dir, "default", "browser", "state.json"), JSON.stringify({ cookies: [{ name: "ht_session", value: "private", domain: "127.0.0.1", path: "/", expires: -1 }] }));
-  writeFileSync(join(dir, "default", "env.json"), JSON.stringify({ baseUrl: "http://127.0.0.1:9" }));
+  writeFileSync(join(dir, "default", "env.json"), JSON.stringify({ baseUrl: `http://127.0.0.1:${port}` }));
 }
 
 test("api refuses a write without --confirm and prints a dry run instead", async () => {
@@ -30,6 +30,25 @@ test("api resolves --account through qa-login and refuses an unknown one before 
   assert.equal(unknown.json.error.code, "usage");
   assert.match(unknown.json.error.message, /unknown account nope/);
   assert.match(unknown.json.error.next, /--state/);
+});
+
+test("api reports a 403 as a route refusal, not an expired identity", async () => {
+  const server = await serve(403);
+  const dir = home();
+  seeded(dir, server.address().port);
+  try {
+    const refused = await json(dir, ["api", "GET", "/login"]);
+    assert.equal(refused.status, 1);
+    assert.equal(refused.json.error.code, "forbidden");
+    assert.doesNotMatch(refused.json.error.message, /identity expired/);
+    assert.match(refused.json.error.next, /not an expired identity/);
+    assert.equal(refused.json.data.status, 403);
+    const ok = await json(dir, ["api", "GET", "/api/flags"]);
+    assert.equal(ok.status, 0);
+    assert.equal(ok.json.ok, true);
+  } finally {
+    server.close();
+  }
 });
 
 test("api needs a path and never prints the cookie", async () => {

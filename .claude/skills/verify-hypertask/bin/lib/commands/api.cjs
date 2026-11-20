@@ -15,7 +15,8 @@ Usage:
   --base     base URL, default from the run folder env.json, else app.hypertask.ai.
   --state    auth state. Its cookies are sent and never printed.
   --account  QA account for a production request, resolved through qa-login.
-             Default flags (user 985) when no state, session or seed is present.  --confirm  required for a write, because a write reaches shared data.
+             Default flags (user 985) when no state, session or seed is present.
+  --confirm  required for a write, because a write reaches shared data.
   --dry-run  print the request shape and send nothing.
 
 A write without --confirm is refused. The response body is returned as JSON up to

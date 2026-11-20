@@ -44,15 +44,14 @@ $H session start --base https://app.hypertask.ai --viewport 1440x900
 $H open /my-tasks --full
 ```
 
-Press the shortcut through the session's CDP port, because no ht-verify command
-sends a bare key:
+Press the shortcut with `$H press`, which sends a real key or chord to the
+session and reports the landed URL and the focused element:
 
 ```bash
-P=$($H session status | jq -r .data.port)
-node -e 'const{chromium}=require("playwright");(async()=>{const b=await chromium.connectOverCDP("http://127.0.0.1:'"$P"'");const p=b.contexts()[0].pages()[0];await p.keyboard.press("Control+k");await b.close()})()'
+$H press "Control+k"
 ```
 
-Then `$H open /my-tasks` again for Ctrl+J, and drive with `$H fill '#htc-search'
+Then `$H press "Control+j"` for Ctrl+J, and drive with `$H fill '#htc-search'
 'copy private'` and `$H shot --session --out <png>`.
 
 Require on Search: tabs `Search` (selected) and `New Task` inside the window,
