@@ -186,40 +186,49 @@ preflight() {
 owner_name() {  # who this session is, the way the rest of the repo names it
   local name=${SHIP_SESSION_NAME:-}
   if [ -z "$name" ]; then
-    name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity" 2>/dev/null | cut -f1)
+    name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity" 2>/dev/null | cut -f1) || return 1
   fi
   printf '%s' "${name%% | *}"
 }
 
 refuse_second_pr() {  # HTPR-9519: one open PR per runner at a time
-  local name prs mine
-  name="$(owner_name)"
+  local name branch prs mine
+  name="$(owner_name)" \
+    || die "the session identity could not be read, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name, or check that .claude/skills/ship/scripts/ship-identity runs; nothing was pushed."
+  [ -n "$name" ] \
+    || die "the session identity is empty, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name and re-run; nothing was pushed."
   case "$name" in
-    ''|'Valentins Claude Code') return 0 ;;  # the owner's own session, not a runner
+    'Valentins Claude Code') return 0 ;;  # the owner's own session, not a runner
   esac
+  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   prs="$(gh pr list -R hypertask-ai/hypertask --state open --limit 300 \
     --json number,isDraft,headRefName 2>/dev/null)" \
     || die "the open pull requests could not be read, so $SELF cannot tell whether $name already has one." "Retry when 'gh pr list -R hypertask-ai/hypertask --state open' works; nothing was pushed."
   mine="$(printf '%s' "$prs" | python3 -c '
 import json, re, sys
-name = sys.argv[1]
+name, branch = sys.argv[1], sys.argv[2]
 key = lambda s: re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", s.lower())).strip("-")
-prefixes = {key(name)} | {key(w) for w in re.split(r"[^A-Za-z0-9]+", name) if len(w) > 2}
+words = [w for w in re.split(r"[^A-Za-z0-9]+", name) if w]
+prefixes = {key(name)}
+tail = key(words[-1]) if words else ""
+if len(tail) > 2 and tail not in {"runner", "ci", "hax", "infra", "ceo"}:
+    prefixes.add(tail)
 slot = re.search(r"(?:^|[^a-z0-9])runner[-_ ]?([1-9][0-9]*)", name, re.I)
 if slot:
     prefixes |= {"runner-" + slot.group(1), "runner" + slot.group(1)}
-def mine(branch):
-    branch = branch.lower()
-    return not branch.startswith("dependabot/") and any(
-        re.match(re.escape(p) + r"($|[/_-])", branch) for p in prefixes)
+def mine(pr):
+    head = str(pr.get("headRefName") or "").lower()
+    if head.startswith("dependabot/") or head == branch.lower():
+        return False
+    return any(re.match(re.escape(p) + r"($|[/_-])", head) for p in prefixes)
 try:
     prs = json.load(sys.stdin)
 except ValueError:
     sys.exit(1)
 print("\n".join("https://github.com/hypertask-ai/hypertask/pull/%d" % pr["number"]
                 for pr in prs if isinstance(pr, dict) and type(pr.get("number")) is int
-                and pr.get("isDraft") is False and mine(str(pr.get("headRefName") or ""))))
-' "$name")" \
+                and pr.get("isDraft") is False and mine(pr)))
+' "$name" "$branch")" \
     || die "the open pull request list could not be read for $name." "Retry when 'gh pr list -R hypertask-ai/hypertask --state open' works; nothing was pushed."
   [ -z "$mine" ] || die "$name already has $(printf '%s\n' "$mine" | wc -l | tr -d ' ') open pull request(s): ${mine%%$'\n'*}$(printf '%s\n' "$mine" | sed -n '2s/.*/ (and more)/p'). $SELF opens one PR per runner." "Finish it (Babysit to a verifier PASS) or close it first, then re-run. Nothing was pushed."
 }

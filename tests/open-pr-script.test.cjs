@@ -20,13 +20,16 @@ function runScript(t, args = [], env = {}) {
 printf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"
 case '${command} '"$*" in
   'git rev-parse --show-toplevel'*) echo "$OPEN_PR_ROOT" ;;
+  'git rev-parse --abbrev-ref HEAD'*) printf '%s\\n' "\${CURRENT_BRANCH:-}" ;;
   'git fetch '*) exit 0 ;;
   'git diff '*) printf '%s' "\${DIFF_NUMSTAT:-}"; exit "\${DIFF_EXIT:-0}" ;;
   'git push '*) exit "\${PUSH_EXIT:-0}" ;;
   'gh pr create '*)
     if [ "\${CREATE_EXIT:-0}" != 0 ]; then echo 'create refused' >&2; exit "$CREATE_EXIT"; fi
     echo '${prUrl}' ;;
-  'gh pr list '*) printf '%s' "\${OPEN_PRS:-[]}" ;;
+  'gh pr list '*)
+    if [ "\${PR_LIST_EXIT:-0}" != 0 ]; then echo 'list refused' >&2; exit "$PR_LIST_EXIT"; fi
+    printf '%s' "\${OPEN_PRS:-[]}" ;;
   'gh pr merge '*) echo 'Auto merge is not allowed for this repository' >&2; exit 1 ;;
   'vcc task move '*) exit "\${MOVE_EXIT:-0}" ;;
   'hypertask --json task get '*)
@@ -45,6 +48,8 @@ esac
   return { ...result, commands: fs.readFileSync(log, 'utf8').trim().split('\n') };
 }
 
+const openPrs = (...prs) => JSON.stringify(prs);
+
 for (const [lane, section] of [
   [null, 'AI Review'],
   ['ai-review', 'AI Review'],
@@ -57,15 +62,16 @@ for (const [lane, section] of [
     assert.ok(result.stdout.split('\n').includes(`  pr:        ${prUrl}`));
     assert.ok(result.stdout.includes(`section:   ${section} (read back from the board)`));
     assert.match(result.stdout, /automerge=no/);
-    assert.equal(result.commands.length, 8);
+    assert.equal(result.commands.length, 9);
     assert.equal(result.commands[0], 'git rev-parse --show-toplevel');
     assert.equal(result.commands[1], 'git fetch origin production');
     assert.match(result.commands[2], /^git diff --numstat -M --no-ext-diff --diff-filter=ADMR origin\/production\.\.\.HEAD$/);
-    assert.equal(result.commands[3], 'gh pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,isDraft,headRefName');
-    assert.equal(result.commands[4], 'git push -u origin HEAD');
-    assert.match(result.commands[5], /^gh pr create --base production /);
-    assert.equal(result.commands[6], `vcc task move HTPR-6706 --section ${section}`);
-    assert.equal(result.commands[7], 'hypertask --json task get HTPR-6706');
+    assert.equal(result.commands[3], 'git rev-parse --abbrev-ref HEAD');
+    assert.equal(result.commands[4], 'gh pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,isDraft,headRefName');
+    assert.equal(result.commands[5], 'git push -u origin HEAD');
+    assert.match(result.commands[6], /^gh pr create --base production /);
+    assert.equal(result.commands[7], `vcc task move HTPR-6706 --section ${section}`);
+    assert.equal(result.commands[8], 'hypertask --json task get HTPR-6706');
     assert.ok(!result.commands.some((command) => command.startsWith('gh pr merge')));
   });
 }
@@ -87,8 +93,9 @@ test('dry run leaves auto-merge off without executing external commands', (t) =>
   assert.equal(result.commands[0], 'git rev-parse --show-toplevel');
   assert.equal(result.commands[1], 'git fetch origin production');
   assert.match(result.commands[2], /^git diff /);
-  assert.equal(result.commands.length, 4);
-  assert.match(result.commands[3], /^gh pr list -R hypertask-ai\/hypertask --state open /);
+  assert.equal(result.commands.length, 5);
+  assert.equal(result.commands[3], 'git rev-parse --abbrev-ref HEAD');
+  assert.equal(result.commands[4], 'gh pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,isDraft,headRefName');
 });
 
 test('an over-cap diff is refused before the push', (t) => {
@@ -127,12 +134,12 @@ test('an unmeasurable diff refuses the handoff instead of guessing', (t) => {
 });
 
 for (const [name, env, error, commandCount] of [
-  ['push failure', { PUSH_EXIT: '1' }, /git push to origin failed/, 5],
-  ['PR creation failure', { CREATE_EXIT: '1' }, /gh pr create failed/, 6],
-  ['board move failure', { MOVE_EXIT: '1' }, /Moving HTPR-6706 to 'AI Review' failed/, 7],
-  ['board read failure', { READ_EXIT: '1' }, /Could not read HTPR-6706 back/, 8],
-  ['wrong review section', { BOARD_SECTION: 'Agent Blocked (Infra)' }, /not 'AI Review'.*wrong review queue/, 8],
-  ['in progress readback after review move', { BOARD_SECTION: 'In Progress' }, /in 'In Progress', not 'AI Review'.*wrong review queue/, 8],
+  ['push failure', { PUSH_EXIT: '1' }, /git push to origin failed/, 6],
+  ['PR creation failure', { CREATE_EXIT: '1' }, /gh pr create failed/, 7],
+  ['board move failure', { MOVE_EXIT: '1' }, /Moving HTPR-6706 to 'AI Review' failed/, 8],
+  ['board read failure', { READ_EXIT: '1' }, /Could not read HTPR-6706 back/, 9],
+  ['wrong review section', { BOARD_SECTION: 'Agent Blocked (Infra)' }, /not 'AI Review'.*wrong review queue/, 9],
+  ['in progress readback after review move', { BOARD_SECTION: 'In Progress' }, /in 'In Progress', not 'AI Review'.*wrong review queue/, 9],
 ]) {
   test(`${name} remains a failed handoff`, (t) => {
     const result = runScript(t, [], env);
@@ -141,8 +148,8 @@ for (const [name, env, error, commandCount] of [
     assert.doesNotMatch(result.stdout, /PR opened\./);
     assert.equal(result.commands.length, commandCount);
     if (name === 'in progress readback after review move') {
-      assert.equal(result.commands[6], 'vcc task move HTPR-6706 --section AI Review');
-      assert.equal(result.commands[7], 'hypertask --json task get HTPR-6706');
+      assert.equal(result.commands[7], 'vcc task move HTPR-6706 --section AI Review');
+      assert.equal(result.commands[8], 'hypertask --json task get HTPR-6706');
     }
   });
 }
@@ -151,28 +158,67 @@ for (const [who, branch] of [
   ['HT Pstack Boss', 'boss/9412-earlier-fix'],
   ['RUNNER 3', 'runner-3/yper4-876'],
   ['RUNNER 3', 'runner3/HTPR-9001'],
+  ['CI Runner 3', 'ci-runner-3/yper4-876'],
 ]) {
   test(`${who} is refused a second PR while ${branch} is open`, (t) => {
     const result = runScript(t, [], {
       SHIP_SESSION_NAME: who,
-      OPEN_PRS: JSON.stringify([{ number: 3712, isDraft: false, headRefName: branch }]),
+      OPEN_PRS: openPrs({ number: 3712, isDraft: false, headRefName: branch }),
     });
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /already has 1 open pull request\(s\): https:\/\/github\.com\/hypertask-ai\/hypertask\/pull\/3712/);
     assert.match(result.stderr, /Finish it \(Babysit to a verifier PASS\) or close it first/);
     assert.doesNotMatch(result.stdout, /PR opened\./);
-    assert.equal(result.commands.length, 4);
+    assert.equal(result.commands.length, 5);
+  });
+}
+
+for (const [who, branch] of [
+  ['RUNNER 3', 'runner-4/yper4-700'],
+  ['RUNNER 3', 'runner4/HTPR-9002'],
+  ['HT Pstack Boss', 'runner-3/yper4-876'],
+]) {
+  test(`${who} is not blocked by ${branch}`, (t) => {
+    const result = runScript(t, [], {
+      SHIP_SESSION_NAME: who,
+      OPEN_PRS: openPrs({ number: 3701, isDraft: false, headRefName: branch }),
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /PR opened\./);
   });
 }
 
 test('another runner, a draft and a Dependabot bump do not hold this runner back', (t) => {
   const result = runScript(t, [], {
-    OPEN_PRS: JSON.stringify([
+    OPEN_PRS: openPrs(
       { number: 3701, isDraft: false, headRefName: 'runner-3/yper4-876' },
       { number: 3702, isDraft: true, headRefName: 'boss/9492-daily-live-pass' },
       { number: 3703, isDraft: false, headRefName: 'dependabot/npm_and_yarn/next-16.4.6' },
-    ]),
+    ),
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /PR opened\./);
 });
+
+test('a re-run on the branch that already has its PR is not refused by itself', (t) => {
+  const result = runScript(t, [], {
+    CURRENT_BRANCH: 'boss/9492-daily-live-pass',
+    OPEN_PRS: openPrs({ number: 3729, isDraft: false, headRefName: 'boss/9492-daily-live-pass' }),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /PR opened\./);
+});
+
+for (const [name, env, error] of [
+  ['an unreadable open PR list', { PR_LIST_EXIT: '1' }, /the open pull requests could not be read/],
+  ['malformed open PR JSON', { OPEN_PRS: 'not json' }, /the open pull request list could not be read for HT Pstack Boss/],
+]) {
+  test(`${name} refuses the handoff instead of guessing`, (t) => {
+    const result = runScript(t, [], env);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, error);
+    assert.match(result.stderr, /nothing was pushed/);
+    assert.doesNotMatch(result.stdout, /PR opened\./);
+    assert.equal(result.commands.length, 5);
+  });
+}
