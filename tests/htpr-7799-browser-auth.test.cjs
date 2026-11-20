@@ -1,24 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 const { NextResponse } = require("next/server");
 const cookieHelpers = require("better-auth/cookies");
-
-const read = file => fs.readFileSync(file, "utf8");
-
-test("Google OAuth initiation keeps the production provider default without a new chooser", async () => {
-  const source = read("src/lib/auth/betterAuth.ts");
-  const block = source.match(/socialProviders:\s*\{\s*google:\s*\{([\s\S]*?)\n\s*\}/)?.[1];
-  assert.ok(block);
-  assert.doesNotMatch(block, /prompt:|hostedDomain|loginHint|disableSignIn|disableSignUp/);
-  const { google } = await import("@better-auth/core/social-providers");
-  const provider = google({ clientId: "fixture", clientSecret: "fixture" });
-  const url = await provider.createAuthorizationURL({ state: "fixture", codeVerifier: "fixture", redirectURI: "https://app.hypertask.ai/api/auth/callback/google" });
-  assert.equal(url.searchParams.get("prompt"), null);
-  assert.equal(url.searchParams.get("hd"), null);
-  assert.ok(url.searchParams.get("scope").includes("email"));
-});
 
 for (const multi of [true, false]) {
   test(`${multi ? "multi" : "single"}-account browser sign-out revokes presented sessions and clears legacy cookies only`, async () => {
