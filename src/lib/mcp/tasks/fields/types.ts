@@ -71,6 +71,7 @@ export interface UpdateTaskBody {
     skip_if_labels_present?: (string | number)[];
     due_date?: string | null;
     assignee?: number[];
+    remove_agents?: string[];
     parent_task_id?: number | null;
     risk_level?: string;
     acceptance_criteria?: string;
@@ -144,6 +145,7 @@ export interface TaskUpdateFieldContext {
     contractFieldUpdates: ContractFieldUpdates;
     parsedPullRequest: ReturnType<typeof parseGithubPullRequestUrl>;
     assigneeUserIds: number[] | undefined;
+    removeAgentRefs: string[] | undefined;
     assignAssignees: ExecuteTaskUpdateOptions['assignAssignees'];
     clearAssignees: ExecuteTaskUpdateOptions['clearAssignees'];
     linkPullRequest: typeof linkTaskPullRequest;
