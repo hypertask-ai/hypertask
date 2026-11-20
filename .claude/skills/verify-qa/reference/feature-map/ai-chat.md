@@ -320,8 +320,10 @@ automatic opening comes back.
 
 ### Floating chat outline
 
-Open chat from a task, use the overflow menu's **Toggle Floating View**, then
-navigate to Inbox and reopen chat if navigation closed it. In AMOLED the
+Open chat from a task, use the overflow menu's **Floating window**, then
+navigate to Inbox and reopen chat if navigation closed it. The row reads
+**Sidebar** while the chat is already floating
+(`src/components/AI_CHAT/ChatHeader.tsx:778`). In AMOLED the
 floating window has a quiet 1px outline and 5px corners, including the outer
 phone sheet. Capture 1440x900 and 390x844 over the inbox. Compare the window
 size with the outline disabled; it must not change. Porcelain, Graphite and
@@ -363,8 +365,9 @@ from the saved value, not from a fresh pick.
 2. `POST /api/app-shell/bootstrap` still returns that saved string, so the
    migration happens on read, not by rewriting stored data.
 3. Open the AI chat on the account's board: the picker shows the replacement
-   model only, and the old label is gone. Settings > AI default models and the
-   Android composer (`POST /api/android/ai/composer`) list the same set.
+   model only, and the old label is gone. Settings > Default models and the
+   Android composer (`POST /api/android/ai/composer`) list the same set
+   (`src/components/Modals/Settings/settingsNavigation.ts:159`).
 4. Send a message and record the `modelOptionId` in the `POST
    /api/ai/chat/stream` body: it must be the replacement id, and the reply must
    arrive from that model, not a fallback.
@@ -413,6 +416,16 @@ message and composer stay inside the viewport, and ordinary text replies
 still render. With `htpr-7683-ai-chat-ticket-rows` off, replies and history
 must remain text-only. The server entry points are
 `POST /api/ai/chat/stream` and `GET /api/ai-chat/all-sessions`.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs ai-chat --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`ai-chat ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

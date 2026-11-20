@@ -47,6 +47,16 @@ both belong to.
    Reads when it next runs, and require the chat inbox tool on an agent token.
    Do not invent a second chat registration.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs agent-chat-roster --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`agent-chat-roster ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 Board-post ordering returns; missing timestamps lose name ties; revoked or

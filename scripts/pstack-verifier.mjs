@@ -11,7 +11,6 @@ const journeyLib = libRequire("./lib/pstack-journeys.cjs");
 const compareLib = libRequire("./lib/pstack-compare.cjs");
 
 export const FEATURE_MAP_DIR = ".claude/skills/verify-qa/reference/feature-map";
-export const BASE_CACHE_DIR = "base-cache";
 export const AREA_JOURNEY_LIMIT = 6;
 export const JOURNEY_RUN_LIMIT = (AREA_JOURNEY_LIMIT + 2) * 2;
 
@@ -161,11 +160,45 @@ export function normalizeVerdict(verdict, notes = "") {
   if (value === "FAIL") return "FAIL";
   return "";
 }
+function cutMarks(text) {
+  const marks = [];
+  const stack = [];
+  const mark = (end) => marks.push({ end, stack: stack.slice() });
+  let inString = false, escaped = false;
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "\"") { inString = false; mark(at + 1); }
+      continue;
+    }
+    if (char === "\"") inString = true;
+    else if (char === "{") stack.push("}");
+    else if (char === "[") stack.push("]");
+    else if (char === "}" || char === "]") { stack.pop(); mark(at + 1); }
+    else if (char === ",") mark(at);
+  }
+  return { marks, open: stack, inString };
+}
+function closeCutObject(text) {
+  const { marks, open, inString } = cutMarks(text);
+  if (!marks.length) return null;
+  const closers = open.slice().reverse().join("");
+  const candidates = [
+    `${text}${inString ? "\"" : ""}${closers}`,
+    ...marks.slice(-60).reverse().map((mark) => `${text.slice(0, mark.end).replace(/[,\s]+$/, "")}${mark.stack.slice().reverse().join("")}`),
+  ];
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate); } catch { continue; }
+  }
+  return null;
+}
 export function jsonObjects(text) {
   const objects = [];
-  let error = null;
+  let error = null, cut = false;
   for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
-    let depth = 0, inString = false, escaped = false;
+    let depth = 0, inString = false, escaped = false, closed = false;
     for (let at = start; at < text.length; at++) {
       const char = text[at];
       if (inString) {
@@ -177,24 +210,33 @@ export function jsonObjects(text) {
       if (char === '"') inString = true;
       else if (char === "{") depth++;
       else if (char === "}" && --depth === 0) {
+        closed = true;
         try { objects.push(JSON.parse(text.slice(start, at + 1))); } catch (failure) { error = error ?? failure; }
         break;
       }
     }
+    if (!closed) cut = true;
   }
-  return { objects, error };
+  if (cut) {
+    const start = text.indexOf("{");
+    const repaired = closeCutObject(text.slice(start));
+    if (repaired) objects.push(repaired);
+  }
+  return { objects, error, cut };
 }
 function jsonObject(text, keys = []) {
   const raw = String(text ?? "").replace(/```(?:json)?/gi, " ");
-  const { objects, error } = jsonObjects(raw);
+  const { objects, error, cut } = jsonObjects(raw);
   const wanted = objects.find((body) => body && typeof body === "object" && !Array.isArray(body) && (!keys.length || keys.some((key) => key in body)));
-  if (!wanted) throw new Error(`model answer was not JSON${error ? `: ${error.message}` : ""}`);
+  if (!wanted) throw new Error(`model answer was not JSON${error ? `: ${error.message}` : ""}${cut ? ` (the answer stopped mid-object at ${raw.trim().length} characters)` : ""}`);
   return wanted;
 }
 export function parseAnswer(text) {
   const body = jsonObject(text, ["verdict", "notes"]);
   const notes = String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
-  return { actions: readActions(body.actions, 6), notes, verdict: normalizeVerdict(body.verdict, notes) };
+  const verdict = normalizeVerdict(body.verdict, notes);
+  if (!verdict) throw new Error(`model answer had no verdict: ${String(body.verdict ?? "(none)").slice(0, 40)}`);
+  return { actions: readActions(body.actions, 6), notes, verdict };
 }
 export function parsePlan(text) {
   const body = jsonObject(text, ["actions", "expect", "reason"]);
@@ -476,22 +518,6 @@ export function readFeaturePages(dir = FEATURE_MAP_DIR) {
   return readDir(dir)
     .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
     .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
-}
-export function readBaseCache(dir) {
-  return readDir(dir)
-    .filter((name) => name.endsWith(".json"))
-    .flatMap((name) => {
-      try {
-        const parsed = journeyLib.parseCacheEntry(readFileSync(path.join(dir, name), "utf8"));
-        return parsed ? [parsed] : [];
-      } catch {
-        return [];
-      }
-    });
-}
-export const pageHash = (text) => journeyLib.sha256(text);
-export function cachedJourney(entries, { baseSha, mapSha, journey, page }) {
-  return (Array.isArray(entries) ? entries : []).find((entry) => entry.baseSha === baseSha && entry.mapSha === mapSha && entry.journey === journey && entry.pageHash === pageHash(page?.text ?? "")) ?? null;
 }
 export function bugfixTitle(title) {
   return /\[BUGFIX\]/i.test(String(title ?? ""));
@@ -813,36 +839,6 @@ export async function runPlan({ page, plan, base, projectId, taskId, bearer, age
 export function shotsDirFor(shotsRoot, index) {
   return index === 0 ? shotsRoot : path.join(shotsRoot, String(index));
 }
-export function cacheEntryFor({ plan, run, baseSha, mapSha }) {
-  const item = plan.journeys.find((entry) => entry.journey === run.journey);
-  if (!item || !run) return null;
-  return {
-    baseSha,
-    mapSha,
-    journey: run.journey,
-    scriptHash: journeyLib.scriptHash(item.actions, item.expect ?? []),
-    pageHash: item.page ? pageHash((readFeaturePages().find((page) => page.name === item.page) ?? { text: "" }).text) : "",
-    apiOnly: run.apiOnly === true,
-    ok: compareLib.classifyRun(run, item).state === "ok",
-    judged: { verdict: String(run.judged ?? "") },
-    steps: run.steps,
-    expects: run.expects,
-    navigations: run.navigations,
-    offOrigin: run.offOrigin ?? [],
-  };
-}
-export function writeBaseCache({ plan, evidence, dir, baseSha, mapSha }) {
-  mkdirSync(dir, { recursive: true });
-  let written = 0;
-  for (const run of evidence.journeys ?? []) {
-    if (run.journey.startsWith("change:")) continue;
-    const entry = cacheEntryFor({ plan, run, baseSha, mapSha });
-    if (!entry || !entry.pageHash) continue;
-    writeFileSync(path.join(dir, `${entry.journey.replace(/[^a-z0-9-]/gi, "-")}-${entry.scriptHash.slice(0, 12)}.json`), `${JSON.stringify(entry)}\n`, { mode: 0o600 });
-    written += 1;
-  }
-  return written;
-}
 export async function runJourneys({ page, plan, base, projectId, taskId, bearer, agentBearer, archivedProjectId, shotsRoot, offOrigin = [], nextNavigations = () => [], run = runPlan }) {
   const items = Array.isArray(plan.journeys) && plan.journeys.length ? plan.journeys : [{ journey: "change:primary", actions: plan.actions ?? [], expect: plan.expect ?? [] }];
   const journeys = [];
@@ -934,7 +930,7 @@ export async function completeWithOpenRouter(prompt, { key, model, images = [], 
   if (!key) throw new Error("model login is missing");
   const chosen = String(model).startsWith("deepseek/") ? assertFlashModel(model) : String(model);
   const content = images.length ? [{ type: "text", text: prompt }, ...images.slice(0, 6).map((data) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${data}` } }))] : prompt;
-  const payload = { model: chosen, temperature: 0, max_tokens: 1200, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] };
+  const payload = { model: chosen, temperature: 0, max_tokens: 2000, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] };
   if (chosen.startsWith("deepseek/")) payload.reasoning = { enabled: false };
   const response = await fetchImpl(PSTACK_VERIFIER.endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000) });
   if (!response.ok) {
@@ -953,7 +949,7 @@ function invalidModelOutput(error) {
 }
 function logAnswer(text) {
   const raw = String(text ?? "").replace(/\s+/g, " ").trim();
-  console.log(`verifier answer: ${redact(raw.slice(0, 400), secretValues()) || "(empty)"}`);
+  console.log(`verifier answer (${raw.length} chars): ${redact(raw.slice(0, 1600), secretValues()) || "(empty)"}`);
 }
 export async function askModel(prompt, options, read) {
   const once = async () => {
@@ -1219,7 +1215,6 @@ export async function planFromRequest(request, deps = {}) {
   else if (!plan.unevaluated && harnessOnly) Object.assign(plan, { actions: [], expect: [], reason: "no user path: no app code changed" });
   else if (!plan.unevaluated) {
     const bugfix = bugfixTitle(request.title) && hasAppCode(listed.files);
-    const compare = deps.compare ?? process.env.PSTACK_VERIFIER_COMPARE === "true";
     const pages = deps.pages ?? readFeaturePages();
     let reach = [];
     try {
@@ -1232,15 +1227,11 @@ export async function planFromRequest(request, deps = {}) {
       request,
       pages,
       reach,
-      entries: deps.entries ?? readBaseCache(path.join(workDir(), BASE_CACHE_DIR)),
       ask,
       key: deps.key ?? process.env.OPENROUTER_EVAL_KEY,
       model: picked.model,
       models: picked.models,
-      mapSha: deps.mapSha ?? process.env.GITHUB_SHA,
-      baseSha: request.baseSha,
       bugfix,
-      compare,
     });
     plan.journeys = journeys.items;
     plan.bugfix = bugfix;
@@ -1248,23 +1239,17 @@ export async function planFromRequest(request, deps = {}) {
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
     if (journeys.unevaluated) plan.unevaluated = journeys.unevaluated;
-    if (compare && plan.journeys.length) plan.compare = true;
   }
   if (driveNeeded(plan)) plan.viewports = [...VIEWPORT_NAMES];
   return plan;
 }
-export async function planJourneys({ request, pages, entries, ask, key, model, models, mapSha, baseSha, bugfix = false, compare = false, reach = [] }) {
+export async function planJourneys({ request, pages, ask, key, model, models, bugfix = false, reach = [] }) {
   const items = [];
-  const matched = compare ? journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages }) : [];
+  const matched = journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages });
   const chosen = matched.slice(0, AREA_JOURNEY_LIMIT);
   for (const item of chosen) {
     const page = pages.find((candidate) => candidate.name === item.page);
     const journey = `area:${item.page}`;
-    const hit = cachedJourney(entries, { baseSha, mapSha, journey, page });
-    if (hit) {
-      items.push({ journey, page: item.page, actions: hit.steps.map((step) => step.action), expect: hit.expects.map((expect) => expect.expect), scriptHash: hit.scriptHash, base: hit, planned: false });
-      continue;
-    }
     let parsed;
     try {
       parsed = await ask(buildPrompt({ kind: "page", page: page?.text ?? "", boardPath: request.boardPath, taskPath: request.taskPath }), { key, model, models }, parsePlan);
@@ -1273,7 +1258,7 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
       continue;
     }
     if (!parsed.actions.length) continue;
-    items.push({ journey, page: item.page, actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true });
+    items.push({ journey, page: item.page, actions: parsed.actions, expect: parsed.expect });
   }
   const journey = `change:${bugfix ? "repro" : "primary"}`;
   let parsed;
@@ -1282,7 +1267,7 @@ export async function planJourneys({ request, pages, entries, ask, key, model, m
   } catch (error) {
     return { items: [], actions: [], expect: [], reason: "", unevaluated: failureText(error, 160) };
   }
-  const change = parsed.actions.length ? [{ journey, page: "", actions: parsed.actions, expect: parsed.expect, scriptHash: journeyLib.scriptHash(parsed.actions, parsed.expect), base: null, planned: true }] : [];
+  const change = parsed.actions.length ? [{ journey, page: "", actions: parsed.actions, expect: parsed.expect }] : [];
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "", unevaluated: "" };
 }
 export const driveNeeded = (plan) => !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
@@ -1294,22 +1279,7 @@ async function planCommand() {
   const dir = path.join(workDir(), "plan");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "plan.json"), `${JSON.stringify(plan)}\n`, { mode: 0o600 });
-  const basePlan = { ...plan, journeys: (plan.journeys ?? []).filter((item) => item.actions.length > 0 && !item.base) };
-  writeFileSync(path.join(dir, "base-plan.json"), `${JSON.stringify(basePlan)}\n`, { mode: 0o600 });
-  console.log(`base journeys: ${basePlan.journeys.map((item) => item.journey).join(", ") || "(none)"}`);
-  output({ empty: driveNeeded(plan) ? "false" : "true", model: plan.verifierModel, baseNeeded: basePlan.journeys.length ? "true" : "false" });
-}
-export function cachedBaseFor(item, viewport) {
-  if (!item) return null;
-  const bases = item.bases && typeof item.bases === "object" ? item.bases : item.base ? { desktop: item.base } : {};
-  return bases[viewport || "desktop"] ?? null;
-}
-function baseRunFor(plan, journey, viewport, baseEvidence) {
-  const fresh = (baseEvidence?.journeys ?? []).find((run) => run.journey === journey && runViewport(run) === viewport);
-  if (fresh) return fresh;
-  const cached = cachedBaseFor((plan.journeys ?? []).find((entry) => entry.journey === journey), viewport);
-  if (!cached) return null;
-  return { journey, viewport: runViewport(cached), apiOnly: cached.apiOnly === true, steps: cached.steps, expects: cached.expects, navigations: cached.navigations, offOrigin: cached.offOrigin, judged: cached.judged?.verdict ?? "" };
+  output({ empty: driveNeeded(plan) ? "false" : "true", model: plan.verifierModel });
 }
 export function shotDirFor(work, viewport, index) {
   return shotsDirFor(viewportShotsDir(path.join(work, "evidence", "shots"), viewport), index);
@@ -1320,7 +1290,40 @@ function judgePrompt(plan, item, head, work, viewport, index) {
     options: { images: imagesIn(shotDirFor(work, viewport, index)) },
   };
 }
-export async function judgeJourneys({ plan, binding, evidence, picked, baseEvidence, ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY, work = workDir() }) {
+export const NIGHTLY_WORKFLOW = "feature-map-live-daily.yml";
+
+export function failedFeatures(nightly) {
+  const graded = Array.isArray(nightly?.graded) ? nightly.graded : [];
+  return graded
+    .filter((feature) => String(feature?.verdict ?? "") === "fail")
+    .map((feature) => path.basename(String(feature?.file ?? ""), ".md"))
+    .filter(Boolean);
+}
+
+export function readNightlyRed(call = gh) {
+  let red = [];
+  try {
+    const runs = JSON.parse(call(["run", "list", "--workflow", NIGHTLY_WORKFLOW, "--limit", "5", "--json", "databaseId,status,createdAt"]));
+    const done = (Array.isArray(runs) ? runs : [])
+      .filter((run) => run.status === "completed")
+      .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+    for (const run of done.slice(0, 2)) {
+      const dir = path.join(process.env.RUNNER_TEMP || "/tmp", `pstack-nightly-${run.databaseId}`);
+      try {
+        call(["run", "download", String(run.databaseId), "--name", `feature-map-live-${run.databaseId}`, "--dir", dir]);
+        red = failedFeatures(JSON.parse(readFileSync(path.join(dir, "result.json"), "utf8")));
+        break;
+      } catch (error) {
+        console.log(`nightly ${run.databaseId}: ${failureText(error, 120)}`);
+      }
+    }
+  } catch (error) {
+    console.log(`nightly results unread: ${failureText(error, 120)}`);
+  }
+  console.log(`already red on production: ${red.join(", ") || "(none)"}`);
+  return red;
+}
+export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY, work = workDir() }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     for (const viewport of planViewports(plan)) {
@@ -1338,59 +1341,28 @@ export async function judgeJourneys({ plan, binding, evidence, picked, baseEvide
           console.log(`journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
         }
       }
-      journeys.push({ journey: item.journey, viewport, plan: item, base: baseRunFor(plan, item.journey, viewport, baseEvidence), head: head ? { ...head, judged } : null });
+      journeys.push({ journey: item.journey, viewport, plan: item, head: head ? { ...head, judged } : null });
     }
   }
   const hasRepro = (plan.journeys ?? []).some((item) => item.journey === "change:repro");
-  return compareLib.decideComparison({ journeys, bugfix: plan.bugfix === true, bugfixUnevaluated: plan.bugfix && !hasRepro ? String(plan.reason ?? "") : "" });
+  return compareLib.decideHeadOnly({ journeys, redFeatures, bugfix: plan.bugfix === true, bugfixUnevaluated: plan.bugfix && !hasRepro ? String(plan.reason ?? "") : "" });
 }
-export async function judgeBaseCommand({ work = workDir(), ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY } = {}) {
-  const binding = bindingNow();
-  const plan = readPlan(readFileSync(path.join(work, "plan", "base-plan.json"), "utf8"), binding);
-  let evidence = null;
-  try { evidence = readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding); } catch { evidence = null; }
-  const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
-  const journeys = [];
-  for (const [index, item] of (plan.journeys ?? []).entries()) {
-    for (const viewport of planViewports(plan)) {
-      const run = (evidence?.journeys ?? []).find((entry) => entry.journey === item.journey && runViewport(entry) === viewport) ?? null;
-      let judged = "";
-      if (run && picked.model && !compareLib.classifyRun(run, item).state.match(/failed|unavailable/)) {
-        try {
-          const { prompt, options } = judgePrompt(plan, item, run, work, viewport, index);
-          const parsed = await ask(prompt, { key, model: picked.model, models: picked.models, ...options }, parseAnswer);
-          judged = parsed.verdict;
-        } catch (error) {
-          judged = "UNEVALUATED";
-          console.log(`base journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
-        }
-      }
-      const taggedRun = viewport ? { journey: item.journey, viewport } : { journey: item.journey };
-      journeys.push({ ...taggedRun, apiOnly: item.actions.every((action) => action.op === "api"), steps: run?.steps ?? [], expects: run?.expects ?? [], navigations: run?.navigations ?? [], offOrigin: run?.offOrigin ?? [], judged });
-    }
-  }
-  writeFileSync(path.join(work, "base-evidence.json"), `${JSON.stringify({ ...binding, journeys })}\n`, { mode: 0o600 });
-  console.log(`base evidence: ${journeys.map((item) => `${item.journey}${item.viewport ? ` [${item.viewport}]` : ""} ${item.judged || compareLib.classifyRun(item).state}`).join(", ")}`);
-}
-export const comparisonMode = (plan) => plan.compare === true && !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+export const journeyMode = (plan) => !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
 async function judgeCommand() {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
   let evidence = null;
   try { evidence = JSON.parse(readFileSync(path.join(workDir(), "evidence", "evidence.json"), "utf8")); } catch { evidence = null; }
-  let baseEvidence = null;
-  const baseEvidenceFile = process.env.PSTACK_BASE_EVIDENCE || path.join(workDir(), "base-evidence.json");
-  try { baseEvidence = JSON.parse(readFileSync(baseEvidenceFile, "utf8")); } catch { baseEvidence = null; }
   let model = { verdict: "", notes: "" };
   notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
-  const comparing = comparisonMode(plan);
+  const comparing = journeyMode(plan);
   let compared = null;
   if (comparing) {
     try {
       evidence = evidence ? readJourneyEvidence(evidence, binding) : null;
     } catch { evidence = null; }
-    compared = await judgeJourneys({ plan, binding, evidence, picked, baseEvidence });
+    compared = await judgeJourneys({ plan, evidence, picked, redFeatures: readNightlyRed() });
   } else if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
       const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
@@ -1487,11 +1459,10 @@ async function main() {
   if (command === "resolve") await resolveCommand();
   else if (command === "plan") await planCommand();
   else if (command === "judge") await judgeCommand();
-  else if (command === "judge-base") await judgeBaseCommand();
   else if (command === "mark") await markCommand();
   else if (command === "post") await postCommand();
   else if (command === "cancel") await cancelCommand();
-  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|judge-base|mark|post|cancel");
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|mark|post|cancel");
 }
 const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
 if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
