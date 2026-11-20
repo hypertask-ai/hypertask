@@ -80,6 +80,7 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   const updatedCalls = []
   const updated = await fileFindings({ graded: failing, token: 'test-token', fetchImpl: fetchFor([openTicket, commented], updatedCalls) })
   assert.equal(updated.action, 'updated')
+  assert.equal(updatedCalls.find((call) => call.url.endsWith('/api/mcp/comments')).body.ticket_number, 'HTPR-7')
   assert.equal(updatedCalls.some((call) => call.url.endsWith('/api/mcp/tasks/create')), false)
   const closed = await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([openTicket, commented, archivedComment]) })
   assert.equal(closed.action, 'archived')
