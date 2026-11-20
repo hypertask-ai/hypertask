@@ -363,8 +363,10 @@ docker volume rm hypertask-verify-db
 ```
 
 Remove your own fixtures through product surfaces only, never SQL:
-`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...> --base-url
-<origin>`. Design and phone runs start and close their own headless browsers and create no
+`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`. It targets
+production by default; `--base-url` accepts only an `http://127.0.0.1` origin, so pass it for a
+local run and omit it for production. Design and phone runs start and close their own headless
+browsers and create no
 rows. Actions owns its disposable services. The daily pruner removes old allowlisted build
 debris and Done-ticket videos under its age rules (`evidence-prune` dry-runs by default, the
 timer applies it); it never removes a run folder you just wrote. Run cleanup after every failed

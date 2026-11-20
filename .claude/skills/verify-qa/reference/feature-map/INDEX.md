@@ -46,7 +46,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `data-rfd-*` mouse steps, reload proof, restore column, delete fixture |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | PR vs schedule job selection, `evaluated N, skipped M`, UX dispatch log, cancelled-run census |
 | Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `ht-flag get`, refused same-mode set 403, `/admin/flags` 404 for QA, identical `/api/flags` |
-| Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
+| Figma connect | [figma-connect.md](figma-connect.md) | no smoke id; drive steps in figma-connect.md (Settings > Accounts, `/api/figma/connection`, OAuth leave) |
 | In-app feedback | [in-app-feedback.md](in-app-feedback.md) | POST /api/feedback on board 15; brain-medium only when the flag is on |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Login | [login.md](login.md) | `login` (write journey) |
@@ -55,14 +55,14 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | MCP and CLI project listing | [mcp-project-list.md](mcp-project-list.md) | read-only pagination, malformed-input refusals, metadata and scoped caller checks |
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP task moves | [mcp-task-moves.md](mcp-task-moves.md) | disposable fixture refusal, unchanged column, successful moves; delete fixture |
-| MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; never revoke-all on QA 2343 (it runs the MCP watcher) |
+| MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; single-token mint/revoke steps in the file; never revoke-all on QA 2343 (MCP watcher) or on 985 (shared agent token) |
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | AI model canary | [model-canary.md](model-canary.md) | internal cron, dedicated internal-key request identity, read-only MCP status |
-| My Tasks | [my-tasks.md](my-tasks.md) | no write journey; verify by hand |
-| Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
+| My Tasks | [my-tasks.md](my-tasks.md) | no smoke id; drive steps in my-tasks.md (list, settings button, `/scheduled`, board-tab absence) |
+| Pages | [pages.md](pages.md) | no smoke id; drive steps in pages.md (snippets create/reload/delete, `/pages`, standalone Back to Pages) |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
 | Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
-| Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
+| Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and drafts via the steps in quick-entry-cards.md; Table view needs a board view |
 | Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | MCP velocity numbers and status update draft match /report/<slug>/velocity |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |

@@ -20,7 +20,7 @@
 
 1. Doctor: confirm the merge deployment succeeded and a QA account is signed in on `/my-tasks`.
 2. Use an agent or QA account's own bearer token, never Valentin's. Send `tools/list`, then `tools/call` with a unique user agent.
-3. Call `get` with `ticket_number` as one string (`"HTPR-1234"`) and as a list (`["HTPR-1234"]`); both must return the ticket, `isError` false.
+3. Call `get` with `ticket_number` as one string (`"HTPR-1234"`) and as a list (`["HTPR-1234"]`); both must return the ticket. A success result carries no `isError` key; assert on the returned task. A refusal carries `isError: true` and a message at HTTP 200.
 4. Call `get` with `task_id` as one number and as a list.
 5. Call `get` with a malformed ticket number and with no identifier; both must return a readable validation error, not a 500.
 6. For hello, use a QA agent of account 985. Compare MCP and GET responses: `agent: {id, displayName}` (or `agent: null` for a user token), and `startBoard: {id, title, boardUrl}`. Require the newest board across all visible boards, not only the first 50; a missing title falls back to the board short name. Use existing fixtures; record an unavailable >50-board or untitled-board case as `UNREACHABLE`.
@@ -29,7 +29,7 @@
 
 ### Indexed and materialized ticket lookup
 
-Look up one existing QA ticket by `ticket_number` through `hypertask_tasks` with `action: "get"`, and open that same number in the app. Both return that ticket. Repeat with different letter casing. A number that matches two accessible boards, and no `project_id`, returns HTTP 400 with code `ambiguous_ticket_number` and tells the caller to provide `project_id`.
+Look up one existing QA ticket by `ticket_number` through `hypertask_tasks` with `action: "get"`, and open that same number in the app. Both return that ticket. Repeat with different letter casing. A number that matches two accessible boards, and no `project_id`, returns HTTP 400 with code `ambiguous_ticket_number` and tells the caller to provide `project_id` on the REST route `GET /api/mcp/tasks`. Through `tools/call` the same refusal arrives as HTTP 200 with `isError: true` and only the message text.
 
 With `htpr-8977-indexed-ticket-lookup` on and `htpr-8977-materialized-ticket-lookup` off, candidates come from `lower("ticketNumber") = lower(...)`. A number that contains `\`, `%`, or `_` uses `ILIKE` instead. The query reads at most 9 ids. More than 8 candidates, or a candidate query that fails, falls back to the older case-insensitive match. Zero candidates skip the live-task scan and still check old ticket-number aliases.
 
@@ -48,6 +48,7 @@ hint coexistence. Never send a valid comment-add probe on a real ticket.
 ## Gotchas
 
 - The wire schema (`getGetTasksBaseSchema`) and the service schema (`createTaskIdentificationArraySchema`) drift apart: one accepts a shape the other rejects (HTPR-7206).
+- `tools/call` refusals return HTTP 200, so a 200 is not a pass; read `isError` and the message.
 - A `z.transform` or `z.preprocess` in the wire schema breaks `z.toJSONSchema` for `tools/list`.
 - Hello picks from only the first board page, or suggests legacy tools absent from that credential's MCP v2 catalog.
 - The tool description promises a shape the schema rejects; AI clients follow the description first.
