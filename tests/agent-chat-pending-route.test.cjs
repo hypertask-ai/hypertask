@@ -58,9 +58,14 @@ const tx = {
     rawQueries.push(sql);
     if (/FROM "Agent"/.test(sql)) return [{ id: "agent-polling" }];
     if (/WITH pending AS/.test(sql)) {
+      const answeredChat = /answer\."replyToMessageId" IS NOT NULL/.test(sql);
       const claimed = pendingRows.filter((row) =>
         (!sql.includes('AND message."isDelivered" = false') || !row.isDelivered)
         && !replies.some((reply) => reply.replyToMessageId === row.id)
+        && !(answeredChat && replies.some((reply) => reply.sessionId === row.sessionId
+          && reply.role === "assistant"
+          && reply.replyToMessageId
+          && new Date(reply.createdAt).getTime() >= new Date(row.createdAt).getTime()))
       ).slice(0, 50);
       if (sql.includes('SET "isDelivered" = true')) claimed.forEach((row) => {
         row.isDelivered = true;
@@ -172,7 +177,7 @@ async function fetchPending(unanswered = false) {
   return { response, body: await response.json() };
 }
 
-async function postReply(agentId = "agent-polling") {
+async function postReply(agentId = "agent-polling", replyToMessageId = "message-1") {
   authContext = {
     agentId,
     user: { id: 6, displayName: "Valentin" },
@@ -184,7 +189,7 @@ async function postReply(agentId = "agent-polling") {
         method: "POST",
         body: JSON.stringify({
           text: "Yes, I am here.",
-          replyToMessageId: "message-1",
+          replyToMessageId,
         }),
       },
     ),
@@ -207,6 +212,7 @@ test.beforeEach(() => {
       text: "Are you there?",
       userName: "Valentin",
       isDelivered: false,
+      createdAt: new Date("2026-09-17T12:00:00.000Z"),
     },
   ];
   replies = [];
@@ -301,6 +307,26 @@ test("MCP inbox replays until answered with the switch on and leaves the message
 
   assert.equal((await fetchPending()).body.messages[0].id, "message-1");
   assert.equal(pendingRows[0].isDelivered, true);
+});
+
+test("MCP inbox stops replaying an earlier message once the chat is answered", async () => {
+  chatAllEnabled = true;
+  pendingRows.push({
+    id: "message-2",
+    sessionId: "session-1",
+    text: "And the follow-up?",
+    userName: "Valentin",
+    isDelivered: true,
+    createdAt: new Date("2026-09-17T12:00:10.000Z"),
+  });
+
+  const first = await fetchPending(true);
+  assert.deepEqual(first.body.messages.map((message) => message.id), ["message-1", "message-2"]);
+
+  assert.equal((await postReply("agent-polling", "message-2")).response.status, 200);
+
+  assert.deepEqual((await fetchPending(true)).body.messages, []);
+  assert.deepEqual((await fetchPending(true)).body.messages, []);
 });
 
 test("the fetching agent can reply after pending marks the message delivered", async () => {
