@@ -4,14 +4,8 @@ const React = require("react");
 const { createRoot } = require("react-dom/client");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
-const {
-  detailSidebarOverlays,
-  ticketUpDownLivesInHeader,
-  setHeaderArrows,
-  TaskMovement,
-  Title,
-  mobile,
-} = require("./fixtures/htpr-9387-header-arrows-stubs.cjs");
+const stubs = require("./fixtures/htpr-9387-header-arrows-stubs.cjs");
+const { detailSidebarOverlays, ticketUpDownLivesInHeader, setHeaderArrows, TaskMovement, Title, mobile } = stubs;
 
 const arrows = (placement) => renderToStaticMarkup(React.createElement(TaskMovement, {
   placement,
@@ -40,18 +34,12 @@ test("header arrows are plain chevrons and still move between tickets", async ()
   const html = arrows("header");
   assert.match(html, /data-task-nav="header"/);
   assert.match(html, /2 \/ 2/);
-  for (const gone of ["task-nav-controls", "rounded-[20px]", "bg-back-button", "shadow-md"]) {
-    assert.equal(html.includes(gone), false);
-  }
-
+  for (const gone of ["task-nav-controls", "rounded-[20px]", "bg-back-button", "shadow-md"]) assert.equal(html.includes(gone), false);
   setHeaderArrows(false);
   const rolledBack = arrows("header");
   assert.match(rolledBack, /data-task-nav="rail"/);
-  for (const pill of ["task-nav-controls", "rounded-\\[20px\\]", "bg-back-button", "shadow-md"]) {
-    assert.match(rolledBack, new RegExp(pill));
-  }
+  for (const pill of ["task-nav-controls", "rounded-\\[20px\\]", "bg-back-button", "shadow-md"]) assert.match(rolledBack, new RegExp(pill));
   assert.equal(rolledBack.includes('data-task-nav="header"'), false);
-
   setHeaderArrows(true);
   const previousCalls = [];
   const nextCalls = [];
@@ -82,11 +70,8 @@ test("header arrows are plain chevrons and still move between tickets", async ()
 
 test("the header row holds the arrows on desktop and leaves the phone header alone", () => {
   const arrowsNode = React.createElement("div", { "data-part": "arrows" }, "arrows");
-  const render = (isMobile) => renderToStaticMarkup(React.createElement(
-    mobile.Provider,
-    { value: isMobile },
-    React.createElement(Title, { toggleDueDate: () => {}, headerNavigation: arrowsNode }),
-  ));
+  const render = (isMobile) => renderToStaticMarkup(React.createElement(mobile.Provider, { value: isMobile },
+    React.createElement(Title, { toggleDueDate: () => {}, headerNavigation: arrowsNode })));
   setHeaderArrows(true);
   const desktop = render(false);
   assert.match(desktop, /data-title-row="true"[\s\S]*data-part="arrows"/);
