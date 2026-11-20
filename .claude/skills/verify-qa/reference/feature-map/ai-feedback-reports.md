@@ -24,7 +24,10 @@ note, and posting the Slack line. None of them add a screen.
   `tests/ai-feedback-service.test.cjs`. They stub the database, so no board
   write happens.
 - Live refusal, never creating a ticket when the rule works: call the MCP
-  endpoint with a field the tool does not document and read the reply.
+  endpoint with a field the tool does not document and read the reply. A
+  disposable agent credential is at `~/.config/ht-qa/htpr-8090-agent.json`
+  (`{id, token}`); read it into the variable, never print it. The reply is a
+  JSON-RPC result with `result.isError: true`, not an HTTP error.
 
 ```
 curl -sS https://app.hypertask.ai/mcp -H "Authorization: Bearer $AGENT_TOKEN" \
@@ -46,6 +49,16 @@ after: a refusal that opens a ticket is the bug this page exists for.
   and the dropped customer text.
 - `tests/htpr-8276-feedback-slack-line.test.cjs` covers the one Slack line.
   Do not post to the team channel by hand.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs ai-feedback-reports --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`ai-feedback-reports ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

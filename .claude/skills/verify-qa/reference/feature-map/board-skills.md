@@ -13,7 +13,12 @@
 ## How to get to it (user POV)
 
 `https://app.hypertask.ai/settings/board-skills`, or Settings, Board,
-Skills. The route `/settings/board/skills` redirects there. Each board
+Skills. `/settings/board/skills` is not a redirect to it: the board settings
+router only knows board-general, board-ai, board-skills, board-files,
+board-members and board-agents, so `board/skills` lands on board general
+(`src/app/settings/board/[[...section]]/page.tsx:8-27`, live 2026-11-20). The
+page reads the board from the `previousBoard` cookie, so open the board you
+mean first (`src/components/Modals/Settings/useSettingsTeam.ts`). Each board
 lists its own skills; a skill is typed in AI chat as `/slug`, or as
 `@hyperai /slug` in a comment.
 
@@ -108,6 +113,16 @@ first message is `/slug` plus the current comment text. The comment
 skill writer stays closed. If chat is already sending, the toast says
 "Could not run the skill. Please try again." Flag off opens the
 comment skill writer instead.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs board-skills --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`board-skills ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

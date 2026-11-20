@@ -536,7 +536,7 @@ test("the model call uses the eval headers and AbortSignal.timeout", async () =>
   assert.deepEqual(seen, [60000, PSTACK_VERIFIER.endpoint, "Bearer secret", "application/json", true]);
 });
 
-test("the model call turns reasoning off so the answer fits the token cap", async () => {
+test("the model call turns reasoning off and leaves room for a full plan", async () => {
   const { completeWithOpenRouter } = await load();
   let sent;
   const text = await completeWithOpenRouter("{}", {
@@ -549,7 +549,7 @@ test("the model call turns reasoning off so the answer fits the token cap", asyn
   });
   assert.equal(text, "{}");
   assert.deepEqual(sent.reasoning, { enabled: false });
-  assert.equal(sent.max_tokens, 1200);
+  assert.equal(sent.max_tokens, 2000);
   let other;
   await completeWithOpenRouter("{}", {
     key: "secret",

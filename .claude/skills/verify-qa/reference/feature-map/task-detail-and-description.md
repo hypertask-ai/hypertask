@@ -19,7 +19,7 @@
 - `new-subtask-button` With `htpr-8250-new-subtask-button` on (Everyone), the sub-task modal always starts with + Create new sub-task, or Create sub-task plus the typed name. Off shows create only when the search matches nothing.
 - `agent-automatic-ai` With `htpr-8904-agent-automatic-ai` on (Owner + QA), an agent-authored ticket change skips the automatic ticket summary, comment summary, and smart labels. A person's edit on the same board still runs them. Off restores the agent calls.
 - `ctrl-j-write-with-ai` With `htpr-8975-ctrl-j-write-with-ai` on (Owner + QA), Ctrl+J or Cmd+J in an editable ticket comment, comment edit, or description skips the compose palette and runs the editor's Write with AI toggle. The inline box uses the comment well, the comment-row mic, and a text Rewrite button instead of the purple arrow.
-- `right-column` With `htpr-8991-right-column` on (Owner + QA), the ticket side panel keeps Status and Project, shows the other fields only when they have a value, and adds Add field. Add field opens the command list of the empty fields. The ticket ID sits beside the title and copies on click.
+- `right-column` With `htpr-8991-right-column` on (Owner + QA), the ticket side panel keeps Status and Project, shows the other fields only when they have a value, and adds Add field. Add field opens the command list of the empty fields. Live, `htpr-8997-id-row` (EVERYONE) also puts the ticket ID in that panel under ID; without it the ID sits beside the title and copies on click.
 - `sticky-title` With `htpr-8992-sticky-title` on (Owner + QA), the ticket title bar stays put and, once the page is scrolled, draws a 1px line under it. On a phone that line uses the border token that stays visible in dark themes. Off leaves the header as it is.
 - `ai-box-outline` With `htpr-9025-ai-box-outline` on (Owner + QA), the Write with AI box in the description and comment editors gets a 1px outline in the editor border colour. Size and corners stay the same. Off removes that outline.
 
@@ -50,6 +50,15 @@ Prints PASS/FAIL per step and `task ok`. Loopback only.
 `--break title` must print `negative control ok`.
 Run hosted with `scripts/verify-qa <branch> hands-free-drives`.
 
+Read each flag's live mode with `ht-verify flags show <key>` before calling a row
+(Owner + QA). On 2026-11-20 these read EVERYONE while their rows here say
+Owner + QA: `htpr-8991-right-column`, `htpr-8992-sticky-title`,
+`htpr-9025-ai-box-outline`, `htpr-7315-unread-ticket-opens-top`,
+`htpr-7627-ticket-first-screen`. For an EVERYONE flag the live off state is
+unreachable and the test named in that row is the off proof, not a flag switch.
+`htpr-6177-auto-task-descriptions` read OFF, so its on screen is the unreached
+state.
+
 ### Time reports
 
 Open `/time` signed in. Confirm the Time reports title, Team, Board, Date
@@ -60,6 +69,11 @@ and Delete, not Pause or Stop. To check a running row, open that ticket and
 press Start, then return to `/time`. The running row shows Pause or Resume,
 and Stop. Press Stop before leaving. The duration opens the time log. The
 task name links to that ticket.
+
+Live empty state, 2026-11-20: `ht-verify open /time --wait body` gives the
+heading Time reports, the SCOPE row Team / Board / User / Date range / Timers /
+Group by, `Total 0:00:00`, the + Add time entry button and `No time entries.`
+(period included). The URL carries team, from, to and group in the query.
 
 ### Local writing assistance and undo
 
@@ -145,8 +159,8 @@ No test covers this flag off.
 With `htpr-8250-new-subtask-button` on, open the sub-task modal on a
 disposable ticket. The header is Link existing or create a new subtask. With
 an empty search the first row is + Create new sub-task. Type a name and the
-row becomes Create sub-task with that name, while matching tasks stay in the
-list. Do not switch `htpr-8250-new-subtask-button` Off. Off proof:
+row becomes `Create sub-task "<name>"` (with quotes), while matching tasks stay in
+the list. Do not switch `htpr-8250-new-subtask-button` Off. Off proof:
 `tests/htpr-8250-new-subtask-button.test.cjs`.
 
 ### Agent images and agent automatic AI
@@ -205,6 +219,27 @@ test covers this flag off.
 For a manual edit, screenshot the description before and after, then a
 **reload check**: close and reopen the task (or full page reload) and
 screenshot again.
+
+Headless, the description editor does not open from a click: clicking
+`#description-input` and pressing Enter left no
+`#description-container .ProseMirror[contenteditable='true']` mounted and the
+stored description empty (tried 2026-11-20 on production). Write the
+description through the same route the editor posts, then prove the read
+view after a reload:
+
+```bash
+ht-verify api PUT /api/tasks/single --data '{"newTask":{"id":<task>,"description":"<p>QA runner description edit.</p>"}}' --confirm --state "$QA_STATE"
+ht-verify open /detail/project-7049/<index> --wait "#description-input"
+ht-verify probe "#description-container" --text   # the saved text, read from the server
+ht-verify shot --session --out description-after-reload.png
+```
+
+Right column on the same ticket (`htpr-8991-right-column` on):
+`[data-task-property-label]` has 5 rows (ID, Status, Project, Time, Tags),
+an empty due date and size are absent, and `Add field` opens the command
+list of the empty fields. `[data-title-container="task-detail"]` had
+`border-bottom-width: 0px` before scrolling; scroll the page and re-probe
+to see the 1px line.
 
 [HTPR-6281](https://app.hypertask.ai/detail/project-15/6281) needs the
 opposite check: it's about the open task **not** picking up a change made

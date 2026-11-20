@@ -10,13 +10,41 @@ The feature-flag-gate and ux-signoff checks use trusted production code and post
 
 ## Driving it with agent-browser
 
-After merge, observe the next production pull-request event. Require the per-PR feature-flag job to succeed and the fleet job to skip. Then observe two scheduled runs: only the fleet job should run. GitHub may delay scheduled starts; do not generate PR events to force fleet sweeps.
+No browser. Drive it with `gh`. Verified 2026-11-20:
 
-- The first run after a change to the status format judges every open PR once (`evaluated N, skipped 0`).
+1. `gh run list --workflow=feature-flag-gate.yml --limit 8 --json databaseId,event,conclusion`
+   shows current `pull_request_target` runs (many `skipped`: the per-PR job
+   skips when the head is unchanged) and scheduled runs.
+2. Split the job selection on both:
+   `gh api repos/hypertask-ai/hypertask/actions/runs/<pr-run>/jobs --jq
+   '.jobs[]|"\(.name) \(.conclusion)"'` for a PR run, and the same for a
+   schedule run. The PR run runs `feature-flag-gate`; the schedule run runs
+   only `reconcile-feature-flag-gate` and skips the per-PR job.
+3. Read a green schedule run's reconcile log:
+   `gh run view <schedule-run> --repo hypertask-ai/hypertask --log | grep -E
+   'evaluated [0-9]+, skipped [0-9]+|skip #[0-9]+'` prints lines such as
+   `skip #3718: unchanged since its last status under 30 minutes ago` and
+   `evaluated 108, skipped 3`.
+4. UX sign-off only runs on dispatch:
+   `gh run list --workflow=ux-signoff-gate.yml --limit 3` shows
+   `workflow_dispatch` events; the log reconciles PRs with verdicts such as
+   `No visible UI change` and `No new component file; reused UI ships behind
+   its flag without a wireframe`.
+5. Read the live per-PR status, not a stamp:
+   `gh api repos/hypertask-ai/hypertask/commits/<head>/statuses --jq
+   '.[]|select(.context=="feature-flag-gate")|{state,description}'`.
+6. Count cancellations before calling the fleet healthy:
+   `gh run list --workflow=feature-flag-gate.yml --event schedule --limit 5`.
+   Three of the five runs on 2026-11-20 were `cancelled` at about ten minutes;
+   record that as a gap.
+7. Do not generate PR events or dispatch to force a sweep.
+
+- The first run after a change keeps skipping PRs already stamped `success`/`failure` with unchanged head, base, title and labels; the status description/format is not part of the fingerprint, so a format change alone never forces a full judge.
 - A later run within 30 minutes skips PRs whose head, base, title and labels are unchanged (`skip #N: unchanged since its last status under 30 minutes ago`, then `evaluated N, skipped M`).
-- A rate limit shows as `GitHub API rate limited; waiting Ns until reset` and then a normal result, or as `::warning::skipped: GitHub rate limited until <time>` with a green job and no error status.
+- A rate limit shows as `GitHub API rate limited; waiting Ns until reset` and then a normal result, or as `::warning::skipped: GitHub rate limited until <time>` with a green job and no error status. A run that exits on a batched rate limit prints only the warning, not the counters.
+- A scheduled fleet run cancelled mid-sweep posts nothing (observed 3 of 5 recent runs cancelled at ~10 minutes). Record it as a gap, not a pass.
 
-The positive control is the per-PR feature-flag-gate job: it still judges and posts its own result. PR and fleet runs retain the same non-cancelling concurrency group so a sweep cannot race a PR verdict. The group uses GitHub `queue: max` to retain up to 100 pending PR runs; a burst beyond that limit cancels new arrivals until scheduled reconciliation. Inspect the production workflow for that setting and retain a queued-run example when available.
+The positive control is the per-PR feature-flag-gate job: it still judges and posts its own result. PR and fleet runs do not share a concurrency group: the group is `feature-flag-gate-${{ github.event.pull_request.number || github.ref }}` and `cancel-in-progress: true`, with no `queue:` key; GitHub rejects `queue: max` beside cancellation. A fleet sweep is cancelled if another run enters the same `refs/heads/production` group.
 
 ## Gotchas
 
@@ -38,7 +66,7 @@ Save a post-merge PR run showing target success and fleet skip, plus two schedul
 
 The evaluator entry point is `evaluate` in `.github/scripts/feature-flag-gate.mjs`.
 After deployment, read the trusted feature-flag check on a production PR that passes its ticket flag through an imported formatter (for example, https://github.com/hypertask-ai/hypertask/pull/2237).
-Require the check's `ffg=` stamp to identify production containing the repair; an older passing status is not live proof.
+The published status description is human-readable and carries no `ffg=` stamp; the fingerprint `ffg=<base>.<hash(title,labels)>` is internal, used to decide skips. Identify the production containing the repair from the run's base SHA and the status `updated_at`, not from a description stamp. An older passing status is not live proof.
 Do not change that PR, its flag, or its ticket during verification.
 
 Hosted `tests/feature-flag-gate.test.cjs` must prove the formatter groups: aliased parameters, explicit live return branches, rendered consumers, return truthiness, invariant guards, independent boolean inputs, formatter dependency/render consumption async server consumers and render coercion/omitted defaults.

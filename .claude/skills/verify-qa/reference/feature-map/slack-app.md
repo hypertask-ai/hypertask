@@ -22,12 +22,29 @@
 3. On support, check app capabilities, personal linking and disconnect, team disconnect versus uninstall, data retained and its expiry, uninstall behavior, and `help@hypertask.ai`. Reload to verify the server still serves the same content. Follow the Add to Slack return link without completing OAuth.
 4. Set the `theme` cookie on `app.hypertask.ai` to `porcelain`, `graphite`, `amoled`, and `dia` before each load. Capture support and the changed install page at desktop 1440x900 and phone 390x844; scroll to check lower content and horizontal overflow.
 5. Repeat both page routes with plain user 2343 (`storageState-qa-normal.json`) and a fresh signed-out context. Both should see the support page and marketplace links. Switching the support flag Off returns 404. Do not infer a working login from a 404 alone; confirm the plain account independently.
-6. Check `/api/slack/install` with redirects disabled. Signed out should redirect to `/login?returnTo=/settings/slack`. Signed in without an unambiguous accessible team redirects to Slack settings with `missing_team`; an inaccessible `teamId` yields `team_access_denied`. An authorized team redirects to Slack OAuth when configured, otherwise settings with `not_configured`. Record status and destination host/path only; never expose OAuth state, client identifiers, tokens, or cookies. Do not follow Slack redirects in a read-only run.
+6. Check `/api/slack/install` with redirects disabled. Signed out redirects to `/login?returnTo=%2Fsettings%2Fslack` (the returnTo is URL-encoded). Signed in without an unambiguous accessible team redirects to Slack settings with `?slack_error=missing_team`; an inaccessible `teamId` yields `slack_error=team_access_denied`; an unconfigured install yields `slack_error=not_configured`. Record status and destination host/path only; never expose OAuth state, client identifiers, tokens, or cookies. Do not follow Slack redirects in a read-only run.
 7. Inspect `origin/production:docs/slack-app-manifest.json` for `app_uninstalled` and `tokens_revoked`. This proves the declared event subscriptions, not delivery or cleanup in a real workspace.
 8. Record a short WebM of `/add-to-slack`, clicking Slack app support, then scrolling the support page. Keep it under 3 MB.
 9. Open `/integrations` at 1440x900 and 390x844. Confirm the Slack card is active and Discord and Microsoft Teams say Coming Soon. Do not press Connect Slack.
 10. Open `/settings/slack/link` signed in, with no token. Confirm the invalid-link copy and that the address stays on this page. Signed out lands on `/login`. Do not post the form.
 11. `htpr-6817-slack-app` is proved in a real Slack workspace, which this run already records as UNREACHABLE. Do not install, disconnect, or send a Slack message to manufacture it.
+
+Worked on production, 2026-11-20, QA 985. Live modes: `htpr-4857-add-to-slack`,
+`htpr-6921-slack-marketplace` and `htpr-6817-slack-app` all read EVERYONE.
+
+```text
+/add-to-slack        200  title "Add Hypertask to Slack"
+/slack/support       200  title "Hypertask for Slack support", copy names /ht, bot mentions, DMs, assistant sidebar
+/integrations        200  Slack card live; Discord and Microsoft Teams say "coming soon..." with a Coming Soon badge
+/settings/slack      200  title Settings
+/settings/slack/link 200  title "Connect Slack", body "This link is invalid, expired, or belongs to another Hypertask team. Run /ht connect in Slack for a new link."
+GET /api/slack/install (signed out)  307 https://app.hypertask.ai/login?returnTo=%2Fsettings%2Fslack
+```
+
+`origin/production:docs/slack-app-manifest.json` declares `app_uninstalled` and
+`tokens_revoked`. Phone: `ht-verify shot https://app.hypertask.ai/slack/support
+--out support-390x844.png --viewport 390x844` renders signed in and does not
+overflow. Nothing here proves live Slack parity.
 
 ## Gotchas
 

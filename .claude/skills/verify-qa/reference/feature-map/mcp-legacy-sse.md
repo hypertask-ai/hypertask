@@ -7,22 +7,22 @@
 ## How to get to it (user POV)
 
 - Legacy MCP clients connect to `GET https://app.hypertask.ai/sse` and send messages to `POST https://app.hypertask.ai/message` with their own bearer token.
-- The routes also expose POST and DELETE on `/sse`, and GET and DELETE on `/message`.
+- `/sse` exports POST and DELETE and `/message` exports GET and DELETE, but every method other than those two returns 405 Method Not Allowed. Only `GET /sse` and `POST /message` do transport work.
 - Current clients use `/mcp`; their requests must not count as legacy SSE usage.
 
 ## Driving it with agent-browser
 
 1. Doctor: confirm the merge deployment succeeded and a QA account is signed in on `/my-tasks`.
-2. Use a QA account's own valid bearer token, never the owner's token. Make a GET `/sse` request with a unique user agent. Bound the connection duration and close it after collecting its first response.
-3. Query PostHog using the existing read-only API credential for `mcp_legacy_sse_request` with that unique user agent. Check endpoint, verified user id, user agent, and timestamp against the request. Allow bounded ingestion time before judging absence.
-4. Probe `/message` without a token and confirm the existing 401 response plus an event with `user_id` null.
-5. Probe `/mcp` without a token and confirm its existing 401 response without a legacy event for its unique user agent.
+2. Use a QA account's own bearer token, never the owner's token. Make a GET `/sse` request with a unique user agent and `Accept: text/event-stream`. Bound the connection (for example `timeout 12 curl -sN`) and close it after the first `event: endpoint` frame, which carries `data: /message?sessionId=<id>`. Expect HTTP 200 and `content-type: text/event-stream`.
+3. Query PostHog for `mcp_legacy_sse_request` with that unique user agent, using a read-only API credential that holds `query:read`. Check endpoint, verified user id, user agent, and timestamp against the request. Allow bounded ingestion time before judging absence. Without a `query:read` key this step is verified-unreachable; the closest real check is the 200 and the `event: endpoint` frame.
+4. Probe `POST /message?sessionId=test` with no token: 401 JSON-RPC `-32001`. Probe `POST /mcp` with no token: 401 JSON-RPC `-32001`.
+5. Probe `POST /sse` with a valid token: 405 Method Not Allowed.
 
 ## Gotchas
 
 - Long-lived streams can lose buffered events when a serverless invocation ends. Capture immediately and keep the promise alive with `waitUntil`.
 - Query strings can contain session ids or tokens. Record only the endpoint pathname, never headers or the full URL.
-- The SSE route may already respond 405 for accounts on the stateless flag. Compare with its pre-change response; tracking must preserve it.
+- `GET /sse` needs `Accept` containing `text/event-stream`, `*/*` or `text/*`, else 406. `POST /message` needs `?sessionId=` (400 without it) and `Content-Type: application/json` (400 without it). A missing `REDIS_URL`/`KV_URL` answers 503.
 - A failed or absent PostHog client must not fail or delay the transport response.
 - Reconnects count as requests, not unique clients; bots and unauthorized traffic are distinct from authenticated use.
 
