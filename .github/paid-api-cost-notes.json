@@ -218,4 +218,6 @@
     "reason": "HTPR-9080 saves one boolean per person through Hypertask's own same-origin preferences API. No paid provider call, no retries, no token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/9080"
   }
+,
+  "src/lib/mcp/tasks/fields/removeAgents.ts:ce994f822c8186fc0409e772136f741bd2515c8b0f06dfdedd472147dcbe23c3": {"maxUsdPerDay": 0, "reason": "HTPR-9365 removes one agent assignee through the existing same-origin /api/mcp/assignees/assign route, the same call the human assignee path already makes. One request per named agent, no retries and no paid provider calls.", "source": "https://app.hypertask.ai/detail/project-15/9365"}
 }
