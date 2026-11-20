@@ -103,10 +103,10 @@ export async function GET(request: NextRequest) {
             AND NOT EXISTS (
               SELECT 1
               FROM "ChatMessage" answer
+              JOIN "ChatMessage" answered ON answered."id" = answer."replyToMessageId"
               WHERE answer."sessionId" = message."sessionId"
                 AND answer."role" = 'assistant'::"ChatRole"
-                AND answer."replyToMessageId" IS NOT NULL
-                AND answer."createdAt" >= message."createdAt"
+                AND answered."createdAt" > message."createdAt"
             )` : Prisma.empty}
           ORDER BY message."createdAt" ASC, message."id" ASC
           FOR UPDATE OF message SKIP LOCKED

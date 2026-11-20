@@ -58,14 +58,17 @@ const tx = {
     rawQueries.push(sql);
     if (/FROM "Agent"/.test(sql)) return [{ id: "agent-polling" }];
     if (/WITH pending AS/.test(sql)) {
-      const answeredChat = /answer\."replyToMessageId" IS NOT NULL/.test(sql);
+      const answeredChat = /answered\."createdAt" > message\."createdAt"/.test(sql);
+      const answersLaterMessage = (row) => replies.some((reply) =>
+        reply.role === "assistant"
+        && reply.replyToMessageId
+        && pendingRows.some((answered) => answered.id === reply.replyToMessageId
+          && answered.sessionId === row.sessionId
+          && new Date(answered.createdAt).getTime() > new Date(row.createdAt).getTime()));
       const claimed = pendingRows.filter((row) =>
         (!sql.includes('AND message."isDelivered" = false') || !row.isDelivered)
         && !replies.some((reply) => reply.replyToMessageId === row.id)
-        && !(answeredChat && replies.some((reply) => reply.sessionId === row.sessionId
-          && reply.role === "assistant"
-          && reply.replyToMessageId
-          && new Date(reply.createdAt).getTime() >= new Date(row.createdAt).getTime()))
+        && !(answeredChat && answersLaterMessage(row))
       ).slice(0, 50);
       if (sql.includes('SET "isDelivered" = true')) claimed.forEach((row) => {
         row.isDelivered = true;
@@ -307,6 +310,30 @@ test("MCP inbox replays until answered with the switch on and leaves the message
 
   assert.equal((await fetchPending()).body.messages[0].id, "message-1");
   assert.equal(pendingRows[0].isDelivered, true);
+});
+
+test("MCP inbox keeps a follow-up sent while the agent was composing the reply", async () => {
+  chatAllEnabled = true;
+  pendingRows.push({
+    id: "message-2",
+    sessionId: "session-1",
+    text: "Sent while you were typing",
+    userName: "Valentin",
+    isDelivered: true,
+    createdAt: new Date("2026-09-17T12:00:10.000Z"),
+  });
+  replies = [{
+    id: "reply-1",
+    sessionId: "session-1",
+    role: "assistant",
+    content: "Here is the first answer.",
+    replyToMessageId: "message-1",
+    createdAt: new Date("2026-09-17T12:00:20.000Z"),
+  }];
+
+  const { body } = await fetchPending(true);
+
+  assert.deepEqual(body.messages.map((message) => message.id), ["message-2"]);
 });
 
 test("MCP inbox stops replaying an earlier message once the chat is answered", async () => {
