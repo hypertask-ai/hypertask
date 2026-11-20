@@ -271,10 +271,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (writerLabelIds.length) {
       tagIds = brainTools?.enforceBrainLabel([...tagIds, ...writerLabelIds], writerBrain) ?? [...new Set([...tagIds, ...writerLabelIds])];
     }
-    if (agentId) {
-      const { defaultAgentBrainLabelIds } = await import("@/lib/agents/defaultBrainLabel");
-      tagIds = await defaultAgentBrainLabelIds(projectId, tagIds);
-    }
+    if (agentId) tagIds = await (await import("@/lib/agents/defaultBrainLabel")).defaultAgentBrainLabelIds(projectId, tagIds);
     const initializeWriterDefaults = body.initializeWriterDefaults === true &&
       await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, session.userId);
     const initialPriority = initializeWriterDefaults ? { priority_index: 0, Priority_Value: "No Priority" } : priority;
