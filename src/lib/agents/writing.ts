@@ -218,9 +218,10 @@ export function assertAgentWriting(
       errors.push(new AgentWritingError(field, `Keep text within ${MAX_CHECK_TEXT_LENGTH} characters`))
       continue
     }
-    const checked = field === 'description' ? ticketOpening(value) : value
+    const template = field === 'description' && Boolean(context.houseRules && context.create)
+    const checked = template ? ticketOpening(value) : value
     const oldValue = previous[field]
-    const old = field === 'description' && typeof oldValue === 'string' && oldValue.length <= MAX_CHECK_TEXT_LENGTH ? ticketOpening(oldValue) : oldValue
+    const old = template && typeof oldValue === 'string' && oldValue.length <= MAX_CHECK_TEXT_LENGTH ? ticketOpening(oldValue) : oldValue
     const unchanged = new Set(typeof old === 'string' && old.length <= MAX_CHECK_TEXT_LENGTH ? lines(old) : [])
     const fresh = lines(checked).filter((line) => !unchanged.has(line))
     for (const line of fresh) {

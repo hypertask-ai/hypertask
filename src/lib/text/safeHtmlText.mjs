@@ -22,6 +22,11 @@ export function stripTags(html) {
   let start = 0;
   let open = html.indexOf("<");
   while (open !== -1) {
+    if (html.indexOf(">", open + 1) === -1) break;
+    if (!/[a-z/!?]/i.test(html[open + 1] ?? "")) {
+      open = html.indexOf("<", open + 1);
+      continue;
+    }
     let close = open + 1;
     let quote = "";
     for (; close < html.length; close += 1) {

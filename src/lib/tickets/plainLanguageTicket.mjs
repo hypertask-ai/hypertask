@@ -33,6 +33,7 @@ export function ticketOpening(html) {
       html = `${html.slice(0, start)} ${html.slice(close + 3)}`;
       continue;
     }
+    if (html.indexOf(">", start + 1) === -1) break;
     let quote = "";
     let end = start + 1;
     for (; end < html.length; end += 1) {
@@ -57,8 +58,7 @@ export function ticketOpening(html) {
 }
 
 function structuredText(html) {
-  return stripTags(dropBlockquotes(html)
-    .replace(/<!--[\s\S]*?-->/g, " ")
+  return stripTags(html
     .replace(/\s+/g, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n"))
