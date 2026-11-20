@@ -3,12 +3,12 @@
 ## Sub-features
 
 - `task-share-links` Task share links.
-- `board-read-only-share` `/share/project` (`src/app/share/project/page.tsx`) opens with `?id=<invite key>`. The invite dialog copies it as the read-only view (`src/components/Modals/commands/inviteMember.tsx`). A live key shows that board's columns and tickets with no editing, the document title `<board> • Hypertask`, and the line `Part of the team? You're almost there to begin working in Hypertask` plus **Sign up or Login**, which opens `/invite?key=<invite key>`. A missing, unknown, or expired key does not show the board.
+- `board-read-only-share` `/share/project` (`src/app/share/project/page.tsx`) opens with `?id=<invite key>`. The invite dialog copies it as the read-only view (`src/components/Modals/commands/inviteMember.tsx`). A live key shows that board's columns and tickets with no editing, the document title `<board> • Hypertask` (set client-side after hydration), and the line `Part of the team? You're almost there to begin working in Hypertask` plus **Sign up or Login**, which opens `/invite?key=<invite key>`. A missing, unknown, or expired key redirects to `/unauthorized`; it does not show the board.
 - `agent-task-share` With `htpr-8216-agent-task-share` on, an agent token can `POST /api/mcp/tasks/share` with `{ "taskId": <id> }` and `GET /api/mcp/tasks/share?taskId=<id>`. A successful body is `{ success: true, share }` where `share.link` is `/share?id=<shareId>`, `share.isPublic` is true when a live share exists and the task is not Deleted, and a second POST reuses that live share. Flag off, both answers are 404 `{ "success": false, "error": "Ticket sharing is not enabled" }`. A Deleted task or a board whose status is not Normal answers 403 `This board does not allow sharing a ticket` on POST. Default mode is Owner + QA.
 
 ## How to get to it (user POV)
 
-A board member opens a task and copies its share link (`POST /api/share/createShareLink`, signed in). The link is `https://app.hypertask.ai/share?id=<shareId>`. The board read-only link is `/share/project?id=<invite key>`, copied from the invite dialog. An agent with `htpr-8216-agent-task-share` uses `POST /api/mcp/tasks/share` and reads the same link back with GET. Someone who opens it sees the shared task (`/api/share/getSharedTask`); after they sign in or sign up, the app calls `POST /api/members/share` with the `shareId` to join them to the task's board (`joinProjectFromShareURL` in `src/hooks/General/useAuth.tsx`).
+A board member opens a task and copies its share link (`POST /api/share/createShareLink`, signed in). The link is `https://app.hypertask.ai/share?id=<shareId>`. The board read-only link is `/share/project?id=<invite key>`, copied from the invite dialog. An agent with `htpr-8216-agent-task-share` uses `POST /api/mcp/tasks/share` and reads the same link back with GET. Someone who opens it sees the shared task (`POST /api/share/getSharedTask?shareId=<id>`); after they sign in or sign up, the app calls `POST /api/members/share` with the `shareId` to join them to the task's board (`joinProjectFromShareURL` in `src/hooks/General/useAuth.tsx`).
 
 ## Driving it with agent-browser
 
@@ -18,6 +18,29 @@ A board member opens a task and copies its share link (`POST /api/share/createSh
 4. Open the share URL signed in and confirm the shared task shows.
 5. As owner 4036, copy **Read only view** from the invite dialog. Open `/share/project?id=<invite key>` signed out. The board columns show, and **Sign up or Login** goes to `/invite?key=<invite key>`. Open `/share/project` with no `id`, and again with an expired key, and confirm the board does not show.
 6. With `htpr-8216-agent-task-share` on for the agent user, `POST /api/mcp/tasks/share` for a Normal task on board 7283. Expect 200, `share.isPublic` true, and `share.link`. GET the same `taskId` and expect the same link. Call POST again and expect that same link, not a second row. Flag off, both calls answer 404 `Ticket sharing is not enabled`.
+
+Worked on production, 2026-11-20, QA 985, a disposable task on board 7049:
+
+```bash
+ht-verify api POST /api/share/createShareLink --data '{"taskId":<task>,"projectId":7049}' --confirm --state "$QA_STATE"
+# 200 {message:"\"New Link Generated\"", data:{link:"https://app.hypertask.ai/share?id=<uuid>", type:"Anyone"}}
+ht-verify open "https://app.hypertask.ai/share?id=<uuid>" --wait body   # signed in: redirects to /detail/project-7049/<index>
+curl -s "https://app.hypertask.ai/share?id=<uuid>" | grep -c "<task title>"   # >0 signed out: the public share renders server-side
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' -X POST -H 'content-type: application/json' -d '{"shareId":"x","userId":985}' https://app.hypertask.ai/api/members/share
+# 401 {"message":"Unauthorized"}; nobody is added
+curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://app.hypertask.ai/share/project
+# 307 https://app.hypertask.ai/unauthorized
+curl -s -w '\n%{http_code}\n' -X POST -H 'content-type: application/json' -d '{"taskId":<task>}' https://app.hypertask.ai/api/mcp/tasks/share
+# 401 {"success":false,"error":"Unauthorized. Invalid or missing authentication token.","reason":"missing_token"}
+```
+
+The two agent calls need an agent bearer token: `verified-unreachable: agent
+MCP token on board 7049's team; tried POST /api/mcp/tasks/share without one,
+got 401 missing_token`. Do not mint a token to force it.
+
+The board read-only key is also `verified-unreachable: no invite key exists for
+this run and creating an invite emails a real address; tried /share/project
+(307 /unauthorized) and the invite dialog route`.
 
 ## Gotchas
 

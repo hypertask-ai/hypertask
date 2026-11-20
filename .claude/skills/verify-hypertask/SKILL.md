@@ -39,7 +39,9 @@ State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), s
 | `.claude/skills/verify-hypertask/bin/ht-verify open <path> [--wait <selector>]` | the page loads in the session and reports URL, status and title |
 | `.claude/skills/verify-hypertask/bin/ht-verify click <selector> [--double]` | a real click lands and the page reacts |
 | `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text> [--submit]` | a field accepts typed input on the real page |
-| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path> [--data] [--confirm] [--dry-run]` | an authenticated call through the run's cookies; a write needs `--confirm` |
+| `.claude/skills/verify-hypertask/bin/ht-verify press <keys> [--selector] [--count]` | a real key or chord lands, e.g. `Control+Shift+S`, `Shift+3`, `j` |
+| `.claude/skills/verify-hypertask/bin/ht-verify probe <selector> [--text\|--count\|--attr\|--style\|--html]` | what the page shows, read-only: text, count, attribute, computed style, or `--cookie theme` |
+| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path> [--data] [--confirm] [--dry-run]` | an authenticated call through the run's cookies; a write needs `--confirm`; 401 means the state expired, a 403 is a route's flag/role/origin refusal |
 | `.claude/skills/verify-hypertask/bin/ht-verify logs [--dev\|--browser] [--lines] [--grep]` | the dev or browser log shows what happened |
 | `.claude/skills/verify-hypertask/bin/ht-verify flags list\|show <key>\|set ...` | flag state, and a switch only through ht-flag's approval path, never Off |
 | `.claude/skills/verify-hypertask/bin/ht-verify drive <area> [--base] [--state] [--board]` | one hands-free area (board, task, comments, flags, ctrl-j, ai-chat, inbox) step by step |
@@ -387,7 +389,9 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-hypertask/bin/ht-verify session start` | one persistent browser the later `open`, `click`, `fill` and `shot --session` share |
 | `.claude/skills/verify-hypertask/bin/ht-verify click <selector>` | a real click lands and the page reacts |
 | `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text>` | a field accepts typed input on the real page |
-| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path>` | an authenticated API call answers through the run's own cookies, writes behind `--confirm` |
+| `.claude/skills/verify-hypertask/bin/ht-verify press <keys>` | a key or chord lands, with `--selector` to focus first and `--count` to repeat |
+| `.claude/skills/verify-hypertask/bin/ht-verify probe <selector>` | read-only text, count, attribute, computed style or safe cookie from the page |
+| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path>` | an authenticated API call answers through the run's own cookies, writes behind `--confirm`, a 403 is a refusal not an expired identity |
 | `.claude/skills/verify-hypertask/bin/ht-verify logs` | the dev or browser log shows what happened |
 | `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
 | `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |

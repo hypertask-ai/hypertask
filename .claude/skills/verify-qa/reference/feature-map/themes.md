@@ -27,7 +27,36 @@
 7. With `htpr-8054-graphite-2` off, both pickers hide Graphite 2. A saved Graphite 2 cookie resolves to the system theme without being overwritten. Do not switch production flags for this test; cover the off path in the focused theme tests and record the live mode.
 8. On `/settings`, confirm the page title is Settings and the open section is General. Choose Appearance. On desktop, with `htpr-7328-rounded-theme` on, Material (follows device) is in the list and in Ctrl+K. At 390x844 it is absent. Do not need a new theme to prove the row exists; selecting it is the behavior check and must be restored afterward.
 9. With `htpr-7870-appearance-heading-once` on, desktop Appearance shows that word once. At 390x844 the card above the list still says Appearance.
-10. In AMOLED, with `htpr-9027-amoled-toggle` on, turn on an existing settings switch only if one is already on, or read a switch that is already on. The on track uses hsl(222 9% 46%). Porcelain, Graphite, and Dia keep the green on track. Restore the theme cookie when finished.
+10. In AMOLED, with `htpr-9027-amoled-toggle` on, turn on an existing settings switch only if one is already on, or read a switch that is already on. The on track is the inner span of the switch: `[role=switch][aria-checked=true] > span`. The on track uses hsl(222 9% 46%), which computes to `rgb(107, 113, 128)`. Porcelain, Graphite, and Dia keep the green on track. Restore the theme cookie when finished.
+
+Worked on production, 2026-11-20, QA 985. Live modes then:
+`htpr-8054-graphite-2` OWNER_AND_QA, `htpr-9027-amoled-toggle` OWNER_AND_QA,
+`htpr-7870-appearance-heading-once` EVERYONE, `htpr-7328-rounded-theme` OFF.
+
+```bash
+ht-verify open /settings/appearance --wait body
+# title Settings; sidebar Profile > Appearance; list: Follow system, Light · Porcelain,
+# Dark · Graphite, Graphite 2, OLED black · AMOLED, Paper · Dia. Material is absent while 7328 is OFF.
+ht-verify click 'text="Graphite 2"'
+ht-verify probe html --attr data-theme          # graphite-2
+ht-verify probe --cookie theme                   # graphite-2 (read after a reload; see gotcha)
+ht-verify open /settings/appearance --wait body  # reload
+ht-verify probe html --attr data-theme          # still graphite-2
+ht-verify press Control+k --wait 900
+ht-verify probe "input:focus" --attr placeholder # "Type a command or search"
+ht-verify fill "input:focus" Graphite            # RESULTS: Graphite 2, Dark · Graphite
+ht-verify press Enter --wait 1500                # data-theme graphite-2
+ht-verify open /settings/notifications --wait "[role=switch][aria-checked=true]"
+ht-verify probe "[role=switch][aria-checked=true] > span" --style background-color   # amoled: rgb(107, 113, 128)
+ht-verify shot https://app.hypertask.ai/settings/appearance --out appearance-390x844.png --viewport 390x844
+```
+
+Clicking through Appearance changes `html[data-theme]` and writes the `theme`
+cookie in the same context; the value survives a reload. A fresh context
+(the QA state without the cookie) resolves to Porcelain. The session's cookies
+are never written back to the state file, so there is nothing to restore there.
+Palette focus matters: press Escape and click a neutral label before Ctrl+K,
+or the settings page's own Search settings input keeps focus.
 
 ## Gotchas
 
@@ -37,6 +66,8 @@
 - New CSS leaks into Graphite or Porcelain.
 - Mobile first-screen preferences reject a newly supported theme.
 - Material is expected on the phone, or a saved Material choice is left in place after the check.
+- Reading the on-track colour from the switch button returns `rgba(0, 0, 0, 0)`: the visible track is the button's inner span.
+- `ht-verify probe --cookie theme` straight after a pick has reported the cookie absent while `html[data-theme]` already changed; reload the page and probe again before calling the cookie wrong.
 - Desktop Appearance still shows Appearance on the card above the theme list while `htpr-7870-appearance-heading-once` is on.
 - An AMOLED settings switch that is on stays green while `htpr-9027-amoled-toggle` is on.
 
