@@ -159,6 +159,7 @@ export const taskNamespaceSchema = {
   updatedAt: { type: "string" },
   uniqueIndex: { type: "int" },
   projectTitle: { type: "string" },
+  keywordOnly: { type: "bool" },
 };
 
 export const commentNamespaceSchema = {
@@ -175,6 +176,7 @@ export const commentNamespaceSchema = {
   taskStatus: { type: "string", filterable: true },
   taskUpdatedAt: { type: "string" },
   taskUniqueIndex: { type: "int" },
+  keywordOnly: { type: "bool" },
 };
 
 export const pageNamespaceSchema = {
@@ -552,11 +554,12 @@ export async function upsertTaskRowsToTurbopuffer(
 
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer task upsert"
+    "turbopuffer task upsert",
+    true
   );
 
   if (!hasVectors) {
-    console.error(
+    console.warn(
       `turbopuffer task upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -611,11 +614,12 @@ export async function upsertCommentRowsToTurbopuffer(
 
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer comment upsert"
+    "turbopuffer comment upsert",
+    true
   );
 
   if (!hasVectors) {
-    console.error(
+    console.warn(
       `turbopuffer comment upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -658,7 +662,7 @@ export async function upsertPageRowsToTurbopuffer(
   );
 
   if (!hasVectors) {
-    console.error(
+    console.warn(
       `turbopuffer page upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -783,7 +787,7 @@ export async function upsertCustomInstructionFileRowsToTurbopuffer(
   );
 
   if (!hasVectors) {
-    console.error(
+    console.warn(
       `turbopuffer custom instruction file upsert skipped: embeddings unavailable for ${rows.length} row(s)`
     );
     return;
@@ -1161,16 +1165,18 @@ async function ensureNamespaceSchema(
 
 async function embedRowsForWrite<T extends { searchText: string; projectId?: number; teamId?: string }>(
   rows: T[],
-  context: string
-): Promise<{ rows: Array<T & { vector?: number[] }>; hasVectors: boolean }> {
+  context: string,
+  repairKeywordRows = false
+): Promise<{ rows: Array<T & { vector?: number[]; keywordOnly?: boolean }>; hasVectors: boolean }> {
   const buckets = new Map<string, T[]>();
   for (const row of rows) buckets.set(row.teamId || `project:${row.projectId ?? ""}`, [...(buckets.get(row.teamId || `project:${row.projectId ?? ""}`) ?? []), row]);
-  const written: Array<T & { vector?: number[] }> = [];
+  const written: Array<T & { vector?: number[]; keywordOnly?: boolean }> = [];
+  const markRepairable = (row: T, keywordOnly: boolean) => repairKeywordRows ? { ...row, keywordOnly } : row;
   for (const group of buckets.values()) {
     const { embeddingSpendMode, withSpendCharge } = await import("@/lib/ai/spend/embeddingRoute");
     const route = await embeddingSpendMode(group.flatMap((row) => row.projectId ? [row.projectId] : []), group.find((row) => row.teamId)?.teamId);
     if (route === "mixed-keyword" || (typeof route !== "string" && route.mode === "keyword")) {
-      written.push(...group.map((row) => ({ ...row, vector: [...KEYWORD_SEARCH_VECTOR] })));
+      written.push(...group.map((row) => ({ ...markRepairable(row, false), vector: [...KEYWORD_SEARCH_VECTOR] })));
       continue;
     }
     try {
@@ -1179,12 +1185,12 @@ async function embedRowsForWrite<T extends { searchText: string; projectId?: num
       if (!key) throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
       const run = () => texts.length === 1 ? shareInFlightEmbedding(toEmbeddingInput(texts[0]), key) : embedInputs(texts.map(toEmbeddingInput), key);
       const vectors = typeof route !== "string" && route.mode === "vector" && route.teamId ? await withSpendCharge(route, route.teamId, texts, run) : await run();
-      if (!vectors) written.push(...group.map((row) => ({ ...row, vector: [...KEYWORD_SEARCH_VECTOR] })));
-      else written.push(...group.map((row, index) => ({ ...row, vector: vectors[index] })));
+      if (!vectors) written.push(...group.map((row) => ({ ...markRepairable(row, false), vector: [...KEYWORD_SEARCH_VECTOR] })));
+      else written.push(...group.map((row, index) => ({ ...markRepairable(row, false), vector: vectors[index] })));
     } catch (error) {
-      console.error(`${context} embedding error, writing keyword-searchable rows:`, error);
-      if (typeof route !== "string" && route.mode === "current") return { rows, hasVectors: false };
-      written.push(...group.map((row) => ({ ...row, vector: [...KEYWORD_SEARCH_VECTOR] })));
+      console.warn(`${context} embeddings unavailable, writing keyword-searchable rows:`, error);
+      if (!repairKeywordRows && typeof route !== "string" && route.mode === "current") return { rows, hasVectors: false };
+      written.push(...group.map((row) => ({ ...markRepairable(row, true), vector: [...KEYWORD_SEARCH_VECTOR] })));
     }
   }
   return { rows: written, hasVectors: written.length > 0 };

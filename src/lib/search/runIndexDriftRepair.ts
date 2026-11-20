@@ -44,6 +44,10 @@ function textAttr(row: { [key: string]: unknown } | undefined, key: string) {
   return value == null ? "" : String(value);
 }
 
+function keywordOnlyAttr(row: { [key: string]: unknown } | undefined) {
+  return row?.keywordOnly === true || row?.keywordOnly === "true";
+}
+
 async function queryRows(name: string, body: Record<string, unknown>) {
   const response = await turbopuffer.namespace(name).query(body as any);
   return (response.rows ?? []) as { id?: unknown; [key: string]: unknown }[];
@@ -79,12 +83,12 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
       filters: ["id", "In", taskIds],
       rank_by: ["id", "asc"],
       top_k: taskIds.length,
-      include_attributes: ["updatedAt"],
+      include_attributes: ["updatedAt", "keywordOnly"],
       consistency: { level: "strong" },
     })) {
       const id = Number(row.id);
       if (!Number.isInteger(id)) continue;
-      indexedTasks.set(id, { updatedAt: textAttr(row, "updatedAt") });
+      indexedTasks.set(id, { updatedAt: textAttr(row, "updatedAt"), keywordOnly: keywordOnlyAttr(row) });
     }
   }
   const indexedComments = new Map<number, IndexedCommentCopy | null>();
@@ -94,11 +98,11 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
       filters: ["taskId", "Eq", String(task.id)],
       rank_by: ["taskUpdatedAt", "asc"],
       top_k: 1,
-      include_attributes: ["taskTitle", "taskUpdatedAt"],
+      include_attributes: ["taskTitle", "taskUpdatedAt", "keywordOnly"],
       consistency: { level: "strong" },
     });
     indexedComments.set(task.id, row
-      ? { taskTitle: textAttr(row, "taskTitle"), taskUpdatedAt: textAttr(row, "taskUpdatedAt") }
+      ? { taskTitle: textAttr(row, "taskTitle"), taskUpdatedAt: textAttr(row, "taskUpdatedAt"), keywordOnly: keywordOnlyAttr(row) }
       : null);
   }
   return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };
