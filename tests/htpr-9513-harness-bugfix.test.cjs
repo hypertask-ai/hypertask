@@ -63,15 +63,16 @@ test("an app bug fix still plans a change:repro journey", async () => {
   assert.deepEqual(primary.items.map((item) => item.journey), ["change:primary"]);
 });
 
-test("an app bug fix with no planned repro is still unevaluated", async () => {
+test("an app bug fix with no planned repro needs a changed test that fails on the old code", async () => {
   const { planFromRequest, decide, judgeJourneys } = await load();
   const plan = await planFromRequest(request("HTPR-9513 [BUGFIX] the save route drops its last field", ["src/lib/tasks/saveLimit.ts"]), {
     binding, altModel: ALT, pages: [], ask: () => ({ actions: [], expect: [], reason: "no user path: the planner cannot build the state" }),
   });
   assert.equal(plan.bugfix, true);
   const result = decide({ model: {}, plan, evidence: null, binding, checksPassed: true });
-  assert.equal(result.verdict, "UNEVALUATED");
-  assert.match(result.notes, /no repro journey/);
+  assert.equal(result.verdict, "FAIL");
+  assert.match(result.notes, /no changed test that fails on the old code/);
+  assert.equal(decide({ model: {}, plan, evidence: null, binding, checksPassed: true, reproFirstPassed: true }).verdict, "PASS+NOTES");
   const captured = { ...binding, bugfix: true, actions: [], expect: [], verifierModel: ALT, claim: { title: "HTPR-9513 [BUGFIX] the save route drops its last field" }, files: ["src/lib/tasks/saveLimit.ts"], reason: "no user path: the planner cannot build the state", journeys: [{ journey: "area:boards-and-views", actions: [{ op: "goto", path: "/inbox" }], expect: [] }] };
   const run = { journey: "area:boards-and-views", apiOnly: false, offOrigin: [], steps: [{ action: { op: "goto", path: "/inbox" }, ok: true, error: "" }], expects: [], navigations: [{ url: "http://127.0.0.1:3100/inbox", status: 200 }] };
   const judged = await judgeJourneys({ plan: captured, evidence: { ...binding, journeys: [run] }, picked: { model: ALT }, ask: () => ({ verdict: "PASS", notes: "" }) });

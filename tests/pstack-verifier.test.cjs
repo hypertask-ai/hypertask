@@ -55,6 +55,46 @@ test("an empty plan logs its reason and passes only for a non-app change with gr
   assert.equal(ciChecksPassed([{ name: CONTEXT, conclusion: "failure" }]), false);
 });
 
+test("a server-only bug fix passes on green checks and a changed test that fails on the old code", async () => {
+  const { decide, reproFirstPassed, reproFirstWaiting, REPRO_FIRST_JOB } = await load();
+  const reason = "no user path: this only changes server startup instrumentation";
+  const server = plan([], { reason, files: ["src/lib/startup/register.ts", "tests/startup-register.test.cjs"], filesTruncated: false, bugfix: true });
+  const proved = decide({ model: {}, plan: server, evidence: null, binding, checksPassed: true, reproFirstPassed: true });
+  assert.equal(proved.verdict, "PASS+NOTES");
+  assert.match(proved.notes, /^no user path: repro-first shows a changed test failing on the old code and passing here: /);
+  assert.match(proved.notes, /server startup instrumentation/);
+  const unproved = decide({ model: {}, plan: server, evidence: null, binding, checksPassed: true });
+  assert.equal(unproved.verdict, "FAIL");
+  assert.match(unproved.notes, /^the bug fix has no changed test that fails on the old code: /);
+  assert.match(unproved.notes, /server startup instrumentation/);
+  assert.equal(decide({ model: {}, plan: server, evidence: null, binding, checksPassed: false, reproFirstPassed: true }).verdict, "FAIL");
+  assert.equal(decide({ model: {}, plan: server, evidence: null, binding, checksPassed: true, checksPending: true }).verdict, "PENDING");
+  assert.equal(decide({ model: {}, plan: plan([], { ...server, bugfix: false }), evidence: null, binding, checksPassed: true, reproFirstPassed: true }).verdict, "FAIL");
+  assert.equal(reproFirstPassed([{ name: REPRO_FIRST_JOB, conclusion: "success" }]), true);
+  assert.equal(reproFirstPassed([{ name: REPRO_FIRST_JOB, conclusion: "failure" }]), false);
+  assert.equal(reproFirstPassed([{ name: REPRO_FIRST_JOB, conclusion: null }]), false);
+  assert.equal(reproFirstPassed([{ name: "ci-tests", conclusion: "success" }]), false);
+  assert.equal(reproFirstPassed([]), false);
+  const rerun = [
+    { name: REPRO_FIRST_JOB, conclusion: "failure", created_at: "2026-01-01T00:00:00Z" },
+    { name: REPRO_FIRST_JOB, conclusion: "success", created_at: "2026-01-01T00:10:00Z" },
+  ];
+  assert.equal(reproFirstPassed(rerun), true);
+  assert.equal(reproFirstWaiting([{ name: REPRO_FIRST_JOB, conclusion: null }]), true);
+  assert.equal(reproFirstWaiting([{ name: REPRO_FIRST_JOB, conclusion: "failure" }]), false);
+  assert.equal(reproFirstWaiting([]), false);
+});
+
+test("a bug fix with a planned user journey still decides from the evidence", async () => {
+  const { decide } = await load();
+  const body = plan([{ op: "goto", path: "/project?id=1" }], { bugfix: true });
+  const ok = decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence(), binding, checksPassed: false, reproFirstPassed: false });
+  assert.equal(ok.verdict, "PASS");
+  const broken = decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: evidence({ steps: [{ ok: false, error: "missing" }] }), binding, checksPassed: true, reproFirstPassed: true });
+  assert.equal(broken.verdict, "FAIL");
+  assert.equal(broken.notes, "a step failed");
+});
+
 test("a truncated file list cannot take the non-app pass", async () => {
   const { decide, takeFileList, planFileList } = await load();
   const names = [...Array.from({ length: 100 }, (_, index) => `docs/a${index}.md`), "src/app/page.tsx"];
@@ -1315,6 +1355,13 @@ test("the head lane judges from its own screenshots, and a page red in nightly d
     assert.equal(excused.verdict, "PASS+NOTES");
     assert.match(excused.notes, /already red on production/);
     assert.deepEqual(asked, []);
+    const bugPlan = { ...plan, bugfix: true, reason: "no user path: server startup only" };
+    const proved = await judgeJourneys({ plan: bugPlan, evidence: { ...binding, journeys: [run(true)] }, picked: pickVerifier("deepseek", "grok/grok-4"), bugfixProved: true, ask: () => ({ verdict: "PASS", notes: "" }), work: dir });
+    assert.equal(proved.verdict, "PASS+NOTES");
+    assert.match(proved.notes, /no user path, and repro-first shows a changed test failing on the old code/);
+    const unproved = await judgeJourneys({ plan: bugPlan, evidence: { ...binding, journeys: [run(true)] }, picked: pickVerifier("deepseek", "grok/grok-4"), ask: () => ({ verdict: "PASS", notes: "" }), work: dir });
+    assert.equal(unproved.verdict, "UNEVALUATED");
+    assert.match(unproved.notes, /no repro journey: no user path: server startup only/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

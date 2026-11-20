@@ -359,7 +359,7 @@ function sameSeries(seen, planned, key) {
   if (seen.length !== planned.length) return false;
   return seen.every((item, index) => item?.[key] == null || JSON.stringify(item[key]) === JSON.stringify(planned[index]));
 }
-export function decide({ model = {}, plan, evidence, binding, checksPassed = false, checksPending = false }) {
+export function decide({ model = {}, plan, evidence, binding, checksPassed = false, checksPending = false, reproFirstPassed = false }) {
   let parsed;
   try { parsed = readPlan(plan, binding); } catch { return { verdict: "FAIL", notes: "schema/binding mismatch" }; }
   if (evidence?.preview === "down") return { verdict: "FAIL", notes: "preview did not start" };
@@ -373,9 +373,10 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
     if (noAppPath && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (files.length && docsShortcut(files, parsed.filesTruncated) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (botPlanPass(parsed, checksPassed)) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500), authorFamily: parsed.botLogin };
+    if (reason && parsed.bugfix === true && hasAppCode(files) && checksPassed && reproFirstPassed) return { verdict: "PASS+NOTES", notes: `no user path: ${REPRO_FIRST_JOB} shows a changed test failing on the old code and passing here: ${reason}`.slice(0, 500) };
     if (checksPending) return { verdict: "PENDING", notes: "waiting for required checks" };
     const reachable = Array.isArray(parsed.reachable) ? parsed.reachable.filter((item) => typeof item === "string") : [];
-    if (reason && parsed.bugfix === true && hasAppCode(files)) return { verdict: "UNEVALUATED", notes: `the bug fix has no repro journey: ${reason}`.slice(0, 500) };
+    if (reason && parsed.bugfix === true && hasAppCode(files)) return { verdict: "FAIL", notes: `the bug fix has no changed test that fails on the old code: ${reason}`.slice(0, 500) };
     if (reason && reachable.length) return { verdict: "UNEVALUATED", notes: `no user path was planned for a change that reaches ${reachable.slice(0, 3).join(", ")}: ${reason}`.slice(0, 500) };
     return { verdict: "FAIL", notes: (reason ? `no user path verified: ${reason}` : "no user path verified").slice(0, 500) };
   }
@@ -541,6 +542,7 @@ export const FILE_LIST_CAP = 100;
 export const CI_WAIT_ROUNDS = 40;
 export const CI_WAIT_INTERVAL_MS = 30000;
 export const REQUIRED_CI_CONTEXTS = ["ci-tests", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
+export const REPRO_FIRST_JOB = "repro-first";
 export const BOT_LOGINS = new Set(["dependabot", "dependabot[bot]", "app/dependabot"]);
 const BOT_COMMITTERS = new Set([...BOT_LOGINS, "web-flow"]);
 const MANIFEST_BASENAMES = new Set(["package.json", "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"]);
@@ -606,6 +608,13 @@ export function ciChecksPending(runs) {
 export function ciChecksPassed(runs) {
   const latest = latestRuns(runs);
   return latest.length > 0 && latest.every((run) => run.conclusion === "success" || run.conclusion === "skipped");
+}
+export function reproFirstPassed(runs) {
+  const run = latestRuns(runs).find((item) => item?.name === REPRO_FIRST_JOB);
+  return run?.conclusion === "success";
+}
+export function reproFirstWaiting(runs) {
+  return latestRuns(runs).some((run) => run?.name === REPRO_FIRST_JOB && run?.conclusion == null);
 }
 export function relevantStatuses(statuses) {
   const seen = new Set();
@@ -1310,7 +1319,7 @@ export function readNightlyRed(call = gh) {
   console.log(`already red on production: ${red.join(", ") || "(none)"}`);
   return red;
 }
-export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY, work = workDir() }) {
+export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY, work = workDir() }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     for (const viewport of planViewports(plan)) {
@@ -1332,9 +1341,20 @@ export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], 
     }
   }
   const hasRepro = (plan.journeys ?? []).some((item) => item.journey === "change:repro");
-  return compareLib.decideHeadOnly({ journeys, redFeatures, bugfix: plan.bugfix === true, bugfixUnevaluated: plan.bugfix && !hasRepro ? String(plan.reason ?? "") : "" });
+  return compareLib.decideHeadOnly({ journeys, redFeatures, bugfix: plan.bugfix === true, bugfixUnevaluated: plan.bugfix && !hasRepro ? String(plan.reason ?? "") : "", bugfixProved: plan.bugfix === true && !hasRepro && bugfixProved === true });
 }
 export const journeyMode = (plan) => !plan.fail && Array.isArray(plan.journeys) && plan.journeys.length > 0;
+async function reproFirstProof(binding) {
+  try {
+    const repo = requireRepo(process.env.GITHUB_REPOSITORY);
+    const runs = await collectCheckRuns((page) => JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`])));
+    const statuses = JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/status`])).statuses;
+    return reproFirstPassed(runs) && emptyPlanGate({ runs, statuses }).checksPassed;
+  } catch (error) {
+    console.log(`ci checks unread: ${failureText(error)}`);
+    return false;
+  }
+}
 async function judgeCommand() {
   const binding = bindingNow();
   const plan = readPlan(readFileSync(path.join(workDir(), "plan", "plan.json"), "utf8"), binding);
@@ -1344,12 +1364,16 @@ async function judgeCommand() {
   notePreviewDown(plan, evidence);
   const picked = pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   const comparing = journeyMode(plan);
+  const files = Array.isArray(plan.files) ? plan.files : [];
+  const bugfixNoPath = plan.bugfix === true && hasAppCode(files);
+  const noRepro = !(plan.journeys ?? []).some((item) => item.journey === "change:repro");
   let compared = null;
   if (comparing) {
     try {
       evidence = evidence ? readJourneyEvidence(evidence, binding) : null;
     } catch { evidence = null; }
-    compared = await judgeJourneys({ plan, evidence, picked, redFeatures: readNightlyRed() });
+    const bugfixProved = bugfixNoPath && noRepro ? await reproFirstProof(binding) : false;
+    compared = await judgeJourneys({ plan, evidence, picked, redFeatures: readNightlyRed(), bugfixProved });
   } else if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
       const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
@@ -1358,20 +1382,22 @@ async function judgeCommand() {
   }
   let checksPassed = false;
   let checksPending = false;
-  const files = Array.isArray(plan.files) ? plan.files : [];
+  let reproFirst = false;
   if (!comparing && !plan.fail && !plan.actions.length && !listWasTruncated(plan, files)) {
     try {
       const repo = requireRepo(process.env.GITHUB_REPOSITORY);
       const gate = await waitForCiChecks(async () => ({
         runs: await collectCheckRuns((page) => JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/check-runs?per_page=100&page=${page}`]))),
         statuses: JSON.parse(gh(["api", `repos/${repo}/commits/${binding.sha}/status`])).statuses,
-      }), { pending: (snapshot) => emptyPlanGate(snapshot).checksPending });
+      }), { pending: (snapshot) => emptyPlanGate(snapshot).checksPending || (bugfixNoPath && reproFirstWaiting(snapshot.runs)) });
       const ready = emptyPlanGate(gate);
       checksPassed = ready.checksPassed;
       checksPending = ready.checksPending;
+      reproFirst = reproFirstPassed(gate.runs);
     } catch (error) { console.log(`ci checks unread: ${failureText(error)}`); }
   }
-  const verdict = compared ?? decide({ model, plan, evidence, binding, checksPassed, checksPending });
+  if (bugfixNoPath && !reproFirst) checksPending = false;
+  const verdict = compared ?? decide({ model, plan, evidence, binding, checksPassed, checksPending, reproFirstPassed: reproFirst });
   const dir = path.join(workDir(), "verdict");
   mkdirSync(dir, { recursive: true });
   writeFileSync(path.join(dir, "verdict.json"), `${JSON.stringify({ ...verdict, ...binding, baseSha: plan.baseSha || "", tree: plan.tree || "", patchId: plan.patchId || "", diffSha256: plan.diffSha256 || "", authorFamily: verdict.authorFamily || plan.botLogin || plan.authorFamily || "", verifierModel: plan.botLogin ? "" : (plan.verifierModel || "") })}\n`, { mode: 0o600 });
