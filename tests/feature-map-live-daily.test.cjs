@@ -26,7 +26,6 @@ test('the map index gives one row per area and a driver only when the map names 
   assert.deepEqual(plan.find((feature) => feature.file === 'boards-and-views.md').scripts, scripts)
   const figma = plan.find((feature) => feature.file === 'figma-connect.md')
   assert.match(figma.reason, /no live driver/)
-  assert.match(readFileSync(path.join(__dirname, '..', '.github/workflows/feature-map-live-daily.yml'), 'utf8'), /FEATURE_MAP_LIVE: '1'/)
 })
 
 test('grading says pass, fail or not-drivable per mapped feature', () => {

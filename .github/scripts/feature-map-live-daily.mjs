@@ -4,6 +4,7 @@ import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } f
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { api, findOpenWeeklyTicket } from './feature-map-live-weekly-file.mjs'
+import { LIVE_OPT_IN } from '../../.claude/skills/verify-qa/scripts/drive-grade.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
@@ -163,6 +164,9 @@ function runDrive(name, dir) {
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
     throw new Error('feature-map-live-daily runs only on a GitHub-hosted runner, never the VPS')
+  }
+  if (process.env[LIVE_OPT_IN] !== '1') {
+    throw new Error(`feature-map-live-daily needs ${LIVE_OPT_IN}=1 to drive production, set by its workflow step`)
   }
   const dir = path.join(root, OUT)
   mkdirSync(dir, { recursive: true })
