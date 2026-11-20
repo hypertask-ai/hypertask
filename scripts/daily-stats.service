@@ -3,5 +3,5 @@ Description=Rebuild and publish the Hypertask daily stats page (YPER4-341)
 [Service]
 Type=oneshot
 Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/usr/bin/python3 %h/.local/share/daily-stats/daily-stats.py --publish
+ExecStart=/usr/bin/python3 %h/projects/hypertask-ops/scripts/daily-stats.py --publish
 TimeoutStartSec=15min
