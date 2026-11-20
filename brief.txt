@@ -1,0 +1,6 @@
+Read /home/valentin/.claude/plugins/cache/cursor-plugins/pstack/0.15.46/skills/poteto-mode/worker.md before anything else.
+
+Goal (Valentin): drain the open PR queue to under 15; every remaining PR gets one owner who runs the pstack Babysit playbook to a verifier PASS. You own PR https://github.com/hypertask-ai/hypertask/pull/3636 (branch one-ticket-template, worktree /tmp/b15/wt-pr3636). Read /home/valentin/.claude/plugins/cache/cursor-plugins/pstack/0.15.46/skills/poteto-mode/playbooks/babysit.md and follow it exactly.
+Bring the branch up to date with production, fix what is red that this PR caused, make sure the PR body has a first line `Author-Model: <family>` (claude, deepseek, grok, codex or other: read who wrote it from the commits), and wait for the pstack-verifier status to be success. If the PR's ticket is already fixed on production, or the change no longer makes sense, close the PR with a one-line reason instead and move its ticket to Backlog with SHIP_SESSION_NAME="HT Pstack Boss" ~/.local/bin/vcc. Do not merge; HT Product Lead merges on PASS. Never force-push anything but this branch, with --force-with-lease.
+SETUP: export PATH=$HOME/.local/bin:$PATH SHIP_SESSION_NAME="HT Pstack Boss". node_modules symlinked; never npm install; never the full suite.
+Report /tmp/b15/kpr3636-report.md: final head sha, verifier state, what you changed.

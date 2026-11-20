@@ -57,8 +57,10 @@ export function ticketOpening(html) {
 
 function structuredText(html) {
   return stripTags(dropBlockquotes(html)
+    .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n"))
+    .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<(?:[^>"']|"[^"]*"|'[^']*')*>/g, " "))
     .replace(/&nbsp;/gi, " ")
     .replace(/&#(?:x27|39);/gi, "'")
     .replace(/&apos;/gi, "'")

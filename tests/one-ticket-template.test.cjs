@@ -48,6 +48,11 @@ test('fake dividers in HTML attributes or comments cannot hide bad prose', () =>
     assert.throws(() => check(block.replace('Everyone.', `${fake}Next: inspect src/lib/search.ts.`)), /Technical detail/);
   }
 });
+test('attributes and comments before the opening leave the template intact', () => {
+  for (const noise of ['<span title="<hr>">', "<span title='<HR>'>", '<!-- <hr> -->']) {
+    assert.doesNotThrow(() => check(noise + block));
+  }
+});
 test('each required label owns a separate opening line', () => {
   assert.equal(template.hasPlainLanguageTicketBlock(block.replace(/<\/p><p>/g, ' ')), false);
 });
