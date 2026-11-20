@@ -1,1 +1,1 @@
-| Command palette | [command-palette.md](command-palette.md) | no smoke id; `ctrl-j-drive.mjs` hands-free drive, palette rows and Share Task tooltip shots |
+| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via `ht-verify session`; `;`/`SHIFT ;` chips, plus composer (`ctrl-j-drive.mjs` is stale for QA 985) |

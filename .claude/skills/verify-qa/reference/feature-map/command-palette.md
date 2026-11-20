@@ -34,19 +34,58 @@ the same palette lists the commands but hides the key chips
 
 ## Driving it with agent-browser
 
-**Hands-free drive, every Ctrl+J change:**
+**Production, QA 985 (verified 2026-11-20).** Start one persistent session and
+read the real DOM; the phone palette hides the key chips by design.
+
+```bash
+H=.claude/skills/verify-hypertask/bin/ht-verify
+export HT_VERIFY_RUN=/tmp/b15/9515-evidence/htverify
+$H session start --base https://app.hypertask.ai --viewport 1440x900
+$H open /my-tasks --full
+```
+
+Press the shortcut through the session's CDP port, because no ht-verify command
+sends a bare key:
+
+```bash
+P=$($H session status | jq -r .data.port)
+node -e 'const{chromium}=require("playwright");(async()=>{const b=await chromium.connectOverCDP("http://127.0.0.1:'"$P"'");const p=b.contexts()[0].pages()[0];await p.keyboard.press("Control+k");await b.close()})()'
+```
+
+Then `$H open /my-tasks` again for Ctrl+J, and drive with `$H fill '#htc-search'
+'copy private'` and `$H shot --session --out <png>`.
+
+Require on Search: tabs `Search` (selected) and `New Task` inside the window,
+rows `Copy private task link (title + URL)` with chips `CTRL` `;` and
+`Copy private task URL` with `CTRL` `SHIFT` `;`, plus `Search tasks: "copy
+private"`. Never `CTRL :`.
+
+Require on New Task with QA 985 (`htpr-8829-ctrlj-plus-composer` on): visible
+`Send` (button and text), `Choose a board`, `Auto` model picker, `Attach file`
+and `Add context` inside the box, and no footer row and no `Create task` button.
+`Escape` closes the window.
+
+**Hands-free drive, loopback only.**
 `node .claude/skills/verify-qa/scripts/ctrl-j-drive.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>`
 presses Ctrl+J on a seeded board, requires the New Task popup and its focused
 composer, checks the composer button names, and sends the note with the shortcut
-the footer names (`Ctrl Enter create` today, plain `Enter` when the flag is off).
-It requires the ticket to be created and opened at its detail page, records the
-create response, deletes the task it created, then reopens and closes the popup
-with Escape. It prints `PASS` or `FAIL` per step and ends with
-`ctrl-j drive ok`. It refuses any base that is not loopback, so it never drives
-production: run it on the seeded browser-smoke stack
-(`scripts/verify-qa <branch> hands-free-drives` runs it hosted).
-`--break shortcut` swallows Ctrl+J on purpose; the run must then end with
-`negative control ok`, which proves the drive detects a broken shortcut.
+the footer names (`Ctrl Enter create` when the word-keys footer is on, plain
+`Enter` when `htpr-8253-ctrlj-ctrl-enter-send` is off). It requires the ticket
+to be created and opened at its detail page, records the create response,
+deletes the task it created, then reopens and closes the popup with Escape. It
+prints `PASS` or `FAIL` per step and ends with `ctrl-j drive ok`. It refuses any
+base that is not loopback, so it never drives production: run it on the seeded
+browser-smoke stack (`scripts/verify-qa <branch> hands-free-drives` runs it
+hosted). `--break shortcut` swallows Ctrl+J on purpose; the run must then end
+with `negative control ok`.
+
+**Known harness gap (2026-11-20).** That script is stale for the QA 985
+default: it demands `[aria-label="Create task"]` and a footer matching
+`/(ctrl|cmd) enter create/`, but the plus composer renders a `Send` control and
+no footer, while `htpr-8253` (EVERYONE) turns plain Enter into a paragraph
+break. On the QA 985 default the drive creates zero tickets and fails. Fix the
+script to accept `Send` and to press Control+Enter before trusting its `ok`.
+Reading this file's production steps is the reliable check until then.
 
 - Open any task at `/detail/project-<board>/<number>`, press `Ctrl+K`, type
   `copy private`, and read the key chips on the right of each row.
@@ -74,14 +113,15 @@ No tasks need creating for this styling check.
 
 With `htpr-8253-ctrlj-ctrl-enter-send` on (default Everyone), Ctrl+Enter opens
 in the New Task composer, type a two-paragraph note, and press Enter: a line
-break must appear and no ticket may be created. The footer below the box reads
-`CTRL+ENTER Send` (`CMD+ENTER` on Apple). Press Ctrl+Enter (Cmd+Enter on a Mac):
-exactly one ticket is created with the whole note, the composer closes and the
-new ticket opens. Repeat at 1440x900 and 390x844 in Porcelain, Graphite, AMOLED
-and Dia, and capture the footer hint in each. With the flag Off, Enter creates
-the task again and the hint reads `Enter Send`. The phone New Task sheet hides
-the footer and keeps its Send button, so record that path as the closest check
-for the phone footer.
+break must appear and no ticket may be created. Without the plus composer the
+footer below the box reads a spaced `Ctrl Enter` `Send` (not `CTRL+ENTER`), and
+the plus composer (`htpr-8829`) hides the footer entirely. Press Ctrl+Enter
+(Cmd+Enter on a Mac): exactly one ticket is created with the whole note, the
+composer closes and the new ticket opens. Repeat at 1440x900 and 390x844 in
+Porcelain, Graphite, AMOLED and Dia, and capture the footer hint in each. With
+the flag Off, Enter creates the task again and the hint reads `Enter Send`. The
+phone New Task sheet hides the footer and keeps its Send button, so record that
+path as the closest check for the phone footer.
 
 ### Board named in the note
 
@@ -167,17 +207,18 @@ Screenshots of the palette rows with the key chips, the matching help-list
 rows, and one Share Task tooltip, then compare the glyphs by eye. Shoot the
 desktop viewport at 1440x900; all four themes when row styling changed.
 `tests/htpr-7891-palette-share-key-labels.test.cjs` pins the palette labels to
-the shared module and the help list.
-
-### Cleanup
-
-None; reading the palette and the help list writes nothing.
+the shared module and the help list. The copy-private rows print `;` and
+`SHIFT ;` today (verified live), never `:`.
 
 ### Gap
 
 Phone shots cannot prove the key chips, because the phone palette hides them;
-they only prove the rows still render.
+they only prove the rows still render. The loopback `ctrl-j-drive.mjs` is stale
+for the QA 985 plus-composer default; see the harness gap above.
 
+### Cleanup
+
+None; reading the palette and the help list writes nothing.
 ### Desktop New Task entry
 
 While `htpr-8035-sidebar-new-task` and the compose task writer are on, the

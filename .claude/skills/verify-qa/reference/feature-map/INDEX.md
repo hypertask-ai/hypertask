@@ -32,20 +32,20 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Board member list | [board-member-list.md](board-member-list.md) | `feature-map-drive.mjs board-member-list`; query `teamId` ignored |
 | Board skills | [board-skills.md](board-skills.md) | `feature-map-drive.mjs board-skills`; create a throwaway skill, prove 201 and the reload, delete it |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `feature-map-drive.mjs boards-and-views`; `board-drive-live.mjs` hands-free |
-| CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | live repository visibility, trusted workflow rejection, title binding |
-| Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | historical first/final CLI replay, server helper and owner-review routing |
-| Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
-| CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
-| CLI install commands and login | [cli-install.md](cli-install.md) | no smoke id; Settings CLI shots, real install and read-only token-login guided start |
-| Command palette | [command-palette.md](command-palette.md) | no smoke id; `ctrl-j-drive.mjs` hands-free drive, palette rows and Share Task tooltip shots |
-| Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `node .claude/skills/verify-qa/scripts/comments-drive-live.mjs` |
-| Create task attachments | [create-task-attachments.md](create-task-attachments.md) | `create-task` covers save only; attachments verify by hand |
-| Board custom instructions | [custom-instructions.md](custom-instructions.md) | QA 985 saved multiline text, reload/reopen, failed and empty saves |
-| Demo board | [demo-board.md](demo-board.md) | `demo` (tag `@demo`, `demo.spec.ts`) |
-| Desktop human CLI login | [desktop-login.md](desktop-login.md) | QA 985 bearer exchange, shared and legacy route checks, isolated task save, cookie/flag-off/permission controls |
-| Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
-| Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
-| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `node .claude/skills/verify-qa/scripts/flags-drive-live.mjs` |
+| CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | `ci-runner-policy.cjs` on the production SHA, self-hosted negative control, `pr-title` status |
+| Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | pinned PR-2034 replay with today's evaluator: first fails, final writes `feature-gated-ui` |
+| Required-check settings | [ci-settings.md](ci-settings.md) | live ruleset read, hourly `verify`/`chain` run log, no settings step in `ci-tests` |
+| CI tests and parallel checks | [ci-tests.md](ci-tests.md) | `ci-prepare` then 4 PR / 8 push shards, `Run independent static checks`, `shard-proof … duplicates=0` |
+| CLI install commands and login | [cli-install.md](cli-install.md) | Settings CLI desktop/phone, `llms.txt`, real install, Ctrl+K `#cliInstallModal`, management-key Team row |
+| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via `ht-verify session`; `;`/`SHIFT ;` chips, plus composer (`ctrl-j-drive.mjs` is stale for QA 985) |
+| Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | post, `@` picker, reload and delete on board 7049; `comments-drive-live.mjs` for loopback |
+| Create task attachments | [create-task-attachments.md](create-task-attachments.md) | Ctrl+K Create task, attach file, `Save`, request chain 200, reload |
+| Board custom instructions | [custom-instructions.md](custom-instructions.md) | board 7049 GET, save, reload/reopen, unsaved edit, restore |
+| Demo board | [demo-board.md](demo-board.md) | one guest `/demo`, `/onboarding?resumeKey=…`, tutorial URLs recorded unreachable (tutorial disabled) |
+| Desktop human CLI login | [desktop-login.md](desktop-login.md) | `/cli-auth` consent and cancel, `/login/agent` code, human bearer sessions and revoke, no-token 401 |
+| Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `data-rfd-*` mouse steps, reload proof, restore column, delete fixture |
+| Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | PR vs schedule job selection, `evaluated N, skipped M`, UX dispatch log, cancelled-run census |
+| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `ht-flag get`, refused same-mode set 403, `/admin/flags` 404 for QA, identical `/api/flags` |
 | Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
 | In-app feedback | [in-app-feedback.md](in-app-feedback.md) | POST /api/feedback on board 15; brain-medium only when the flag is on |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
