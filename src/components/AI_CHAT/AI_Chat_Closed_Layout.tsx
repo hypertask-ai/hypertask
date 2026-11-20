@@ -7,7 +7,8 @@ import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { detailSidebarOverlays } from "@/lib/taskDetailHeaderArrows";
+
+const DETAIL_PAGE_MIN_WIDTH = 944;
 
 interface AIChatClosedLayoutProps {
   children: React.ReactNode;
@@ -53,9 +54,7 @@ export default function AIChatClosedLayout({
   useLayoutEffect(() => {
     if (isMobile || sidebarWidthPx <= 0) return;
     const update = () => setSidebarOverlays(
-      isDetailPage
-        ? detailSidebarOverlays(window.innerWidth, sidebarWidthPx, false)
-        : window.innerWidth < Math.max(768, sidebarWidthPx + 340)
+      window.innerWidth < Math.max(768, sidebarWidthPx + (isDetailPage ? DETAIL_PAGE_MIN_WIDTH : 340))
     );
     update();
     window.addEventListener("resize", update);

@@ -383,6 +383,126 @@ body {
   overflow: hidden !important;
 }
 
+#createTaskModal[data-phone-new-task-sheet] {
+  --phone-new-task-keyboard: 0px;
+  --phone-new-task-viewport-top: 0px;
+  position: fixed;
+  top: var(--phone-new-task-viewport-top, 0px);
+  right: 0;
+  bottom: var(--phone-new-task-keyboard, 0px);
+  left: 0;
+  width: auto;
+  max-width: none;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+#createTaskModal[data-phone-new-task-sheet] .modal-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+#createTaskModal[data-phone-new-task-sheet] .modal-content > div,
+#createTaskModal[data-phone-new-task-sheet] #body,
+#createTaskModal[data-phone-new-task-sheet] #taskInfo_comments_description_container,
+#createTaskModal[data-phone-new-task-sheet] [data-testid="ticket-thread"],
+#createTaskModal[data-phone-new-task-sheet] [data-phone-new-task-card],
+#createTaskModal[data-phone-new-task-sheet] #main-wrapper-create-task-create-task-tiptap-description,
+#createTaskModal[data-phone-new-task-sheet] #main-wrapper-create-task-create-task-tiptap-description > :last-child {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#createTaskModal[data-phone-new-task-sheet] #body {
+  overflow: hidden;
+  padding-top: max(env(safe-area-inset-top), 28px);
+}
+
+#createTaskModal[data-phone-new-task-sheet] [data-testid="ticket-thread"] {
+  padding-bottom: 0;
+}
+
+#createTaskModal[data-phone-new-task-sheet] [data-phone-new-task-card] {
+  margin-bottom: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+  overflow: hidden;
+}
+
+#createTaskModal[data-phone-new-task-sheet] #main-wrapper-create-task-create-task-tiptap-description > :last-child {
+  height: auto;
+}
+
+#createTaskModal[data-phone-new-task-sheet] #main-wrapper-create-task-create-task-tiptap-description > :last-child > :first-child {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#createTaskModal[data-phone-new-task-sheet] #main-wrapper-create-task-create-task-tiptap-description > :last-child > :first-child > :last-child {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+#createTaskModal[data-phone-new-task-sheet] [data-phone-new-task-card] .attachment-upload-container {
+  flex: 0 0 auto;
+  width: 100%;
+  margin-top: auto;
+  margin-bottom: 0;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-keyboard] [data-mobile-new-task-actions] {
+  padding-bottom: 0.75rem;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] #body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-task-properties-rail],
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-mobile-new-task-properties] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  min-height: 120px;
+  background-color: var(--bg-taskDetail-container);
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-phone-new-task-card] {
+  flex: 1 0 auto;
+  min-height: 120px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .item {
   // color:white;
   display: block;
