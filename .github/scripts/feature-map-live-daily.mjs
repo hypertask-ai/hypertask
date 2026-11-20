@@ -191,7 +191,7 @@ async function main() {
 
   writeFileSync(path.join(dir, 'result.json'), JSON.stringify({ runUrl, tagStatus, scriptStatus, graded, problems, suiteErrors }, null, 2))
   let filing = ''
-  const ticket = await fileFindings({ graded, problems, suiteErrors, runUrl }).catch((error) => { filing = error.message; return null })
+  const ticket = await fileFindings({ graded, problems, suiteErrors, runUrl, token: process.env.HYPERTASK_MCP_TOKEN }).catch((error) => { filing = error.message; return null })
   const lines = summaryLines(graded, { problems, suiteErrors, ticketUrl: ticket?.url ?? '' })
   if (ticket) lines.push('', `Ticket ${ticket.action}: ${ticket.url || 'none'}`)
   if (filing) lines.push('', `Ticket filing failed: ${filing}`)

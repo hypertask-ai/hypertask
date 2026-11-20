@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: feature-map-live-daily
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   live-pass:

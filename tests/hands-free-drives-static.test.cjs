@@ -31,14 +31,13 @@ test("hands-free drives parse and refuse any non-loopback base", () => {
 
 test("the live opt-in unlocks the production origin and nothing else", async () => {
   const { driveBaseAllowed, LIVE_BASE } = await import(path.join(root, ".claude/skills/verify-qa/scripts/drive-grade.mjs"));
-  const guard = (base, live) => { process.env.FEATURE_MAP_LIVE = live; return driveBaseAllowed(base); };
+  const guard = (base, live) => { process.env.FEATURE_MAP_LIVE = live; const allowed = driveBaseAllowed(base); delete process.env.FEATURE_MAP_LIVE; return allowed; };
   assert.equal(guard("http://127.0.0.1:3100", ""), true);
   assert.equal(guard(LIVE_BASE, ""), false, "production without the opt-in");
   assert.equal(guard(LIVE_BASE, "1"), true);
   for (const base of ["https://app.hypertask.ai/", "http://app.hypertask.ai", "https://preview.hypertask.ai", "https://example.com", "https://app.hypertask.ai.evil.example"]) assert.equal(guard(base, "1"), false, `the opt-in allowed ${base}`);
-  const outside = spawnSync(process.execPath, [path.join(".claude/skills/verify-qa/scripts", "board-drive-live.mjs"),
-    path.join(tmpdir(), "drive-check-outside"), "--base", "https://example.com", "--state", path.join(tmpdir(), "never-read-state.json")],
-  { cwd: root, encoding: "utf8", timeout: 30_000, env: { ...process.env, FEATURE_MAP_LIVE: "1" } });
+  const outside = spawnSync(process.execPath, [path.join(".claude/skills/verify-qa/scripts", "board-drive-live.mjs"), path.join(tmpdir(), "drive-check-outside"), "--base", "https://example.com", "--state", path.join(tmpdir(), "never-read-state.json")],
+    { cwd: root, encoding: "utf8", timeout: 30_000, env: { ...process.env, FEATURE_MAP_LIVE: "1" } });
   assert.equal(outside.status, 2, "the opt-in drove a host it does not name");
 });
 
