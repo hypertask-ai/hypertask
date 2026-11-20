@@ -41,12 +41,14 @@ test("the real saveLimit change reaches a page even though no feature page names
   assert.ok(trace.surfaces.some((item) => /^src\/(?:pages|app)\//.test(item.file)), JSON.stringify(trace.surfaces));
 });
 
-test("a bug fix with no repro can be evaluated again, not failed", async () => {
+test("a bug fix with no repro names the missing failing test, and a test repro passes it", async () => {
   const { decide } = await load();
-  const result = decide({ model: {}, plan: plan([], { reason: "the write route needs a state the planner cannot create", files: ["src/lib/mcp/tasks/services.ts"], filesTruncated: false, bugfix: true }), evidence: null, binding, checksPassed: true });
-  assert.equal(result.verdict, "UNEVALUATED");
-  assert.match(result.notes, /no repro journey/);
+  const body = plan([], { reason: "the write route needs a state the planner cannot create", files: ["src/lib/mcp/tasks/services.ts", "tests/mcp-task-write.test.cjs"], filesTruncated: false, bugfix: true });
+  const result = decide({ model: {}, plan: body, evidence: null, binding, checksPassed: true });
+  assert.equal(result.verdict, "FAIL");
+  assert.match(result.notes, /no changed test that fails on the old code/);
   assert.match(result.notes, /state the planner cannot create/);
+  assert.equal(decide({ model: {}, plan: body, evidence: null, binding, checksPassed: true, reproFirstPassed: true }).verdict, "PASS+NOTES");
 });
 
 test("a change that reaches a screen but gets no planned path is not failed on the change", async () => {

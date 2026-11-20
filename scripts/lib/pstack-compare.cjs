@@ -63,7 +63,7 @@ function areaOf(journey) {
   return value.startsWith("area:") ? value.slice(5) : "";
 }
 
-function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnevaluated = "" } = {}) {
+function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnevaluated = "", bugfixProved = false } = {}) {
   const list = (Array.isArray(journeys) ? journeys : []).map((item) => ({
     journey: String(item?.journey ?? ""),
     viewport: typeof item?.viewport === "string" ? item.viewport : "",
@@ -86,7 +86,8 @@ function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnev
     else problems.push(`${where}: ${failureNote(item.run, item.head.failIndex)}`);
   }
   if (bugfix && !list.some((item) => item.journey === "change:repro")) {
-    if (bugfixUnevaluated) unrun.push(`the bug fix has no repro journey: ${bugfixUnevaluated}`.slice(0, 240));
+    if (bugfixProved) notes.push("the bug fix has no user path, and repro-first shows a changed test failing on the old code");
+    else if (bugfixUnevaluated) unrun.push(`the bug fix has no repro journey: ${bugfixUnevaluated}`.slice(0, 240));
     else problems.push("the bug fix has no repro journey");
   }
   const notesOut = [...new Set([...unrun, ...unjudged.map((journey) => `${journey}: the judge model did not answer`)])];

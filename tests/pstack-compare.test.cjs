@@ -213,3 +213,13 @@ test("a bug fix with no repro and a stated reason could not be evaluated", () =>
   assert.equal(result.verdict, "UNEVALUATED");
   assert.match(result.notes, /no repro journey: the archived board cannot be reached/);
 });
+
+test("a bug fix with no repro passes on notes once repro-first proves it", () => {
+  const journeys = [{ journey: "area:inbox", head: okRun() }];
+  const proved = decideHeadOnly({ journeys, bugfix: true, bugfixProved: true, bugfixUnevaluated: "server only" });
+  assert.equal(proved.verdict, "PASS+NOTES");
+  assert.match(proved.notes, /no user path, and repro-first shows a changed test failing on the old code/);
+  const red = decideHeadOnly({ journeys: [{ journey: "area:inbox", head: okRun({ steps: [{ ok: false }] }) }], bugfix: true, bugfixProved: true });
+  assert.equal(red.verdict, "FAIL");
+  assert.match(red.notes, /area:inbox: failed at step 1/);
+});
