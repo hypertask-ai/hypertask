@@ -75,6 +75,37 @@ try {
   const agent = await prisma.agent.create({ data: { displayName: agentName, userId: user.id } });
   const agentToken = createMcpToken(user.id, user.email, undefined, agent.id);
   await prisma.agent.update({ where: { id: agent.id }, data: agentTokenCredentialFields(agentToken) });
+  const chat = await prisma.chatSession.create({
+    data: {
+      userId: user.id,
+      agentId: agent.id,
+      projectId: projects.get("fixture").id,
+      title: `Core smoke agent chat ${runKey}`,
+    },
+  });
+  const askedAt = new Date();
+  const ask = (index) => prisma.chatMessage.create({
+    data: {
+      role: "human",
+      content: `Core smoke agent chat question ${index} ${runKey}`,
+      sessionId: chat.id,
+      authorUserId: user.id,
+      isDelivered: true,
+      createdAt: new Date(askedAt.getTime() + index * 1_000),
+    },
+  });
+  await ask(1);
+  const lastQuestion = await ask(2);
+  await prisma.chatMessage.create({
+    data: {
+      role: "assistant",
+      content: `Core smoke agent chat answer ${runKey}`,
+      sessionId: chat.id,
+      authorAgentId: agent.id,
+      replyToMessageId: lastQuestion.id,
+      createdAt: new Date(askedAt.getTime() + 2_000),
+    },
+  });
   await prisma.member.createMany({
     data: plan.boards.flatMap((board) => users.map((member) => {
       const row = { projectId: projects.get(board.key).id, userId: member.id };

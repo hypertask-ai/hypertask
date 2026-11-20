@@ -851,6 +851,8 @@ test("the drive fills archived, board and task ids in an api body", async () => 
   assert.match(missing.steps[0].error, /archived project id is not allowed/);
   const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
   assert.match(prompt, /\{archived\} is the seeded archived board/);
+  assert.match(prompt, /seeded agent token/);
+  assert.match(prompt, /agent inbox is empty/);
   } finally {
     if (savedToken === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = savedToken;
@@ -863,6 +865,8 @@ test("the seed mints an agent token for the seeded agent and exports it", async 
   assert.match(source, /createMcpToken\(user\.id, user\.email, undefined, agent\.id\)/);
   assert.match(source, /agentTokenCredentialFields\(agentToken\)/);
   assert.match(source, /CORE_SMOKE_AGENT_TOKEN: agentToken/);
+  assert.match(source, /prisma\.chatSession\.create\(/);
+  assert.match(source, /replyToMessageId: lastQuestion\.id/);
 });
 
 test("an agent-only route is called with the seeded agent token", async () => {

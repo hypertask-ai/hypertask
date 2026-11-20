@@ -920,7 +920,7 @@ export function buildPrompt({ kind, title, body, diff, page, boardPath, taskPath
   if (kind === "page") parts.push(block("DATA: FEATURE PAGE", page, 6000, fence));
   else parts.push(block("DATA: TITLE", title, 300, fence), block("DATA: BODY", body, 2500, fence), block("DATA: DIFF", diff, 12000, fence));
   if (kind === "plan") {
-    parts.push(block("DATA: SEEDED FIXTURES", "active board {id}\ntask {task}\narchived board {archived}\nagent token: seeded agent (agent-only routes)", 300, fence));
+    parts.push(block("DATA: SEEDED FIXTURES", "active board {id}\ntask {task}\narchived board {archived}\nagent token: seeded agent (agent-only routes)\nagent chat: one chat with two questions, the agent answered the newer one, so the agent inbox is empty", 300, fence));
     if (Array.isArray(reach) && reach.length) parts.push(block("DATA: CHANGE REACHES", reach.map((item) => `${item.via?.join(" -> ") ?? item.file}${item.pages?.length ? ` (page: ${item.pages.join(", ")})` : ""}`).join("\n"), 1500, fence));
   }
   if (kind === "judge") {
