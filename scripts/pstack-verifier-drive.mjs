@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { BASE_CACHE_DIR, cookiesFromHeader, drivePlan, planViewports, previewDownBody, readPlan, readSmokeEnv, runViewport, smokeDriveIds, waitForPreview, writeBaseCache } from "./pstack-verifier.mjs";
+import { cookiesFromHeader, drivePlan, previewDownBody, readPlan, readSmokeEnv, smokeDriveIds, waitForPreview } from "./pstack-verifier.mjs";
 
 const work = process.env.WORK;
 const binding = { sha: process.env.HEAD_SHA, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
@@ -37,11 +37,6 @@ try {
     ...smokeDriveIds(seeded),
   });
   writeEvidence({ ...binding, journeys: run.journeys, steps: run.steps, expects: run.expects, navigations: run.navigations, offOrigin: run.offOrigin });
-  if (process.env.PSTACK_BASE_CACHE && process.env.BASE_SHA) {
-    const primary = planViewports(plan)[0];
-    const written = writeBaseCache({ plan, evidence: { journeys: run.journeys.filter((item) => runViewport(item) === primary) }, dir: path.join(work, BASE_CACHE_DIR), baseSha: process.env.BASE_SHA, mapSha: process.env.GITHUB_SHA });
-    console.log(`base cache entries written: ${written}`);
-  }
 } finally {
   await browser.close();
 }
