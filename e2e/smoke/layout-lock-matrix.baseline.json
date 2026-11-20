@@ -159,11 +159,11 @@
           "ai-sidebar": {"selector":"[data-testid=\"ai-sidebar\"], [data-ai-chat-panel]","box":{"x":680,"y":0,"width":420,"height":900}}
         },
         "1280": {
-          "title": {"selector":"#title-input","box":{"x":212,"y":36,"width":832,"height":37}},
-          "description": {"selector":"[data-testid=\"ticket-description\"]","contentHeight":true,"box":{"x":194,"y":105,"width":680,"height":207}},
-          "comment-list": {"selector":"[data-testid=\"ticket-thread\"]","contentHeight":true,"box":{"x":194,"y":105,"width":680,"height":795}},
-          "comment-box": {"selector":"[data-testid=\"comment-composer\"]","box":{"x":194,"y":532,"width":680,"height":152}},
-          "properties-panel": {"selector":"[data-task-properties-rail]","contentHeight":true,"box":{"x":897,"y":105,"width":312,"height":459}},
+          "title": {"selector":"#title-input","box":{"x":219,"y":36,"width":826,"height":72}},
+          "description": {"selector":"[data-testid=\"ticket-description\"]","contentHeight":true,"box":{"x":201,"y":140,"width":680,"height":207}},
+          "comment-list": {"selector":"[data-testid=\"ticket-thread\"]","contentHeight":true,"box":{"x":201,"y":140,"width":680,"height":760}},
+          "comment-box": {"selector":"[data-testid=\"comment-composer\"]","box":{"x":201,"y":567,"width":680,"height":148}},
+          "properties-panel": {"selector":"[data-task-properties-rail]","contentHeight":true,"box":{"x":897,"y":140,"width":312,"height":185}},
           "left-sidebar": {"selector":".app-shell-rail","box":{"x":0,"y":0,"width":130,"height":900}},
           "ai-sidebar": {"selector":"[data-testid=\"ai-sidebar\"], [data-ai-chat-panel]","box":{"x":860,"y":0,"width":420,"height":900}}
         },
