@@ -4,7 +4,7 @@ const {
   baseMoved,
   buildMarker,
   classifyRun,
-  decideComparison,
+  decideHeadOnly,
   parseMarker,
   reusableVerdict,
   sha256,
@@ -28,19 +28,18 @@ const okRun = (overrides = {}) => ({
   ...overrides,
 });
 
-test("a preview that never started is unavailable, so the comparison could not be evaluated", () => {
+const okHead = (overrides = {}) => ({ journey: "area:inbox", head: okRun(), ...overrides });
+
+test("a preview that never started could not be evaluated", () => {
   assert.deepEqual(classifyRun({ preview: "down", steps: [], expects: [], navigations: [], offOrigin: [] }), { state: "unavailable", failIndex: -1 });
   assert.deepEqual(classifyRun(null), { state: "unavailable", failIndex: -1 });
-  assert.equal(decideComparison({ journeys: [{ journey: "change:repro", base: { preview: "down" }, head: okRun() }], bugfix: true }).verdict, "UNEVALUATED");
+  assert.equal(decideHeadOnly({ journeys: [okHead({ head: { preview: "down" } })] }).verdict, "UNEVALUATED");
 });
 
-test("a real regression still fails when another journey could not be compared", () => {
-  const result = decideComparison({ journeys: [
-    { journey: "area:inbox", base: null, head: okRun() },
-    { journey: "area:boards", base: okRun(), head: okRun({ steps: [{ ok: true }, { ok: false }] }) },
-  ] });
+test("a broken journey fails even when another journey never ran", () => {
+  const result = decideHeadOnly({ journeys: [okHead({ journey: "area:inbox", head: null }), okHead({ journey: "area:boards", head: okRun({ steps: [{ ok: true }, { ok: false }] }) })] });
   assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /area:boards: regression at step 2/);
+  assert.match(result.notes, /area:boards: failed at step 2/);
 });
 
 test("a failing step, a failing expect and a bad document status each fail a run", () => {
@@ -57,17 +56,6 @@ test("a journey with no document response fails unless every action is an api ca
   assert.equal(classifyRun(okRun({ navigations: [] }), { actions: [{ op: "goto", path: "/" }] }).state, "failed");
 });
 
-test("a cached api-only base run keeps its plan, so a bugfix repro cannot claim it reproduced", () => {
-  const cached = { steps: [{ action: { op: "api", method: "POST", path: "/api/mcp/tasks" }, ok: true }], expects: [], navigations: [], offOrigin: [], judged: { verdict: "PASS" } };
-  const head = { ...cached, apiOnly: true, judged: "PASS" };
-  assert.equal(classifyRun(cached).state, "ok");
-  assert.equal(classifyRun(head).state, "ok");
-  const repro = decideComparison({ journeys: [{ journey: "change:repro", base: cached, head }], bugfix: true });
-  assert.equal(repro.verdict, "FAIL");
-  assert.match(repro.notes, /does not reproduce the bug/);
-  assert.equal(decideComparison({ journeys: [{ journey: "area:api", base: cached, head }] }).verdict, "PASS");
-});
-
 test("an unrecognized judge verdict fails closed", () => {
   assert.equal(classifyRun(okRun({ judged: "PENDING" })).state, "failed");
   assert.equal(classifyRun(okRun({ judged: "maybe" })).state, "failed");
@@ -75,115 +63,65 @@ test("an unrecognized judge verdict fails closed", () => {
   assert.equal(classifyRun(okRun({ judged: "PASS+NOTES" })).state, "ok");
 });
 
+test("a run carries its judged verdict as an object, and a judge-only failure says so", () => {
+  assert.equal(classifyRun(okRun({ judged: { verdict: "PASS" } })).state, "ok");
+  assert.equal(classifyRun(okRun({ judged: { verdict: "FAIL" } })).state, "failed");
+  const judged = decideHeadOnly({ journeys: [okHead({ head: okRun({ judged: "FAIL" }) })] });
+  assert.equal(judged.verdict, "FAIL");
+  assert.match(judged.notes, /area:inbox: the judge failed it/);
+});
+
 test("a journey the judge never read is unevaluated, and a broken step still fails", () => {
-  const unjudged = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun({ judged: "UNEVALUATED" }) }] });
+  const unjudged = decideHeadOnly({ journeys: [okHead({ head: okRun({ judged: "UNEVALUATED" }) })] });
   assert.equal(unjudged.verdict, "UNEVALUATED");
   assert.match(unjudged.notes, /the judge model did not answer/);
-  const broken = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun({ judged: "UNEVALUATED", steps: [{ ok: false }] }) }] });
+  const broken = decideHeadOnly({ journeys: [okHead({ head: okRun({ judged: "UNEVALUATED", steps: [{ ok: false }] }) })] });
   assert.equal(broken.verdict, "FAIL");
-  const repro = decideComparison({ journeys: [{ journey: "change:repro", base: okRun({ judged: "UNEVALUATED" }), head: okRun() }], bugfix: true });
-  assert.equal(repro.verdict, "UNEVALUATED");
-});
-
-test("a head that regressed against a passing base fails", () => {
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun({ steps: [{ ok: true }, { ok: false }] }) }] });
-  assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /area:inbox: regression at step 2/);
-});
-
-test("a journey that broke earlier than base did fails even when both failed", () => {
-  const base = okRun({ steps: [{ ok: true }, { ok: true }, { ok: false }] });
-  const head = okRun({ steps: [{ ok: false }, { ok: true }, { ok: false }] });
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base, head }] });
-  assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /regression at step 1, base failed at step 3/);
-  assert.doesNotMatch(result.notes, /base reached/);
-});
-
-test("the same failure at the same step on base and head is pre-existing, not a regression", () => {
-  const captured = (name) => JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "pstack-verifier", `${name}-evidence.json`), "utf8"));
-  const replay = (name) => captured(name).journeys.map((run) => ({ journey: run.journey, base: { ...run, judged: "" }, head: { ...run, judged: "PASS" } }));
-  const result = decideComparison({ journeys: replay("44445936703") });
-  assert.equal(result.verdict, "PASS+NOTES");
-  assert.match(result.notes, /fails the same way on base/);
-  assert.doesNotMatch(result.notes, /regression/);
-});
-
-test("a different error at the same step is still a regression", () => {
-  const action = { op: "click", text: "Save" };
-  const steps = (error) => [{ action: { op: "goto", path: "/" }, ok: true }, { action, ok: false, error }];
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun({ steps: steps("not actionable") }), head: okRun({ steps: steps("api status 500") }) }] });
-  assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /base failed differently at the same step/);
-});
-
-test("a repro that fails the same way on both sides could not evaluate the change", () => {
-  const captured = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "pstack-verifier", "44450409918-evidence.json"), "utf8"));
-  const journeys = captured.journeys.map((run) => ({ journey: run.journey, base: { ...run, judged: "" }, head: { ...run, judged: "PASS" } }));
-  const result = decideComparison({ journeys, bugfix: true });
-  assert.equal(result.verdict, "UNEVALUATED");
-  assert.match(result.notes, /change:repro: the same failure is on base/);
-  assert.doesNotMatch(result.notes, /regression|repro still fails/);
-});
-
-test("a journey that got further than base and still fails is a note, not a fail", () => {
-  const base = okRun({ steps: [{ ok: false }, { ok: true }] });
-  const head = okRun({ steps: [{ ok: true }, { ok: false }] });
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base, head }] });
-  assert.equal(result.verdict, "PASS+NOTES");
-  assert.match(result.notes, /got further than base/);
-});
-
-test("a missing base comparison could not be evaluated, and never claims a pass", () => {
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base: null, head: okRun() }] });
-  assert.equal(result.verdict, "UNEVALUATED");
-  assert.match(result.notes, /the base comparison did not run/);
-});
-
-test("a journey that works now and did not on base passes with a note", () => {
-  const base = okRun({ steps: [{ ok: true }, { ok: false }] });
-  const result = decideComparison({ journeys: [{ journey: "change:primary", base, head: okRun() }] });
-  assert.equal(result.verdict, "PASS+NOTES");
-  assert.match(result.notes, /works now/);
 });
 
 test("every journey passing on head is a bare pass", () => {
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun() }, { journey: "change:primary", base: okRun(), head: okRun() }] });
+  const result = decideHeadOnly({ journeys: [okHead({ journey: "area:inbox" }), okHead({ journey: "change:primary" })] });
   assert.deepEqual(result, { verdict: "PASS", notes: "" });
 });
 
 test("an empty journey list is not a pass", () => {
-  assert.equal(decideComparison({ journeys: [] }).verdict, "FAIL");
+  assert.equal(decideHeadOnly({ journeys: [] }).verdict, "FAIL");
 });
 
-test("a bug fix needs its repro to fail on base and pass on head", () => {
-  const failsOnBase = okRun({ steps: [{ ok: false }] });
-  assert.equal(decideComparison({ journeys: [{ journey: "change:repro", base: failsOnBase, head: okRun() }], bugfix: true }).verdict, "PASS");
-  const reproPassesOnBase = decideComparison({ journeys: [{ journey: "change:repro", base: okRun(), head: okRun() }], bugfix: true });
-  assert.equal(reproPassesOnBase.verdict, "FAIL");
-  assert.match(reproPassesOnBase.notes, /does not reproduce the bug/);
-  const stillFails = decideComparison({ journeys: [{ journey: "change:repro", base: failsOnBase, head: failsOnBase }], bugfix: true });
-  assert.equal(stillFails.verdict, "UNEVALUATED");
-  assert.match(stillFails.notes, /the same failure is on base/);
-  const brokeLater = decideComparison({ journeys: [{ journey: "change:repro", base: okRun({ steps: [{ ok: false, error: "not actionable" }] }), head: okRun({ steps: [{ ok: true }, { ok: false, error: "api status 500" }] }) }], bugfix: true });
-  assert.equal(brokeLater.verdict, "FAIL");
-  assert.match(brokeLater.notes, /the repro still fails on head/);
+test("a head journey that is red in the nightly pass does not block the pull request", () => {
+  const captured = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures", "pstack-verifier", "44445936703-evidence.json"), "utf8"));
+  const journeys = captured.journeys.map((run) => ({ journey: run.journey, head: { ...run, judged: "PASS" } }));
+  const red = journeys.map((item) => item.journey.slice("area:".length));
+  const excused = decideHeadOnly({ journeys, redFeatures: red });
+  assert.equal(excused.verdict, "PASS+NOTES");
+  assert.match(excused.notes, /already red on production/);
+  assert.doesNotMatch(excused.notes, /failed at step/);
 });
 
-test("a cached base result carries its judged verdict as an object", () => {
-  assert.equal(classifyRun(okRun({ judged: { verdict: "PASS" } })).state, "ok");
-  assert.equal(classifyRun(okRun({ judged: { verdict: "FAIL" } })).state, "failed");
-});
-
-test("a bug fix whose journeys are not named as a repro fails even when base failed and head passed", () => {
-  const failsOnBase = okRun({ steps: [{ ok: false }] });
-  const result = decideComparison({ journeys: [{ journey: "change:primary", base: failsOnBase, head: okRun() }], bugfix: true });
+test("a head journey that fails while the nightly pass is green for that feature still fails", () => {
+  const result = decideHeadOnly({ journeys: [okHead({ journey: "area:inbox", head: okRun({ steps: [{ ok: true }, { ok: false }] }) })], redFeatures: ["boards-and-views"] });
   assert.equal(result.verdict, "FAIL");
-  assert.match(result.notes, /no repro journey/);
+  assert.match(result.notes, /area:inbox: failed at step 2/);
+  assert.doesNotMatch(result.notes, /already red on production/);
+});
+
+test("the nightly red list never excuses the change journey or a feature it does not drive", () => {
+  const change = decideHeadOnly({ journeys: [okHead({ journey: "change:primary", head: okRun({ steps: [{ ok: false }] }) })], redFeatures: ["primary", "inbox"] });
+  assert.equal(change.verdict, "FAIL");
+  const undriven = decideHeadOnly({ journeys: [okHead({ journey: "area:mcp-task-lookup", head: okRun({ steps: [{ ok: false }] }) })], redFeatures: [] });
+  assert.equal(undriven.verdict, "FAIL");
+});
+
+test("a bug fix needs its repro to pass on head", () => {
+  const repro = (ok) => [{ journey: "change:repro", head: okRun({ steps: [{ ok }] }) }];
+  assert.equal(decideHeadOnly({ journeys: repro(true), bugfix: true }).verdict, "PASS");
+  const stillFails = decideHeadOnly({ journeys: repro(false), bugfix: true });
+  assert.equal(stillFails.verdict, "FAIL");
+  assert.match(stillFails.notes, /change:repro: failed at step 1/);
 });
 
 test("a bug fix with no repro journey fails", () => {
-  const result = decideComparison({ journeys: [{ journey: "area:inbox", base: okRun(), head: okRun() }], bugfix: true });
+  const result = decideHeadOnly({ journeys: [okHead({ journey: "area:inbox" })], bugfix: true });
   assert.equal(result.verdict, "FAIL");
   assert.match(result.notes, /no repro journey/);
 });
@@ -267,8 +205,8 @@ test("only this verifier's own markers are read for base drift", () => {
 });
 
 test("a bug fix with no repro and a stated reason could not be evaluated", () => {
-  const result = decideComparison({
-    journeys: [{ journey: "area:inbox", base: okRun(), head: okRun() }],
+  const result = decideHeadOnly({
+    journeys: [{ journey: "area:inbox", head: okRun() }],
     bugfix: true,
     bugfixUnevaluated: "the archived board cannot be reached by any write route",
   });
