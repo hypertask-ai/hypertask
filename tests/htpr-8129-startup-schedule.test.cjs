@@ -28,6 +28,12 @@ function startup(t, create, overrides = {}) {
       qstashCallbackBase: () => "https://app.example.test",
       getQstashClient: () => ({ schedules: { create } }),
     },
+    "@/lib/redis": {
+      getRedis: async () => ({
+        set: async () => "OK",
+        del: async () => 1,
+      }),
+    },
   });
   return { register, errors };
 }
