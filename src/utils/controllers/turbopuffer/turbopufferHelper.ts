@@ -552,18 +552,7 @@ export async function upsertTaskRowsToTurbopuffer(
 ) {
   if (rows.length === 0) return;
 
-  const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
-    rows,
-    "turbopuffer task upsert",
-    true
-  );
-
-  if (!hasVectors) {
-    console.warn(
-      `turbopuffer task upsert skipped: embeddings unavailable for ${rows.length} row(s)`
-    );
-    return;
-  }
+  const { rows: rowsWithVectors } = await embedRowsForWrite(rows, "turbopuffer task upsert", true);
 
   return turbopuffer.namespace(turbopufferNamespaces.task.name).write({
     upsert_rows: rowsWithVectors,
@@ -612,18 +601,7 @@ export async function upsertCommentRowsToTurbopuffer(
 ) {
   if (rows.length === 0) return;
 
-  const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
-    rows,
-    "turbopuffer comment upsert",
-    true
-  );
-
-  if (!hasVectors) {
-    console.warn(
-      `turbopuffer comment upsert skipped: embeddings unavailable for ${rows.length} row(s)`
-    );
-    return;
-  }
+  const { rows: rowsWithVectors } = await embedRowsForWrite(rows, "turbopuffer comment upsert", true);
 
   return turbopuffer.namespace(turbopufferNamespaces.comment.name).write({
     upsert_rows: rowsWithVectors,
