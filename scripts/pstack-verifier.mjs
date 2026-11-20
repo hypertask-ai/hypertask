@@ -327,12 +327,13 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
     const reason = String(parsed.reason ?? "").replace(/\s+/g, " ").trim();
     const files = Array.isArray(parsed.files) ? parsed.files : [];
     if (listWasTruncated(parsed, files)) return { verdict: "FAIL", notes: "file list truncated" };
-    if (files.length && !hasAppPath(files) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
+    const noAppPath = files.length > 0 && (!hasAppPath(files) || harnessOnlyBugfix(parsed.claim?.title, files));
+    if (noAppPath && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (files.length && docsShortcut(files, parsed.filesTruncated) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (botPlanPass(parsed, checksPassed)) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500), authorFamily: parsed.botLogin };
     if (checksPending) return { verdict: "PENDING", notes: "waiting for required checks" };
     const reachable = Array.isArray(parsed.reachable) ? parsed.reachable.filter((item) => typeof item === "string") : [];
-    if (reason && parsed.bugfix === true) return { verdict: "UNEVALUATED", notes: `the bug fix has no repro journey: ${reason}`.slice(0, 500) };
+    if (reason && parsed.bugfix === true && hasAppCode(files)) return { verdict: "UNEVALUATED", notes: `the bug fix has no repro journey: ${reason}`.slice(0, 500) };
     if (reason && reachable.length) return { verdict: "UNEVALUATED", notes: `no user path was planned for a change that reaches ${reachable.slice(0, 3).join(", ")}: ${reason}`.slice(0, 500) };
     return { verdict: "FAIL", notes: (reason ? `no user path verified: ${reason}` : "no user path verified").slice(0, 500) };
   }
@@ -444,6 +445,18 @@ export function selectPlan(files, filesTruncated = false) {
   const list = Array.isArray(files) ? files : [];
   if (filesTruncated || hasAppPath(list)) return null;
   return { actions: [], expect: [], reason: "no user path: non-app files only" };
+}
+const APP_CODE_PREFIXES = ["src/", "app/", "pages/", "public/"];
+const APP_CODE_FILES = new Set(["next.config.js", "postcss.config.js", "tailwind.config.ts", "tokens.css"]);
+export function hasAppCode(files) {
+  return (Array.isArray(files) ? files : []).some((file) => {
+    const name = String(file);
+    return APP_CODE_PREFIXES.some((prefix) => name.startsWith(prefix)) || APP_CODE_FILES.has(name);
+  });
+}
+export function harnessOnlyBugfix(title, files) {
+  const list = Array.isArray(files) ? files : [];
+  return list.length > 0 && bugfixTitle(title) && !hasAppCode(list);
 }
 const readDir = (dir) => {
   try {
@@ -1186,11 +1199,13 @@ export async function planFromRequest(request, deps = {}) {
   const listed = planFileList(request);
   const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: "", unevaluated: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, baseSha: request.baseSha || "", tree: request.tree || "", patchId: request.patchId || "", diffSha256: request.diffSha256 || "", claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
   const selected = botLogin || plan.unevaluated ? null : selectPlan(listed.files, listed.filesTruncated);
+  const harnessOnly = harnessOnlyBugfix(request.title, listed.files);
   if (botLogin) { plan.reason = "no user path"; plan.botLogin = botLogin; }
   else if (!plan.unevaluated && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
   else if (selected) Object.assign(plan, selected);
+  else if (!plan.unevaluated && harnessOnly) Object.assign(plan, { actions: [], expect: [], reason: "no user path: no app code changed" });
   else if (!plan.unevaluated) {
-    const bugfix = bugfixTitle(request.title);
+    const bugfix = bugfixTitle(request.title) && hasAppCode(listed.files);
     const compare = deps.compare ?? process.env.PSTACK_VERIFIER_COMPARE === "true";
     const pages = deps.pages ?? readFeaturePages();
     let reach = [];
