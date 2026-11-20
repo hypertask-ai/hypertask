@@ -40,7 +40,7 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 | Simplify | [simplify-before-pr](../simplify-before-pr/SKILL.md); [blast-radius](../blast-radius/SKILL.md) outside the usual lane | Own diff reviewed; shared behavior preserved |
 | Check UI | [design-compliance](../design-compliance/SKILL.md), [verify-hypertask](../verify-hypertask/SKILL.md) | Before/after evidence; unrelated layout unchanged |
 | Document behavior | [update-docs](../update-docs/SKILL.md) | Changed behavior documented or justified no-change record |
-| Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge |
+| Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge; one open PR per runner, `open-pr.sh` refuses a second while one is open |
 | Merge | vcc merge routine and `ship-check guard` | Current-head required checks and production health green |
 | Deploy | vcc deployment routine | `ship-check deployed` passes for the merge SHA |
 | Verify live | [verify-hypertask](../verify-hypertask/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |

@@ -29,7 +29,7 @@ test("every case comes out right for both model families", async () => {
     assert.equal(row.failure, "");
     assert.ok(row.verdict === row.expected || (row.expected === "PASS" && row.verdict === "PASS+NOTES"));
   }
-  for (const row of result.results.filter((item) => item.case === "planted-bug")) assert.match(row.notes, /regression at step/);
+  for (const row of result.results.filter((item) => item.case === "planted-bug")) assert.match(row.notes, /failed at step/);
 });
 
 test("a bug that only shows at phone width fails and names the phone viewport", async () => {
@@ -39,7 +39,7 @@ test("a bug that only shows at phone width fails and names the phone viewport", 
   assert.equal(result.results.length, 2);
   for (const row of result.results) {
     assert.equal(row.verdict, "FAIL");
-    assert.match(row.notes, /change:primary \[phone\]: regression at step/);
+    assert.match(row.notes, /change:primary \[phone\]: failed at step/);
     assert.doesNotMatch(row.notes, /\[desktop\]/);
   }
 });
@@ -80,7 +80,7 @@ test("a failed step still fails when the model says PASS", async () => {
   assert.equal(result.ok, true);
   for (const row of result.results) {
     assert.equal(row.verdict, "FAIL");
-    assert.match(row.notes, /regression at step/);
+    assert.match(row.notes, /failed at step/);
   }
 });
 

@@ -10,20 +10,47 @@
 The search bar (any board, or global) and board filter controls.
 Tags hide: open a board or My Tasks, open filters, pick one or more tags,
 and set the tags match to Hide tags while `htpr-8171-hide-tags` is on.
+Read the live mode first with `ht-verify flags show htpr-8171-hide-tags`; it is
+EVERYONE on production, so there is no live off path.
 
 ## Driving it with agent-browser
 
-`agent-browser`, headless, `?realtime=on`. Search a term that matches a title
-word and a scrambled/partial word, and check both archived and active tasks
-show up when they should. For filters, apply one and reload to confirm it
-holds. For hide tags, use the QA flag account. Pick tags on a board and on
+Search: `?realtime=on`, search a term that matches a title word and a
+scrambled/partial word, and check both archived and active tasks show up when
+they should. For filters, apply one and reload to confirm it holds. For hide
+tags, use the QA flag account. Pick tags on a board and on
 My Tasks, set Hide tags, and confirm tickets with any of those tags leave
 the list. The active tags row shows Hide. Reload and confirm the saved view
 still hides them. With `htpr-8171-hide-tags` off, Hide is absent and a view
 saved as Hide shows those tickets again.
 
+Worked on production, 2026-11-20, QA 985 on QA Sandbox 7049:
+
+```bash
+ht-verify open /search --wait "#search-input"
+ht-verify fill "#search-input" "login is:open"     # URL becomes /search?searchTerm=login+is%3Aopen after Enter
+ht-verify press Enter --wait 2500
+ht-verify probe "#tasks-list" --count              # 1 list with result rows
+ht-verify probe mark --count                       # >0: title and snippet matches are marked
+
+ht-verify open "/project?id=7049&surface=board" --wait "[aria-label='Filter board']"
+ht-verify click "[aria-label='Filter board']"      # dialog: Filters / Match ANY Filters / Tags row
+ht-verify click "text=Tags"                        # tag values, "Match ANY tags" once a tag is picked
+ht-verify click 'text="bugs"'                      # applies the tag filter immediately
+ht-verify click 'text="Match ANY tags"'            # becomes "Match ALL tags"
+ht-verify click 'text="Match ALL tags"'            # becomes "Hide tags"; the tags row shows "\u00b7 Hide"
+ht-verify shot --session --out hide-tags.png
+```
+
+The tag filter row is labelled Tags on a board, and the three match states
+cycle in that order. Reload loses an unsaved filter; only Save view keeps it,
+so shoot the saved view when the ticket is about persistence.
+
 ## Gotchas
 
+- The tips list is longer than the eleven operators in `search.md`: live it
+  also offers `type:`, `priority:`, `phrase:` and `exclude:`. Read the list
+  rather than counting to eleven.
 - Weak matches ranking above strong ones, or title phrases not outranking
   scrambled title words ([HTPR-6372](https://app.hypertask.ai/detail/project-15/6372), three rounds: `#549`, `#552`, `#553`).
 - Archived tasks and title matches dropping out of ranked search
@@ -55,7 +82,8 @@ Screenshot the search results for the exact query from the ticket, in the
 exact order returned. Ranking bugs are about order, not presence, so a
 screenshot that only shows "the task appeared somewhere" doesn't verify a
 ranking fix. For `htpr-8171-hide-tags`, shoot the tags filter on Hide tags
-and the list with those tickets gone, then the same view with the flag off.
+and the list with those tickets gone. Live off is unreachable while the flag
+is EVERYONE, so the off proof is the flag-off test named in the ticket.
 
 ### Cleanup
 

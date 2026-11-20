@@ -25,7 +25,9 @@ server lines and the abandoned-work cron are not screens on that page.
 2. Read `/api/agent-sidebar-chats?projectId=7049` to discover the
    existing QA Sandbox agents without seeding new agents.
 3. Read `/api/agents/<owned-agent-id>/webhook`. Require all three
-   lifecycle event names and their subscribable definitions. Never save
+   lifecycle event names in `availableEvents` and a `subscribable: true`
+   definition for each in `eventDefinitions`
+   (`src/app/api/agents/[agentId]/webhook/route.ts:46-66`). Never save
    signing secrets or authentication headers from the response.
 4. If its recorded deliveries contain a run ID, read that run through
    `/api/mcp/agents/runs/<runId>`. Require matching run and agent IDs.
@@ -57,6 +59,16 @@ server lines and the abandoned-work cron are not screens on that page.
     `tests/htpr-8909-abandoned-work.test.ts` for keep and release. A dry
     call needs cron authorization and still must not be aimed at production
     during this map check.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs agent-runs --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`agent-runs ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

@@ -10,9 +10,28 @@ The "Guard agent board scope" step inside the required `ci-tests` check runs on 
 
 ## Driving it with agent-browser
 
-After the guard is merged and its production deployment succeeds, read the production push `ci-tests` run for the merge commit: the guard step must pass and print `Agent scope: findings=..., new=0`. That is the positive control.
+Read the guard from GitHub, not from an app page:
 
-For the negative control, branch a throwaway PR from current production. Append one unscoped query such as `prisma.task.findFirst({ where: { id } })` to a real agent route (for example `src/app/api/agents/[agentId]/activity/route.ts`). Open a non-draft PR targeting production. Never merge it. Confirm `ci-tests` fails at "Guard agent board scope" with `New unscoped query:` naming that file and line, and that the self-test lines before it passed.
+```bash
+gh run list --workflow ci-tests.yml --branch production --limit 1
+gh run view <run-id> --log | grep -E 'static gate agent-board-scope|Agent scope: '
+```
+
+Require `new=0` and `Agent scope targets: entries=N` in the hundreds. On the 2026-11-19
+production push for `9f4249280d` the real scan printed
+`Agent scope targets: entries=564, with_board_delegate=108` and
+`Agent scope: findings=17, excepted=9, debt=8, new=0`. The same job also runs
+two-file self-tests that print `entries=1` and a deliberate `new=1`; read the last block
+with the hundreds, not the fixture lines. The negative control is a throwaway non-draft PR
+and belongs in a separate run.
+After the guard is merged and its production deployment succeeds, read the production push
+`ci-checks` run for the merge commit: the lane `agent-board-scope` (log group
+`static gate agent-board-scope`) must pass and print `Agent scope: findings=..., new=0`
+(`.github/workflows/ci-tests.yml:457,559`, `.github/scripts/agent-scope/scope_scan.py:86-88`).
+`ci-tests` is the required summary job that needs `ci-checks`; it carries no guard step of its
+own. That is the positive control.
+
+For the negative control, branch a throwaway PR from current production. Append one unscoped query such as `prisma.task.findFirst({ where: { id } })` to a real agent route (for example `src/app/api/agents/[agentId]/activity/route.ts`). Open a non-draft PR targeting production. Never merge it. Confirm the `ci-checks` job fails at the lane `agent-board-scope` with `New unscoped query:` naming that file and line, and that the self-test lines before it passed.
 
 ## Gotchas
 

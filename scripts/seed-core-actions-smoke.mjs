@@ -19,7 +19,7 @@ const jiti = createRequire(path.join(appRoot, "package.json"))("jiti")(
 );
 const prisma = jiti(path.join(appRoot, "src/lib/prisma.ts"));
 const { signSession } = jiti(path.join(appRoot, "src/lib/auth/session.ts"));
-const { createMcpToken } = jiti(path.join(appRoot, "src/lib/mcp/auth/verifyJwt.ts"));
+const { agentTokenCredentialFields, createMcpToken } = jiti(path.join(appRoot, "src/lib/mcp/auth/verifyJwt.ts"));
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 const displayName = `Core smoke user ${runKey}`;
@@ -73,6 +73,39 @@ try {
     }
   }
   const agent = await prisma.agent.create({ data: { displayName: agentName, userId: user.id } });
+  const agentToken = createMcpToken(user.id, user.email, undefined, agent.id);
+  await prisma.agent.update({ where: { id: agent.id }, data: agentTokenCredentialFields(agentToken) });
+  const chat = await prisma.chatSession.create({
+    data: {
+      userId: user.id,
+      agentId: agent.id,
+      projectId: projects.get("fixture").id,
+      title: `Core smoke agent chat ${runKey}`,
+    },
+  });
+  const askedAt = new Date();
+  const ask = (index) => prisma.chatMessage.create({
+    data: {
+      role: "human",
+      content: `Core smoke agent chat question ${index} ${runKey}`,
+      sessionId: chat.id,
+      authorUserId: user.id,
+      isDelivered: true,
+      createdAt: new Date(askedAt.getTime() + index * 1_000),
+    },
+  });
+  await ask(1);
+  const lastQuestion = await ask(2);
+  await prisma.chatMessage.create({
+    data: {
+      role: "assistant",
+      content: `Core smoke agent chat answer ${runKey}`,
+      sessionId: chat.id,
+      authorAgentId: agent.id,
+      replyToMessageId: lastQuestion.id,
+      createdAt: new Date(askedAt.getTime() + 2_000),
+    },
+  });
   await prisma.member.createMany({
     data: plan.boards.flatMap((board) => users.map((member) => {
       const row = { projectId: projects.get(board.key).id, userId: member.id };
@@ -149,6 +182,7 @@ try {
       betterAuthSecret,
       byokCipherSecret,
       mcpToken,
+      agentToken,
     ]) {
       console.log(`::add-mask::${value}`);
     }
@@ -157,6 +191,7 @@ try {
   const values = {
     CORE_SMOKE_COOKIE: cookie,
     CORE_SMOKE_MCP_TOKEN: mcpToken,
+    CORE_SMOKE_AGENT_TOKEN: agentToken,
     CORE_SMOKE_PROJECT_ID: project.id,
     [ARCHIVED_SMOKE_PROJECT_ENV]: archived.id,
     CORE_SMOKE_TASK_ID: task.id,

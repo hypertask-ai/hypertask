@@ -31,12 +31,13 @@ test("the UX sign-off gate is a sweep, so a pull request event pays no job for i
   assert.match(JSON.stringify(chain), /ux-signoff-gate\.yml/);
 });
 
-test("the feature map is checked in the job that was already paid for", () => {
+test("the feature map gate covers new features only, never coverage growth", () => {
   const ci = read("ci-tests");
   const launcher = ci.jobs["ci-checks"].steps.find((step) => step.name === "Run independent static checks");
-  assert.match(launcher.run, /^ *lane_feature_map_coverage\(\) \{$/m);
-  assert.match(launcher.run, /^ *run_lane feature-map-coverage$/m);
-  assert.match(launcher.run, /node \.github\/scripts\/feature-map-coverage\.cjs --strict/);
+  assert.match(launcher.run, /^ *lane_feature_map_change\(\) \{$/m);
+  assert.match(launcher.run, /^ *run_lane feature-map-change$/m);
+  assert.doesNotMatch(launcher.run, /feature.map.coverage/);
+  assert.equal(fs.existsSync(path.join(__dirname, "..", ".github", "scripts", "feature-map-coverage.cjs")), false);
   assert.equal(exists("feature-map-coverage"), false);
 });
 

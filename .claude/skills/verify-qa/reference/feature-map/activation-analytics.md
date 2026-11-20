@@ -17,11 +17,21 @@ There is no customer screen. The daily run is the GitHub workflow `.github/workf
 
 - Doctor: production deployment success, QA 985 signed in on `/my-tasks`, and the core inbox cycle.
 - Read `/api/flags` with QA 985 and ordinary QA 2343. Retired activation switches must be absent; other switches remain available.
-- Never create customer-looking analytics using synthetic QA identities. QA 985, guest users and configured QA emails remain excluded. Local activation/controller tests prove exclusions alongside an eligible positive control.
+- Never create customer-looking analytics using synthetic QA identities. QA 985, guest users and configured QA emails are excluded (`src/lib/telemetry/accountCategory.ts:23-35`). Probe mailboxes are not excluded: `isSyntheticAccount` recognises only `qa` and `guest`, so a probe account stays activation-eligible and `legacyAccountCategory` labels its events `customer` (`src/lib/telemetry/activationAnalytics.ts:21-24`, `src/lib/telemetry/savedWorkAnalytics.ts:11-19`). Report that as a product gap; do not paper it with a doc claim.
 - Read the existing `https://hypertask.app/signup-check` aggregate report when its Access service identity is available. Follow [signup-check.md](../ops-map/signup-check.md); do not query ticket data through a database.
 - Provider-side event delivery is UNREACHABLE when the runner lacks read access. Record that limit rather than claiming a mock proves live delivery.
-- `GET /api/cron/funnel-probe-signup` needs cron authorization. Flag off returns 404 and `{ "ok": false, "disabled": true }`. Flag on returns 200 and `{ "ok": true, "runner": "github-actions", "workflow": "funnel-probe-daily.yml" }`.
+- `GET /api/cron/funnel-probe-signup` needs cron authorization (`src/app/api/cron/funnel-probe-signup/route.ts:12-21`). Without it the route answers 401 `{"error":"unauthorized"}` before the flag is read, so a QA runner can only prove the refusal. With cron authority, flag off returns 404 and `{ "ok": false, "disabled": true }`, and flag on returns 200 and `{ "ok": true, "runner": "github-actions", "workflow": "funnel-probe-daily.yml" }`.
 - `GET /api/ops/funnel-probe-inbox` and `GET /api/ops/funnel-probe-state` answer only on `https://app.hypertask.ai`, only with cron authorization, and only for a probe email. A missing inbox or state row is 404 with `{ "found": false }`.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs activation-analytics --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`activation-analytics ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

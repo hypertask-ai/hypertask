@@ -11,6 +11,6 @@ This skill is now [verify-hypertask](../verify-hypertask/SKILL.md). Read it for 
 proof: Launch, Doctor, Drive, Evidence, Cleanup and Helpers.
 
 The helpers stay in `scripts/` and the customer map stays in `reference/feature-map/`
-because `.github/workflows/ship-scripts-tests.yml`, `feature-map-coverage.yml` and
-`feature-map-weekly.yml` name those paths, and that workflow file has another owner.
+because `.github/workflows/ship-scripts-tests.yml` and `feature-map-weekly.yml` name those
+paths, and those workflow files have another owner.
 Both paths move with the skill once those lists move with them.

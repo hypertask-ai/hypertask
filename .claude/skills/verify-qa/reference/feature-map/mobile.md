@@ -18,13 +18,31 @@ Real 390x844 phone-viewport screenshot, never a resized desktop window:
 ```
 .claude/skills/verify-on-phone/scripts/phone-shot.sh https://app.hypertask.ai/<path> <out.png>
 ```
+**Set the phone user agent before the first navigation.** The server decides
+"mobile" from the `user-agent` request header (`isMobileDevice` in
+`src/utils/serverActions.ts`), so a Playwright context created at 1440x900 and
+resized to 390x844 still gets `maximum-scale=1.2`, no
+`data-phone-new-task-sheet`, and the desktop chat. Create the context at
+390x844 with an iPhone user agent, or pass `--viewport 390x844` to `ht-verify
+shot`, which sets both. Check `navigator.userAgent` in the page before trusting
+any mobile-only attribute.
+
+With the phone user agent the checks that held on 2026-11-20 were:
+`<meta name="viewport">` = `maximum-scale=5, user-scalable=yes` (with
+`htpr-8145-phone-zoom` on); `#createTaskModal[data-phone-new-task-sheet="on"]`
+and `[data-phone-new-task-card="on"]` on `/new?id=<board>`; `#body`
+`padding-top: 28px`; and on the board, **Ask AI** opening a dialog labelled
+`AI Chat` with `data-ai-chat-phone-fullscreen`, no model label and no
+"Context:" text.
+
 `e2e/smoke/journeys.spec.ts` tests tagged `@mobile` (`open-board`,
 `open-task`, `create-task`) exercise the same shape, but only when
-`HT_QA_JOURNEYS=1`. They are not part of `prod-health.yml`'s CI job (that
-job only runs the read-only `prod.spec.ts` checks). Reading the `@mobile`
-test bodies is still the fastest way to see what "normal" looks like, just
-don't assume they ran automatically. For the session's own proof, shoot
-production with `phone-shot.sh` and `--state`.
+`HT_QA_JOURNEYS=1`. `prod-health.yml` runs `--project Desktop --project Mobile`, whose
+test match covers `prod`, `layout-lock`, `agent-sidebar-chats` and
+`github-connect` specs, so those are not the `@mobile` journeys. Reading the
+`@mobile` test bodies is still the fastest way to see what "normal" looks
+like, just don't assume they ran automatically. For the session's own proof,
+shoot production with `phone-shot.sh` and `--state`.
 
 For the New Task title, open a sandbox board at 390x844, press `C`, expand
 `Title: Add`, then tap the title field, type and save. Check the textarea itself
@@ -47,7 +65,8 @@ change shared provider settings. Delete only this run's QA fixtures.
 ### Delete a chat on the phone
 
 At 390x844, with `htpr-7575-phone-chat-delete` on, open AI chat and open
-the chat history list. A personal row has a button labeled Delete chat.
+the chat history list. A personal row has an icon button with
+`aria-label="Delete chat"` (not visible row text).
 Tap it. The browser asks "Delete this chat?". Confirm, and that chat
 leaves the list. Cancel, and it stays. An agent chat row has no trash
 button. Flag off, the trash button is absent on every row. Desktop
@@ -55,23 +74,23 @@ delete is the same confirm and the same delete action.
 
 ### New task sheet on the phone
 
-Open `/new?id=<board id>` at 390x844 with
+Open `/new?id=<board id>` at 390x844 with an iPhone user agent and
 `htpr-8029-phone-new-task-layout` on. `#createTaskModal` has
-`data-phone-new-task-sheet="on"`. The form body padding-top is the
-safe area, and at least 28px, so the sheet starts below the status bar.
-The description card has `data-phone-new-task-card="on"`. The bar
+`data-phone-new-task-sheet="on"`. `#body` padding-top is the safe area, and at
+least 28px, so the sheet starts below the status bar. The description card has
+`data-phone-new-task-card="on"`. The bar
 inside `.attachment-upload-container` (Attach files, and dictate) sits
 at the bottom of that card. Open the keyboard. The modal gets
 `data-phone-new-task-keyboard="on"` and its bottom edge is the keyboard
-inset, so the bar sits above the keyboard. A short visible height, 640px
-or less, sets `data-phone-new-task-short="on"`. At desktop width the
-sheet attribute is absent. Flag off, those attributes are absent and
-the sheet is full screen.
+inset, so the bar sits above the keyboard. `data-phone-new-task-short="on"`
+also appears whenever the keyboard is open, at any height. At desktop width, or
+with a desktop user agent, the sheet attributes are absent. Flag off, those
+attributes are absent and the sheet is full screen.
 
 ### Full-screen phone chat
 
-At 390x844, with `htpr-8032-phone-chat-fullscreen` on, open AI chat
-from a board. The chat is a dialog labeled AI Chat with
+At 390x844 with an iPhone user agent, `htpr-8032-phone-chat-fullscreen` on, open AI chat
+from a board with **Ask AI**. The chat is a dialog labeled AI Chat with
 `data-ai-chat-phone-fullscreen`, and it has no sheet handle. The header
 is one row. The board picker is one small chip in that header, with no
 "Context:" label. The model line under the

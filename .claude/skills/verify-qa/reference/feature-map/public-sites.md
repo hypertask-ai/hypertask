@@ -22,13 +22,25 @@ Open the affected public URL without signing in. Follow the path in the ticket f
 4. Check unaffected public paths named in the ticket. Do not submit real customer messages or create permanent data to test a form.
 5. Open `/developers` with no saved login and record the final URL. Ask the in-app AI a product how-to that calls `search_help_docs`, then compare an answer with `htpr-7825-whole-help-articles` on against the same question with the flag off. On includes text past the first 1500 characters of the article. Off stops there.
 
+```bash
+for u in https://hypertask.ai/ https://docs.hypertask.ai/ https://help.hypertask.ai/; do
+  curl -s -o /dev/null -w "$u %{http_code}\n" -L --max-time 25 "$u"
+done
+curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' https://app.hypertask.ai/developers   # 307 -> docs
+curl -sL -o /dev/null -w '%{http_code} %{url_effective}\n' https://app.hypertask.ai/developers   # 200 on docs
+```
+
+On 2026-11-20 all three hosts answered 200 and `/developers` answered 307 to
+`https://docs.hypertask.ai/api/rest-api/`, which answered 200 with title
+`REST API | Hypertask Docs`.
+
 ## Gotchas
 
-- The marketing, docs and help sites deploy separately from the app. Verify the affected site's deployment, not the app deployment.
+- The marketing, docs and help sites deploy separately from the app. Verify the affected site's deployment, not the app deployment. None of the three has source in this repo, so only the `/developers` redirect and the help-search code are checkable here.
 - A successful HTTP response alone does not prove the changed content or interaction works.
 - Public pages should work without an app login. Do not use Valentin's browser or account.
 - `/developers` is a redirect. A 200 on the docs site is the result. The app URL itself does not stay on screen.
-- Help search waits at most 8 seconds for the help site. A failed article fetch keeps the search excerpt.
+- Help search waits at most 8 seconds for the help site. A failed article fetch keeps the search excerpt, so a short body is not automatically a flag failure.
 
 ### What proof to collect
 

@@ -4,7 +4,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { finish, readArgs, requireLoopback } from "./drive-grade.mjs";
+import { LIVE_BASE, finish, readArgs, requireLoopback } from "./drive-grade.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -54,9 +54,9 @@ export async function driveMain(area, argv, breaks, run) {
     if (task?.id) {
       const cleanupState = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "drive-cleanup-")), "state.json");
       const storage = JSON.parse(await fs.readFile(state, "utf8"));
-      storage.cookies = storage.cookies.filter(cookie => ["127.0.0.1", "localhost"].includes(cookie.domain)).map(cookie => ({ ...cookie, domain: "app.hypertask.ai" }));
+      if (base !== LIVE_BASE) storage.cookies = storage.cookies.filter(cookie => ["127.0.0.1", "localhost"].includes(cookie.domain)).map(cookie => ({ ...cookie, domain: "app.hypertask.ai" }));
       await fs.writeFile(cleanupState, JSON.stringify(storage), { mode: 0o600 });
-      const cleanup = spawnSync(process.execPath, [path.join(root, ".claude/skills/verify-qa/scripts/fixture-cleanup"), cleanupState, String(task.id), "--base-url", base.replace("localhost", "127.0.0.1")], { encoding: "utf8", timeout: 30_000 });
+      const cleanup = spawnSync(process.execPath, [path.join(root, ".claude/skills/verify-qa/scripts/fixture-cleanup"), cleanupState, String(task.id), ...(base === LIVE_BASE ? [] : ["--base-url", base.replace("localhost", "127.0.0.1")])], { encoding: "utf8", timeout: 30_000 });
       await fs.rm(path.dirname(cleanupState), { recursive: true });
       step("fixture cleaned", cleanup.status === 0, { output: cleanup.stdout, error: cleanup.stderr });
     }
