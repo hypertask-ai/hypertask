@@ -9,24 +9,50 @@
 
 ## How to get to it (user POV)
 
-On a board, Ctrl+K then **Create task** (or `C`) opens the create window (`src/components/RTE/TiptapCreateTaskModal.tsx`). The paperclip (`#create-task-modal-attachmentUpload`) or a file drop attaches files. Save, Save & close or Save & new creates the task at once while files keep uploading in the background (HTPR-5993, flag removed in HTPR-7359), then each file is linked to the new task.
+On a board, Ctrl+K then **Create task** (the row is `Create task` with chip
+`C`; plain `c` on a full board opens nothing useful). The window is
+`TiptapCreateTaskModal.tsx`. The paperclip
+(`#create-task-modal-attachmentUpload`) or a file drop attaches files. The
+visible `Save` control is the primary button; `Save & close` and `Save & new`
+are options under it (they render as `span` rows, not buttons). Saving waits for
+pending uploads before creating, then each file is linked to the new task.
 
 ## Driving it with agent-browser
 
-1. Open a board, Ctrl+K, type `create task`, pick **Create task**, fill the title.
-2. Attach a file of a few MB with the paperclip (Playwright: wait for `filechooser`, then click the paperclip; `setInputFiles` on the first `input[type=file]` hits another uploader).
-3. Press **Save & close**. Expect the toast `Task saved. 1 file uploading` (a small file can finish first and show `Successfully created the task`).
-4. Watch the requests: `POST /api/tasks/uploadUrl` with purpose `task-attachment-link`, `POST /api/tasks/uploadFinalize`, `POST /api/tasks/createGlobally`, then `POST /api/tasks/uploadFinalize` with action `link-task-attachment`. All must be 200.
-5. Open the new task and reload: the file shows on the task.
-6. On a Free board, with `htpr-7686-free-plan-limits` and `htpr-7924-free-file-25mb` on for the QA user, attach a file larger than 10 MB and at most 25 MB. `POST /api/tasks/uploadFinalize` must be 200. Repeat with a file over 25 MB and expect 402 and the 25 MB sentence. Turn `htpr-7924-free-file-25mb` off and expect an over-10 MB file to be refused at 10 MB.
-7. With `htpr-7924-free-storage-2gb` on, upload a file that makes that Free scope's stored attachments pass 2 GB. Expect 402 and the 2 GB sentence, and the staged object removed. Turn the flag off and confirm that same size is not refused for storage.
+Verified on production 2026-11-20 with QA 985 and a 600 KB file:
+
+1. `ht-verify session start --base https://app.hypertask.ai --viewport 1440x900`
+   then `ht-verify open /project?id=7049&surface=board --full`.
+2. Ctrl+K, then `ht-verify fill '#htc-search' 'create task'`, then click the row
+   whose text starts `Create task` (not `Create subtask`).
+3. Fill `#title-input-modal` with `[qa-9515] attach probe <ts>`.
+4. `page.setInputFiles('#create-task-modal-attachmentUpload', '<file>')`. The
+   hidden input works directly; a `filechooser` wait is not needed.
+5. Click the visible `span` with exact text `Save`. For Save & close / Save &
+   new, click those spans instead; there is no standalone button with that name.
+6. Require this request chain, all 200: `POST /api/tasks/uploadUrl` with purpose
+   `task-attachment-link`, `POST /api/tasks/uploadFinalize`,
+   `POST /api/tasks/createGlobally`, then `POST /api/tasks/uploadFinalize` with
+   action `link-task-attachment`.
+7. The toast reads `Task saved. 1 file uploading`; the detail page opens and the
+   file shows in the description. Reload and require the file still there.
+8. Clean up with `node .claude/skills/verify-qa/scripts/fixture-cleanup <state>
+   <taskId>` and zero the probe title on the board.
+9. Plan limits (Free scope, QA 985): the 25 MB / 2 GB refusals arrive on
+   `link-task-attachment` (or on create-time link verification), not on the
+   plain finalize call. A finalize-only 402 expectation is wrong; watch the
+   link request and require 402 `PLAN_LIMIT_REACHED` with the 25 MB or 2 GB
+   sentence. `uploadFinalize` returns 413 only above the 500 MB direct-upload
+   ceiling.
 
 ## Gotchas
 
-- The link call refused (403) or never sent, so the task saves without its file.
+- The link call refused (403/402) or never sent, so the task saves without its file.
 - A pending upload lost when the window closes or Save & new resets it.
 - Late callbacks from the previous ticket attaching to the next one after Save & new.
 - Both Free attachment flags do nothing until `htpr-7686-free-plan-limits` is on. A file of 10 MB or less never consults `htpr-7924-free-file-25mb`. The storage flag off means no 2 GB cap, not a lower cap. A refused finalize deletes the staged object.
+- A 402 on the link call is swallowed by `runLink`; no 25 MB sentence reaches the user on that path. Prove the refusal from the response, not the toast.
+- The toast counts registered upload jobs; it says `1 file uploading` even after a small file finished, so the string is not a speed signal.
 
 ### What proof to collect
 
