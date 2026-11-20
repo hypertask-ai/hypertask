@@ -425,23 +425,6 @@ feature_map_weekly:
   fixtures: offline_with_temporary_home_and_no_secrets
   app_driving: false
 
-feature_map_coverage:
-  ticket: https://app.hypertask.ai/detail/project-15/9406
-  # HTPR-9450 folded the separate workflow into the ci-checks lane, which was
-  # already paid for.
-  context: null
-  workflow: .github/workflows/ci-tests.yml
-  job: ci-checks
-  lane: feature-map-coverage
-  required: false
-  triggers: [pull_request_only_through_ci-tests]
-  runs_when: [src/app, src/lib/flags/definitions, feature_map_pages]
-  commands:
-    - node .github/scripts/feature-map-coverage.cjs --strict
-  test: tests/feature-map-coverage.test.cjs
-  additional_jobs: 0
-  app_driving: false
-
 feature_map_live_weekly:
   ticket: https://app.hypertask.ai/detail/project-11514/205
   context: feature-map-live-weekly

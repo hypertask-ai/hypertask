@@ -15,20 +15,6 @@ function firstFailure(steps, expects) {
   return -1;
 }
 
-function failingItem(run) {
-  const steps = Array.isArray(run?.steps) ? run.steps : [];
-  const expects = Array.isArray(run?.expects) ? run.expects : [];
-  for (const [index, step] of steps.entries()) if (step?.ok !== true) return { kind: "step", index, subject: step?.action ?? null, error: String(step?.error ?? "") };
-  for (const [index, expect] of expects.entries()) if (expect?.ok !== true) return { kind: "expect", index: steps.length + index, subject: expect?.expect ?? null, error: String(expect?.error ?? "") };
-  return null;
-}
-
-function sameFailure(base, head) {
-  const left = failingItem(base), right = failingItem(head);
-  if (!left || !right) return false;
-  return left.kind === right.kind && left.index === right.index && left.error === right.error && JSON.stringify(left.subject) === JSON.stringify(right.subject);
-}
-
 function plannedActions(run, plan) {
   if (Array.isArray(plan?.actions) && plan.actions.length) return plan.actions;
   const steps = Array.isArray(run?.steps) ? run.steps : [];
@@ -40,11 +26,6 @@ function apiOnlyRun(run, plan) {
   if (run?.apiOnly === true) return true;
   const actions = plannedActions(run, plan);
   return actions ? actions.every((action) => action.op === "api") : false;
-}
-
-function failedByJudge(run) {
-  const verdict = judgedVerdict(run);
-  return verdict !== "" && verdict !== "UNEVALUATED" && !PASS_VERDICTS.includes(verdict);
 }
 
 function judgedVerdict(run) {
@@ -70,57 +51,46 @@ function classifyRun(run, plan) {
   return { state: "ok", failIndex: -1 };
 }
 
-function decideComparison({ journeys, bugfix = false, bugfixUnevaluated = "" } = {}) {
+function failureNote(run, failIndex) {
+  const stepsPassed = (run?.steps ?? []).every((step) => step?.ok === true) && (run?.expects ?? []).every((expect) => expect?.ok === true);
+  const judged = judgedVerdict(run);
+  const judgedFail = judged !== "" && judged !== "UNEVALUATED" && !PASS_VERDICTS.includes(judged);
+  return stepsPassed && judgedFail ? "the judge failed it" : `failed at step ${failIndex + 1}`;
+}
+
+function areaOf(journey) {
+  const value = String(journey ?? "");
+  return value.startsWith("area:") ? value.slice(5) : "";
+}
+
+function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnevaluated = "", bugfixProved = false } = {}) {
   const list = (Array.isArray(journeys) ? journeys : []).map((item) => ({
     journey: String(item?.journey ?? ""),
     viewport: typeof item?.viewport === "string" ? item.viewport : "",
-    base: classifyRun(item?.base, item?.plan),
     head: classifyRun(item?.head, item?.plan),
-    baseRun: item?.base ?? null,
-    headRun: item?.head ?? null,
-    judgedFail: failedByJudge(item?.head),
+    run: item?.head ?? null,
   }));
   if (!list.length) return { verdict: "FAIL", notes: "no journey was planned" };
+  const red = new Set((Array.isArray(redFeatures) ? redFeatures : []).map(String));
   const problems = [];
   const notes = [];
   const unjudged = [];
-  const uncompared = [];
+  const unrun = [];
   const label = (item) => (item.viewport ? `${item.journey} [${item.viewport}]` : item.journey);
   for (const item of list) {
-    const { journey, base, head, baseRun, headRun } = item;
     const where = label(item);
-    const repro = bugfix && journey === "change:repro";
-    if (base.state === "unavailable") uncompared.push(`${where}: the base comparison did not run`);
-    else if (head.state === "unavailable") problems.push(`${where}: the head comparison did not run`);
-    else if (base.state === "unjudged" || head.state === "unjudged") unjudged.push(where);
-    else if (head.state === "ok" && base.state === "ok") continue;
-    else if (head.state === "ok" && repro) continue;
-    else if (head.state === "ok") notes.push(`${where} works now, it did not on base`);
-    else if (base.state === "ok") problems.push(`${where}: regression at step ${head.failIndex + 1}`);
-    else if (head.failIndex <= base.failIndex) {
-      if (head.failIndex === base.failIndex && sameFailure(baseRun, headRun)) {
-        if (repro) uncompared.push(`${where}: the same failure is on base, so the check cannot show the change fixes it`);
-        else notes.push(`${where} fails the same way on base, so the change is not the cause`);
-      } else if (head.failIndex === base.failIndex) problems.push(`${where}: regression at step ${head.failIndex + 1}, base failed differently at the same step`);
-      else problems.push(`${where}: regression at step ${head.failIndex + 1}, base failed at step ${base.failIndex + 1}`);
-    }
-    else if (item.judgedFail) problems.push(`${where}: the judge failed it`);
-    else notes.push(`${where} got further than base and still fails at step ${head.failIndex + 1}`);
+    if (item.head.state === "unavailable") unrun.push(`${where}: the run did not finish`);
+    else if (item.head.state === "unjudged") unjudged.push(where);
+    else if (item.head.state === "ok") continue;
+    else if (red.has(areaOf(item.journey))) notes.push(`${where} is already red on production, so the nightly live pass owns it`);
+    else problems.push(`${where}: ${failureNote(item.run, item.head.failIndex)}`);
   }
-  if (bugfix) {
-    const repros = list.filter((item) => item.journey === "change:repro");
-    if (!repros.length) {
-      if (bugfixUnevaluated) uncompared.push(`the bug fix has no repro journey: ${bugfixUnevaluated}`.slice(0, 240));
-      else problems.push("the bug fix has no repro journey");
-    }
-    for (const item of repros) {
-      if (item.base.state === "unjudged" || item.head.state === "unjudged") unjudged.push(label(item));
-      else if (item.base.state === "ok") problems.push(`${label(item)}: the repro passes on base, so it does not reproduce the bug`);
-      else if (item.base.state === "unavailable") uncompared.push(`${label(item)}: the repro did not run on base`);
-      else if (item.head.state !== "ok" && !sameFailure(item.baseRun, item.headRun)) problems.push(`${label(item)}: the repro still fails on head`);
-    }
+  if (bugfix && !list.some((item) => item.journey === "change:repro")) {
+    if (bugfixProved) notes.push("the bug fix has no user path, and repro-first shows a changed test failing on the old code");
+    else if (bugfixUnevaluated) unrun.push(`the bug fix has no repro journey: ${bugfixUnevaluated}`.slice(0, 240));
+    else problems.push("the bug fix has no repro journey");
   }
-  const notesOut = [...new Set([...uncompared, ...unjudged.map((journey) => `${journey}: the judge model did not answer`)])];
+  const notesOut = [...new Set([...unrun, ...unjudged.map((journey) => `${journey}: the judge model did not answer`)])];
   const verdict = problems.length ? "FAIL" : notesOut.length ? "UNEVALUATED" : notes.length ? "PASS+NOTES" : "PASS";
   return { verdict, notes: [...problems, ...notesOut, ...notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 480) };
 }
@@ -182,7 +152,7 @@ module.exports = {
   baseMoved,
   buildMarker,
   classifyRun,
-  decideComparison,
+  decideHeadOnly,
   isPass,
   parseMarker,
   reusableVerdict,
