@@ -51,12 +51,11 @@ State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), s
 .claude/skills/verify-hypertask/bin/ht-verify shot --session --out "$PWD/my-tasks.png"
 ```
 
-A bare `ht-verify up` board view waits on the premerge realtime stack and stays at
-"Loading board..."; the task detail and `/my-tasks` do render. Shoot the board
-against production with the QA identity read-only. `up` refuses a `node_modules`
-symlink that resolves outside this checkout and stops in seconds on a fatal line
-in `dev.log`, so a stack that cannot serve never waits out the 240s timeout or
-leaves `env.json` behind for the next command.
+A bare `ht-verify up` serves a production build with Redis and Soketi, so the board
+renders its columns and cards locally and a new ticket lands through realtime. `up`
+refuses a `node_modules` symlink that resolves outside this checkout and stops in seconds
+on a fatal line in `dev.log`, so a stack that cannot serve never waits out the 240s timeout
+or leaves `env.json` behind for the next command.
 
 ## Launch
 
@@ -74,16 +73,20 @@ export DATABASE_URL=postgresql://verify:verify@127.0.0.1:5678/hypertask
 export SESSION_SECRET=local-verification-session-placeholder-32
 export BETTER_AUTH_SECRET=local-verification-auth-placeholder-32
 export NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
+export NEXT_PUBLIC_BASEURL=http://127.0.0.1:3000
 npx prisma generate
 npx prisma migrate deploy
-setsid nohup env CI=1 __NEXT_AGENT_UPGRADE=security npx next dev -p 3000 \
+npx next build
+setsid nohup env CI=1 __NEXT_AGENT_UPGRADE=security npx next start -H 127.0.0.1 -p 3000 \
   > <run-folder>/dev.log 2>&1 &
 echo $! > <run-folder>/dev.pid
 ```
 
-Write `dev.pid` in the step that starts the server, because Cleanup kills that exact pid.
-`Ready` in `dev.log` is not ready: the first page still compiles, up to a minute cold. Ready
-means `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.
+Build and serve, never `next dev`: in dev the inline Flight payload never resolves, no page
+hydrates, and the board sits on "Loading board..." forever. Real live board updates also need
+`REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up` starts. Write
+only `dev.log`. `Ready` in it is not ready: the first `/login` still compiles. Ready means
+`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.
 `CI=1` and `__NEXT_AGENT_UPGRADE=security` stop Next's agent upgrade nudge from exiting
 before it serves. `npm run dev` also starts `stripe:listen`, which local proof does not need.
 A worktree whose `node_modules` is a symlink elsewhere cannot run Next: it fails on module

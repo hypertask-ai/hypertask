@@ -1,5 +1,5 @@
 const { spawn } = require("node:child_process");
-const { closeSync, lstatSync, openSync, readFileSync, unlinkSync } = require("node:fs");
+const { closeSync, existsSync, lstatSync, openSync, readFileSync, unlinkSync } = require("node:fs");
 const path = require("node:path");
 const {
   ensureRunDir,
@@ -15,32 +15,39 @@ const {
 } = require("../context.cjs");
 const { escapingSymlink, fatalLine } = require("../up-guards.cjs");
 
-const usage = `ht-verify up - start the disposable local stack (Postgres, migrations, Next dev)
+const usage = `ht-verify up - start the disposable local stack (Postgres, Redis, Soketi, Next production)
 
 Usage:
   ht-verify up [--port 3000] [--db-port 5678] [--dry-run]
 
-  --port      Next dev port. Default 3000.
+  --port      Next server port. Default 3000.
   --db-port   Postgres port, bound to 127.0.0.1 only. Default 5678.
   --dry-run   Print the exact commands and write nothing.
 
-Repeat runs reuse the container and server and wait up to 240s for /login 200.
-A symlinked node_modules, a dead dev server or a fatal line in dev.log stops it
-in seconds instead of at the timeout, before any later command reuses the run.
-State lands in the run folder: env.json, dev.log, dev.pid. Secrets are
-placeholders. Needs Docker and node_modules here; a symlink fails Next.
-Known limit: the board view waits on the premerge realtime stack and stays at
-"Loading board..."; the task detail and /my-tasks do render.
+Repeat runs reuse containers and the server and wait up to 240s for /login 200.
+A symlinked node_modules, a dead server or a fatal line in dev.log stops it in
+seconds instead of at the timeout. The first up in a checkout builds Next for
+that port; later runs on the same port reuse the build. State: env.json,
+dev.log, dev.pid. Secrets are placeholders. Needs Docker and node_modules here;
+a symlink fails.
 
 Example:
   ht-verify up`;
 const dbName = "hypertask-verify-db";
+const redisName = "hypertask-verify-redis";
+const soketiName = "hypertask-verify-soketi";
+const redisImage = "ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf";
+const soketiImage = "ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c";
+const redisPort = 6380;
+const soketiPort = 6002;
+const pusherSecret = "local-verify-secret";
 const readyTimeout = 240_000;
+
 function nodeModulesSymlinked() {
   try { return lstatSync(path.join(repoRoot, "node_modules")).isSymbolicLink(); } catch { return false; }
 }
 
-function devAlive(pid) {
+function serverAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
@@ -54,10 +61,10 @@ async function waitForLogin(baseUrl, pid, logFile, deadline) {
     if ((await httpStatus(`${baseUrl}/login`)) === 200) return { ready: true };
     const fatal = fatalLine(readText(logFile));
     if (fatal) return { ready: false, reason: fatal, logFile };
-    if (!devAlive(pid)) return { ready: false, reason: `the dev server (pid ${pid}) exited`, logFile };
+    if (!serverAlive(pid)) return { ready: false, reason: `the Next server (pid ${pid}) exited`, logFile };
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
-  return { ready: false, reason: `Next dev did not answer 200 on ${baseUrl}/login within ${readyTimeout / 1000}s`, logFile };
+  return { ready: false, reason: `Next did not answer 200 on ${baseUrl}/login within ${readyTimeout / 1000}s`, logFile };
 }
 
 async function poll(check, deadline, interval) {
@@ -68,9 +75,9 @@ async function poll(check, deadline, interval) {
   return false;
 }
 
-function startDev(env, port) {
+function startServer(env, port) {
   const fd = openSync(path.join(runDir(), "dev.log"), "a");
-  const child = spawn("npx", ["next", "dev", "-p", String(port)], {
+  const child = spawn("npx", ["next", "start", "-H", "127.0.0.1", "-p", String(port)], {
     cwd: repoRoot,
     detached: true,
     stdio: ["ignore", fd, fd],
@@ -97,9 +104,53 @@ function prisma(env, args) {
   }
 }
 
+function ensureContainer(name, runArgs, startHint) {
+  if (run("docker", ["container", "inspect", name]).status !== 0) {
+    docker(runArgs, startHint);
+    return;
+  }
+  if (!run("docker", ["container", "inspect", "-f", "{{.State.Running}}", name]).stdout.includes("true")) {
+    docker(["start", name], `Run docker logs ${name} and read the first error.`);
+  }
+}
+
+function ensureProductionBuild(env, baseUrl, previous) {
+  const current = existsSync(path.join(repoRoot, ".next", "BUILD_ID")) && previous.builtBaseUrl === baseUrl;
+  if (current) return;
+  const result = run("npx", ["next", "build"], { env, timeout: 900_000 });
+  if (result.status !== 0) {
+    fail(
+      `next build failed: ${(result.stderr || result.stdout).trim().split("\n").slice(-5).join(" ").slice(0, 400)}`,
+      "Run npx next build in this checkout with the same env as env.json and fix the first error.",
+      "failed",
+    );
+  }
+}
+
+function verifyPusherEnv(baseUrl) {
+  return {
+    REDIS_URL: `redis://127.0.0.1:${redisPort}`,
+    NEXT_PUBLIC_BASEURL: baseUrl,
+    BETTER_AUTH_URL: baseUrl,
+    NEXT_TELEMETRY_DISABLED: "1",
+    NEXT_PUBLIC_PUSHER_KEY: "app-key",
+    NEXT_PUBLIC_PUSHER_HOST: "127.0.0.1",
+    NEXT_PUBLIC_PUSHER_PORT: String(soketiPort),
+    NEXT_PUBLIC_PUSHER_USE_TLS: "false",
+    NEXT_PUBLIC_PUSHER_CLUSTER: "mt1",
+    PUSHER_APP_ID: "app-id",
+    PUSHER_KEY: "app-key",
+    PUSHER_SECRET: pusherSecret,
+    PUSHER_HOST: "127.0.0.1",
+    PUSHER_PORT: String(soketiPort),
+    PUSHER_USE_TLS: "false",
+    PUSHER_CLUSTER: "mt1",
+  };
+}
+
 module.exports = {
   name: "up",
-  summary: "start the disposable local stack (Postgres, migrations, Next dev)",
+  summary: "start the disposable local stack (Postgres, Redis, Soketi, Next production)",
   usage,
   async run(argv) {
     const { values } = parseArgs(argv, { port: "value", "db-port": "value", "dry-run": "bool" });
@@ -115,14 +166,19 @@ module.exports = {
       ...localSecrets,
       NEXT_PUBLIC_SITE_URL: baseUrl,
       CI: "1",
+      PREMERGE_NEXT_BUILD: "1",
       __NEXT_AGENT_UPGRADE: "security",
+      ...verifyPusherEnv(baseUrl),
     };
     const plan = [
       `docker volume create ${dbName}`,
       `docker run -d --name ${dbName} -e POSTGRES_USER=verify -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=hypertask -v ${dbName}:/var/lib/postgresql/data -p 127.0.0.1:${dbPort}:5432 postgres:14.0-alpine`,
+      `docker run -d --name ${redisName} -p 127.0.0.1:${redisPort}:6379 ${redisImage}`,
+      `docker run -d --name ${soketiName} -p 127.0.0.1:${soketiPort}:6001 -e SOKETI_DEFAULT_APP_ID=app-id -e SOKETI_DEFAULT_APP_KEY=app-key -e SOKETI_DEFAULT_APP_SECRET=${pusherSecret} ${soketiImage}`,
       "npx prisma generate",
       "npx prisma migrate deploy",
-      `npx next dev -p ${port}`,
+      "npx next build",
+      `npx next start -H 127.0.0.1 -p ${port}`,
     ];
     if (values["dry-run"]) return { target: "local", data: { dryRun: true, steps: plan, baseUrl, databaseUrl } };
     const symlink = escapingSymlink(path.join(repoRoot, "node_modules"), repoRoot);
@@ -145,17 +201,46 @@ module.exports = {
     if (!(await poll(() => run("docker", ["exec", dbName, "pg_isready", "-U", "verify"]).status === 0, Date.now() + 60_000, 1_000))) {
       fail("Postgres did not become ready within 60s", `Run docker logs ${dbName} and read the first error.`, "not-ready");
     }
+    ensureContainer(
+      redisName,
+      ["run", "-d", "--name", redisName, "-p", `127.0.0.1:${redisPort}:6379`, redisImage],
+      `Free port ${redisPort} or remove ${redisName}, then re-run.`,
+    );
+    if (!(await poll(() => run("docker", ["exec", redisName, "redis-cli", "ping"]).stdout.includes("PONG"), Date.now() + 60_000, 1_000))) {
+      fail("Redis did not become ready within 60s", `Run docker logs ${redisName} and read the first error.`, "not-ready");
+    }
+    ensureContainer(
+      soketiName,
+      ["run", "-d", "--name", soketiName, "-p", `127.0.0.1:${soketiPort}:6001`, "-e", "SOKETI_DEFAULT_APP_ID=app-id", "-e", "SOKETI_DEFAULT_APP_KEY=app-key", "-e", `SOKETI_DEFAULT_APP_SECRET=${pusherSecret}`, soketiImage],
+      `Free port ${soketiPort} or remove ${soketiName}, then re-run.`,
+    );
     prisma(env, ["prisma", "generate"]);
     prisma(env, ["prisma", "migrate", "deploy"]);
+    ensureProductionBuild(env, baseUrl, previous);
     const pidFile = readJson(path.join(runDir(), "dev.pid"), {});
-    const reused = (await httpStatus(`${baseUrl}/login`)) === 200;
-    const pid = reused ? pidFile.pid ?? null : startDev(env, port);
-    writeJson(path.join(runDir(), "env.json"), { baseUrl, databaseUrl, dbContainer: dbName, port, dbPort, pid, nodeModulesSymlink: nodeModulesSymlinked() });
+    const reused = previous.mode === "production" && previous.port === port &&
+      (await httpStatus(`${baseUrl}/login`)) === 200;
+    const pid = reused ? pidFile.pid ?? null : startServer(env, port);
+    writeJson(path.join(runDir(), "env.json"), {
+      baseUrl,
+      mode: "production",
+      builtBaseUrl: baseUrl,
+      databaseUrl,
+      dbContainer: dbName,
+      redisContainer: redisName,
+      soketiContainer: soketiName,
+      port,
+      dbPort,
+      redisPort,
+      soketiPort,
+      pid,
+      nodeModulesSymlink: nodeModulesSymlinked(),
+    });
     if (!reused) {
       const outcome = await waitForLogin(baseUrl, pid, path.join(runDir(), "dev.log"), Date.now() + readyTimeout);
       if (!outcome.ready) {
         try { unlinkSync(path.join(runDir(), "env.json")); } catch {}
-        fail(`Next dev is not serving: ${outcome.reason}`, `Read ${outcome.logFile} for the first error, fix it, then run ht-verify up again.`, "not-ready");
+        fail(`Next is not serving: ${outcome.reason}`, `Read ${outcome.logFile} for the first error, fix it, then run ht-verify up again.`, "not-ready");
       }
     }
     return { target: "local", data: { baseUrl, databaseUrl, dbContainer: dbName, pid, reused, log: path.join(runDir(), "dev.log") } };
