@@ -814,8 +814,9 @@ test("the drive fills archived, board and task ids in an api body", async () => 
     [ARCHIVED_SMOKE_PROJECT_ENV]: "2",
     CORE_SMOKE_TASK_ID: "7",
     CORE_SMOKE_MCP_TOKEN: "smoke-token",
+    CORE_SMOKE_AGENT_TOKEN: "agent-token",
   });
-  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token" });
+  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token", agentBearer: "agent-token" });
   const calls = [];
   const action = {
     op: "api",
@@ -850,10 +851,73 @@ test("the drive fills archived, board and task ids in an api body", async () => 
   assert.match(missing.steps[0].error, /archived project id is not allowed/);
   const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
   assert.match(prompt, /\{archived\} is the seeded archived board/);
+  assert.match(prompt, /seeded agent token/);
+  assert.match(prompt, /agent inbox is empty/);
   } finally {
     if (savedToken === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = savedToken;
   }
+});
+
+test("the seed mints an agent token for the seeded agent and exports it", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const source = await readFile("scripts/seed-core-actions-smoke.mjs", "utf8");
+  assert.match(source, /createMcpToken\(user\.id, user\.email, undefined, agent\.id\)/);
+  assert.match(source, /agentTokenCredentialFields\(agentToken\)/);
+  assert.match(source, /CORE_SMOKE_AGENT_TOKEN: agentToken/);
+  assert.match(source, /prisma\.chatSession\.create\(/);
+  assert.match(source, /replyToMessageId: lastQuestion\.id/);
+});
+
+test("an agent-only route is called with the seeded agent token", async () => {
+  const { parsePlan, runPlan, smokeDriveIds } = await load();
+  const ids = smokeDriveIds({ CORE_SMOKE_PROJECT_ID: "4", CORE_SMOKE_TASK_ID: "7", CORE_SMOKE_MCP_TOKEN: "smoke-token", CORE_SMOKE_AGENT_TOKEN: "agent-token" });
+  const action = parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "GET", path: "/api/mcp/chat/pending?unanswered=true", body: {}, expectStatus: 200, expectText: "success" }],
+  })).actions;
+  assert.deepEqual(action[0].path, "/api/mcp/chat/pending?unanswered=true");
+  const sent = [];
+  const page = {
+    request: { async fetch(url, options) { sent.push({ url, headers: options.headers }); return { status: () => 200, async text() { return '{"success":true,"messages":[]}'; } }; } },
+  };
+  const run = await runPlan({
+    page,
+    plan: plan(action),
+    base: "http://127.0.0.1:3100",
+    shotsDir: "/tmp",
+    navigations: [],
+    ...ids,
+  });
+  assert.equal(run.steps[0].ok, true);
+  assert.deepEqual(sent, [{ url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer agent-token" } }]);
+  const account = plan([{ op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "ok" }]);
+  const mixed = [];
+  await runPlan({
+    page: { request: { async fetch(url, options) { mixed.push(options.headers); return { status: () => 200, async text() { return '{"ok":true}'; } }; } } },
+    plan: account,
+    base: "http://127.0.0.1:3100",
+    shotsDir: "/tmp",
+    navigations: [],
+    ...ids,
+  });
+  assert.deepEqual(mixed, [{ Authorization: "Bearer smoke-token" }]);
+  const declared = parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "GET", path: "/api/mcp/inbox", body: {}, auth: "agent", expectStatus: 200, expectText: "ok" }],
+  })).actions;
+  assert.equal(declared[0].auth, "agent");
+  assert.throws(() => parsePlan(JSON.stringify({
+    actions: [{ op: "api", method: "GET", path: "/api/mcp/inbox", body: {}, auth: "cookie", expectStatus: 200, expectText: "ok" }],
+  })), /auth is not allowed/);
+  const missing = await runPlan({
+    page: { request: { async fetch() { return { status: () => 200, async text() { return "success"; } }; } } },
+    plan: plan(action),
+    base: "http://127.0.0.1:3100",
+    projectId: "4",
+    bearer: "smoke-token",
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.equal(missing.steps[0].ok, false);
 });
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
