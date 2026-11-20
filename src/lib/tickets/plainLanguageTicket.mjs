@@ -21,18 +21,56 @@ function openingLabelPattern(label) {
   return new RegExp(`^\\s*${escaped}\\s*:(?=\\s)`, "i");
 }
 
+export function ticketOpening(html) {
+  html = dropBlockquotes(html);
+  let cursor = 0;
+  while (cursor < html.length) {
+    const start = html.indexOf("<", cursor);
+    if (start === -1) break;
+    if (html.startsWith("<!--", start)) {
+      const close = html.indexOf("-->", start + 4);
+      if (close === -1) break;
+      html = `${html.slice(0, start)} ${html.slice(close + 3)}`;
+      continue;
+    }
+    if (html.indexOf(">", start + 1) === -1) break;
+    let quote = "";
+    let end = start + 1;
+    for (; end < html.length; end += 1) {
+      const char = html[end];
+      if (quote) { if (char === quote) quote = ""; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === ">") break;
+    }
+    if (end === html.length) break;
+    const tag = html.slice(start, end + 1);
+    if (/^<hr(?=[\s/>])/i.test(tag)) return html.slice(0, start);
+    cursor = end + 1;
+    const raw = tag.match(/^<(script|style|textarea)(?=[\s>])/i);
+    if (raw) {
+      const close = html.toLowerCase().indexOf(`</${raw[1].toLowerCase()}`, cursor);
+      const shut = close === -1 ? -1 : html.indexOf(">", close);
+      if (shut === -1) break;
+      html = `${html.slice(0, start)} ${html.slice(shut + 1)}`;
+      cursor = start + 1;
+    }
+  }
+  return html;
+}
+
 function structuredText(html) {
-  return stripTags(dropBlockquotes(html)
+  return stripTags(html
+    .replace(/\s+/g, " ")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n"))
+    .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n"))
     .replace(/&nbsp;/gi, " ")
-    .replace(/&#x27;/gi, "'")
+    .replace(/&#(?:x27|39);/gi, "'")
     .replace(/&apos;/gi, "'")
     .replace(/&quot;/gi, '"')
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&amp;/gi, "&")
-    .replace(/\s+/g, " ")
+    .replace(/[^\S\n]+/g, " ")
     .trim();
 }
 
@@ -54,17 +92,16 @@ export function assertPlainLanguageTicketBlock(html) {
 
 export function hasPlainLanguageTicketBlock(html) {
   if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return false;
-  const source = structuredText(html);
-  const trimmed = source.trimStart();
-  const opener = openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[0]);
-  const atStart = trimmed.match(opener);
-  if (!atStart || atStart.index !== 0) return false;
-  return PLAIN_LANGUAGE_TICKET_LABELS.every((label) => labelPattern(label).test(source));
+  const lines = structuredText(ticketOpening(html)).split("\n").map(line => line.trim()).filter(Boolean);
+  return lines.length === PLAIN_LANGUAGE_TICKET_LABELS.length && lines.every((line, index) => {
+    const match = line.match(openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[index]));
+    return match && Boolean(line.slice(match[0].length).trim());
+  });
 }
 
 export function missingPlainLanguageTicketLabels(html) {
   if (typeof html !== "string" || html.length > MAX_CHECK_TEXT_LENGTH || !html.trim()) return [...PLAIN_LANGUAGE_TICKET_LABELS];
-  const source = structuredText(html);
+  const source = structuredText(ticketOpening(html));
   return PLAIN_LANGUAGE_TICKET_LABELS.filter((label) => !labelPattern(label).test(source));
 }
 
@@ -133,4 +170,8 @@ export const INTERNAL_AGENT_TICKET_BOARDS = new Set([15, 4060]);
 
 export function isInternalAgentTicketBoard(projectId) {
   return INTERNAL_AGENT_TICKET_BOARDS.has(projectId);
+}
+
+export function plainLanguageTicketWriterRule() {
+  return `Use docs/ticket-template.md on every board. Open with exactly these five labelled paragraphs in order: ${PLAIN_LANGUAGE_TICKET_LABELS.map((label) => `${label}:`).join("; ")}. Give each a nonempty plain value. Use at most twelve words per sentence, excluding the label. Keep status, code, paths, ids, repro commands and raw source text below the first <hr>. Preserve those details there. This opening replaces default or board-specific Now/Problem/Fix/Done when/Risk/Decision sections. Keep the title plain. The decision is a yes/no question or nothing.`;
 }

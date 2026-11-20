@@ -53,6 +53,10 @@ Runners never switch a flag Off; Off is Valentin's own safety switch.
 
 Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.
 
+## Ticket checks
+
+`assertAgentWriting` is the one ticket gate, covered by `one-ticket-template.test.cjs`.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

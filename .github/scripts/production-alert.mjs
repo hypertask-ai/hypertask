@@ -1,3 +1,4 @@
+import { renderPlainLanguageTicketDescription } from "../../src/lib/tickets/plainLanguageTicket.mjs";
 import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
@@ -90,7 +91,7 @@ async function deliverAlert(config, fetchImpl) {
       const page = await api("/projects/11514/labels");
       const labels = ["CI", "Hypertask CI"].map((name) => page.labels?.find((label) => label.name === name)?.id);
       if (labels.some((id) => !id)) throw new Error("Monitoring board labels are unavailable");
-      const created = await api("/tasks/create", { method: "POST", body: JSON.stringify({ project_id: 11514, title, description: "<h2>Problem</h2><p>A production check could not finish.</p><h2>Fix</h2><p>Read the agent log for details.</p><h2>Done when</h2><p>The check finishes with a clear result.</p><h2>Risk</h2><p>A release warning could be missed.</p><h2>Decision</h2><p>None.</p>", labels }) }, "task");
+      const created = await api("/tasks/create", { method: "POST", body: JSON.stringify({ project_id: 11514, title, description: renderPlainLanguageTicketDescription({ whatWrongOrWanted: "A production check could not finish.", whoItAffects: "Internal only.", recommendedCourseAndWhy: "Restore the check. Release warnings could be missed.", whatValentinMustDecide: "Nothing.", howToUndo: "Revert the repair." }), labels }) }, "task");
       existing = created.task;
     }
     if (!Number.isSafeInteger(existing?.id) || existing.id < 1) throw new Error("Monitoring ticket returned no task id");

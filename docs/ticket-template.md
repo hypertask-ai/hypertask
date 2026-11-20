@@ -1,6 +1,6 @@
 # Ticket template
 
-Every ticket writer on Hypertask internal boards uses this shape. One file, plain language, a recommendation in every ticket. Do not copy this text into skills or prompts; link to `docs/ticket-template.md` in the repo.
+Agent ticket writers use this shape on every board. One file, plain language, a recommendation in every ticket. Do not copy this text into skills or prompts; link to `docs/ticket-template.md` in the repo.
 
 ## The block (required for machine checks)
 

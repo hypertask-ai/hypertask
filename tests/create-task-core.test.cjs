@@ -25,6 +25,7 @@ const prisma = {
   team_Activity: { update: async (options) => { calls.teamActivity = options; } },
   drafts: { create: async (options) => { calls.drafts.push(options); } },
 };
+stubModule("src/lib/agents/defaultBrainLabel.ts", { defaultAgentBrainLabelIds: async () => ["medium"] });
 stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
 stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
 stubModule("src/utils/controllers/tasks/create.ts", { getUniqueTaskCount: async () => 10 });
@@ -96,6 +97,7 @@ for (const [name, options, expectedAgentId, assignmentResult] of [
     assert.deepEqual(result.task.project, { teamId: 1 });
     assert.equal(calls.taskData.assignees, undefined);
     assert.equal(calls.taskData.assigneeId, undefined);
+    assert.deepEqual(calls.taskData.taskLabels, expectedAgentId ? { create: [{ labelId: "medium" }] } : undefined);
     assert.deepEqual(calls.boardActor, actor);
     assert.equal(calls.description.agentId, options.agentId);
     assert.equal(calls.description.creatorId, 6);

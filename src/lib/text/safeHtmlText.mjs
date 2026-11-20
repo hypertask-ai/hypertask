@@ -22,8 +22,20 @@ export function stripTags(html) {
   let start = 0;
   let open = html.indexOf("<");
   while (open !== -1) {
-    const close = html.indexOf(">", open + 1);
-    if (close === -1) break;
+    if (html.indexOf(">", open + 1) === -1) break;
+    if (!/[a-z/!?]/i.test(html[open + 1] ?? "")) {
+      open = html.indexOf("<", open + 1);
+      continue;
+    }
+    let close = open + 1;
+    let quote = "";
+    for (; close < html.length; close += 1) {
+      const char = html[close];
+      if (quote) { if (char === quote) quote = ""; }
+      else if (char === '"' || char === "'") quote = char;
+      else if (char === ">") break;
+    }
+    if (close === html.length) break;
     if (close > open + 1) {
       parts.push(html.slice(start, open), " ");
       start = close + 1;

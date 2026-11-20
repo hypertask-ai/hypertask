@@ -129,7 +129,9 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     status:"Normal"
                 }
             })
+            const brainLabelIds = agentId ? await (await import("@/lib/agents/defaultBrainLabel")).defaultAgentBrainLabelIds(projectId, []) : [];
             const body = {title,
+                ...(brainLabelIds.length ? { taskLabels: { create: brainLabelIds.map(labelId => ({ labelId })) } } : {}),
                 description,
                 section,
                 userId,

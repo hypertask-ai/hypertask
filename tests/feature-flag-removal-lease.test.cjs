@@ -95,6 +95,7 @@ function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
+stubModule("src/lib/agents/defaultBrainLabel.ts", { defaultAgentBrainLabelIds: async (_projectId, ids) => ids });
 stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
 stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null });
 stubModule("src/utils/controllers/tasks/create.ts", { getUniqueTaskCount: async () => 10 });

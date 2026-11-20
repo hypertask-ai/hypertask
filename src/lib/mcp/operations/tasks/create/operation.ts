@@ -1,7 +1,7 @@
 import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
-import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
+import { IdempotencyAccessError , IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from "@/lib/mcp/idempotency/idempotencyStore"
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -15,7 +15,6 @@ import { validateProjectAccess, getSectionForTask, createTask, validateParentTas
 import { mapTaskToDetail } from '@/lib/mcp/tasks/mappers';
 import { CreateTaskBody, TaskDetail } from '@/lib/mcp/tasks/types';
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
-import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
@@ -23,12 +22,6 @@ import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
 import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules';
 import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
-import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from '@/lib/flags/definitions/htpr-7933-plain-language-ticket-template';
-import {
-  assertPlainLanguageTicketBlock,
-  isInternalAgentTicketBoard,
-  PlainLanguageTicketError,
-} from '@/lib/tickets/plainLanguageTicket.mjs';
 import prisma from '@/lib/prisma';
 
 export interface CreateTaskResponse {
@@ -126,28 +119,6 @@ export async function POST(request: NextRequest) {
         } catch (error) {
             if (error instanceof AgentWritingError) throw error;
             await enforceAgentWriting(user.id, ctx.agentId, { title, description }, {}, { create: true, houseRules: true });
-        }
-        if (
-            ctx.agentId &&
-            isInternalAgentTicketBoard(project_id) &&
-            (await isFeatureEnabled(HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG, user.id))
-        ) {
-            try {
-                assertPlainLanguageTicketBlock(description);
-            } catch (error) {
-                if (error instanceof PlainLanguageTicketError) {
-                    return NextResponse.json(
-                        {
-                            ...buildFieldError('invalid_field', 'description', error.message),
-                            message: error.message,
-                            ...(dryRun && { valid: false }),
-                            ...(correlationId && { correlationId }),
-                        },
-                        { status: 400 },
-                    );
-                }
-                throw error;
-            }
         }
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope, { refuseArchivedBoard: true });
         if (projectCheck.error) {

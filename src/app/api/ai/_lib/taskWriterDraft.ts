@@ -75,6 +75,16 @@ export async function generateTaskWriterDraft(
         })
       : { title: null, description: draftHtml };
 
+  if (agentId && body.aiMode === "AiTaskWriter") {
+    const { assertAgentWriting, AgentWritingError } = await import("@/lib/agents/writing");
+    try {
+      assertAgentWriting(agentId, properties, {}, { create: true, houseRules: true });
+    } catch (error) {
+      if (error instanceof AgentWritingError) return { success: false as const, error: error.message };
+      throw error;
+    }
+  }
+
   const parsedAt = Date.now();
   console.info(`[ai/task-writer] stages ${JSON.stringify({
     projectId: body.projectId,

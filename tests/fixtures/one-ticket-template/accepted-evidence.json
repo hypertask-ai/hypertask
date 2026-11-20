@@ -1,0 +1,7 @@
+{
+  "one common template": "",
+  "repro commands": "<pre>node scripts/repro.mjs --project_id 15</pre>",
+  "raw error": "<pre>Traceback: stderr exit code 1</pre>",
+  "status and ids": "<p>Next: retry. Branch/PR: a12bc3456789</p>",
+  "long evidence": "<p>This is the full diagnostic evidence with every detail kept together for the next agent reading the ticket.</p>"
+}

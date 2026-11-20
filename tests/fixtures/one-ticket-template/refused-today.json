@@ -1,0 +1,44 @@
+[
+  {
+    "id": "help-audit-1",
+    "sourceDate": "2026-11-17",
+    "source": "support audit CLI refusal",
+    "raw": "**Problem:** Feature freeze (https://app.hypertask.ai/detail/project-2060/2568) blocks new help-chat features until the repo meets Lauren Tan's verification checklist. Nobody has scored hypertask-ai/ai-chatbot-rs against it yet.\n\n**Repo:** hypertask-ai/ai-chatbot-rs (help.hypertask.ai). Note the old valentinyeo/ai-chatbot too.\n\n**Do:** Score each of the seven items as met, partial or missing, with evidence (file, workflow, run link):\n1. A verify skill that drives the real app\n2. A feature map\n3. Repro before fix\n4. Tests for the verify skill\n5. Real-size seeded data\n6. A verifier on GitHub\n7. A video or trace before release\n\n**Done when:** a scored table sits in this ticket's activity, and every gap is listed as a one-line ticket proposal (title, problem, done-when). No code changes.",
+    "originalFormat": "markdown",
+    "refusal": "sentence-length"
+  },
+  {
+    "id": "help-audit-2",
+    "sourceDate": "2026-11-17",
+    "source": "support audit CLI refusal",
+    "raw": "**Problem:** The feature freeze blocks new help-chat features. It holds until verification meets Lauren Tan's checklist. Nobody has scored the new help repo yet.\n\nFreeze ticket: https://app.hypertask.ai/detail/project-2060/2568\n\n**Do:** Score each item as met, partial or missing, with proof.\n\n1. A verify skill that drives the real app\n2. A feature map\n3. Repro before fix\n4. Tests for the verify skill\n5. Real-size seeded data\n6. A verifier on GitHub\n7. A video or trace before release\n\n**Done when:** the scored table is in this ticket's log. Each gap has a one-line ticket idea. No code changes.",
+    "originalFormat": "markdown",
+    "refusal": "Fix missing"
+  },
+  {
+    "id": "help-audit-3",
+    "sourceDate": "2026-11-17",
+    "source": "support audit CLI refusal",
+    "raw": "**Problem:** The feature freeze blocks new help-chat features. It holds until verification meets Lauren Tan's checklist. Nobody has scored the new help repo yet.\n\nFreeze ticket: https://app.hypertask.ai/detail/project-2060/2568\n\n**Fix:** Score each item as met, partial or missing, with proof.\n\n1. A verify skill that drives the real app\n2. A feature map\n3. Repro before fix\n4. Tests for the verify skill\n5. Real-size seeded data\n6. A verifier on GitHub\n7. A video or trace before release\n\n**Done when:** the scored table is in this ticket's log. Each gap has a one-line ticket idea. No code changes.\n\n**Risk:** Read only, so nothing can break. Undo by closing the ticket.\n",
+    "originalFormat": "markdown",
+    "refusal": "Decision missing"
+  },
+  {
+    "id": "ffgate-desc",
+    "sourceDate": "2026-11-17",
+    "source": "Exact CLI heredoc before the recorded refusal",
+    "raw": "<p><strong>What's wrong or wanted:</strong> PRs that only remove a safety switch fail the flag check.</p>\n<p><strong>Who it affects:</strong> internal only. Flag removal PRs stay red.</p>\n<p><strong>Recommended course and why:</strong> The flag check passes a PR that only deletes a flag. Removing a flag cannot add risk a new flag would cover.</p>\n<p><strong>What Valentin must decide:</strong> nothing.</p>\n<p><strong>How to undo:</strong> revert the PR.</p>\n<h3>Problem</h3>\n<p>PR 3587 removes a flag. The feature-flag-gate check still asks for a new flag.</p>\n<ul><li><p>Same on 3588, 3547, 3524 and 3522.</p></li></ul>\n<h3>Fix</h3>\n<ul><li><p>The check spots a PR whose changes only remove one flag.</p></li><li><p>That PR passes with a clear reason.</p></li></ul>\n<h3>Done when</h3>\n<p>3587 goes green on a rerun. A test proves a normal UI change still fails.</p>\n<h3>Risk</h3>\n<p>This changes a merge gate. It needs three outside reviews first.</p>\n",
+    "originalFormat": "html",
+    "refusal": "Decision missing",
+    "sourceTimestamp": "2026-11-17T10:11:18.366Z"
+  },
+  {
+    "id": "onefmt",
+    "sourceDate": "2026-11-17",
+    "source": "Exact CLI heredoc before the recorded refusal",
+    "raw": "<p><strong>What's wrong or wanted:</strong> Each board wants a different ticket format. Good tickets get refused.</p>\n<p><strong>Who it affects:</strong> internal only. Every agent filing tickets on any board.</p>\n<p><strong>Recommended course and why:</strong> One ticket format for every board. The task writer writes text the server accepts.</p>\n<p><strong>What Valentin must decide:</strong> nothing. He asked for one format.</p>\n<p><strong>How to undo:</strong> revert the PR; no data change.</p>\n<h3>Problem</h3>\n<p>One bug report on board 15 was refused five times.</p>\n<ul><li><p>It named an error code in the description.</p></li><li><p>A brain label was missing.</p></li><li><p>A repro step counted as technical detail.</p></li><li><p>The board 2060 format was refused here.</p></li><li><p>A template version check gave no reply.</p></li></ul>\n<p>The task writer's own rewrite on SOFT-2585 was also refused as too technical.</p>\n<h3>Fix</h3>\n<ul><li><p>One ticket format, the same on every board.</p></li><li><p>The task writer always produces text the server accepts.</p></li><li><p>Repro steps are allowed below the divider.</p></li><li><p>Every refusal names the one part to change.</p></li></ul>\n<h3>Done when</h3>\n<p>The same ticket files cleanly on boards 15 and 2060. A task writer draft passes on the first try. Tests prove both.</p>\n<h3>Risk</h3>\n<p>Low. Looser rules may let a vague ticket through. Undo: revert the PR.</p>\n<h3>Decision</h3>\n<p>None. Valentin already chose one format.</p>\n",
+    "originalFormat": "html",
+    "refusal": "sentence-length",
+    "sourceTimestamp": "2026-11-17T11:27:33.885Z"
+  }
+]
