@@ -55,12 +55,7 @@ Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, 
 
 ## Ticket checks
 
-| Rule | Enforcement |
-|---|---|
-| One agent template on every board | `assertAgentWriting`, `plainLanguageTicket.mjs`, `one-ticket-template.test.cjs` |
-| Style checks stop at the divider | `ticketOpening`, divider and moved-evidence regression tests |
-| Missing brain labels default to medium | `defaultAgentBrainLabelIds`, `one-ticket-template.test.cjs` |
-| Agent writer drafts pass ticket validation | `generateTaskWriterDraft`, `one-ticket-template.test.cjs` |
+`assertAgentWriting` is the one ticket gate, covered by `one-ticket-template.test.cjs`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
