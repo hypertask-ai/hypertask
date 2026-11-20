@@ -54,7 +54,6 @@ export function incidentDescription({ kind, cause, message = "", runUrl = "", no
     whatValentinMustDecide: "Nothing.",
     howToUndo: "Revert the repair if needed.",
   }) + `<p>It was seen at ${when} UTC.</p><p>${rollbackNote(kind, cause, message)}</p>${link}`;
-
 }
 
 export async function fileIncident(config, fetchImpl = fetch) {

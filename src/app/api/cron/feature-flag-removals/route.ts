@@ -37,7 +37,6 @@ function removalDescription(key: string, releasedAt: Date) {
     recommendedCourseAndWhy: "Remove the switch. Keep enabled behaviour.",
     whatValentinMustDecide: "Nothing.", howToUndo: "Undo the cleanup.",
   }) + (
-    `<h2>Problem</h2><p>This released change still has a safety switch.</p>` +
     `<p>Live for <strong>Everyone</strong> since ${released}.</p>` +
     `<p>Live for more than ${days} days.</p>` +
     `<h2>Fix</h2><p>Keep enabled behaviour. Remove the switch and unused alternative.</p>` +
