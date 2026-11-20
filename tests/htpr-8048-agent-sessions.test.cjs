@@ -104,6 +104,7 @@ function picker({ agentsOnly = true, agents = [{ id: "agent", displayName: "Runn
     "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "phone" },
     "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "running" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], hasMoreSessions: false }) },
+    "@/lib/agents/chatAvailability": { agentChatStatusLabel: (mode) => mode ? "Online" : "Reads when it next runs" },
   };
   const loadedModule = { exports: {} };
   new Function("require", "module", "exports", compiled)((name) => { assert.ok(name in mocks, name); return { __esModule: true, ...mocks[name] }; }, loadedModule, loadedModule.exports);

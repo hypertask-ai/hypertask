@@ -4,7 +4,7 @@ import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { type AgentChatActivity, type AgentChatActivityGroup, type AgentChatFilter } from "@/lib/agents/chatActivityFeed";
 import { PROPOSAL_HEADING_CREATED, PROPOSAL_HEADING_PENDING, type SerializedChatTicketProposal, } from "@/lib/agents/chatTicketProposal";
 import { tokenizeMessageLinks, type TProjectIdForPrefix } from "@/lib/agents/messageLinks";
-import { chatRosterStatus, isWorking, type TChatRosterStatus } from "@/lib/agents/registerView";
+import { chatRosterStatus, type TChatRosterStatus } from "@/lib/agents/registerView";
 import formatDateDifference from "@/utils/generateTime";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 import { interceptMessageLinkClick, wrapTablesInMessageHtml, } from "@/utils/helperFunctions/messageHtmlLinks";
@@ -16,12 +16,7 @@ import type { TAgent } from "../AgentsRegister";
 import { TChatMessage, TProposalAction } from "./agentChatTypes";
 
 
-export function chatStatusText(agent: TAgent): string {
-  if (isWorking(agent) && agent.working) {
-    return `Working on ${agent.working.ticket}`;
-  }
-  return "Idle";
-}
+export { chatStatusText } from "@/lib/agents/chatAvailability";
 
 export function agentDictationProjectId(
   agent: TAgent | null | undefined,

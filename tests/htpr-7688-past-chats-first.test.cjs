@@ -18,6 +18,8 @@ function load(file, mocks = {}) {
     if (name === "@/lib/flags/definitions/htpr-8048-agent-sessions") return { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" };
     if (name === "@/lib/flags/definitions/htpr-7737-agent-hover-chat") return { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" };
     if (name === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
+    if (name === "@/lib/agents/chatAvailability") return availability;
+    if (name === "@/lib/agents/registerView") return registerView;
     assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
     return { __esModule: true, ...mocks[name] };
   }, loaded, loaded.exports);
@@ -26,7 +28,8 @@ function load(file, mocks = {}) {
 
 const flag = load("src/lib/flags/definitions/htpr-7688-past-chats-first.ts");
 const chip = load("src/lib/agentStatus/chip.ts");
-const availability = load("src/lib/agents/chatAvailability.ts");
+const registerView = load("src/lib/agents/registerView.ts");
+const availability = load("src/lib/agents/chatAvailability.ts", { "@/lib/agents/registerView": registerView });
 
 function hooks(onStateChange = noop) {
   const slots = [];
@@ -106,13 +109,13 @@ test("flag on lists AI chat, five newest personal titles, Show N more, then agen
     assert.equal(rows.inline, true);
     assert.deepEqual(rows.commandLists.map(row => row.name), [
       "AI chat", "Saved chat 7", "Saved chat 6", "Saved chat 5", "Saved chat 4", "Saved chat 3", "Show 3 more",
-      "Runner · working · webhook", "Quiet runner", "Heartbeat runner · polling",
+      "Runner · Online", "Quiet runner · Reads when it next runs", "Heartbeat runner · Online",
     ]);
     rows.onClickHandler(rows.commandLists.find(row => row.key === "more"));
     assert.equal(view.closed, 0);
     assert.deepEqual(view.render().commandLists.map(row => row.name), [
       "AI chat", ...[7, 6, 5, 4, 3, 2, 1, 0].map(index => `Saved chat ${index}`),
-      "Runner · working · webhook", "Quiet runner", "Heartbeat runner · polling",
+      "Runner · Online", "Quiet runner · Reads when it next runs", "Heartbeat runner · Online",
     ]);
     assert.deepEqual(view.selections, []);
     assert.deepEqual(view.targets, []);
@@ -148,11 +151,11 @@ test("Show more loads remaining paged history without closing or selecting a con
   assert.deepEqual(view.selections, []);
 });
 
-test("flag off preserves AI and agent-only rows, legacy status words and agent selection", () => {
+test("flag off preserves AI and agent-only rows, the plain delivery status and agent selection", () => {
   const view = menu({ enabled: false });
   view.history.hasMoreSessions = true;
   const rows = view.render();
-  assert.deepEqual(rows.commandLists.map(row => row.name), ["AI chat", "Runner · working · webhook", "Quiet runner · offline", "Heartbeat runner · connected · polling"]);
+  assert.deepEqual(rows.commandLists.map(row => row.name), ["AI chat", "Runner · Online", "Quiet runner · Reads when it next runs", "Heartbeat runner · Online"]);
   rows.onClickHandler(rows.commandLists.find(row => row.key === "quiet"));
   assert.deepEqual(view.targets, [{ kind: "native-agent", agent: agents[1] }]);
   assert.deepEqual(view.selections, []);

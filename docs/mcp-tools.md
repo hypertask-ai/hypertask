@@ -76,7 +76,7 @@ A person's MCP connection (OAuth or account token, not an agent token or managem
 
 ## Sidebar agent chat
 
-An agent token reads unanswered sidebar chats with `hypertask_chat_inbox` and answers with `hypertask_chat_reply`. `hypertask chat listen` and `hypertask chat reply` call the same routes. `GET /api/mcp/chat/pending?unanswered=true` keeps returning a human message, with the same id, until an agent reply to it exists, for every agent token, so a run that dies after reading loses nothing. `POST /api/mcp/chat/heartbeat` with `{}` keeps the sidebar on Online. The switch `htpr-7742-agent-chat-all` controls the status sentence and whether the chat tools are advertised; with it off, the old status sentence stays and unanswered messages are still returned.
+An agent token reads unanswered sidebar chats with `hypertask_chat_inbox` and answers with `hypertask_chat_reply`. `hypertask chat listen` and `hypertask chat reply` call the same routes. `GET /api/mcp/chat/pending?unanswered=true` keeps returning a human message, with the same id, until the agent has replied to it or to a message sent after it, for every agent token, so a run that dies after reading loses nothing and a chat that already got an answer stops coming back. `POST /api/mcp/chat/heartbeat` with `{}` keeps the sidebar on Online. The switch `htpr-7742-agent-chat-all` controls the status sentence and whether the chat tools are advertised; with it off, the old status sentence stays and unanswered messages are still returned.
 
 ## Agent identity listing
 

@@ -11,8 +11,8 @@ import { ArrowLeft, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
-import { HTPR_7742_AGENT_CHAT_ALL_FLAG } from "@/lib/flags/definitions/htpr-7742-agent-chat-all";
 import { ActivityGroup, chatStatusText, emptyFeedText, FeedFilter, MessageBubble, ScrollToBottomButton } from "./AgentChatFeedItems";
+import { agentChatStatusLabel } from "@/lib/agents/chatAvailability";
 import type { useAgentChatComposer } from "./useAgentChatComposer";
 import type { useAgentChatFeed } from "./useAgentChatFeed";
 import type { useAgentChatNavigation } from "./useAgentChatNavigation";
@@ -118,7 +118,6 @@ export function AgentChatPane({
 }: Props) {
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
-  const chatAllEnabled = useFlag(HTPR_7742_AGENT_CHAT_ALL_FLAG);
   useEffect(() => {
     if (embedded && !active) setIsRecording(false);
   }, [embedded, active, setIsRecording]);
@@ -145,10 +144,7 @@ export function AgentChatPane({
           </p>
           {!mobileFullscreenChrome && (
             <p className="truncate text-meta text-text-light-gray">
-              {chatStatusText(selectedAgent)}
-              {deliveryMode === "polling"
-                ? " · polling"
-                : ""}
+              {chatStatusText(selectedAgent, deliveryMode)}
             </p>
           )}
         </div>
@@ -288,13 +284,9 @@ export function AgentChatPane({
                 className="-top-12 z-50"
               />
             )}
-            {(deliveryNotice || chatAllEnabled) && (
-              <p className="mb-2 text-meta text-text-light-gray">
-                {chatAllEnabled
-                  ? (deliveryMode ? "Online" : "Reads when it next runs")
-                  : "This agent's runtime has not enabled chat yet."}
-              </p>
-            )}
+            <p className="mb-2 text-meta text-text-light-gray">
+              {agentChatStatusLabel(deliveryMode)}
+            </p>
             <div className="relative">
               {mentionOpen && (
                 <div className="absolute bottom-full left-0 mb-1 max-h-[220px] w-[320px] overflow-y-auto rounded-[4px] bg-modalBackground py-1 shadow-md">

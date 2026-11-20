@@ -99,6 +99,15 @@ export async function GET(request: NextRequest) {
               FROM "ChatMessage" reply
               WHERE reply."replyToMessageId" = message."id"
             )
+            ${unanswered ? Prisma.sql`
+            AND NOT EXISTS (
+              SELECT 1
+              FROM "ChatMessage" answer
+              JOIN "ChatMessage" answered ON answered."id" = answer."replyToMessageId"
+              WHERE answer."sessionId" = message."sessionId"
+                AND answer."role" = 'assistant'::"ChatRole"
+                AND answered."createdAt" > message."createdAt"
+            )` : Prisma.empty}
           ORDER BY message."createdAt" ASC, message."id" ASC
           FOR UPDATE OF message SKIP LOCKED
           LIMIT ${PENDING_MESSAGE_LIMIT}
