@@ -11,7 +11,7 @@ export function repoPaths(markdown) {
   const local = markdown.replace(/\([^()\n]*`[\w.-]+\/[\w.-]+`\s+(?:repo|repository)\b[^()\n]*\)/g, '');
   for (const token of [...local.matchAll(/`([^`\n]+)`/g)].flatMap(match => match[1].trim().split(/\s+/))) {
     if (!/^(src|e2e|\.github|\.claude|scripts|docs|prisma|public)\//.test(token)) continue;
-    const clean = token.replace(/#.*$/, '').replace(/:\d+(?::\d+)?(?:-\d+)?[.,;:!)]*$/, '').replace(/[.,;:!)]*$/, '').replace(/\/$/, '');
+    const clean = token.replace(/#.*$/, '').replace(/:\d+(?::\d+)?(?:-\d+)?(?:[,.]\d+(?::\d+)?(?:-\d+)?)*[.,;:!)]*$/, '').replace(/[.,;:!)]*$/, '').replace(/\/$/, '');
     if (/[<*>?{}]/.test(clean)) continue;
     paths.add(clean);
   }

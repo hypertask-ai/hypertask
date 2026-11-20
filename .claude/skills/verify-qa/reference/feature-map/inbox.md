@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- `needs-you` With `htpr-9055-needs-you` at Owner + QA, open `/inbox?split=Needs%20you`: one row per ticket, descending stored scores across dates. Click, Enter, next-ticket, reload, archive and undo preserve ranking; ordinary tabs and flag-off order stay unchanged.
+- `needs-you` With `htpr-9055-needs-you` at Owner + QA, open `/inbox?split=Needs%20you`: one row per ticket, ordered by action priority first and stored score as the tiebreak, across dates. Click, Enter, next-ticket, reload, archive and undo preserve ranking; ordinary tabs and flag-off order stay unchanged.
   Own-AI teams send nothing; outages use rules; reads never call models. Record daily cost and before/after inbox-read timings. Another runner compares Light, AMOLED and Graphite 2.
 - `quiet-agent-moves-and-description-edits` Quiet agent moves and description edits.
 - `blocked-by-you-bulk-archive` Blocked by you bulk archive.
@@ -58,7 +58,9 @@ before. Do not clear existing inbox items as part of this check. Record the
 or assign a task the QA account watches), then check it lands in the inbox,
 and that archiving/undo works.
 
-- **Core inbox cycle (YPER4-629), every app deploy and before any flag goes to Everyone:** `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <folder>` as QA 985 seeds three reminders on QA Sandbox, opens one by click, sends a comment with Ctrl+Enter, presses J and E, opens one by Enter, and prints `inbox-cycle ok`. The same cycle runs in the required `browser-smoke` check (`e2e/smoke/inbox-cycle.spec.ts`) with every flag on and with live-like modes.
+- **Core inbox cycle (YPER4-629), every app deploy and before any flag goes to Everyone:** `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <folder>` as QA 985 seeds three reminders on QA Sandbox, opens one by click, sends a comment with Ctrl+Enter, presses J and E, opens one by Enter, and prints `inbox-cycle ok`. The same cycle runs in the required `browser-smoke` check (`e2e/smoke/inbox-cycle.spec.ts`) with every flag on and with live-like modes. On 2026-11-20 it printed `inbox-cycle ok` with five steps PASS.
+- `/inbox` on 2026-11-20 rendered splits Important, All, Updates and Agents for 985. Needs you, Blocked by you and Decisions appear only when their flag is on and there are rows, so their absence in an empty account is not a failure. `/reminders` showed the Reminders heading and six `Remind me` rows. `/inbox/agent/<id>` titled the tab `<agent display name> Inbox`; an unknown id redirected to `/inbox?split=Important`.
+- Archive safe is only an entry point while `htpr-8046-archive-safe` is on. It is currently off for 985, so its whole drive block is verified-unreachable until an Owner + QA hold turns it on; the closest real check is the hidden entry point.
 - With `htpr-7311-decision-comment-link` on, open Decisions by click, Enter, and Inbox Next: each ticket jumps to and highlights its latest unanswered Question mentioning the viewer; flag off and other splits keep existing navigation. https://app.hypertask.ai/detail/project-15/7311
 
 ### Agent inbox
@@ -90,6 +92,8 @@ Confirm the header reads `2 selected` beside bulk archive. Clear the selection a
 ### Waiting on a person or an agent
 
 With `htpr-7723-task-waiting-on` on, POST `/api/mcp/tasks/waiting-on` as an agent with a member `userId`.
+Setting or clearing a blocker comment also needs `htpr-7724-blocker-comment`
+(Everyone); with it off the write answers 404.
 Confirm the ticket shows Blocked by that person. POST `userId` null and confirm the clear.
 With the flag off, the same agent write returns 404. The in-app modal still saves.
 With `htpr-8917-agent-waiting-person` on, POST an accepted board-member `agentId` and no person.
@@ -116,9 +120,13 @@ Turn both off and confirm the older packed row returns.
 
 With `htpr-9029-sticky-splits` on, scroll a desktop inbox list.
 Confirm the split tabs stay at the top and a thin line appears under them after the scroll.
-Flag off lets the tabs leave with the rows.
+The line is a box-shadow token, not a border, so a `border-bottom` assertion
+finds nothing. Flag off lets the tabs leave with the rows.
 With `htpr-9080-split-overflow` on, open Manage inbox splits from the gear on the last split.
 Confirm Overflow hidden is off. Turn it on, reload, and confirm the tabs stay on one line.
+The switch is a per-person preference read through the raw flag key string
+`useFlag("htpr-9080-split-overflow")`, not the definitions constant, and it
+starts off for each person.
 When they overflow, use Scroll splits left and Scroll splits right.
 Confirm the selected split stays in view. Flag off hides the switch and the tabs wrap.
 
@@ -204,8 +212,9 @@ Email recipients must not change: this restoration is inbox-only.
 ### Archive safe
 
 With `htpr-8046-archive-safe` on, select Updates, Important or Agents and click
-**Archive safe**. The existing Inbox Zero confirmation shows the eligible count
-before anything is archived. Cancel leaves the Inbox unchanged. Confirm, reload,
+**Archive safe**. The sheet that opens is headed **Archive safe**, not Get to
+Inbox Zero, and shows the eligible count before anything is archived. Cancel
+leaves the Inbox unchanged. Confirm, reload,
 then undo the batch and reload again. Only moves, edits and their structured agent activity may disappear; Important
 and Agents require agent-only events. Mentions, comments (including human replies),
 assignments, reminders, direct replies, blocked tickets, assigned tickets, pending

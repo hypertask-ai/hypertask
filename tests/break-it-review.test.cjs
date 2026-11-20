@@ -163,7 +163,7 @@ test("the breaker is never the author's own model family", async () => {
 });
 
 test("a review that could not run prints its reason in the step log and fails the step", async () => {
-  const answer = JSON.stringify({ tests: [{ name: "blank-title", code: `${good}${good}` }] }).slice(0, 120);
+  const answer = "I read the diff and here is what I think the edge cases are, but I ran out of room before the tests.";
   const { status, code, stdout, stderr } = await runCli({ reply: answer });
   assert.equal(status.state, "failure");
   assert.match(stdout, /Break-it review could not run: .*JSON/);

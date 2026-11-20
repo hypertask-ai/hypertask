@@ -1,1 +1,1 @@
-| Board custom instructions | [custom-instructions.md](custom-instructions.md) | QA 985 saved multiline text, reload/reopen, failed and empty saves |
+| Board custom instructions | [custom-instructions.md](custom-instructions.md) | board 7049 GET, save, reload/reopen, unsaved edit, restore |

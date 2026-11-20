@@ -155,11 +155,45 @@ export function normalizeVerdict(verdict, notes = "") {
   if (value === "FAIL") return "FAIL";
   return "";
 }
+function cutMarks(text) {
+  const marks = [];
+  const stack = [];
+  const mark = (end) => marks.push({ end, stack: stack.slice() });
+  let inString = false, escaped = false;
+  for (let at = 0; at < text.length; at++) {
+    const char = text[at];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "\"") { inString = false; mark(at + 1); }
+      continue;
+    }
+    if (char === "\"") inString = true;
+    else if (char === "{") stack.push("}");
+    else if (char === "[") stack.push("]");
+    else if (char === "}" || char === "]") { stack.pop(); mark(at + 1); }
+    else if (char === ",") mark(at);
+  }
+  return { marks, open: stack, inString };
+}
+function closeCutObject(text) {
+  const { marks, open, inString } = cutMarks(text);
+  if (!marks.length) return null;
+  const closers = open.slice().reverse().join("");
+  const candidates = [
+    `${text}${inString ? "\"" : ""}${closers}`,
+    ...marks.slice(-60).reverse().map((mark) => `${text.slice(0, mark.end).replace(/[,\s]+$/, "")}${mark.stack.slice().reverse().join("")}`),
+  ];
+  for (const candidate of candidates) {
+    try { return JSON.parse(candidate); } catch { continue; }
+  }
+  return null;
+}
 export function jsonObjects(text) {
   const objects = [];
-  let error = null;
+  let error = null, cut = false;
   for (let start = text.indexOf("{"); start >= 0; start = text.indexOf("{", start + 1)) {
-    let depth = 0, inString = false, escaped = false;
+    let depth = 0, inString = false, escaped = false, closed = false;
     for (let at = start; at < text.length; at++) {
       const char = text[at];
       if (inString) {
@@ -171,24 +205,33 @@ export function jsonObjects(text) {
       if (char === '"') inString = true;
       else if (char === "{") depth++;
       else if (char === "}" && --depth === 0) {
+        closed = true;
         try { objects.push(JSON.parse(text.slice(start, at + 1))); } catch (failure) { error = error ?? failure; }
         break;
       }
     }
+    if (!closed) cut = true;
   }
-  return { objects, error };
+  if (cut) {
+    const start = text.indexOf("{");
+    const repaired = closeCutObject(text.slice(start));
+    if (repaired) objects.push(repaired);
+  }
+  return { objects, error, cut };
 }
 function jsonObject(text, keys = []) {
   const raw = String(text ?? "").replace(/```(?:json)?/gi, " ");
-  const { objects, error } = jsonObjects(raw);
+  const { objects, error, cut } = jsonObjects(raw);
   const wanted = objects.find((body) => body && typeof body === "object" && !Array.isArray(body) && (!keys.length || keys.some((key) => key in body)));
-  if (!wanted) throw new Error(`model answer was not JSON${error ? `: ${error.message}` : ""}`);
+  if (!wanted) throw new Error(`model answer was not JSON${error ? `: ${error.message}` : ""}${cut ? ` (the answer stopped mid-object at ${raw.trim().length} characters)` : ""}`);
   return wanted;
 }
 export function parseAnswer(text) {
   const body = jsonObject(text, ["verdict", "notes"]);
   const notes = String(body.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500);
-  return { actions: readActions(body.actions, 6), notes, verdict: normalizeVerdict(body.verdict, notes) };
+  const verdict = normalizeVerdict(body.verdict, notes);
+  if (!verdict) throw new Error(`model answer had no verdict: ${String(body.verdict ?? "(none)").slice(0, 40)}`);
+  return { actions: readActions(body.actions, 6), notes, verdict };
 }
 export function parsePlan(text) {
   const body = jsonObject(text, ["actions", "expect", "reason"]);
@@ -327,12 +370,13 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
     const reason = String(parsed.reason ?? "").replace(/\s+/g, " ").trim();
     const files = Array.isArray(parsed.files) ? parsed.files : [];
     if (listWasTruncated(parsed, files)) return { verdict: "FAIL", notes: "file list truncated" };
-    if (files.length && !hasAppPath(files) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
+    const noAppPath = files.length > 0 && (!hasAppPath(files) || harnessOnlyBugfix(parsed.claim?.title, files));
+    if (noAppPath && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (files.length && docsShortcut(files, parsed.filesTruncated) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (botPlanPass(parsed, checksPassed)) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500), authorFamily: parsed.botLogin };
     if (checksPending) return { verdict: "PENDING", notes: "waiting for required checks" };
     const reachable = Array.isArray(parsed.reachable) ? parsed.reachable.filter((item) => typeof item === "string") : [];
-    if (reason && parsed.bugfix === true) return { verdict: "UNEVALUATED", notes: `the bug fix has no repro journey: ${reason}`.slice(0, 500) };
+    if (reason && parsed.bugfix === true && hasAppCode(files)) return { verdict: "UNEVALUATED", notes: `the bug fix has no repro journey: ${reason}`.slice(0, 500) };
     if (reason && reachable.length) return { verdict: "UNEVALUATED", notes: `no user path was planned for a change that reaches ${reachable.slice(0, 3).join(", ")}: ${reason}`.slice(0, 500) };
     return { verdict: "FAIL", notes: (reason ? `no user path verified: ${reason}` : "no user path verified").slice(0, 500) };
   }
@@ -444,6 +488,18 @@ export function selectPlan(files, filesTruncated = false) {
   const list = Array.isArray(files) ? files : [];
   if (filesTruncated || hasAppPath(list)) return null;
   return { actions: [], expect: [], reason: "no user path: non-app files only" };
+}
+const APP_CODE_PREFIXES = ["src/", "app/", "pages/", "public/"];
+const APP_CODE_FILES = new Set(["next.config.js", "postcss.config.js", "tailwind.config.ts", "tokens.css"]);
+export function hasAppCode(files) {
+  return (Array.isArray(files) ? files : []).some((file) => {
+    const name = String(file);
+    return APP_CODE_PREFIXES.some((prefix) => name.startsWith(prefix)) || APP_CODE_FILES.has(name);
+  });
+}
+export function harnessOnlyBugfix(title, files) {
+  const list = Array.isArray(files) ? files : [];
+  return list.length > 0 && bugfixTitle(title) && !hasAppCode(list);
 }
 const readDir = (dir) => {
   try {
@@ -908,7 +964,7 @@ export async function completeWithOpenRouter(prompt, { key, model, images = [], 
   if (!key) throw new Error("model login is missing");
   const chosen = String(model).startsWith("deepseek/") ? assertFlashModel(model) : String(model);
   const content = images.length ? [{ type: "text", text: prompt }, ...images.slice(0, 6).map((data) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${data}` } }))] : prompt;
-  const payload = { model: chosen, temperature: 0, max_tokens: 1200, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] };
+  const payload = { model: chosen, temperature: 0, max_tokens: 2000, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] };
   if (chosen.startsWith("deepseek/")) payload.reasoning = { enabled: false };
   const response = await fetchImpl(PSTACK_VERIFIER.endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000) });
   if (!response.ok) {
@@ -927,7 +983,7 @@ function invalidModelOutput(error) {
 }
 function logAnswer(text) {
   const raw = String(text ?? "").replace(/\s+/g, " ").trim();
-  console.log(`verifier answer: ${redact(raw.slice(0, 400), secretValues()) || "(empty)"}`);
+  console.log(`verifier answer (${raw.length} chars): ${redact(raw.slice(0, 1600), secretValues()) || "(empty)"}`);
 }
 export async function askModel(prompt, options, read) {
   const once = async () => {
@@ -1186,11 +1242,13 @@ export async function planFromRequest(request, deps = {}) {
   const listed = planFileList(request);
   const plan = { ...binding, authorFamily: botLogin || request.author || "", verifierModel: botLogin ? "" : (picked.model || ""), actions: [], expect: [], reason: "", fail: "", unevaluated: botLogin ? "" : (picked.fail || ""), files: listed.files, filesTruncated: listed.filesTruncated, baseSha: request.baseSha || "", tree: request.tree || "", patchId: request.patchId || "", diffSha256: request.diffSha256 || "", claim: { title: request.title, body: request.body, diff: request.diff, boardPath: request.boardPath, taskPath: request.taskPath } };
   const selected = botLogin || plan.unevaluated ? null : selectPlan(listed.files, listed.filesTruncated);
+  const harnessOnly = harnessOnlyBugfix(request.title, listed.files);
   if (botLogin) { plan.reason = "no user path"; plan.botLogin = botLogin; }
   else if (!plan.unevaluated && docsShortcut(listed.files, listed.filesTruncated)) plan.reason = "no user path";
   else if (selected) Object.assign(plan, selected);
+  else if (!plan.unevaluated && harnessOnly) Object.assign(plan, { actions: [], expect: [], reason: "no user path: no app code changed" });
   else if (!plan.unevaluated) {
-    const bugfix = bugfixTitle(request.title);
+    const bugfix = bugfixTitle(request.title) && hasAppCode(listed.files);
     const compare = deps.compare ?? process.env.PSTACK_VERIFIER_COMPARE === "true";
     const pages = deps.pages ?? readFeaturePages();
     let reach = [];

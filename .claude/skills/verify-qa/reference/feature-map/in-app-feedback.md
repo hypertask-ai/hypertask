@@ -20,6 +20,21 @@ with `text`, `kind`, and `notify: false`. Then find the new board 15 ticket by
 its title (`Bug: ` plus the first line) and read its labels. The response body is
 only `{ success: true }`, so the ticket read is the proof.
 
+```bash
+ht-verify api POST /api/feedback --state ~/.config/hypertask-videos/storageState-qa.json \
+  --data '{"text":"<unique line>","kind":"Bug","notify":false,"pathname":"/settings/accounts","pageTitle":"Accounts"}' --confirm
+# then, with a QA agent token, find it and read the labels:
+#   hypertask_tasks {"action":"list","input":{"project_id":15,"search":"<unique line>"}}
+#   hypertask_tasks {"action":"get","input":{"ticket_number":"HTPR-N"},"response_format":"detailed"}
+ht-verify api POST '/api/tasks/(un)archive' --data '{"taskId":<id>,"status":"Archive"}' --confirm
+```
+
+`kind` must be one of `Bug`, `Idea`, `Question`, `Praise`; anything else is 400
+`Invalid feedback kind`. `notify` defaults to true when omitted, and the
+description then gains `<p><strong>Notify:</strong> yes</p>`. The title is
+`<kind>: <first line>`, cut at 80 characters. A `screenshotUrl` is validated
+with a HEAD request, so leave it out rather than passing a placeholder.
+
 The flag ships at `defaultMode: EVERYONE`, so flag off is UNREACHABLE in the
 declared mode: every account sees the brain tag. An authorized agent can prove
 the off path only during an Owner + QA hold with the flag Off; runners never
@@ -32,6 +47,10 @@ switch a flag Off.
 - Every post assigns every accepted human member of board 15, whether `notify`
   is true or false; `notify` only adds a Notify marker to the description.
   Expect the inbox assignment and archive the fixture ticket.
+- The check notifies real board 15 members (user 6 among them). Post once, read
+  the labels, archive the same ticket in the same run.
+- On 2026-11-20 user 985 got `user-feedback` and `brain-medium` on HTPR-9518 in
+  section 4389 (Backlog), matching the flag-on expectation.
 
 ### What proof to collect
 

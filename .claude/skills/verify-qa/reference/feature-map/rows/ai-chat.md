@@ -1,1 +1,1 @@
-| AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey); `ai-chat-drive.mjs` hands-free drive |
+| AI chat | [ai-chat.md](ai-chat.md) | `feature-map-drive.mjs ai-chat` read-only; `ai-chat-drive.mjs` hands-free write journey |
