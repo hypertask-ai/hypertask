@@ -12,22 +12,22 @@ function assertNoCoverage(ci) {
 
 function assertNormalTriggers(ci, request) {
   assert.deepEqual(ci.on.pull_request.types, prTypes);
-  assert.deepEqual(request.on.pull_request.types, prTypes);
   assert.deepEqual(ci.on.push.branches, ["production"]);
-  assert.equal(ci.on.schedule, undefined);
+  assert.deepEqual(ci.on.schedule, [{ cron: "23 3 * * *" }]);
   assert.equal(ci.on.workflow_dispatch, undefined);
   assert.equal(ci.jobs["ci-prepare"].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
   for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
-    assert.equal(ci.jobs[key].if, "github.event_name == 'push' || github.event.pull_request.draft == false", key);
+    assert.equal(ci.jobs[key].if, "github.event_name != 'pull_request'", key);
   }
-  assert.equal(ci.jobs["browser-smoke"].if, "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)");
+  assert.equal(ci.jobs["browser-smoke"].if, "always()");
   assert.equal(ci.jobs["ci-tests"].name, "ci-tests");
   assert.equal(
     ci.jobs["ci-tests"].if,
     "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)",
   );
   assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test", "ci-fixtures"]);
-  assert.equal(request.jobs.request.if, "github.event.pull_request.draft == false");
+  assert.deepEqual(request.on.pull_request.types, prTypes);
+  assert.equal(request.jobs.request.if, undefined);
 }
 
 test("metadata changes cannot restart or skip required CI, and PR/push tests collect no coverage", () => {
@@ -40,8 +40,8 @@ test("metadata changes cannot restart or skip required CI, and PR/push tests col
   assert.equal(push.env.HT_REQUIRE_PG_TESTS, "${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}");
   assert.match(push.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/ci-shard-upload\/shard-\$\{SHARD\}\.log"/);
   assert.equal(ci.jobs["ci-test"].strategy["fail-fast"], false);
-  assert.equal(String(ci.env.CI_TEST_SHARDS), "6");
-  assert.equal(String(ci.env.CI_SERIAL_SHARDS), "2");
+  assert.equal(String(ci.env.CI_TEST_SHARDS), "${{ github.event_name == 'pull_request' && '3' || '6' }}");
+  assert.equal(String(ci.env.CI_SERIAL_SHARDS), "${{ github.event_name == 'pull_request' && '1' || '2' }}");
   const plan = ci.jobs["ci-prepare"].steps.find((step) => step.name === "Write test shards");
   assert.match(plan.run, /LANES=\$\(\(CI_TEST_SHARDS \+ CI_SERIAL_SHARDS\)\)/);
   assert.match(plan.run, /--count "\$LANES" --serial-lanes "\$CI_SERIAL_SHARDS" --out "\$OUT"/);

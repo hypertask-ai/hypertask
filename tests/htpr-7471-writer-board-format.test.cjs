@@ -248,6 +248,7 @@ function harness(options = {}) {
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     "@/lib/auth/session": { verifySession: () => ({}) },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
     "./create-global-effects": { schedulePostCreateWork() {} },
     "./route": { taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request) },
   });

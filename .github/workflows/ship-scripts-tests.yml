@@ -17,6 +17,7 @@ on:
       - 'scripts/proc-watchdog*'
       - 'scripts/premerge-local.sh'
       - 'scripts/premerge-local-*.mjs'
+      - '.claude/skills/verify-hypertask/bin/**'
       - '.claude/skills/verify-qa/scripts/**'
       - '.claude/skills/verify-design/**'
       - '.github/workflows/ship-scripts-tests.yml'
@@ -92,6 +93,7 @@ jobs:
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
           python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
           python3 .claude/skills/ship/scripts/pr-drain-pick.test.py
+          python3 .claude/skills/ship/scripts/pr-merge-pass.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
           python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
@@ -101,6 +103,7 @@ jobs:
           node --test .claude/skills/verify-design/scripts/design-check.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
           node --test .claude/skills/verify-qa/scripts/fixture-cleanup.test.mjs
+          node --test .claude/skills/verify-hypertask/bin/*.test.mjs .claude/skills/verify-hypertask/bin/lib/*.test.mjs .claude/skills/verify-hypertask/bin/lib/commands/*.test.mjs
 
       - name: Replay incident grouping and claim collision checks
         env:

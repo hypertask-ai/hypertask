@@ -1,0 +1,321 @@
+const assert = require("node:assert/strict");
+const { test } = require("node:test");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
+
+function flagState(enabled) {
+  return { isFeatureEnabled: async () => enabled };
+}
+
+function createHarness(board, flagEnabled) {
+  const writes = [];
+  const tx = {
+    $executeRaw: async () => undefined,
+    project: { findUnique: async () => ({ uniqueIdentifier: "TEST", firstTaskPointerTaskId: null }) },
+    task: {
+      create: async ({ data }) => {
+        writes.push(data);
+        return { ...data, id: 77, project: { teamId: null }, priority: null, taskLabels: [] };
+      },
+    },
+  };
+  const prisma = {
+    project: { findFirst: async () => board },
+    section: { findFirst: async () => ({ id: 9, section_title: "Backlog" }) },
+    task: { count: async () => 0 },
+    team_Activity: { update: async () => undefined },
+    drafts: { create: async () => undefined },
+  };
+  const create = load("src/utils/controllers/tasks/create.ts", {
+    "@/lib/agents/writing": { AgentWritingError: class extends Error {}, agentWritingDetails: () => ({}) },
+    "@/lib/agents/writingEnforcement": { enforceAgentWriting: async () => undefined },
+    "@/lib/planLimits": { isPlanLimitReachedError: () => false, planLimitResponse: () => ({ status: 400, body: {} }) },
+    "@/lib/auth/agentScope": { recordAgentBoardScopeMiss: () => undefined },
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "../description/common-description-create": { default: async () => undefined },
+    "@/lib/flags": flagState(flagEnabled),
+    "@vercel/functions": { waitUntil: () => undefined },
+    "@/lib/ai/labelClassifier": { scheduleClassifyNewTaskAiLabels: () => undefined },
+    "./getNextUniqueTaskIndex": { getNextUniqueTaskIndex: async () => 42 },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
+    "@/lib/mcp/webhooks/taskEvents": {
+      createTaskWithBoardWebhookOutbox: async (_db, _actor, run) => {
+        const written = await run(tx);
+        return { result: written.result, boardWebhookDeliveryIds: [] };
+      },
+    },
+    "@/lib/mcp/webhooks/outbox": { publishBoardWebhookDeliveries: async () => undefined },
+    "@/lib/agentWebhooks/outbox": {
+      emitAgentTaskCreatedWebhook: async () => undefined,
+      markAgentTaskCreatedReady: async () => undefined,
+      persistAgentTaskCreatedPending: async () => undefined,
+    },
+  }).default;
+  const call = () => create({
+    title: "A ticket",
+    description: "",
+    section: "Backlog",
+    userId: 6,
+    ranking: "r",
+    projectId: 11514,
+    sectionId: 9,
+    currentUser: { id: 6 },
+  });
+  return { call, writes };
+}
+
+test("creating a ticket on an archived board is refused with the board name and nothing is written", async () => {
+  const { call, writes } = createHarness({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" }, true);
+  const response = await call();
+  assert.equal(response.status, 400);
+  assert.match(response.json.message, /Fleet CI & Infra/);
+  assert.match(response.json.message, /archived/);
+  assert.equal(writes.length, 0);
+});
+
+test("creating a ticket on an active board still succeeds", async () => {
+  const { call, writes } = createHarness({ id: 15, name: "project-15", title: "Hypertask Product", status: "Normal" }, true);
+  const response = await call();
+  assert.equal(response.status, 200);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].title, "A ticket");
+});
+
+function moveHarness(targetBoard, flagEnabled) {
+  const movedRecords = [];
+  const prisma = {
+    project: {
+      findUnique: async ({ where }) => (where.id === targetBoard.id ? targetBoard : { id: 15, teamId: null }),
+      findFirst: async () => ({ id: targetBoard.id }),
+    },
+    section: { findUnique: async () => ({ id: 10, projectId: targetBoard.id, section_title: "Backlog" }) },
+    task: {
+      findUnique: async ({ where }) => (where.id === 501
+        ? { id: 501, projectId: 15, parentTaskId: 500, subTasks: [] }
+        : { id: 500, projectId: 15, parentTaskId: null, subTasks: [{ id: 501, subTasks: [] }] }),
+      findFirst: async () => null,
+      update: async () => undefined,
+    },
+    page: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
+    $transaction: async (run) => run({ page: { findMany: async () => [], updateMany: async () => ({ count: 0 }) } }),
+    $queryRaw: async () => [],
+    estimate: { updateMany: async () => undefined },
+    priority: { updateMany: async () => undefined },
+    savedContent: { updateMany: async () => undefined },
+    notification: { deleteMany: async () => undefined },
+    drafts: { deleteMany: async () => undefined },
+    reminder: { deleteMany: async () => undefined },
+    assignees: { findMany: async () => [], deleteMany: async () => undefined },
+    member_Team: { findFirst: async () => null },
+    follower: { findMany: async () => [], deleteMany: async () => undefined },
+    taskLabel: { findMany: async () => [] },
+  };
+  const { moveTaskToDifferentBoard } = load("src/utils/controllers/tasks/moveToDifferentBoard.ts", {
+    "@/lib/planLimits": {
+      assertTicketRoom: async () => undefined,
+      isPlanLimitsEnabled: async () => false,
+      isPlanLimitReachedError: () => false,
+      scopeForProject: () => ({}),
+      scopeKey: () => "",
+    },
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@prisma/client": { Prisma: { join: (values) => values } },
+    "@/utils/controllers/getMemberAndOwnerForBoard": { default: async () => [] },
+    "@/utils/generateRank": { default: () => "rank" },
+    "./getNextUniqueTaskIndex": { getNextUniqueTaskIndex: async () => 9 },
+    "@/pages/api/queues/duedateQueue": { cancelDueDateJob: async () => undefined, scheduleDueDateJob: async () => undefined },
+    "date-fns": { subMinutes: (value) => value },
+    "@/utils/controllers/tasks/single": {
+      TASK_IDENTITY_CONFLICT_CODE: "task_identity_conflict",
+      updateTaskSingle: async (data) => {
+        movedRecords.push(data);
+        return { status: 200, json: { id: data.id, projectId: data.projectId } };
+      },
+    },
+    "@/lib/api/errorMessage": { toErrorMessage: (json, fallback) => json?.message ?? fallback },
+    "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "../turbopuffer/turbopufferHelper": { upsertPageToTurbopuffer: async () => undefined },
+    "@/lib/flags": flagState(flagEnabled),
+  });
+  const call = () => moveTaskToDifferentBoard({
+    taskId: 500,
+    targetProjectId: targetBoard.id,
+    targetSectionId: 10,
+    currentProjectId: 15,
+    currentUser: { id: 6 },
+  });
+  return { call, movedRecords };
+}
+
+test("moving a ticket into an archived board is refused with the board name and the ticket stays put", async () => {
+  const { call, movedRecords } = moveHarness({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive", uniqueIdentifier: "HYCI" }, true);
+  const result = await call();
+  assert.equal(result.success, false);
+  assert.equal(result.statusCode, 400);
+  assert.match(result.error, /Fleet CI & Infra/);
+  assert.match(result.error, /archived/);
+  assert.equal(movedRecords.length, 0);
+});
+
+test("moving a ticket into an active board still moves it", async () => {
+  const { call, movedRecords } = moveHarness({ id: 16, name: "project-16", title: "Fleet CI & Infra", status: "Normal", uniqueIdentifier: "HTPR" }, true);
+  const result = await call();
+  assert.equal(result.success, true);
+  assert.equal(movedRecords.length, 2);
+});
+
+function mcpAccess(board, flagEnabled) {
+  const projectQueries = [];
+  const prisma = {
+    project: {
+      findFirst: async ({ where }) => {
+        projectQueries.push(where);
+        if (where.status === "Normal") return null;
+        const matches = board.status === where.status;
+        return matches ? { id: board.id, name: board.name, title: board.title, status: board.status } : null;
+      },
+    },
+  };
+  const { validateProjectAccess } = load("src/lib/mcp/tasks/services.ts", {
+    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/flags": flagState(flagEnabled),
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+  });
+  return { validateProjectAccess, projectQueries };
+}
+
+test("MCP create and move refuse an archived board with the same archived error as the API", async () => {
+  const { validateProjectAccess } = mcpAccess({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" }, true);
+  const result = await validateProjectAccess(11514, 6, null, null, { refuseArchivedBoard: true });
+  assert.equal(result.error.status, 400);
+  assert.match(result.error.message, /Fleet CI & Infra/);
+  assert.match(result.error.message, /archived/);
+});
+
+test("MCP board lookups outside the create and move paths keep the 404 and the flag switch", async () => {
+  const board = { id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" };
+  const withoutOption = await mcpAccess(board, true).validateProjectAccess(11514, 6, null, null);
+  assert.equal(withoutOption.error.status, 404);
+  const flagOff = await mcpAccess(board, false).validateProjectAccess(11514, 6, null, null, { refuseArchivedBoard: true });
+  assert.equal(flagOff.error.status, 404);
+});
+
+const ARCHIVED_MESSAGE = 'Board "Fleet CI & Infra" is archived, so it cannot take new tickets.';
+
+function mcpCreate(projectError) {
+  const writes = [];
+  class StubResponse {
+    constructor(body, status) {
+      this.body = body;
+      this.status = status;
+    }
+    static json(body, init) {
+      return new StubResponse(body, init?.status ?? 200);
+    }
+  }
+  const { POST } = load("src/lib/mcp/operations/tasks/create/operation.ts", {
+    "next/server": { NextResponse: StubResponse },
+    "@/lib/agents/writing": { AgentWritingError: class extends Error {} },
+    "@/lib/agents/writingEnforcement": { enforceAgentWriting: async () => undefined },
+    "@/lib/mcp/routeWrapper": {
+      wrapMcpRoute: (handler) => handler,
+      validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null, teamScope: null }),
+      checkMcpRouteRateLimit: async () => null,
+      readMcpRouteJsonBody: async (request) => ({ ok: true, body: request.body }),
+    },
+    "@/lib/mcp/tasks/validators": {
+      validateCreateTaskBody: () => ({
+        valid: true,
+        data: { project_id: 11514, title: "A ticket", description: "A note", section_id: 9 },
+      }),
+    },
+    "@/lib/mcp/tasks/services": {
+      validateProjectAccess: async () => ({ project: null, error: projectError }),
+      getSectionForTask: async () => ({ section: { id: 9 } }),
+      createTask: async () => { writes.push("create"); return { id: 77 }; },
+      validateParentTask: async () => ({}),
+      validateProjectMemberIds: async () => ({ invalidIds: [] }),
+      matchLabelIds: () => ({ ids: [], unresolved: [] }),
+    },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+  });
+  const call = () => POST({ body: { project_id: 11514, title: "A ticket", description: "A note" }, headers: { get: () => null } });
+  return { call, writes };
+}
+
+test("MCP create names the archived board in the error clients read", async () => {
+  const { call, writes } = mcpCreate({ status: 400, message: ARCHIVED_MESSAGE });
+  const response = await call();
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, ARCHIVED_MESSAGE);
+  assert.equal(response.body.code, "invalid_field");
+  assert.equal(response.body.field, "project_id");
+  assert.equal(response.body.message, ARCHIVED_MESSAGE);
+  assert.equal(writes.length, 0);
+});
+
+test("MCP create still reports a missing board and a permission failure in their own words", async () => {
+  const missing = await mcpCreate({ status: 404, message: "Project with ID 11514 not found" }).call();
+  assert.equal(missing.status, 404);
+  assert.equal(missing.body.error, "Not found");
+  assert.equal(missing.body.code, "not_found");
+  assert.equal(missing.body.message, "Project with ID 11514 not found");
+  const forbidden = await mcpCreate({ status: 403, message: "User does not have permission to create tasks in this project" }).call();
+  assert.equal(forbidden.status, 403);
+  assert.equal(forbidden.body.error, "Permission error");
+  assert.equal(forbidden.body.code, "forbidden");
+  assert.equal(forbidden.body.message, "User does not have permission to create tasks in this project");
+});
+
+function appCreateRoute(board, flagEnabled) {
+  const { load } = require("./task-route-loader.cjs");
+  const sharedRoute = load("src/lib/api/task-writes/route.ts", {
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
+    "@/lib/auth/agentScope": {
+      withAgentScopeRequest: (_request, run) => run(),
+      prepareAgentScope: async () => {},
+    },
+    "@/lib/auth/session": {},
+  });
+  const { POST } = load("src/lib/api/task-writes/create.ts", {
+    "./route": sharedRoute,
+    "./create-fullscreen": { createFullScreenTaskAndReturn: async () => ({ id: 42 }) },
+    "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async () => ({ id: 6 }) },
+    "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
+    "@/lib/media/inlineAgentImages.server": {},
+    "@/lib/flags": { isFeatureEnabled: async () => flagEnabled },
+    "@/lib/flags/keys": { HTPR_7740_CREATE_RESPONSE_FLAG: "htpr-7740-create-response" },
+    "@/lib/prisma": {
+      default: {
+        project: { findFirst: async () => board },
+        section: { findFirst: async () => null },
+        task: { findFirst: async () => null },
+      },
+    },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/tasks/create": { default: async () => { throw new Error("create must not run"); } },
+    "@/lib/realtime/server": { broadcastBoardChange: async () => undefined },
+  });
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => POST });
+  return async function request() {
+    let response;
+    await handler(
+      { method: "POST", headers: {}, body: { title: "A ticket", projectId: 11514 } },
+      { setHeader() {}, status: (status) => ({ json: (body) => { response = { status, body }; } }) },
+    );
+    return response;
+  };
+}
+
+test("a board with no sections but archived status names the board instead of a missing section", async () => {
+  const response = await appCreateRoute({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Archive" }, true)();
+  assert.equal(response.status, 400);
+  assert.equal(response.body.message, ARCHIVED_MESSAGE);
+});
+
+test("a board with no sections that is not archived still reports the missing section", async () => {
+  const response = await appCreateRoute({ id: 11514, name: "project-11514", title: "Fleet CI & Infra", status: "Normal" }, true)();
+  assert.equal(response.status, 404);
+  assert.equal(response.body.message, "No active section found");
+});

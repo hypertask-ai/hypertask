@@ -166,6 +166,7 @@ function selfCheck() {
   console.log('SCOPE_SELF_CHECK_OK');
 }
 
+module.exports = { heavyNeeded, buildNeeded, isDocsOnlyFile, changeScope };
 if (require.main === module) {
   if (process.argv.includes('--self-check')) {
     selfCheck();

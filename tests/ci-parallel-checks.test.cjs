@@ -12,6 +12,8 @@ const lanes = [
   "changed-style-tokens",
   "contracts",
   "eslint",
+  "feature-map-change",
+  "feature-map-coverage",
   "github-comments",
   "lint-overlap-guard",
   "oxlint",
@@ -119,8 +121,8 @@ function assertTrustedTypeScriptCache(steps) {
   assert.ok(restore && save, "TypeScript cache steps exist");
   assert.equal(
     save.if,
-    "needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'",
-    "the TypeScript cache may fill from a pull request only inside its own namespace",
+    "needs.ci-prepare.outputs.run_tests == 'true' && github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'",
+    "only a production push fills the TypeScript cache",
   );
   assert.equal(save.with.key, "${{ steps.restore-tsc-cache.outputs.cache-primary-key }}");
   const namespace = restore.env.TSC_CACHE_NAMESPACE;

@@ -1,0 +1,48 @@
+name: Pstack Verifier Eval
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pstack-verifier-eval
+  cancel-in-progress: true
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { fetch-depth: 1, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: "^24.22.1", check-latest: true }
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Self check without model calls
+        env: { PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL || 'openai/gpt-5' }}" }
+        run: |
+          set -o pipefail
+          node --test tests/pstack-verifier-eval.test.cjs
+          node --test tests/pstack-verifier-drive.test.cjs
+          node scripts/pstack-verifier-eval.mjs --replay correct
+          if node scripts/pstack-verifier-eval.mjs --replay blind; then
+            echo "a verifier stuck on FAIL was accepted, so the eval cannot fail" >&2
+            exit 1
+          fi
+      - name: Live eval on two model families
+        env:
+          OPENROUTER_EVAL_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}"
+          PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL || 'openai/gpt-5' }}"
+        run: node scripts/pstack-verifier-eval.mjs --live --out pstack-verifier-eval.json
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pstack-verifier-eval
+          retention-days: 30
+          if-no-files-found: ignore
+          path: pstack-verifier-eval.json

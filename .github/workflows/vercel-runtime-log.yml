@@ -34,6 +34,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: vercel-runtime-log-${{ inputs.project }}-${{ inputs.ticket }}
+  cancel-in-progress: true
+
 env:
   PROJECT_ID: prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf
   TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs

@@ -3,9 +3,14 @@
 ## Sub-features
 
 - `icon-source` Icon source.
+- `settings-screen` `/settings` is the Settings screen. With no section it opens General. Appearance is the Profile item on this screen.
+- `rounded-theme` With `htpr-7328-rounded-theme` on, desktop Appearance and Ctrl+K include Material (follows device). It follows the device light or dark setting. The phone list hides it even when the flag is on. Off removes the choice, and a saved Material preference resolves to the system theme.
+- `appearance-heading-once` With `htpr-7870-appearance-heading-once` on, desktop Appearance shows the word Appearance once, at the top of the page, and not again on the card above the theme list. Phone still shows it on the card. Off restores the card label.
+- `amoled-toggle` With `htpr-9027-amoled-toggle` on, a settings switch that is on uses the AMOLED primary, hsl(222 9% 46%), instead of green. The off position and every other theme stay unchanged. Off restores the green on-state in AMOLED.
 
 ## How to get to it (user POV)
 
+- Open `/settings`. The screen title is Settings and the first section is General. Choose Appearance under Profile. The theme list is on that page.
 - Settings → Appearance: use the existing theme picker.
 - Ctrl+K: search for the theme name, then press Enter.
 - QA 985 uses `~/.config/hypertask-videos/storageState-qa.json`.
@@ -20,6 +25,9 @@
 5. Expand and collapse the desktop rail. Every visible rail glyph is Iconoir; other themes retain their original icons.
 6. Repeat the four existing themes, desktop and phone. Compare palette and typography against before-change captures. Nothing is removed, hidden or moved by the new theme.
 7. With `htpr-8054-graphite-2` off, both pickers hide Graphite 2. A saved Graphite 2 cookie resolves to the system theme without being overwritten. Do not switch production flags for this test; cover the off path in the focused theme tests and record the live mode.
+8. On `/settings`, confirm the page title is Settings and the open section is General. Choose Appearance. On desktop, with `htpr-7328-rounded-theme` on, Material (follows device) is in the list and in Ctrl+K. At 390x844 it is absent. Do not need a new theme to prove the row exists; selecting it is the behavior check and must be restored afterward.
+9. With `htpr-7870-appearance-heading-once` on, desktop Appearance shows that word once. At 390x844 the card above the list still says Appearance.
+10. In AMOLED, with `htpr-9027-amoled-toggle` on, turn on an existing settings switch only if one is already on, or read a switch that is already on. The on track uses hsl(222 9% 46%). Porcelain, Graphite, and Dia keep the green on track. Restore the theme cookie when finished.
 
 ## Gotchas
 
@@ -28,6 +36,9 @@
 - A saved theme reverts on reload or flashes the system palette.
 - New CSS leaks into Graphite or Porcelain.
 - Mobile first-screen preferences reject a newly supported theme.
+- Material is expected on the phone, or a saved Material choice is left in place after the check.
+- Desktop Appearance still shows Appearance on the card above the theme list while `htpr-7870-appearance-heading-once` is on.
+- An AMOLED settings switch that is on stays green while `htpr-9027-amoled-toggle` is on.
 
 ### What proof to collect
 

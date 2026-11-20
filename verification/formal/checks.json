@@ -1,0 +1,28 @@
+{
+  "tool": {
+    "name": "TLC",
+    "version": "1.7.4",
+    "jar": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+    "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+  },
+  "checks": {
+    "seat-billing": {
+      "spec": "verification/formal/seat-billing/SeatBilling.tla",
+      "config": "verification/formal/seat-billing/SeatBilling.cfg",
+      "properties": [
+        {"name": "JoinNeverDecreases", "expect": "holds"},
+        {"name": "ReconcileMatchesSeats", "expect": "violated", "witness": ["TimedOut", "Landed"]},
+        {"name": "LeaseExcludesOverlap", "expect": "violated", "witness": ["LeaseLost", "Acquire"]}
+      ]
+    },
+    "webhook-retry": {
+      "spec": "verification/formal/webhook-retry/BoardWebhook.tla",
+      "config": "verification/formal/webhook-retry/BoardWebhook.cfg",
+      "properties": [
+        {"name": "AttemptsBound", "expect": "holds"},
+        {"name": "PostsWithinCap", "expect": "violated", "witness": ["PostOk", "Record", "PostOk"]},
+        {"name": "SuccessNotReportedFailed", "expect": "violated", "witness": ["PostOk", "Sweep", "PostFail"]}
+      ]
+    }
+  }
+}

@@ -1,0 +1,44 @@
+name: Core smoke seed size
+
+on:
+  pull_request:
+    branches: [production]
+    paths:
+      - scripts/seed-core-actions-smoke.mjs
+      - scripts/lib/core-smoke-seed-plan.mjs
+      - scripts/run-app-smoke-isolated.sh
+      - .github/scripts/core-smoke-seed-size.mjs
+      - .github/workflows/core-smoke-seed-size.yml
+      - tests/core-smoke-seed-size.test.cjs
+  push:
+    branches: [production]
+    paths:
+      - scripts/seed-core-actions-smoke.mjs
+      - scripts/lib/core-smoke-seed-plan.mjs
+      - scripts/run-app-smoke-isolated.sh
+      - .github/scripts/core-smoke-seed-size.mjs
+      - .github/workflows/core-smoke-seed-size.yml
+      - tests/core-smoke-seed-size.test.cjs
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-smoke-seed-size-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-smoke-seed-size:
+    name: core-smoke-seed-size
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Require a real-size smoke seed
+        run: node .github/scripts/core-smoke-seed-size.mjs

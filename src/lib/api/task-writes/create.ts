@@ -12,6 +12,8 @@ import { taskWriteRoute } from "./route";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7740_CREATE_RESPONSE_FLAG } from "@/lib/flags/keys";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { ArchivedBoardTicketError, assertBoardTakesNewTickets } from "@/utils/controllers/projects/archivedBoardTickets";
 
 const schema = z.custom<Record<string, any>>(
   (body) => !!((body as any)?.fullScreenTask || ((body as any)?.title && (body as any)?.projectId)),
@@ -45,6 +47,11 @@ export const POST = taskWriteRoute({
           orderBy: { ranking: "asc" },
         });
         if (!resolvedSection) {
+          const board = await prisma.project.findFirst({
+            where: { id: projectId, ...taskWriteAccessWhere(session.userId) },
+            select: { id: true, name: true, title: true, status: true },
+          });
+          if (board) await assertBoardTakesNewTickets(board, session.userId);
           return NextResponse.json(
             { message: sectionId ? "Section does not belong to this project" : "No active section found" },
             { status: sectionId ? 400 : 404 },
@@ -81,6 +88,7 @@ export const POST = taskWriteRoute({
         return NextResponse.json({ message: "Could not resolve task position" }, { status: 500 });
       }
     } catch (error) {
+      if (error instanceof ArchivedBoardTicketError) return NextResponse.json({ message: error.message }, { status: 400 });
       if (isPlanLimitReachedError(error)) {
         const refusal = planLimitResponse(error);
         return NextResponse.json(refusal.body, { status: refusal.status });
