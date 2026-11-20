@@ -30,7 +30,7 @@ export function ticketOpening(html) {
     if (html.startsWith("<!--", start)) {
       const close = html.indexOf("-->", start + 4);
       if (close === -1) break;
-      cursor = close + 3;
+      html = `${html.slice(0, start)} ${html.slice(close + 3)}`;
       continue;
     }
     let quote = "";
@@ -49,7 +49,8 @@ export function ticketOpening(html) {
     if (raw) {
       const close = html.toLowerCase().indexOf(`</${raw[1].toLowerCase()}`, cursor);
       if (close === -1) break;
-      cursor = close;
+      html = `${html.slice(0, start)} ${html.slice(close)}`;
+      cursor = start + 1;
     }
   }
   return html;
@@ -58,6 +59,7 @@ export function ticketOpening(html) {
 function structuredText(html) {
   return stripTags(dropBlockquotes(html)
     .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/\s+/g, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|li|h[1-6])>/gi, "\n"))
     .replace(/&nbsp;/gi, " ")
