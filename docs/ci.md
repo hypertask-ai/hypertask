@@ -2010,8 +2010,8 @@ The coverage-growth counter left the pull request gate (HTPR-9512). A pull
 request no longer has to grow the map: `.github/scripts/feature-map-coverage.cjs`
 and its unit test are deleted, because no workflow, report or nightly run read
 them once the lane went. What a pull request keeps is the
-[feature-map change gate](#feature-map-change-gate-htpr-9415): a new feature or
-improvement still needs its area page.
+[feature-map change gate](../ci.md#feature-map-change-gate-htpr-9415): a new
+feature or improvement still needs its area page.
 
 ### The feature-map citation check
 
