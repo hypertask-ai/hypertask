@@ -15,6 +15,16 @@ Settings > Board > Members (`src/components/Modals/Settings/BoardMembersSection.
 3. Repeat with `teamId=<any other team id or a made-up id>`: `teamMembers` must be identical to step 2. The route uses the board's stored team and ignores the query (HTPR-7170).
 4. With a valid positive integer `projectId`, no login answers 401; a signed-in account that cannot open that board gets 404. Missing or invalid `projectId` returns 200 with `[]` before authentication, so it is not an auth-denial probe.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs board-member-list --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`board-member-list ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - Routes trusting an id from the request (team, user) instead of the authorized board or the login (HTPR-7170 here, HTPR-7178 for share links).

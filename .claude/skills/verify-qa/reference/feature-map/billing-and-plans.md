@@ -22,7 +22,8 @@
 
 - Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`).
 - Click Manage subscription to reach Plans (`/settings/plans`); `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
-- Billing > Payment method > Update opens the Stripe customer portal.
+- Billing > Payment > Update opens the Stripe customer portal. The card is titled **Payment**
+  and its row shows the saved card (`src/components/Modals/Settings/BillingSection.tsx:401-413`).
 
 ### Test teams for every plan
 
@@ -88,7 +89,7 @@ Use `~/.config/ht-qa/state-{free,byok,pro}.json`. Select each account's own priv
 2. Open Billing and record current plan, seats, billing cycle, and payment-method controls. Reload and compare.
 3. Click Manage, record the plan rows in the Plans card and monthly/yearly prices, and select the monthly BYOK upgrade on the Free account.
 4. Wait for the server checkout endpoint to return a Stripe-hosted URL and the Stripe checkout page to render. Capture its product, amount, cadence and payment form without filling any payment field. Use Stripe's back/cancel link to return and confirm the plan did not change.
-5. Open Billing again, click Update beside Payment method, and verify the Stripe customer portal renders. Return without changing anything.
+5. Open Billing again, click Update beside the saved card in the **Payment** card, and verify the Stripe customer portal renders. Return without changing anything.
 6. Repeat the identical checkout and portal path after deployment and compare with the baseline. A changed amount, cadence, product, navigation, error, or missing payment form fails the money-path comparison.
 7. Capture Billing and Plans at 1440x900 and 390x844. Check BYOK and Pro accounts without changing subscriptions; opening Plans as owner can still provision a Stripe customer if the team has none. For a strictly read-only run, use an already-linked team; if their Billing page says Free, compare with the recorded pre-existing baseline rather than treating a tier label as proof of a paid subscription.
 
@@ -127,6 +128,16 @@ Do not switch `htpr-7852-internal-team-saved-plan`. Leave the internal team's pl
 ### Vercel budget alerts
 
 Do not post a body to the Vercel budget webhook. There is no screen to open. Filing, the comment update, and the one owner email are `node --test tests/htpr-8101-vercel-budget-alert.test.cjs`.
+
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs billing-and-plans --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`billing-and-plans ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
 
 ## Gotchas
 

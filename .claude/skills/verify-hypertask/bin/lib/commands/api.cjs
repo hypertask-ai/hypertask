@@ -1,20 +1,21 @@
 const { readFileSync } = require("node:fs");
-const { fail, localEnv, parseArgs } = require("../context.cjs");
+const path = require("node:path");
+const { fail, localEnv, parseArgs, repoRoot, run } = require("../context.cjs");
 const { sessionState } = require("../session.cjs");
 
 const usage = `ht-verify api <method> <path> - one authenticated request with the run's cookies
 
 Usage:
-  ht-verify api GET /api/projects/boardTasks [--data '<json>'] [--base URL] [--state PATH]
+  ht-verify api GET /api/projects/boardTasks [--data '<json>'] [--base URL] [--state PATH | --account flags]
   ht-verify api POST /api/tasks/create --data '<json>' --confirm [--dry-run]
 
   <method>   GET (default when omitted), HEAD, POST, PUT, PATCH or DELETE.
   <path>     path on the base URL, or a full URL.
   --data     JSON request body.
   --base     base URL, default from the run folder env.json, else app.hypertask.ai.
-  --state    auth state. Default: the run folder browser/state.json, else the QA
-             flags state. Its cookies are sent and never printed.
-  --confirm  required for a write, because a write reaches shared data.
+  --state    auth state. Its cookies are sent and never printed.
+  --account  QA account for a production request, resolved through qa-login.
+             Default flags (user 985) when no state, session or seed is present.  --confirm  required for a write, because a write reaches shared data.
   --dry-run  print the request shape and send nothing.
 
 A write without --confirm is refused. The response body is returned as JSON up to
@@ -22,11 +23,18 @@ A write without --confirm is refused. The response body is returned as JSON up t
 
 Examples:
   ht-verify api GET /api/flags
+  ht-verify api GET /api/flags --base https://app.hypertask.ai --account plain
   ht-verify api POST /api/comments/create --data '{"taskId":1,"content":"hi"}' --confirm
   ht-verify api PATCH /api/tasks/single --data '{"id":1}' --confirm --dry-run`;
 
 const WRITE = ["POST", "PUT", "PATCH", "DELETE"];
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
+
+function accountState(account) {
+  const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [account, "--state"], { timeout: 15_000 });
+  if (selected.status !== 0) fail(`unknown account ${account}`, "Pass --account with one of the qa-login names, or --state with a state file.", "usage", 2);
+  return selected.stdout.trim();
+}
 
 function cookieHeader(state) {
   const now = Date.now() / 1000;
@@ -43,7 +51,7 @@ module.exports = {
   summary: "one authenticated request with the run's cookies, writes behind --confirm",
   usage,
   async run(argv) {
-    const { values, positionals } = parseArgs(argv, { data: "value", base: "value", state: "value", confirm: "bool", "dry-run": "bool" });
+    const { values, positionals } = parseArgs(argv, { data: "value", base: "value", state: "value", account: "value", confirm: "bool", "dry-run": "bool" });
     const [first, ...rest] = positionals;
     const named = METHODS.includes(String(first).toUpperCase());
     const method = named ? String(first).toUpperCase() : "GET";
@@ -56,7 +64,9 @@ module.exports = {
     const url = target.startsWith("/") ? new URL(target, base).toString() : target;
     const plan = { method, url, data: values.data ? JSON.parse(values.data) : null };
     if (values["dry-run"]) return { target: base.includes("127.0.0.1") ? "local" : "production", data: { dryRun: true, steps: [plan] } };
-    const stateFile = values.state || sessionState();
+    const loopback = base.includes("127.0.0.1") || base.includes("localhost");
+    const stateFile = values.state
+      || (loopback ? sessionState() : (values.account ? accountState(values.account) : sessionState() || accountState("flags")));
     if (!stateFile) fail("no auth state to send", "Run ht-verify seed for a local run, or pass --state with a QA state file.", "usage", 2);
     const state = JSON.parse(readFileSync(stateFile, "utf8"));
     const response = await fetch(url, {
