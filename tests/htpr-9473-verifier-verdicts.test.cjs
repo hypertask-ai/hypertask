@@ -65,7 +65,7 @@ test("the revert that touches saveLimit is planned against the task save page", 
     files: ["src/lib/tasks/saveLimit.ts", "tests/feature-flag-reconcile-workflow.test.cjs", "tests/htpr-9106-save-limit.test.cjs"], filesTruncated: false, baseSha: BASE,
     boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1",
   };
-  const built = await planFromRequest(request, { binding, pages: [], entries: [], ask: () => ({ actions: [], expect: [], reason: "no user path: library and test changes only" }) });
+  const built = await planFromRequest(request, { binding, pages: [], ask: () => ({ actions: [], expect: [], reason: "no user path: library and test changes only" }) });
   assert.ok(built.reachable.length > 0, JSON.stringify(built.reachable));
   const result = decide({ model: {}, plan: built, evidence: null, binding, checksPassed: true });
   assert.equal(result.verdict, "UNEVALUATED");
@@ -75,7 +75,7 @@ test("the revert that touches saveLimit is planned against the task save page", 
 test("the captured bug fix plan with no repro is could-not-evaluate, not a fail", async () => {
   const { judgeJourneys } = await load();
   const capturedPlan = {
-    ...binding, bugfix: true, compare: true, actions: [], expect: [], verifierModel: model.model,
+    ...binding, bugfix: true, actions: [], expect: [], verifierModel: model.model,
     reason: "no user path: the change only affects API/MCP write paths and server-side validation",
     journeys: [{ journey: "area:mcp-task-lookup", actions: [{ op: "goto", path: "/my-tasks" }], expect: [{ text: "Core actions smoke" }] }],
   };
@@ -85,7 +85,7 @@ test("the captured bug fix plan with no repro is could-not-evaluate, not a fail"
     expects: [{ expect: { text: "Core actions smoke" }, ok: false, error: "text not visible" }],
     navigations: [{ url: "http://127.0.0.1:3100/my-tasks", status: 200 }],
   };
-  const judged = await judgeJourneys({ plan: capturedPlan, binding, evidence: { ...binding, journeys: [run] }, picked: model, baseEvidence: { ...binding, journeys: [{ ...run, judged: "" }] }, ask: () => ({ verdict: "PASS", notes: "" }) });
+  const judged = await judgeJourneys({ plan: capturedPlan, evidence: { ...binding, journeys: [run] }, picked: model, redFeatures: ["mcp-task-lookup"], ask: () => ({ verdict: "PASS", notes: "" }) });
   assert.equal(judged.verdict, "UNEVALUATED");
   assert.match(judged.notes, /no repro journey/);
   assert.match(judged.notes, /API\/MCP write paths/);
