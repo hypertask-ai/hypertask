@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useContext } from 'react'
 import { useTaskContext } from '@/lib/contexts/TaskDetail/TaskProvider';
 import TaskOptions from '../TaskOptions/TaskOptions';
 import TaskTitle from './TaskTitle';
@@ -7,7 +7,6 @@ import { TaskSummaryMobile } from '@/components/Modals/Sheets/SummarySheet';
 import SubTaskLink from './SubtaskLink';
 import BaseTitleContainer from './BaseTitleContainer';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useContext } from "react";
 import MobileTaskDueDate from "./MobileTaskDueDate";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8991_RIGHT_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8991-right-column";
@@ -16,6 +15,8 @@ import { HTPR_8992_STICKY_TITLE_FLAG } from "@/lib/flags/definitions/htpr-8992-s
 import { HTPR_9054_REMOVE_AGENT_CHIP_FLAG } from "@/lib/flags/definitions/htpr-9054-remove-agent-chip-under-title";
 import TaskDetailAgentStatusChip from "@/lib/agentStatus/TaskDetailAgentStatusChip";
 import { HTPR_7339_AGENT_PULSE_DOT_FLAG } from "@/lib/flags/definitions/htpr-7339-agent-pulse-dot";
+import { HTPR_9387_HEADER_ARROWS_FLAG } from "@/lib/flags/definitions/htpr-9387-header-arrows";
+import { ticketUpDownLivesInHeader } from "@/lib/taskDetailHeaderArrows";
 import useCopyURL from "@/hooks/General/useCopyURL";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -24,9 +25,10 @@ interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
   toggleDueDate: () => void;
   clearDesktopNavigation?: boolean;
+  headerNavigation?: React.ReactNode;
 }
 
-const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNavigation = false }: TaskDetailTitleContainerProps) => {
+const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNavigation = false, headerNavigation = null }: TaskDetailTitleContainerProps) => {
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -35,6 +37,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
   const stickyTitleLine = useFlag(HTPR_8992_STICKY_TITLE_FLAG);
   const removeHeaderAgentChip = useFlag(HTPR_9054_REMOVE_AGENT_CHIP_FLAG);
   const agentPulseDot = useFlag(HTPR_7339_AGENT_PULSE_DOT_FLAG);
+  const headerArrows = useFlag(HTPR_9387_HEADER_ARROWS_FLAG);
   const { copyTicketNumber } = useCopyURL();
   const isApple = useDeviceContext();
   const ticketNumber = currentTask?.ticketNumber?.toUpperCase();
@@ -89,6 +92,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNav
                 />
               </span>
             )}
+            {headerArrows && ticketUpDownLivesInHeader(headerArrows, Boolean(_mbl), false) ? headerNavigation : null}
             <TaskOptions />
           </>
         }
