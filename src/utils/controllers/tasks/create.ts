@@ -15,6 +15,7 @@ import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from "@/lib/flags/definitions/htpr
 import { scheduleClassifyNewTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { ArchivedBoardTicketError, assertBoardTakesNewTickets } from "@/utils/controllers/projects/archivedBoardTickets";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import { createTaskWithBoardWebhookOutbox, WebhookTaskSnapshot } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
@@ -92,13 +93,15 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     id: projectId,
                     ...taskWriteAccessWhere(currentUser.id, agentId, teamScope),
                 },
-                select: { id: true },
+                select: { id: true, name: true, title: true, status: true },
             })
             if (!allowedProject)
             return ({
                 status:404,
                 json:{ message: "Project not found or access denied" }
             })
+
+            await assertBoardTakesNewTickets(allowedProject, currentUser.id);
 
             recordAgentBoardScopeMiss(allowedProject.id, "write");
             const sectionExists = await prisma.section.findFirst({
@@ -310,6 +313,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             })
         } catch (error) {
             if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) } };
+            if (error instanceof ArchivedBoardTicketError) return { status: 400, json: { message: error.message } };
             if (isPlanLimitReachedError(error)) {
                 const refusal = planLimitResponse(error)
                 return { status: refusal.status, json: refusal.body }

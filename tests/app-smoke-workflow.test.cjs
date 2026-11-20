@@ -96,11 +96,8 @@ test("app smoke validates the head before isolated build and route checks", asyn
 
   assert.match(workflow, /name: run app-smoke/);
   assert.match(workflow, /timeout-minutes: 15/);
-  assert.match(request, /branches: \[production\]/);
-  assert.match(
-    request,
-    /types: \[opened, synchronize, reopened, ready_for_review\]/,
-  );
+  assert.deepEqual(yaml.load(request).on.pull_request.types, ["opened", "synchronize", "reopened", "ready_for_review"]);
+  assert.equal(parsedWorkflow.on.schedule, undefined);
   assert.match(workflow, /workflow_run:/);
   assert.match(workflow, /workflows: \["App Smoke Request"\]/);
   assert.deepEqual(parsedWorkflow.concurrency, {
@@ -110,7 +107,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.equal(parsedWorkflow.jobs["app-smoke"].concurrency, undefined);
   assert.deepEqual(parsedWorkflow.on.push.branches, ["production"]);
   assert.deepEqual(yaml.load(request).concurrency, {
-    group: "app-smoke-request-${{ github.event.pull_request.number }}",
+    group: "app-smoke-request-${{ github.event.pull_request.number || github.run_id }}",
     "cancel-in-progress": true,
   });
   const validationSteps = parsedWorkflow.jobs.validate.steps;
@@ -126,11 +123,11 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
     parsedWorkflow.jobs.validate.if,
-    "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'",
+    "github.event_name == 'workflow_run' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'",
   );
   assert.equal(
     parsedWorkflow.jobs.report.if,
-    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
+    "always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'",
   );
   assert.match(
     workflow,
@@ -275,7 +272,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   );
   assert.match(
     isolated,
-    /timeout --signal=KILL 1m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
+    /timeout --signal=KILL 2m node \/trusted\/scripts\/seed-core-actions-smoke\.mjs/,
   );
   assert.match(isolated, /trap 'cleanup 130' INT/);
   assert.match(isolated, /trap 'cleanup 143' TERM/);
@@ -323,11 +320,12 @@ test("app smoke validates the head before isolated build and route checks", asyn
     isolated,
     /Generated Prisma client missing from the candidate dependencies\./,
   );
+  const seedPlan = await readFile("scripts/lib/core-smoke-seed-plan.mjs", "utf8");
   assert.match(seed, /writeFile\(/);
   assert.match(seed, /flag: "wx"/);
-  assert.match(seed, /sections: \["Baseline", "Alternate"\]/);
-  assert.match(seed, /section_title: "Baseline"/);
-  assert.match(seed, /section_title: "Alternate"/);
+  assert.match(seed, /buildCoreSmokeSeedPlan/);
+  assert.match(seedPlan, /"Baseline"/);
+  assert.match(seedPlan, /"Alternate"/);
   assert.match(isolated, /next build/);
   assert.doesNotMatch(isolated, /next build --webpack/);
   assert.match(isolated, /NODE_OPTIONS=--max-old-space-size=8192/);
@@ -367,12 +365,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   const workflow = await readFile(".github/workflows/automerge.yml", "utf8");
 
   assert.match(workflow, /workflows: \["CI Tests", "Revert Guard"\]/);
-  assert.match(
-    workflow,
-    /REQUIRED="app-smoke ci-tests ai-review next-public-secrets pr-title"/,
-  );
-  assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
-  assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
+  assert.match(workflow, /REQUIRED="pstack-verifier"/);
 });
 
 test("required-check drift monitoring is hourly, production-only and outside PR CI", async () => {
@@ -454,7 +447,8 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /ruleset\.target !== "branch"/);
   assert.match(settingsScript, /!ruleset\.conditions\.ref_name\.include\.includes\("refs\/heads\/production"\)/);
   assert.match(settingsScript, /ruleset\.conditions\.ref_name\.exclude\.includes\("refs\/heads\/production"\)/);
-  assert.match(settingsScript, /new Set\(ruleset\.rules/);
+  assert.match(settingsScript, /new Set\(checks\.map\(\(check\) => check\.context\)\)/);
+  assert.match(settingsScript, /check\.integration_id !== pinned/);
   assert.match(settingsScript, /Live required checks do not match docs\/ci-policy\.yml/);
   const contexts = settingsScript.match(/const expected = \[([\s\S]*?)\]\.sort\(\)/)[1];
   assert.deepEqual(
@@ -463,32 +457,21 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   );
 });
 
-test("CI policy keeps the protected smoke producer live and required", async () => {
+test("CI policy requires only the verifier and automerge mirrors it", async () => {
   const policy = yaml.load(await readFile("docs/ci-policy.yml", "utf8"));
-  const required = [
-    "app-smoke",
-    "browser-smoke",
-    "ci-tests",
-    "ai-review",
-    "claude-review",
-    "feature-flag-gate",
-    "pr-title",
-    "next-public-secrets",
-    "secret-scan",
-  ];
 
   assert.equal(policy.topology.repository_default_branch, "production");
-  assert.deepEqual(policy.required_checks.contexts, required);
-  assert.deepEqual(policy.required_checks.automerge_also_requires, [
-    "app-smoke",
-    "browser-smoke",
-    "ci-tests",
-    "feature-flag-gate",
-  ]);
+  assert.deepEqual(policy.required_checks.contexts, ["pstack-verifier"]);
+  const automerge = await readFile(".github/workflows/automerge.yml", "utf8");
+  const automergeRequired = [...automerge.matchAll(/REQUIRED="(?:\$REQUIRED )?([^"]+)"/g)]
+    .flatMap((match) => match[1].split(" "))
+    .sort();
   assert.deepEqual(
-    policy.policies.production_ruleset.required_status_checks,
-    required,
+    [...policy.required_checks.automerge_also_requires].sort(),
+    automergeRequired,
+    "automerge_also_requires must mirror the REQUIRED list in automerge.yml",
   );
+  assert.deepEqual(policy.policies.production_ruleset.required_status_checks, ["pstack-verifier"]);
 });
 
 test("npm registry proxy refuses arbitrary CONNECT targets", async (t) => {

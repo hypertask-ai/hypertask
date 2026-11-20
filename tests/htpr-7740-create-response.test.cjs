@@ -33,6 +33,7 @@ function harness({ enabled = true, tasks = [], section = { id: 9, section_title:
         if (!section || (query.where.id && query.where.id !== section.id)) return null;
         return section;
       } },
+      project: { findFirst: async () => ({ id: 15, name: "project-15", title: "Hypertask Product", status: "Normal" }) },
     } },
     "@/utils/controllers/tasks/create": { default: async (data) => {
       if (createError) throw createError;

@@ -6,7 +6,7 @@
 
 ## How to get to it (user POV)
 
-The feature-flag-gate and ux-signoff checks on pull requests to production use trusted production code and post commit statuses. Feature-flag PR events evaluate only their target; fleet reconciliation runs on a fifteen-minute schedule. This is infrastructure, with no app UI or account writes.
+The feature-flag-gate and ux-signoff checks use trusted production code and post commit statuses. Feature-flag pull request events evaluate only their target; fleet reconciliation runs on a fifteen-minute schedule. The ux-signoff gate runs only on that hourly dispatch and on manual dispatch, not on pull request events (HTPR-9450). This is infrastructure, with no app UI or account writes.
 
 ## Driving it with agent-browser
 

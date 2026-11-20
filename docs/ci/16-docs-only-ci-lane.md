@@ -1,21 +1,13 @@
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
-Required `app-smoke` and `browser-smoke` still report success when every changed
-file is documentation, skills or `tests/**` outside `src/`; both browser halves
-skip their heavy steps and the summary job reads their success (HYCI-32). The shared
-`.github/scripts/ci-change-scope.cjs` emits `heavy_needed=false` for `docs/**`,
-`.claude/**`, `skills/**`, `.agents/skills/**`, `tests/**` and Markdown outside
-`src/`. Source files (even Markdown), dependency files and CI/harness code run
-smoke normally. Empty/unknown diffs and detector failures run the heavy lane.
-Production pushes always run everything.
-
-App Smoke determines scope in its trusted validation job and publishes
-`app-smoke: success` with `docs-only change, skipped` without starting its build
-job. Browser smoke keeps its successful required job and explicit scope output,
-but skips install/build/tests with a clear log line. Its PostgreSQL, Redis and
-Soketi job-level services still start. Neither required workflow uses path skips.
-Visual Regression keeps its narrow screen/harness path filter and excludes
-Markdown; unit-test-only changes do not start it.
+HTPR-9450 keeps both smoke contexts as PR stubs.
+This includes docs-only and source-changing PRs.
+Neither stub starts services, builds, or browsers.
+The real browser shards run on production pushes.
+They also run nightly, using the existing scope detector.
+`app-smoke-nightly.yml` runs against the event's production SHA, and only when the ref is `production`, so a manual dispatch from a branch cannot smoke the branch.
+Manual App Smoke requests retain their scope detector.
+Visual comparison runs nightly and remains available manually.
 
 The stricter existing `build_needed` output for `ci-tests` is unchanged: changed
 unit tests still run. Its legacy docs-only exclusions remain `docs/`, `.claude/`,

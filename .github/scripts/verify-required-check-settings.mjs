@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
+const APP_INTEGRATIONS = { "pstack-verifier": 5264284 };
 const maxWaitSeconds = 3900;
 const deadline = Date.now() + 4_000_000;
 const proofPath = process.env.SETTINGS_PROOF || ".settings-proof/last-verified.json";
@@ -147,21 +148,28 @@ try {
         ruleset.conditions.ref_name.exclude.includes("refs/heads/production")) {
       throw new Error("The required-check ruleset does not protect production.");
     }
-    const expected = [
-      "app-smoke", "ci-tests", "ai-review", "claude-review", "feature-flag-gate",
-      "next-public-secrets", "pr-title", "secret-scan", "browser-smoke",
-    ].sort();
-    const actual = [...new Set(ruleset.rules
+    const expected = ["pstack-verifier"].sort();
+    const checks = ruleset.rules
       .filter((rule) => rule.type === "required_status_checks")
-      .flatMap((rule) => rule.parameters.required_status_checks.map((check) => check.context)))].sort();
+      .flatMap((rule) => rule.parameters.required_status_checks);
+    const actual = [...new Set(checks.map((check) => check.context))].sort();
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      throw new Error("Live required checks do not match docs/ci-policy.yml.");
+      throw new Error("Live required checks do not match docs/ci-policy.yml: pstack-verifier is the whole set.");
+    }
+    console.log(`Required-check settings: the live ruleset requires ${actual.join(", ")} and nothing else.`);
+    const integrations = Object.fromEntries(checks.map((check) => [check.context, check.integration_id]));
+    for (const check of checks) {
+      const pinned = APP_INTEGRATIONS[check.context] ?? 15368;
+      if (check.integration_id !== pinned) {
+        throw new Error(pinned === 15368 ? `Required check ${check.context} is missing GitHub Actions integration_id 15368.` : `Required check ${check.context} integration must be ${pinned}.`);
+      }
     }
     recordVerified({
       repository: repo,
       defaultBranch: repository.default_branch,
       rulesetId: matches[0].id,
       contexts: actual,
+      integrations,
     });
     publishResult(true);
     console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);

@@ -39,8 +39,8 @@ Read linked sections on demand, not every reference.
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
 | Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
 | UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
-| Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-qa/SKILL.md](.claude/skills/verify-qa/SKILL.md) |
-| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-on-phone/SKILL.md](.claude/skills/verify-on-phone/SKILL.md) |
+| Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
+| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
 | App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
 | pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
 | Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |
@@ -52,3 +52,13 @@ Runners never switch a flag Off; Off is Valentin's own safety switch.
 `src/` enforces comment rules through `local/no-comments`.
 
 Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

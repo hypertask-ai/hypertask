@@ -6,6 +6,10 @@
 # from inside the worktree with your work committed on the current branch.
 #
 # Run `open-pr.sh --help` for usage and examples.
+#
+# One open PR per runner (HTPR-9519): a runner that already has an open, non-draft
+# PR in hypertask-ai/hypertask is refused here, before the push. The rule is code
+# because a rule that lives only in markdown does not hold.
 set -euo pipefail
 
 SELF="open-pr"
@@ -40,6 +44,12 @@ Usage:
              [--remote <name>] [--base <branch>] [--dry-run] [--help]
 
 TYPE is BUGFIX, FEATURE or INFRA. The PR title becomes "<TICKET> [<TYPE>] <title>".
+
+Before it pushes, the script refuses a second open PR: a runner that already has
+an open, non-draft PR counts down to one. The runner is named by
+SHIP_SESSION_NAME (or the identity ship-identity resolves) and by the branch
+prefix it uses (runner-3/, runner3/, ci-runner-3/, boss/). Drafts and Dependabot
+branches never count; neither does the owner's own session.
 
 Before it pushes, the script runs .github/scripts/pr-preflight.cjs: the title
 must have the shape (HTPR|HYFA|YPER4|HYCI)-<n> [TAG] <summary>, and the diff
@@ -173,6 +183,56 @@ preflight() {
     || die "the pull request would be refused before opening (see the message above)." "Fix the title shape or split the diff, then re-run. Nothing was pushed."
 }
 
+owner_name() {  # who this session is, the way the rest of the repo names it
+  local name=${SHIP_SESSION_NAME:-}
+  if [ -z "$name" ]; then
+    name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity" 2>/dev/null | cut -f1) || return 1
+  fi
+  printf '%s' "${name%% | *}"
+}
+
+refuse_second_pr() {  # HTPR-9519: one open PR per runner at a time
+  local name branch prs mine
+  name="$(owner_name)" \
+    || die "the session identity could not be read, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name, or check that .claude/skills/ship/scripts/ship-identity runs; nothing was pushed."
+  [ -n "$name" ] \
+    || die "the session identity is empty, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name and re-run; nothing was pushed."
+  case "$name" in
+    'Valentins Claude Code') return 0 ;;  # the owner's own session, not a runner
+  esac
+  branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  prs="$(gh pr list -R hypertask-ai/hypertask --state open --limit 300 \
+    --json number,isDraft,headRefName 2>/dev/null)" \
+    || die "the open pull requests could not be read, so $SELF cannot tell whether $name already has one." "Retry when 'gh pr list -R hypertask-ai/hypertask --state open' works; nothing was pushed."
+  mine="$(printf '%s' "$prs" | python3 -c '
+import json, re, sys
+name, branch = sys.argv[1], sys.argv[2]
+key = lambda s: re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", s.lower())).strip("-")
+words = [w for w in re.split(r"[^A-Za-z0-9]+", name) if w]
+prefixes = {key(name)}
+tail = key(words[-1]) if words else ""
+if len(tail) > 2 and tail not in {"runner", "ci", "hax", "infra", "ceo"}:
+    prefixes.add(tail)
+slot = re.search(r"(?:^|[^a-z0-9])runner[-_ ]?([1-9][0-9]*)", name, re.I)
+if slot:
+    prefixes |= {"runner-" + slot.group(1), "runner" + slot.group(1)}
+def mine(pr):
+    head = str(pr.get("headRefName") or "").lower()
+    if head.startswith("dependabot/") or head == branch.lower():
+        return False
+    return any(re.match(re.escape(p) + r"($|[/_-])", head) for p in prefixes)
+try:
+    prs = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+print("\n".join("https://github.com/hypertask-ai/hypertask/pull/%d" % pr["number"]
+                for pr in prs if isinstance(pr, dict) and type(pr.get("number")) is int
+                and pr.get("isDraft") is False and mine(pr)))
+' "$name" "$branch")" \
+    || die "the open pull request list could not be read for $name." "Retry when 'gh pr list -R hypertask-ai/hypertask --state open' works; nothing was pushed."
+  [ -z "$mine" ] || die "$name already has $(printf '%s\n' "$mine" | wc -l | tr -d ' ') open pull request(s): ${mine%%$'\n'*}$(printf '%s\n' "$mine" | sed -n '2s/.*/ (and more)/p'). $SELF opens one PR per runner." "Finish it (Babysit to a verifier PASS) or close it first, then re-run. Nothing was pushed."
+}
+
 run() {  # echoes a paste-able command in dry runs, runs it otherwise
   if [ "$DRY_RUN" = "yes" ]; then
     printf 'DRY RUN:'; shq "$@"; printf '\n'
@@ -186,6 +246,7 @@ if [ "$DRY_RUN" = "yes" ]; then
   git fetch "$REMOTE" "$BASE" \
     || die "git fetch $REMOTE $BASE failed, so the size check has no base to measure against." "Check 'git remote -v' and that the branch '$BASE' exists on '$REMOTE', or pass --base with the right branch."
   preflight
+  refuse_second_pr
   run git push -u "$REMOTE" HEAD
   run gh pr create --base "$BASE" --title "$PR_TITLE" --body-file "$BODY_FILE"
   run vcc task move "$TICKET" --section "$SECTION"
@@ -199,6 +260,7 @@ fi
 git fetch "$REMOTE" "$BASE" \
   || die "git fetch $REMOTE $BASE failed, so the base branch is unknown here." "Check 'git remote -v' and that the branch '$BASE' exists on '$REMOTE', or pass --base with the right branch."
 preflight
+refuse_second_pr
 git push -u "$REMOTE" HEAD \
   || die "git push to $REMOTE failed, so there is nothing for GitHub to open a PR against." "Run 'git status' to confirm the work is committed, then 'git push -u $REMOTE HEAD' by hand to read the real git error."
 

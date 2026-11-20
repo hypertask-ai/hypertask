@@ -19,8 +19,7 @@ async function workflowScript() {
     .join('\n')
 }
 
-async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
-  const omitBrowserSmoke = Boolean(arguments[0] && arguments[0].omitBrowserSmoke)
+async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitPstackVerifier = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '', commitStatuses } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
   const runnerTemp = join(directory, 'runner-temp')
@@ -31,6 +30,11 @@ async function runWorkflow({ failTemp = false, failList = false, failView = fals
   const prTitle = title ?? (speed ? '[SPEED] Optimize the app' : 'Safe change')
   const commentsJson = JSON.stringify(comments ?? [{ body: `APPROVE\nreviewed-commit: ${head}` }])
   const reviewChecksJson = JSON.stringify(reviewChecks ?? [{ name: 'claude-review', conclusion: 'SUCCESS', startedAt: '2026-08-11T10:00:00Z' }]).slice(1, -1)
+  const appStatus = { context: 'pstack-verifier', state: 'success', creator: { login: 'hypertask-runners[bot]' }, updated_at: '2026-08-11T10:00:00Z' }
+  const statusRows = [
+    ...(speed && speedQa ? [{ context: 'speed-qa', state: 'success', creator: { login: speedQaCreator }, updated_at: '2026-08-11T10:00:00Z' }] : []),
+    ...(omitPstackVerifier ? [] : (commitStatuses ?? [appStatus])),
+  ]
   const gh = `#!/usr/bin/env bash
 set -u
 if [ "$1" = "api" ] && [[ " $* " == *"repos/owner/repository/issues/42/comments"* ]]; then
@@ -56,11 +60,11 @@ if [ "$1 $2" = "pr view" ]; then
     exit 0
   fi
   pr_view_json=$(cat <<'JSON'
-{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[${omitAppSmoke ? '' : '{"name":"app-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},'}{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},${reviewChecksJson},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
+{"number":42,"title":${JSON.stringify(prTitle)},"isDraft":false,"isCrossRepository":false,"mergeable":"${failMergeability || unknownMergeability ? 'UNKNOWN' : 'MERGEABLE'}","baseRefName":"production","headRefOid":"${head}","headRepositoryOwner":{"login":"owner"},"labels":[],"statusCheckRollup":[{"name":"ci-tests","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},${reviewChecksJson},{"name":"next-public-secrets","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"revert-guard","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"pr-title","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"feature-flag-gate","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"visual-regression","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-evidence","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"speed-qa","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"},{"name":"vercel-build","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}],"comments":${commentsJson}}
 JSON
 )
-  if [ "\${GH_STUB_OMIT_BROWSER_SMOKE:-}" != "1" ]; then
-    pr_view_json=$(printf '%s' "$pr_view_json" | jq '.statusCheckRollup += [{"name":"browser-smoke","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}]')
+  if [ "\${GH_STUB_OMIT_PSTACK_VERIFIER:-}" != "1" ]; then
+    pr_view_json=$(printf '%s' "$pr_view_json" | jq '.statusCheckRollup += [{"name":"pstack-verifier","conclusion":"SUCCESS","startedAt":"2026-08-11T10:00:00Z"}]')
   fi
   printf '%s\\n' "$pr_view_json"
   exit 0
@@ -80,7 +84,7 @@ if [ "$1" = "api" ] && [[ " $* " == *"/issues/42/events"* ]]; then
   exit 0
 fi
 if [ "$1" = "api" ] && [[ " $* " == *"/statuses"* ]]; then
-  ${speed && speedQa ? `echo '[{"context":"speed-qa","state":"success","creator":{"login":"${speedQaCreator}"},"updated_at":"2026-08-11T10:00:00Z"}]'` : "echo '[]'"}
+  printf '%s\\n' ${JSON.stringify(JSON.stringify([statusRows]))}
   exit 0
 fi
 if [ "$1 $2" = "pr diff" ]; then echo ${JSON.stringify(changedFile)}; exit 0; fi
@@ -156,7 +160,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
         GH_STUB_EXEMPT_UI: exemptUi ? '1' : '',
         GH_STUB_INVALID_GATE_DECISION: invalidGateDecision ? '1' : '',
         GH_STUB_UNKNOWN_MERGEABILITY: unknownMergeability ? '1' : '',
-        GH_STUB_OMIT_BROWSER_SMOKE: omitBrowserSmoke ? '1' : '',
+        GH_STUB_OMIT_PSTACK_VERIFIER: omitPstackVerifier ? '1' : '',
         EXPECTED_PR_TITLE: prTitle,
         EXPECTED_BASE_SHA: 'b'.repeat(40),
         EXPECTED_HEAD_SHA: head,
@@ -226,30 +230,9 @@ test('auto-merge evaluates and merges a ready PR with isolated scratch state', a
 
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /MERGED #42/)
-  assert.match(result.stdout, /check pr-title = SUCCESS/)
+  assert.match(result.stdout, /check pstack-verifier = SUCCESS/)
   assert.match(result.stdout, /feature-flag-gate re-evaluation = PASS/)
   assert.deepEqual(scratchEntries, [])
-})
-
-test('auto-merge accepts either review context and ignores a failing obsolete counterpart', async () => {
-  for (const [good, bad] of [['claude-review', 'ai-review'], ['ai-review', 'claude-review']]) {
-    const { result } = await runWorkflow({ reviewChecks: [
-      { name: bad, conclusion: 'FAILURE', startedAt: '2026-08-11T10:01:00Z' },
-      { name: good, conclusion: 'SUCCESS', startedAt: '2026-08-11T10:00:00Z' },
-    ] })
-    assert.equal(result.status, 0, result.stderr)
-    assert.match(result.stdout, /check ai-review = SUCCESS/)
-    assert.match(result.stdout, /MERGED #42/)
-  }
-})
-
-test('auto-merge waits when neither review context succeeds', async () => {
-  const { result } = await runWorkflow({ reviewChecks: [
-    { name: 'claude-review', conclusion: 'FAILURE' },
-    { name: 'ai-review', conclusion: 'PENDING' },
-  ] })
-  assert.equal(result.status, 0, result.stderr)
-  assert.doesNotMatch(result.stdout, /MERGED #42/)
 })
 
 test('auto-merge re-evaluates current feature-flag metadata before merging', async () => {
@@ -299,22 +282,22 @@ test('auto-merge refuses fork and shared heads at the final feature-flag boundar
   }
 })
 
-test('auto-merge refuses a PR without the app smoke result', async () => {
-  const { result, scratchEntries } = await runWorkflow({ omitAppSmoke: true })
+test('auto-merge refuses a PR without the pstack verifier result', async () => {
+  const { result, scratchEntries } = await runWorkflow({ omitPstackVerifier: true })
 
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /check app-smoke = MISSING/)
+  assert.match(result.stdout, /check pstack-verifier = MISSING/)
   assert.doesNotMatch(result.stdout, /MERGED #42/)
   assert.deepEqual(scratchEntries, [])
 })
 
-test('auto-merge refuses a PR without the browser smoke result', async () => {
-  const { result, scratchEntries } = await runWorkflow({ omitBrowserSmoke: true })
-
-  assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /check browser-smoke = MISSING/)
-  assert.doesNotMatch(result.stdout, /MERGED #42/)
-  assert.deepEqual(scratchEntries, [])
+test('auto-merge reads the app status, not the Actions rollup, for the verifier', async () => {
+  const row = (login, state, at) => ({ context: 'pstack-verifier', state, creator: { login }, updated_at: at })
+  const forged = await runWorkflow({ commitStatuses: [row('github-actions[bot]', 'success', '2026-08-11T11:00:00Z'), row('hypertask-runners[bot]', 'failure', '2026-08-11T10:00:00Z')] })
+  assert.match(forged.result.stdout, /check pstack-verifier = FAILURE hypertask-runners\[bot\]/)
+  assert.doesNotMatch(forged.result.stdout, /MERGED #42/)
+  const ignored = await runWorkflow({ commitStatuses: [row('github-actions[bot]', 'failure', '2026-08-11T11:00:00Z'), row('hypertask-runners[bot]', 'success', '2026-08-11T10:00:00Z')] })
+  assert.match(ignored.result.stdout, /MERGED #42/)
 })
 
 test('a Prisma migration auto-merges like any other change', async () => {

@@ -32,14 +32,13 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
-# One line for the whole lane, sweep runs included, so a sweep and a PR event can
-# never read the same pull request at once and file two tickets for it. Nothing
-# is cancelled: a run that is midway through filing a ticket must finish, so a
-# newer event waits in the queue instead of replacing it.
+# One group per pull request. A newer event cancels the older run of that same
+# pull request. A sweep uses its own key, so it does not cancel a pull request
+# that is filing a ticket. queue: max is absent because GitHub rejects it beside
+# cancellation (HYCI-107, HYCI-182).
 concurrency:
-  group: dependabot-lane
-  queue: max
-  cancel-in-progress: false
+  group: dependabot-lane-${{ github.event.pull_request.number || 'schedule' }}
+  cancel-in-progress: true
 
 # Labels, comments and reading the pull request only. Arming a small bump's
 # auto-merge needs the PAT instead, because a merge performed with GITHUB_TOKEN
@@ -47,6 +46,7 @@ concurrency:
 # happens when the repository allows auto-merge at all, and it is off today. The
 # old labeller ended its life red on every small bump over exactly that setting.
 permissions:
+  actions: read
   contents: read
   pull-requests: write
 

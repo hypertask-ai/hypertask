@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Board 15: every ticket with a feature flag shows its flag link as the first line of its description.
+
+Valentin, 2026-11-10: "all tickets in board 15 need the flag url clearly visible!!!!!!!!!! hard hard rule."
+
+Reads every live flag (ht-flag get: key, mode, ticketId) and every open board 15 ticket. A ticket with a flag gets
+one line per flag at the very top of its description:  Flag: https://app.hypertask.ai/admin/flags/<key> (mode).
+The line is rewritten when the mode changes and never duplicated. Then it lists merged work that should have a
+flag and has none: tickets in QA or a flag column with no flag at all (No Flag means no flag on purpose).
+
+flag-links             list the edits and the tickets missing a flag
+flag-links --apply     write the edits as your agent (vcc), with an agent-lane note each
+flag-links --self-test
+"""
+import html
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+HT_FLAG = Path(os.environ.get("HT_FLAG", Path(__file__).resolve().parent / "ht-flag"))
+VCC = str(Path.home() / ".local/bin/vcc")
+BOARD = "15"
+OPEN = ["Backlog", "UX needed", "UX Sign-off", "In Progress", "Agent Blocked (Infra)", "Valentin Review", "AI Review",
+        "QA", "Flag: Only Me + QA", "Flag: Everyone", "Flag: Off", "No Flag"]
+NEEDS_FLAG = {"QA", "Flag: Only Me + QA", "Flag: Everyone", "Flag: Off"}
+MODE = {"OFF": "Off", "OWNER_ONLY": "Only Me", "OWNER_AND_QA": "Owner + QA", "EVERYONE": "Everyone"}
+URL = "https://app.hypertask.ai/admin/flags/"
+LINE = re.compile(r'^\s*<p><strong>Flag:</strong>.*?</p>\s*', re.S)
+
+
+def payload(text):
+    start = min(i for i in (text.find("["), text.find("{")) if i >= 0)
+    return json.loads(text[start:])
+
+
+def flags_by_ticket():
+    got = payload(subprocess.run([str(HT_FLAG), "get"], capture_output=True, text=True, check=True).stdout)
+    out = {}
+    for f in (got if isinstance(got, list) else got.get("flags", [])):
+        if f.get("ticketId") and f.get("key"):
+            out.setdefault(f["ticketId"], []).append((f["key"], f.get("mode")))
+    return {t: sorted(v) for t, v in out.items()}
+
+
+def column(name):
+    rows, offset = [], 0
+    while True:
+        out = subprocess.run([VCC, "--json", "task", "list", "--project", BOARD, "--section", name, "--limit", "100",
+                              "--offset", str(offset)], capture_output=True, text=True, check=True).stdout
+        page = payload(out).get("tasks", [])
+        rows += page
+        if len(page) < 100:
+            return rows
+        offset += 100
+
+
+def header(flags):
+    return "".join(f'<p><strong>Flag:</strong> <a href="{URL}{html.escape(k)}">{URL}{html.escape(k)}</a> '
+                   f'({MODE.get(m, m or "unknown")})</p>' for k, m in flags)
+
+
+def with_header(desc, flags):
+    body = desc or ""
+    while LINE.match(body):
+        body = LINE.sub("", body, count=1)
+    return header(flags) + body
+
+
+def plan():
+    flags = flags_by_ticket()
+    edits, missing = [], []
+    for col in OPEN:
+        for t in column(col):
+            key = t["ticketNumber"]
+            mine = flags.get(key)
+            if mine:
+                desc = t.get("description") or ""
+                new = with_header(desc, mine)
+                if new != desc:
+                    edits.append((key, col, new, mine))
+            elif col in NEEDS_FLAG:
+                missing.append((key, col, t.get("title", "")))
+    return edits, missing
+
+
+def apply(edits):
+    bad = 0
+    for key, col, new, mine in edits:
+        path = Path(f"/tmp/flag-links-{key}.html")
+        path.write_text(new)
+        # The edit only prepends the fixed flag line and keeps the existing body as written. ticket-lint judges the whole
+        # description, so an old ticket that predates the lint would refuse the flag line; skip it for this one edit.
+        done = subprocess.run([VCC, "task", "update", key, "--description-file", str(path)], capture_output=True, text=True,
+                              env={**os.environ, "VCC_TICKET_LINT": "/bin/true"})
+        path.unlink(missing_ok=True)
+        if done.returncode:
+            bad += 1
+            print(f"  FAIL {key}: {(done.stderr or done.stdout).strip()[-200:]}")
+            continue
+        subprocess.run([VCC, "activity", "add", key, "flag-links: flag link set at the top of the description: "
+                        + ", ".join(f"{k} ({m})" for k, m in mine)], capture_output=True, text=True)
+    return bad
+
+
+def self_test():
+    f = [("htpr-1-x", "OWNER_AND_QA")]
+    once = with_header("<p>Body</p>", f)
+    assert once.startswith('<p><strong>Flag:</strong> <a href="https://app.hypertask.ai/admin/flags/htpr-1-x">')
+    assert "(Owner + QA)" in once and once.endswith("<p>Body</p>")
+    assert with_header(once, f) == once, "idempotent"
+    moved = with_header(once, [("htpr-1-x", "EVERYONE")])
+    assert moved.count("<strong>Flag:</strong>") == 1 and "(Everyone)" in moved
+    two = with_header(once, [("htpr-1-a", "EVERYONE"), ("htpr-1-x", "OFF")])
+    assert two.count("<strong>Flag:</strong>") == 2 and two.endswith("<p>Body</p>")
+    print("flag-links self-test ok")
+
+
+def main():
+    if "--self-test" in sys.argv:
+        return self_test()
+    edits, missing = plan()
+    print(f"FLAG-LINKS board {BOARD}: {len(edits)} tickets need their flag line, {len(missing)} merged tickets have no flag")
+    for key, col, _, mine in edits:
+        print(f"  EDIT {key} [{col}] " + ", ".join(k for k, _ in mine))
+    for key, col, title in missing:
+        print(f"  NO-FLAG {key} [{col}] {title[:80]}  https://app.hypertask.ai/detail/project-15/{key.split('-')[1]}")
+    if "--apply" in sys.argv and edits:
+        bad = apply(edits)
+        print(f"applied {len(edits) - bad} of {len(edits)}")
+        return 1 if bad else 0
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

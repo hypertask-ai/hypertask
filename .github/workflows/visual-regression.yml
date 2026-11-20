@@ -9,6 +9,7 @@ on:
     branches: [production]
   schedule:
     - cron: '5 4 * * 1'
+    - cron: '53 3 * * *'
   workflow_dispatch:
     inputs:
       base:
@@ -33,7 +34,7 @@ concurrency:
 jobs:
   visual-regression:
     name: visual-regression
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual'))
+    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
@@ -247,7 +248,7 @@ jobs:
     name: verify-qa
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.journey != '' && inputs.journey != 'visual')
-      || github.event_name == 'schedule'
+      || (github.event_name == 'schedule' && github.event.schedule == '5 4 * * 1')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:

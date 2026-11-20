@@ -5,10 +5,18 @@
 - `percentage-only-allowance-copy` Percentage-only allowance copy.
 - `local-daily-usage-check` Local daily usage check.
 - `usage-attribution-htpr-7851` Usage attribution (HTPR-7851).
+- `batch-background-ai` With `htpr-7098-batch-background-ai` on, Slack thread summaries and smart-label backfills that bill a Hypertask gateway key are sent to the Anthropic batch path at half price and finish later. A customer key stays on the instant path. If the batch submit fails, the backfill runs immediately. Off runs both jobs immediately.
+- `baseten-byok` With `htpr-7732-baseten-byok` on, a paid team’s Bring your own key screen adds a Baseten row. The row takes a Baseten API key and lists DeepSeek V4.1 Flash, DeepSeek V4.1 Flash Fast, Kimi K3.1 Pro, and GLM-5.3 Flash. The connection test calls DeepSeek V4.1 Flash. Off hides the row, skips Baseten routing, and the test answers “Baseten is unavailable”.
+- `own-key-rejected` With `htpr-7751-own-key-rejected` on, chat names the rejected own key and says to update it in Settings, AI, Bring your own key. The named providers are OpenAI, Claude, Google, Moonshot, Z.ai, Alibaba, OpenRouter, custom, and Baseten. That reply shows Retry. A DeepSeek own-key failure keeps its existing refusal. Off keeps the generic chat failure.
+- `team-ai-breakdown` With `htpr-7788-team-ai-breakdown` on, Settings AI usage shows one card for every team the viewer owns, plus the open team if it is missing from that list. Each card shows the monthly percentage, By model, By feature, and Most active boards. By member is included only for the team owner, and only when the team is not paying with its own key. Off keeps the single selected-team page.
+- `always-use-this-key` With `htpr-8049-always-use-this-key` on, a team owner sees Always use this key on each saved, enabled key in Bring your own key. Turning one on clears the others. The model picker then lists only that key’s models. A request that cannot use the key pauses and says the allowance is not used. Off hides the switch.
+- `qwen-max-byok` With `htpr-8207-qwen-max-byok` on, the Alibaba connection test calls Qwen3.8 Max, and the model pickers add GLM-5.3 and Gemini 3.1 Pro Preview. Off tests Alibaba with Qwen3.7 Plus and hides those two models.
 
 ## How to get to it (user POV)
 
 Open a team board, then Settings > Team > AI usage (`/settings/ai-usage`). The selected settings team controls the request to `/api/settings/ai-usage?teamId=...`; board admins also send `projectId`.
+
+Bring your own key is Settings > Team > AI > Bring your own key. The Baseten row, the Always use this key switch, and the Alibaba test live on that screen. The named own-key rejection appears in the chat transcript, not on the usage page.
 
 ## Driving it with agent-browser
 
@@ -18,6 +26,11 @@ Open a team board, then Settings > Team > AI usage (`/settings/ai-usage`). The s
 4. Check a successful report on an available QA team: model breakdown and allowance display remain present. Managed/shared failures must not blame a customer's key. Never edit keys, spend funds, change plans or replace a capped key for this check.
 5. Check desktop 1440x900 and phone 390x844 in Porcelain, Graphite, AMOLED and Dia. The existing Gateway card must contain readable copy, without moving the settings shell.
 6. Off retains the generic failure. Exercise rollback and 403 fixtures in the isolated route/component tests; never flip production modes merely to manufacture coverage.
+7. For `htpr-7788-team-ai-breakdown`, open AI usage as a team owner. Count one card per owned team. Open By model, By feature, and Most active boards only when that card’s response has rows. Confirm By member is absent for a non-owner and for a team on its own key. Do not change teams.
+8. For `htpr-7732-baseten-byok` and `htpr-8049-always-use-this-key`, open Bring your own key on a paid team as the owner. Confirm the Baseten row and the Always use this key switch are visible. Do not save a key, run a test, or turn the switch on. A free plan hides the whole screen.
+9. For `htpr-8207-qwen-max-byok`, open the model picker and confirm GLM-5.3 and Gemini 3.1 Pro Preview are listed. Do not run the Alibaba connection test.
+10. For `htpr-7751-own-key-rejected`, do not provoke a provider rejection. The on-state copy is “Your {provider} key was rejected. Update it in Settings, AI, Bring your own key.” Retry is the only action on that assistant message.
+11. For `htpr-7098-batch-background-ai`, do not start a label backfill or a Slack summary. On sends eligible gateway-key work to the batch path at half price. A customer key, a failed submit, and Off all stay on the immediate path.
 
 ### Percentage-only allowance copy
 
@@ -31,6 +44,9 @@ As QA 985, compare `/settings/ai-usage` against its actual successful `/api/sett
 - A report-only permissions failure is misreported as a revoked key.
 - A managed-key failure blames a customer's key.
 - Successful usage disappears or the selected team changes.
+- Team AI usage shows one card, or By member, for a team the viewer does not own.
+- Always use this key is switched on during the check, or a Baseten or Alibaba test is sent.
+- A customer-key Slack summary or label backfill is treated as proof of the batch path.
 
 ### What proof to collect
 

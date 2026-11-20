@@ -89,7 +89,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   const visualRegressionOnly = yaml.dump({ jobs: { "visual-regression": job } });
   assert.doesNotMatch(visualRegressionOnly, /secrets\.|: write|workflow_run|pull_request_target/);
   assert.doesNotMatch(workflow, /workflow_run|pull_request_target/);
-  assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1"]);
+  assert.deepEqual(parsed.on.schedule.map(entry => entry.cron), ["5 4 * * 1", "53 3 * * *"]);
   const weeklyFiling = parsed.jobs["verify-qa"].steps.find(step => step.name === "File fleet-board weekly result");
   assert.equal(weeklyFiling.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_FLEET_BOARD_MCP_TOKEN }}");
   const filesWeekly = (event, { journey = "", head = "" } = {}) => vm.runInNewContext(
@@ -100,23 +100,25 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.equal(filesWeekly("workflow_dispatch", { journey: "inbox-cycle", head: "runner7/hyci-205" }), false);
   assert.equal(filesWeekly("workflow_dispatch", { journey: "inbox-cycle-broken", head: "production" }), false);
   assert.equal(filesWeekly("push"), false);
-  const evaluate = (expression, event, journey) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
-    github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production", sha: "push-sha" },
+  const evaluate = (expression, event, journey, cron) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
+    github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false }, schedule: cron }, ref: "refs/heads/production", sha: "push-sha" },
     inputs: { journey }, format: (template, value) => template.replace("{0}", value),
   });
-  for (const [event, journey, group, cancel, visual, verify] of [
-    ["push", "", "visual-regression-push-sha", false, true, false],
-    ["schedule", "", "feature-map-live-weekly", false, false, true],
-    ["workflow_dispatch", "", "visual-regression-push-sha", true, true, false],
-    ["workflow_dispatch", "visual", "visual-regression-push-sha", true, true, false],
-    ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true],
-    ["workflow_dispatch", "inbox-cycle-broken", "verify-qa", false, false, true],
+  for (const [event, journey, group, cancel, visual, verify, cron] of [
+    ["push", "", "visual-regression-push-sha", false, true, false, undefined],
+    ["schedule", "", "feature-map-live-weekly", false, true, true, "5 4 * * 1"],
+    ["schedule", "", "feature-map-live-weekly", false, true, false, "53 3 * * *"],
+    ["workflow_dispatch", "", "visual-regression-push-sha", true, true, false, undefined],
+    ["workflow_dispatch", "visual", "visual-regression-push-sha", true, true, false, undefined],
+    ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true, undefined],
+    ["workflow_dispatch", "inbox-cycle-broken", "verify-qa", false, false, true, undefined],
   ]) {
-    assert.equal(evaluate(parsed.concurrency.group, event, journey), group);
-    assert.equal(evaluate(parsed.concurrency["cancel-in-progress"], event, journey), cancel);
-    assert.equal(evaluate(job.if, event, journey), visual);
-    assert.equal(evaluate(parsed.jobs["verify-qa"].if, event, journey), verify);
+    assert.equal(evaluate(parsed.concurrency.group, event, journey, cron), group);
+    assert.equal(evaluate(parsed.concurrency["cancel-in-progress"], event, journey, cron), cancel);
+    assert.equal(evaluate(job.if, event, journey, cron), visual);
+    assert.equal(evaluate(parsed.jobs["verify-qa"].if, event, journey, cron), verify);
   }
+  assert.equal(evaluate(parsed.jobs["verify-qa"].if, "schedule", "", "53 3 * * *"), false, "the daily visual cron must not start the weekly inbox journey");
   assert.match(parsed.concurrency["cancel-in-progress"], /github\.event_name != 'push' \}\}$/);
   const groupFor = (event, journey, head) => vm.runInNewContext(
     parsed.concurrency.group.replace(/^\$\{\{\s*|\s*\}\}$/g, ""),
@@ -404,6 +406,9 @@ test("five full-viewport screens use real theme/time, cached ticket navigation, 
   assert.ok(spec.includes("test.step('page height settles before scrolling to the last comment'"));
   assert.doesNotMatch(spec, /scrollIntoViewIfNeeded|parent\.scrollTop|scrollingElement|ticket-comment'\)\.last\(\)|data-task-composer-slot/);
   assert.match(spec, /keyboard\.press\('Control\+j'\)/);
+  assert.match(spec, /readFileSync\(path\.join\(__dirname, '\.\.\/\.\.\/src\/lib\/firstScreen\/inboxZero\.ts'\)/);
+  assert.match(spec, /page\.route\(url => rewardImageUrls\.some\(image => url\.href\.includes\(image\) \|\| url\.href\.includes\(encodeURIComponent\(image\)\)\), route => route\.fulfill\(\{/);
+  assert.ok(spec.indexOf('page.route(') < spec.indexOf("navigate(page, '/inbox')"));
   assert.match(spec, /navigate\(page, '\/inbox'\)/);
   assert.match(spec, /getByAltText\('Inbox zero reward background'\)/);
   assert.match(spec, /image\.complete\)/);

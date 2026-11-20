@@ -34,22 +34,23 @@ test('native scanner checks retain required names without commit-status API call
   }
 });
 
-test('trusted publication combines outside and title guards without exposing candidate code', () => {
+test('trusted publication combines outside, title and feature-map guards without exposing candidate code', () => {
   const w = workflow('pr-guards-trusted');
   assert.deepEqual(Object.keys(w.jobs), ['pr-guards-trusted', 'bind-ticket']);
   assert.deepEqual(Object.keys(w.on), ['pull_request_target', 'workflow_dispatch']);
-  assert.equal(w.concurrency.group, 'pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}');
-  assert.equal(w.concurrency.queue, 'max');
-  assert.equal(w.concurrency['cancel-in-progress'], false);
+  assert.equal(w.concurrency.group, 'pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}-${{ github.run_attempt }}');
+  assert.equal(w.concurrency.queue, undefined);
+  assert.equal(w.concurrency['cancel-in-progress'], true);
   const steps = w.jobs['pr-guards-trusted'].steps;
-  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'runner-policy']);
+  assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'feature-map', 'runner-policy']);
   const checkout = steps.find(step => step.uses?.startsWith('actions/checkout@'));
   assert.equal(checkout.with.ref, 'production');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.ok(steps.every(step => !step['continue-on-error']));
-  for (const id of ['outside', 'size', 'title', 'runner-policy']) {
+  for (const id of ['outside', 'size', 'title', 'feature-map', 'runner-policy']) {
     assert.equal(steps.find(step => step.id === id).env.PR_METADATA, '${{ steps.metadata.outputs.pr }}');
   }
+  assert.match(steps.find(step => step.id === 'feature-map').with.script, /previous_filename !== file\.filename \? \[file\.filename, file\.previous_filename\]/);
   assert.equal(steps.at(-1).if, "${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}");
   assert.deepEqual(workflow('gitleaks').on.push.branches, ['main', 'master', 'production']);
   assert.deepEqual(workflow('secret-guard').on.push.branches, ['production', 'main']);
@@ -68,14 +69,11 @@ test('runner policy installs its parser even after an earlier guard fails', () =
   assert.equal(runner.env.NODE_PATH, '${{ github.workspace }}/.github/scripts/node-version-guard/node_modules');
 });
 
-test('CI policy preserves every required context and describes native guard publication', () => {
+test('CI policy requires only the verifier and describes native guard publication', () => {
   const policy = yaml.load(read('docs/ci-policy.yml'));
   assert.deepEqual(policy.pr_job_budget.pull_request_guards.native_checks, ['secret-scan', 'next-public-secrets']);
   assert.deepEqual(policy.pr_job_budget.trusted_pull_request_guards.published_statuses, ['pr-title']);
-  assert.deepEqual(policy.required_checks.contexts, [
-    'app-smoke', 'browser-smoke', 'ci-tests', 'ai-review', 'claude-review',
-    'feature-flag-gate', 'pr-title', 'next-public-secrets', 'secret-scan',
-  ]);
+  assert.deepEqual(policy.required_checks.contexts, ['pstack-verifier']);
   assert.deepEqual(policy.policies.production_ruleset.required_status_checks, policy.required_checks.contexts);
 });
 

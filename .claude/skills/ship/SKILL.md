@@ -38,23 +38,32 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 | Review high-risk design | [interrogate](../interrogate/SKILL.md), only for the valentin-review lane | Review blockers resolved; required human decision recorded |
 | Implement | [fix-bug](../fix-bug/SKILL.md), [fix-slow-page](../fix-slow-page/SKILL.md), or [ship-feature-behind-flag](../ship-feature-behind-flag/SKILL.md) | Smallest complete change; targeted behavior checks pass in CI |
 | Simplify | [simplify-before-pr](../simplify-before-pr/SKILL.md); [blast-radius](../blast-radius/SKILL.md) outside the usual lane | Own diff reviewed; shared behavior preserved |
-| Check UI | [design-compliance](../design-compliance/SKILL.md), [verify-on-phone](../verify-on-phone/SKILL.md) | Before/after evidence; unrelated layout unchanged |
+| Check UI | [design-compliance](../design-compliance/SKILL.md), [verify-hypertask](../verify-hypertask/SKILL.md) | Before/after evidence; unrelated layout unchanged |
 | Document behavior | [update-docs](../update-docs/SKILL.md) | Changed behavior documented or justified no-change record |
-| Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge |
+| Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge; one open PR per runner, `open-pr.sh` refuses a second while one is open |
 | Merge | vcc merge routine and `ship-check guard` | Current-head required checks and production health green |
 | Deploy | vcc deployment routine | `ship-check deployed` passes for the merge SHA |
-| Verify live | [verify-qa](../verify-qa/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
+| Verify live | [verify-hypertask](../verify-hypertask/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
 | Close | Plain-language outcome, QA report, then Done | `ship-check docs` and `ship-check done` pass |
 | Clean | [clean-up](../clean-up/SKILL.md) | `ship-check cleaned` passes |
 | Reflect | [reflect](../reflect/SKILL.md), once after the last ticket | Accepted proposals handled, or skip reason in activity |
 
-Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Design QA for any design-pass, Figma or visible UI ticket uses [verify-design](../verify-design/SKILL.md); a different runner marks its checklist. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
+Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Design QA for any design-pass, Figma or visible UI ticket uses [verify-hypertask](../verify-hypertask/SKILL.md); a different runner marks its checklist. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
 
 ## Stay active until Done
 
 Nobody prompts a runner again after its turn ends. Ending the turn while CI, review bots, merge, deploy, or QA are pending stops the ticket. Keep working from claim to Done. To wait, run one bounded watcher, such as `gh pr checks <pr> --watch --interval 300`, then act on what it reports. Stop early only for a blocker or a Valentin Question from the exceptions below.
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
+
+## The autonomous-run loop
+
+An agent driving more than one PR owns its loop from this repo. No lead session nudges it.
+
+1. Write the exit predicate before the first round: a check a machine can run, such as "these N PRs are merged, the verifier is green, the live behaviour is proven". Keep iterating until it passes. A plateau is not the end; change approach instead.
+2. Watch events first: a merge, a check verdict or a ref move wakes the loop, from a background watcher. Fall back to an hourly heartbeat when no event can wake it, and never re-check a merge pass more often.
+3. Write one decision row per round in the ticket's checkpoint file: what changed, whether the predicate moved, what runs next.
+4. Merge through `scripts/pr-merge-pass --queue <file>` or `--label <label>`. It merges only when the pstack-verifier status from the verifier app is success, pins the merge to the head it read, never passes `--admin`, and prints one JSON document per round.
 
 ## Scripted chores
 
@@ -97,7 +106,7 @@ Write agent activity at claim, fix, PR, checks green, merge, deploy, and QA; at 
 
 Human comments are for decisions, QA, and completion. Claims, releases, handoffs, status, session names, and resume commands belong in agent activity only. Use the shared `tickets` rules and the appropriate `--kind`. Before waiting on CI, a helper, deployment, or a person, post the required agent activity record through `vcc activity add` with separate **Next**, **Helpers**, **Branch/PR**, and **Outputs** lines. Include the resume command. Do not message another session.
 
-Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-qa's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
+Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-hypertask's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
 
 After successful live proof, explain the user-visible problem and changed result before Done. Link the PR and report. Put the flag's dedicated link last in its ticket description, preserving other text; use the same link whenever naming it. Make the required release announcement with Valentin's mention. Follow [flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior), not historical defaults in old comments.
 

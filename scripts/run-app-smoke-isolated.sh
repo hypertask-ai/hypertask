@@ -8,7 +8,6 @@ trusted_root=${2:?trusted checkout is required}
 candidate_root=$(cd "$candidate_root" && pwd -P)
 trusted_root=$(cd "$trusted_root" && pwd -P)
 hold=0
-publish_args=()
 if [ "${PSTACK_VERIFIER_HOLD:-}" = "1" ]; then
   hold=1
   : "${PSTACK_VERIFIER_READY:?PSTACK_VERIFIER_READY is required}"
@@ -19,6 +18,9 @@ fi
 # It only parses the flag files as data and never runs candidate code.
 if [ -d "$candidate_root/src/lib/flags/definitions" ]; then
   node "$trusted_root/scripts/generate-flag-index.mjs" "$candidate_root"
+fi
+if [ -d "$trusted_root/src/lib/flags/definitions" ]; then
+  node "$trusted_root/scripts/generate-flag-index.mjs" "$trusted_root"
 fi
 
 # Docker cannot create nested mount targets beneath the read-only /app bind.
@@ -64,13 +66,15 @@ volume_keeper="ht-smoke-volume-keeper-$run_key"
 build="ht-smoke-build-$run_key"
 state="ht-smoke-state-$run_key"
 runtime_image="ht-smoke-runtime-$run_key"
+relay="ht-smoke-relay-$run_key"
+publish_network="ht-smoke-publish-$run_key"
 
 cleanup() {
   result=${1:-$?}
   trap - EXIT INT TERM
   if [ "$result" -ne 0 ]; then docker logs "$app" 2>/dev/null | tail -200 || true; fi
-  docker rm -f "$app" "$database" "$install" "$generate" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" >/dev/null 2>&1 || true
-  docker network rm "$network" "$egress_network" >/dev/null 2>&1 || true
+  docker rm -f "$app" "$database" "$install" "$generate" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" "$relay" >/dev/null 2>&1 || true
+  docker network rm "$network" "$egress_network" "$publish_network" >/dev/null 2>&1 || true
   docker volume rm "$build" "$state" "$dependencies" >/dev/null 2>&1 || true
   docker image rm "$runtime_image" >/dev/null 2>&1 || true
   if [ "$next_env_target_created" = true ]; then rm -f -- "$next_env_target"; fi
@@ -109,7 +113,7 @@ docker run -d --name "$volume_keeper" \
 
 use_trusted_dependencies=false
 dependencies_mount=$dependencies
-if [ "${CORE_SMOKE_TRUSTED_DEPENDENCIES:-false}" = true ] && [ -d "$trusted_root/node_modules" ]; then
+if [ "${CORE_SMOKE_TRUSTED_DEPENDENCIES:-false}" = true ] && [ -f "$trusted_root/node_modules/.package-lock.json" ]; then
   inputs_match=true
   for trusted_input in package.json package-lock.json .npmrc prisma.config.ts src/prisma; do
     if [ ! -e "$candidate_root/$trusted_input" ] && [ ! -e "$trusted_root/$trusted_input" ]; then
@@ -324,7 +328,7 @@ docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${c
   -e CORE_SMOKE_APP_ROOT=/trusted \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
   -v "$state:/state" \
-  "$runtime_image" timeout --signal=KILL 1m node /trusted/scripts/seed-core-actions-smoke.mjs
+  "$runtime_image" timeout --signal=KILL 2m node /trusted/scripts/seed-core-actions-smoke.mjs
 
 docker run --rm --name "$probe" \
   --cap-drop ALL \
@@ -352,11 +356,7 @@ docker run --rm --name "$builder" --network "$network" "${runtime[@]}" "${common
   -v "$trusted_root/scripts:/trusted:ro" \
   "$runtime_image" timeout --signal=KILL 10m node node_modules/next/dist/bin/next build
 
-if [ "$hold" = 1 ]; then
-  publish_args=(-p 127.0.0.1:3100:3100)
-fi
 docker run -d --name "$app" --network "$network" \
-  "${publish_args[@]}" \
   --cap-drop ALL \
   --security-opt no-new-privileges \
   --read-only \
@@ -391,6 +391,21 @@ done
 [ "$app_ready" = true ] || { echo "Next.js did not become ready within 60 seconds." >&2; exit 1; }
 
 if [ "$hold" = 1 ]; then
+  docker network create "$publish_network" >/dev/null
+  docker run -d --name "$relay" --network "$publish_network" \
+    -p 127.0.0.1:3100:3100 \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --read-only \
+    --pids-limit 64 \
+    --memory 64m \
+    -e APP_HOST="$app" \
+    "$runtime_image" node -e 'const net=require("node:net");const host=process.env.APP_HOST;net.createServer((c)=>{const u=net.connect(3100,host);const d=()=>{c.destroy();u.destroy()};c.on("error",d);u.on("error",d);c.pipe(u);u.pipe(c)}).listen(3100,"0.0.0.0")' >/dev/null
+  docker network connect "$network" "$relay"
+  if ! node --input-type=module -e 'const {pathToFileURL}=await import("node:url"); const {waitForPreview}=await import(pathToFileURL(process.argv[1]).href); if (!await waitForPreview("http://127.0.0.1:3100")) process.exit(1)' "$trusted_root/scripts/pstack-verifier.mjs"; then
+    echo "preview did not start" >&2
+    exit 1
+  fi
   ready_dir=$(dirname "$PSTACK_VERIFIER_READY")
   mkdir -p "$ready_dir"
   cp "$scratch/smoke.env" "$ready_dir/smoke.env"

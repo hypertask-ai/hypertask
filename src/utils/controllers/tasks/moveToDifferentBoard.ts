@@ -18,6 +18,7 @@ import { IUser } from "@/models/model";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { archivedBoardTicketRefusal } from "@/utils/controllers/projects/archivedBoardTickets";
 
 import { upsertPageToTurbopuffer } from "../turbopuffer/turbopufferHelper";
 
@@ -485,6 +486,11 @@ export async function moveTaskToDifferentBoard(
       };
     }
     return { success: true, task: result.json };
+  }
+
+  const archivedRefusal = await archivedBoardTicketRefusal(newProject, currentUser.id);
+  if (archivedRefusal) {
+    return { success: false, error: archivedRefusal.message, statusCode: 400 };
   }
 
   const projectIdentifier = newProject.uniqueIdentifier;

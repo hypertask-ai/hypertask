@@ -231,11 +231,11 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
   assert.doesNotMatch(smoke, /Minified React error #418/);
 });
 
-test("MCP CLI API contract stays fatal inside the required browser-smoke job", async () => {
+test("MCP CLI API contract stays fatal inside the nightly browser-smoke job", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const policy = yaml.load(await source("docs/ci-policy.yml"));
-  assert.ok(policy.required_checks.contexts.includes("browser-smoke"));
+  assert.equal(policy.required_checks.contexts.includes("browser-smoke"), false);
   const smoke = workflow.jobs["browser-smoke-desktop"];
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");
@@ -483,7 +483,7 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.deepEqual(shards.map((shard) => shard.needs), SHARDS.map(() => "browser-build"));
   for (const shard of shards) {
     assert.equal(shard.if, desktop.if);
-    assert.match(shard.if, /pull_request\.draft == false/);
+    assert.match(shard.if, /event_name != 'pull_request'/);
     assert.ok(shard["timeout-minutes"] <= 20);
     assert.ok(shard.steps.some((step) => step.name === "Download the one build"));
     assert.ok(!shard.steps.some((step) => step.name === "Upload the one build"));
@@ -495,7 +495,7 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.equal(aggregate.outputs, undefined, "nothing reads this summary any more (HYCI-108)");
   assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-build"]);
 
-  const step = aggregate.steps[0];
+  const step = aggregate.steps.find(step => step.name === "Require every browser shard");
   const env = ["BUILD", "DESKTOP", "MOBILE", "MATRIX", "FLAGS"];
   for (const [name, key] of env.map((name, index) => [name, ["browser-build", ...SHARDS][index]])) {
     assert.equal(step.env[name], "${{ needs." + key + ".result }}", name);
