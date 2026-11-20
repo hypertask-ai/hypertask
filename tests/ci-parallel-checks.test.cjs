@@ -13,7 +13,6 @@ const lanes = [
   "contracts",
   "eslint",
   "feature-map-change",
-  "feature-map-coverage",
   "github-comments",
   "lint-overlap-guard",
   "oxlint",

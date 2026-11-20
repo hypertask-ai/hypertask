@@ -967,9 +967,9 @@ Verdicts:
 - a head journey failed earlier than base did, or at the same step with a different failure, or the repro passed on base: FAIL.
 - an unavailable base comparison: the run could not evaluate the change, so the status is error and the recheck drives it again; it is never a FAIL on the change itself.
 - the same failure at the same step on base and head: the change is not the cause, so it is PASS+NOTES naming it. For a repro that fails the same way on both sides, the run could not evaluate the change, so the status is error.
-- a bug fix whose repro cannot be built, or a change that reaches a screen but whose plan found no user path: the run could not evaluate the change, so the status is error, never FAIL on the change itself.
+- a bug fix whose repro cannot be built, or a change that reaches a screen but whose plan found no user path: the run could not evaluate the change, so the status is error, never FAIL on the change itself. This needs app code in the diff: a `[BUGFIX]` whose file list holds nothing under `src/`, no API route, no page and no shipped asset plans no repro journey, asks no model, and settles like any non-app change.
 - some journey got further than base without passing: PASS+NOTES naming it.
-- non-app files only: PASS+NOTES, no app path.
+- non-app files only, and a `[BUGFIX]` with no app code: PASS+NOTES, no app path.
 
 An identical diff is not an identity: a rebase onto a new base can bring production files the diff never shows, and `git patch-id --stable` ignores whitespace inside a value. Reuse is therefore anchored on the head tree, and the recheck re-runs a green head whose base has moved. That machinery is not in this change yet.
 
@@ -2006,19 +2006,12 @@ status is a signal within the hour instead of a job on every push. The rules in
 
 ### Feature-map coverage
 
-The separate `feature-map-coverage` workflow is gone; its strict counter runs in
-the `ci-checks` lane of `ci-tests.yml` (`feature-map-coverage`), which was already
-paid for. The counter prints `N of M`, the unmapped names and the map rows out of
-sync. `M` is every `page.tsx` route under `src/app` plus flag definitions whose
-kind is `feature` or `improvement`, and `N` is how many of those names appear in a
-feature-map area page. Bugfix and internal flags are repairs, not extra features.
-
-The strict counter fails when a mapped area is unmapped, an area page has no row
-in `rows/`, or a row has no area page (HTPR-9415). It runs only when the diff
-touches `src/app/`, `src/lib/flags/definitions/` or the feature-map pages, so a
-pull request that cannot change the count pays nothing for it. The unit test
-`tests/feature-map-coverage.test.cjs` runs in the test shards, and the counter
-itself runs no browser, no secrets and no database.
+The coverage-growth counter left the pull request gate (HTPR-9512). A pull
+request no longer has to grow the map: `.github/scripts/feature-map-coverage.cjs`
+and its unit test are deleted, because no workflow, report or nightly run read
+them once the lane went. What a pull request keeps is the
+[feature-map change gate](../ci.md#feature-map-change-gate-htpr-9415): a new
+feature or improvement still needs its area page.
 
 ### The feature-map citation check
 
