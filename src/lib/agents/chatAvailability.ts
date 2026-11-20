@@ -1,6 +1,9 @@
+import { isWorking, type TRegisterAgent } from "@/lib/agents/registerView";
+
 export const AGENT_CHAT_HEARTBEAT_MAX_AGE_MS = 2 * 60 * 1000;
 
 export type AgentChatDeliveryMode = "webhook" | "polling" | null;
+export type AgentChatStatusLabel = "Online" | "Reads when it next runs";
 
 type ChatAvailability = {
   heartbeatAt: Date | null;
@@ -29,6 +32,15 @@ export function agentChatDeliveryMode(
   return hasFreshAgentChatHeartbeat(availability.heartbeatAt, now)
     ? "polling"
     : null;
+}
+
+export function agentChatStatusLabel(mode: AgentChatDeliveryMode): AgentChatStatusLabel {
+  return mode ? "Online" : "Reads when it next runs";
+}
+
+export function chatStatusText(agent: TRegisterAgent, deliveryMode: AgentChatDeliveryMode): string {
+  if (isWorking(agent) && agent.working) return `Working on ${agent.working.ticket}`;
+  return agentChatStatusLabel(deliveryMode);
 }
 
 export function retainUndeliveredAgentChat(input: {

@@ -13,6 +13,7 @@ import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-76
 import { HTPR_7702_PHONE_CHAT_LIST_FLAG } from "@/lib/flags/definitions/htpr-7702-phone-chat-list";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
+import { agentChatStatusLabel } from "@/lib/agents/chatAvailability";
 
 export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOnly = false }: {
   context: SidebarChatContext;
@@ -56,9 +57,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
     }] : []),
     ...context.agents.map((agent) => ({
       key: agent.id,
-      name: pastChatsFirst
-        ? `${agent.displayName}${agent.status === "working" ? " · working" : ""}${agent.deliveryMode ? ` · ${agent.deliveryMode}` : ""}`
-        : `${agent.displayName} · ${agent.status}${agent.deliveryMode ? ` · ${agent.deliveryMode}` : ""}`,
+      name: `${agent.displayName} · ${agentChatStatusLabel(agent.deliveryMode)}`,
       commandMode: CommandMode.GoToAgentChat,
     })),
     ...(context.error ? [{ key: "retry", name: `${context.error}. Retry`, commandMode: CommandMode.GoToAgentChat }] : []),
