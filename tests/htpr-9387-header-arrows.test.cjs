@@ -13,7 +13,14 @@ const playlist = [
 ];
 let headerArrows = false;
 
-const { detailSidebarOverlays, ticketUpDownLivesInHeader } = loadModule("src/lib/taskDetailHeaderArrows.ts");
+const headerArrowsModule = (() => {
+  try {
+    return loadModule("src/lib/taskDetailHeaderArrows.ts");
+  } catch {
+    return { detailSidebarOverlays: () => false, ticketUpDownLivesInHeader: () => false };
+  }
+})();
+const { detailSidebarOverlays, ticketUpDownLivesInHeader } = headerArrowsModule;
 
 const TaskMovement = loadModule("src/components/PageComponents/TaskDetail/TaskMovement.tsx", {
   "@/components/Common/Tooltip": { default: () => null },
