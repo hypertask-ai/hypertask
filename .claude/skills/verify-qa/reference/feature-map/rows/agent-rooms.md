@@ -1,1 +1,1 @@
-| Board agent rooms | [agent-rooms.md](agent-rooms.md) | read-only room listing, authentication, desktop/phone reload |
+| Board agent rooms | [agent-rooms.md](agent-rooms.md) | `feature-map-drive.mjs agent-rooms`; read-only room listing with the auto-create blocked |

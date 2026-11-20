@@ -19,29 +19,38 @@ The address is `https://app.hypertask.ai/scheduled`. A signed-out visit is sent 
 
 `phone-shot.sh` or `agent-browser`, headless, against production. Load the
 page, wait for the table, then look at what sits between the filter row and
-the first table row. Many parts are behind Owner + QA flags (views, scopes,
-bulk selection, snooze), so check with the QA flag identity
-(`storageState-qa.json`) and with the plain account
-(`storageState-qa-normal.json`). Pick a board tab, reload, and confirm the
-`board` URL parameter and selected list remain. On desktop, Tab and Shift+Tab
-cycle board tabs; C opens task creation and Back cancels it. The list uses
-the available page width beside the app rail.
+the first table row. Scopes are hardcoded on; the flags My Tasks actually read
+are `htpr-8144-phone-my-tasks`, `htpr-6940-drop-board-tabs`,
+`htpr-6312-my-tasks-priority-filter` and `htpr-8171-hide-tags`. Views, bulk
+selection and snooze are not flag-gated, so running both storage states proves
+nothing extra for them. Pick a board tab only while `htpr-6940-drop-board-tabs`
+is off: it ships `EVERYONE`, so the tab row is gone for every account and the
+Tab/Shift+Tab cycling step is verified-unreachable until that flag is off.
+On desktop, C opens task creation and Back cancels it. The list uses the
+available page width beside the app rail.
 
 Scheduled: open `/scheduled`, wait for Tasks with Due Dates, and confirm the
-due-date groups and the board tabs. Open a row and confirm that task opens.
-On a phone the same tabs sit in the footer.
+due-date groups. The `This Week` and `Later` headings appear only when a task
+falls in them, so an absent heading with no such tasks is not a failure. Open a
+row and confirm that task opens. The board tab strip here follows the same
+`htpr-6940-drop-board-tabs` rule as My Tasks: with the flag on there is nothing
+to see, flag off the footer tabs return.
 
 Board tabs: on My Tasks with `htpr-6940-drop-board-tabs` on, the board tab
-row is absent. Scope and Group: Board still reach every board. With the flag
-off, the desktop row and the phone footer tabs return. With
-`htpr-6312-my-tasks-priority-filter` on, the old priority filter button is
-absent and the rows stay unfiltered by that control.
+row is absent. Assert on `[data-testid="my-tasks-splits-desktop"]` and
+`[data-testid="my-tasks-splits-phone"]` (both zero) and
+`[data-testid="my-tasks-list"]` (one). Scope and Group: Board still reach
+every board. With the flag off, the desktop row and the phone footer tabs
+return. With `htpr-6312-my-tasks-priority-filter` on, the old priority filter
+button is absent and the rows stay unfiltered by that control; the table's
+`PRIORITY` column header is a sort, not the removed filter button.
 
 ## Gotchas
 
 - Controls nobody asked for showing up on top of the table, like the
   "Quick add a task" bar removed in
-  [HTPR-6570](https://app.hypertask.ai/detail/project-15/6570).
+  [HTPR-6570](https://app.hypertask.ai/detail/project-15/6570). The page text
+  contains no "quick add" string.
 - Ctrl+E not archiving the focused row
   ([HTPR-6445](https://app.hypertask.ai/detail/project-15/6445)).
 - The board tab row still showing while `htpr-6940-drop-board-tabs` is on, or Scope and Group: Board failing to reach a board.
@@ -64,10 +73,12 @@ that the old priority button is absent and the rows are unchanged.
 
 ### Automated evidence
 
-`node --test tests/htpr-6570-my-tasks-no-quick-add.test.cjs` checks that My Tasks source no longer references the removed Quick add component or flag; layout and keyboard behavior still need live proof.
-`npm run test:file -- tests/my-tasks-priority-filter-component.test.cjs tests/global-shortcut-routes.test.cjs`
-exercises board URL restoration, Tab bursts, full-width rendering and global
-C shortcut eligibility without the retired shortcuts/width flag.
+The old removal test for HTPR-6570 is gone from `tests/`, so nothing checks that
+source absence any more. Closest coverage is
+`npm run test:file -- tests/my-tasks-priority-filter-component.test.cjs tests/global-shortcut-routes.test.cjs`,
+which exercises board URL restoration, Tab bursts, full-width rendering and
+global C shortcut eligibility. Layout and keyboard behavior still need live
+proof.
 
 ### Cleanup
 

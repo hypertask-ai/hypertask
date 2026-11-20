@@ -1,1 +1,1 @@
-| Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
+| Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | `feature-map-drive.mjs announcements-admin-api`; no-login 401 checks on the admin routes |

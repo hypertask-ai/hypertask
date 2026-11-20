@@ -1,1 +1,1 @@
-| Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
+| Pages | [pages.md](pages.md) | no smoke id; drive steps in pages.md (snippets create/reload/delete, `/pages`, standalone Back to Pages) |
