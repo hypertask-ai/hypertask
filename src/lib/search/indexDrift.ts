@@ -5,8 +5,8 @@ import {
 export type DriftPass = { date: string; found: number };
 export type DriftState = { afterId: number; found: number; results: DriftPass[] };
 export type DriftTask = { id: number; title: string; updatedAt: string; commentCount: number };
-export type IndexedTaskTime = { updatedAt: string };
-export type IndexedCommentCopy = { taskTitle: string; taskUpdatedAt: string };
+export type IndexedTaskTime = { updatedAt: string; keywordOnly?: boolean };
+export type IndexedCommentCopy = { taskTitle: string; taskUpdatedAt: string; keywordOnly?: boolean };
 export function emptyDriftState(): DriftState {
   return { afterId: 0, found: 0, results: [] };
 }
@@ -18,11 +18,14 @@ function laterEdit(editedAt: string, indexedAt: string | null): boolean {
   return edited > indexed;
 }
 export function taskRowDrifted(task: { updatedAt: string }, indexed: IndexedTaskTime | null): boolean {
-  return !indexed || laterEdit(task.updatedAt, indexed.updatedAt);
+  if (!indexed) return true;
+  if (indexed.keywordOnly) return true;
+  return laterEdit(task.updatedAt, indexed.updatedAt);
 }
 export function commentCopyDrifted(task: DriftTask, indexed: IndexedCommentCopy | null): boolean {
   if (task.commentCount === 0) return false;
   if (!indexed || indexed.taskTitle !== task.title) return true;
+  if (indexed.keywordOnly) return true;
   return laterEdit(task.updatedAt, indexed.taskUpdatedAt);
 }
 export function commentsFollowTaskEdit(args: {
