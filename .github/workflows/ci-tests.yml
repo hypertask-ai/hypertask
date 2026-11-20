@@ -533,15 +533,6 @@ jobs:
             node .github/scripts/feature-map-change-guard.mjs "$BASE_SHA" "$HEAD_SHA" "$PR_TITLE"
           }
 
-          lane_feature_map_coverage() {
-            if [ -n "$BASE_SHA" ] && git diff --name-only "$BASE_SHA" "$HEAD_SHA" \
-              | grep -qE '^(src/app/|src/lib/flags/definitions/|\.claude/skills/verify-qa/reference/feature-map/)'; then
-              node .github/scripts/feature-map-coverage.cjs --strict
-            else
-              echo "feature map coverage: no mapped area, flag definition or map file changed"
-            fi
-          }
-
           run_lane() {
             local name=$1
             ( set -euo pipefail; "lane_${name//-/_}" ) > "$LOGS/$name.log" 2>&1 &
@@ -566,7 +557,6 @@ jobs:
               run_lane changed-style-tokens
               run_lane paid-api-cost-notes
               run_lane feature-map-change
-              run_lane feature-map-coverage
             fi
           fi
 

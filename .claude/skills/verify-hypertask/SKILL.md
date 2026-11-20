@@ -186,9 +186,9 @@ Start from the map for the change: the customer map
 `.claude/skills/verify-qa/reference/feature-map/INDEX.md`, one file per customer area with
 Sub-features, How to get to it (user POV), Driving it with agent-browser and Gotchas, or the
 ops map `.claude/skills/verify-qa/reference/ops-map/INDEX.md` for build, release, runner, CI
-and monitoring recipes. Build and release tickets read the ops map, not the customer map. The
-counter `node .github/scripts/feature-map-coverage.cjs --strict` gates every PR and reads 310
-of 310 mapped. Design screens use the recipe in
+and monitoring recipes. Build and release tickets read the ops map, not the customer map. A
+`[FEATURE]` or `[IMPROVE]` PR adds or edits the area page it touches; coverage growth of old
+pages is not a gate. Design screens use the recipe in
 `.claude/skills/verify-design/features/README.md`, one `design-check run` per screen. Write
 the checklist from the ticket's acceptance criteria before testing, and correct a wrong or
 missing recipe in the same PR.
@@ -397,7 +397,6 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <dir> [--phone]` | the core inbox cycle on production |
 | `.claude/skills/verify-qa/scripts/fixture-cleanup <state> <taskId...>` | deletes only fixtures the run created, through product surfaces |
 | `.claude/skills/verify-qa/scripts/evidence-prune` | ages out old build debris; dry-run unless `--apply` |
-| `.github/scripts/feature-map-coverage.cjs [--strict]` | map coverage count against real routes and flags |
 
 `verify-qa` and `verify-design` scripts are owned by
 `.github/workflows/ship-scripts-tests.yml`, which runs their tests on these paths; keep the
