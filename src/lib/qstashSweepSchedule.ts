@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { getQstashClient, qstashCallbackBase } from "@/lib/qstash";
+import { getRedis } from "@/lib/redis";
 
 export const SWEEP_QUEUE_PATH = "/api/queues/sweep";
 export const SWEEP_SCHEDULE_CRON = "* * * * *";
@@ -12,6 +14,41 @@ export function shouldAutoEnsureSweepSchedule() {
   if (process.env.VERCEL_ENV === "preview") return false;
 
   return process.env.NODE_ENV === "production";
+}
+
+export const SWEEP_SCHEDULE_REGISTRATION_WINDOW_SECONDS = 60 * 60;
+
+export function sweepScheduleRegistrationKey() {
+  const callbackBase = createHash("sha256")
+    .update(qstashCallbackBase())
+    .digest("hex")
+    .slice(0, 16);
+  return `qstash:sweep-schedule:registered:${SWEEP_SCHEDULE_ID}:${callbackBase}`;
+}
+
+function isRateLimited(error: unknown) {
+  return typeof error === "object" && error !== null && "status" in error && error.status === 429;
+}
+
+export async function ensureSweepScheduleOncePerWindow() {
+  const redis = await getRedis();
+  const key = sweepScheduleRegistrationKey();
+  const claimed = await redis.set(
+    key,
+    "1",
+    "EX",
+    SWEEP_SCHEDULE_REGISTRATION_WINDOW_SECONDS,
+    "NX",
+  );
+  if (claimed !== "OK") {
+    return { registered: false as const, reason: "already-registered-this-window" as const };
+  }
+  try {
+    return { registered: true as const, ...(await ensureSweepSchedule()) };
+  } catch (error) {
+    if (!isRateLimited(error)) await redis.del(key).catch(() => undefined);
+    throw error;
+  }
 }
 
 export async function ensureSweepSchedule() {

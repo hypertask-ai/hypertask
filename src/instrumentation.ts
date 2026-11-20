@@ -15,8 +15,8 @@ export async function register() {
   if (!shouldAutoEnsureSweepSchedule()) return;
 
   try {
-    const { ensureSweepSchedule } = await import("./lib/qstashSweepSchedule");
-    await ensureSweepSchedule();
+    const { ensureSweepScheduleOncePerWindow } = await import("./lib/qstashSweepSchedule");
+    await ensureSweepScheduleOncePerWindow();
   } catch (error) {
     console.error("[instrumentation] sweep schedule registration failed", error);
   }
