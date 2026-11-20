@@ -811,6 +811,7 @@ function moveFixture(options = {}) {
     "@/lib/api/errorMessage": { toErrorMessage: (body, fallback) => body?.message ?? body?.error ?? fallback },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
     "../turbopuffer/turbopufferHelper": { upsertPageToTurbopuffer: async () => {} },
     "@/utils/controllers/tasks/single": {
       TASK_IDENTITY_CONFLICT_CODE: "TASK_IDENTITY_CONFLICT",

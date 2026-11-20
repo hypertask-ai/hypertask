@@ -1,11 +1,16 @@
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FLASH, buildPrompt, completeWithOpenRouter, decide, parseAnswer, parsePlan, pickVerifier, redact } from "./pstack-verifier.mjs";
+import { chromium } from "playwright";
+import { FLASH, buildPrompt, completeWithOpenRouter, drivePlan, judgeJourneys, parseAnswer, parsePlan, pickVerifier, readJourneyEvidence, redact } from "./pstack-verifier.mjs";
 
 export { FLASH };
 export const EVAL_BINDING = { sha: "b".repeat(40), run: "1", attempt: "1" };
 export const EVAL_REPO_FILES = ["src/app/project/field-list.tsx"];
+export const EVAL_VIEWPORTS = ["desktop", "phone"];
+export const EVAL_JOURNEY = "change:primary";
 
 const claim = {
   title: "HTPR-0000 [BUGFIX] A saved project field appears in the field list",
@@ -30,18 +35,84 @@ export const CASES = [
     expected: "FAIL",
     why: "The saved field name is not on the page, so the claimed behaviour is broken.",
     claim,
-    pageShowsField: false,
+    pageShows: { desktop: false, phone: false },
+    baseShows: { desktop: true, phone: true },
+    plan: { actions, expect: [{ text: "Renewal date" }] },
+  },
+  {
+    name: "planted-phone-bug",
+    expected: "FAIL",
+    why: "The saved field name is on the desktop page and missing at phone width, which is the planted phone bug.",
+    claim,
+    pageShows: { desktop: true, phone: false },
+    baseShows: { desktop: true, phone: true },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
   {
     name: "clean",
     expected: "PASS",
-    why: "The saved field name is on the page, so the claimed behaviour works.",
+    why: "The saved field name is on the page at desktop and phone width, so the claimed behaviour works.",
     claim,
-    pageShowsField: true,
+    pageShows: { desktop: true, phone: true },
+    baseShows: { desktop: false, phone: false },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
 ];
+
+const FIXTURE_FORM = `
+<button type="button">Add field</button>
+<label>Field name <input type="text" name="field"></label>
+<p id="saved-field">Renewal date</p>`;
+const fixturePage = (style) => `<!doctype html>
+<html lang="en">
+<head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${style}</style></head>
+<body>${FIXTURE_FORM}</body>
+</html>`;
+
+export const PHONE_ONLY_BUG_HTML = fixturePage("#saved-field { display: none; } @media (min-width: 600px) { #saved-field { display: block; } }");
+export const FIELD_ON_EVERY_SIZE_HTML = fixturePage("#saved-field { display: block; }");
+
+export const DRIVEN_CASE = {
+  ...CASES.find((item) => item.name === "planted-phone-bug"),
+  name: "planted-phone-bug-driven",
+  why: "The page hides the saved field below 600px, so the real drive passes at desktop and fails on the phone lane.",
+};
+
+export async function fixtureServer(html) {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  });
+  await new Promise((done) => server.listen(0, "127.0.0.1", done));
+  return { base: `http://127.0.0.1:${server.address().port}`, close: () => new Promise((done) => server.close(done)) };
+}
+
+export function drivenPlan(item = DRIVEN_CASE, model = FLASH) {
+  const plan = item.plan ?? { actions: [], expect: [] };
+  const actions = plan.actions.map((action) => (action.op === "goto" ? { ...action, path: "/" } : action));
+  return evalPlan(item, model, { ...plan, actions });
+}
+
+export async function driveEvalEvidence({ item = DRIVEN_CASE, html = PHONE_ONLY_BUG_HTML, work = "" } = {}) {
+  const root = work || mkdtempSync(path.join(tmpdir(), "pstack-drive-"));
+  const server = await fixtureServer(html);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const drive = await drivePlan({ browser, projectId: "1", plan: drivenPlan(item), base: server.base, shotsRoot: path.join(root, "shots"), origin: server.base });
+    return readJourneyEvidence(JSON.stringify({ ...EVAL_BINDING, ...drive }), EVAL_BINDING);
+  } finally {
+    await browser.close();
+    await server.close();
+    if (!work) rmSync(root, { recursive: true, force: true });
+  }
+}
+
+export async function judgeDrivenCase({ item = DRIVEN_CASE, model = FLASH, ask = async () => ({ verdict: "PASS", notes: "The saved field is visible." }) } = {}) {
+  const evidence = await driveEvalEvidence({ item });
+  const baseEvidence = await driveEvalEvidence({ item, html: FIELD_ON_EVERY_SIZE_HTML });
+  const result = await judgeJourneys({ plan: drivenPlan(item, model), binding: EVAL_BINDING, evidence, baseEvidence, picked: { model }, ask, work: "" });
+  return { case: item.name, model, expected: "FAIL", verdict: result.verdict, notes: result.notes, ok: result.verdict === "FAIL", evidence };
+}
 
 export function evalModels(alt) {
   const primary = pickVerifier("grok", alt);
@@ -59,9 +130,18 @@ function matches(item, verdict) {
   return item.expected === "PASS" ? verdict === "PASS" || verdict === "PASS+NOTES" : verdict === item.expected;
 }
 
-export function evalPlan(item, model) {
+export function evalPlan(item, model, plan = item.plan) {
   if (!item?.claim) throw new Error("eval case is missing");
-  return { ...EVAL_BINDING, authorFamily: String(model).startsWith("deepseek/") ? "deepseek" : "other", verifierModel: model, actions: [], expect: [], reason: "" };
+  return {
+    ...EVAL_BINDING,
+    authorFamily: String(model).startsWith("deepseek/") ? "deepseek" : "other",
+    verifierModel: model,
+    actions: plan.actions,
+    expect: plan.expect,
+    reason: "",
+    viewports: EVAL_VIEWPORTS,
+    journeys: [{ journey: EVAL_JOURNEY, page: "", actions: plan.actions, expect: plan.expect, base: null, planned: true }],
+  };
 }
 
 export function planPromptFor(item) {
@@ -74,44 +154,62 @@ export function planCoversFixture(plan, value = "Renewal date") {
   return fillsField && watchesField;
 }
 
-export function evalEvidence(item, plan = item.plan) {
-  const shown = item.pageShowsField === true;
+function showsOn(shown, viewport) {
+  if (shown && typeof shown === "object") return shown[viewport] === true;
+  return shown === true;
+}
+
+function evalRun(item, plan, viewport, shown) {
+  const visible = showsOn(shown, viewport);
   const failedStep = Number.isInteger(item.stepFailure) ? item.stepFailure : -1;
   return {
-    ...EVAL_BINDING,
+    journey: EVAL_JOURNEY,
+    viewport,
+    apiOnly: false,
     steps: plan.actions.map((action, index) => (index === failedStep ? { action, ok: false, error: "step was not actionable" } : { action, ok: true, error: "" })),
-    expects: plan.expect.map((expect) => ({ expect, ok: shown, error: shown ? "" : "text not visible" })),
+    expects: plan.expect.map((expect) => ({ expect, ok: visible, error: visible ? "" : "text not visible" })),
     navigations,
     offOrigin: [],
+    judged: visible ? "PASS" : "",
   };
+}
+
+function evidenceFor(item, plan, shown) {
+  const runs = EVAL_VIEWPORTS.map((viewport) => evalRun(item, plan, viewport, shown));
+  return { ...EVAL_BINDING, journeys: runs, steps: runs[0].steps, expects: runs[0].expects, navigations, offOrigin: [] };
+}
+
+export function evalEvidence(item, plan = item.plan) {
+  return evidenceFor(item, plan, item.pageShows ?? item.pageShowsField);
+}
+
+export function evalBaseEvidence(item, plan = item.plan) {
+  return evidenceFor({ ...item, stepFailure: undefined }, plan, item.baseShows ?? {});
 }
 
 export function answerFor(mode, item) {
   const plan = JSON.stringify(item.plan);
-  if (mode === "correct") return { plan, judge: item.judge ?? JSON.stringify({ verdict: item.expected, notes: item.why }) };
+  if (mode === "correct") return { plan, judge: JSON.stringify({ verdict: "PASS", notes: item.why }) };
   if (mode === "blind") return { plan, judge: '{"verdict":"FAIL","notes":"Not sure."}' };
   throw new Error(`unknown replay mode ${mode}`);
 }
 
 export async function judgeCase({ item, model, key, answer, complete = completeWithOpenRouter }) {
   const live = answer === undefined;
-  let plan = evalPlan(item, model);
+  let parsed = item.plan;
   let failure = "";
   try {
     const planText = live ? await complete(planPromptFor(item), { key, model }) : answer.plan;
-    plan = { ...plan, ...parsePlan(planText) };
-    if (!plan.actions.length) throw new Error("the plan stage returned no actions");
-    if (!planCoversFixture(plan)) throw new Error("the plan does not exercise the fixture behaviour");
+    parsed = { ...parsed, ...parsePlan(planText) };
+    if (!parsed.actions.length) throw new Error("the plan stage returned no actions");
+    if (!planCoversFixture(parsed)) throw new Error("the plan does not exercise the fixture behaviour");
   } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
-  const evidence = evalEvidence(item, plan);
-  let judged = { verdict: "", notes: "" };
+  let result = { verdict: "FAIL", notes: failure };
   if (!failure) {
-    try {
-      const reply = live ? await complete(promptFor(item, plan, evidence), { key, model }) : answer.judge;
-      judged = parseAnswer(reply);
-    } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
+    const judgement = answer ? answer.judge : undefined;
+    const ask = live ? async (prompt, options) => parseAnswer(await complete(prompt, options)) : async () => parseAnswer(judgement);
+    result = await judgeJourneys({ plan: evalPlan(item, model, parsed), binding: EVAL_BINDING, evidence: evalEvidence(item, parsed), baseEvidence: evalBaseEvidence(item, parsed), picked: { model }, ask, key, work: "" });
   }
-  const result = decide({ model: judged, plan, evidence, binding: EVAL_BINDING, checksPassed: true });
   return { case: item.name, model, expected: item.expected, verdict: result.verdict, notes: result.notes, ok: !failure && matches(item, result.verdict), failure, why: item.why };
 }
 

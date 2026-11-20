@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
-import { attachGuard, BASE_CACHE_DIR, cookiesFromHeader, previewDownBody, readPlan, readSmokeEnv, recordNav, runJourneys, smokeDriveIds, waitForPreview, writeBaseCache } from "./pstack-verifier.mjs";
+import { BASE_CACHE_DIR, cookiesFromHeader, drivePlan, planViewports, previewDownBody, readPlan, readSmokeEnv, runViewport, smokeDriveIds, waitForPreview, writeBaseCache } from "./pstack-verifier.mjs";
 
 const work = process.env.WORK;
 const binding = { sha: process.env.HEAD_SHA, run: String(process.env.GITHUB_RUN_ID), attempt: String(process.env.GITHUB_RUN_ATTEMPT) };
@@ -24,27 +24,24 @@ const planFile = process.env.PSTACK_PLAN_FILE || path.join(work, "plan", "plan.j
 const plan = readPlan(readFileSync(planFile, "utf8"), binding);
 const shotsDir = path.join(evidenceDir, "shots");
 mkdirSync(shotsDir, { recursive: true });
-const offOrigin = [];
-const current = { navigations: [] };
 const browser = await chromium.launch({ headless: true });
-const origin = new URL(ready.url).origin;
-let context;
 try {
-  context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block", recordVideo: { dir: evidenceDir, size: { width: 1440, height: 900 } } });
-  await attachGuard(context, origin, offOrigin);
-  await context.addCookies(cookiesFromHeader(seeded.CORE_SMOKE_COOKIE, ready.url));
-  const page = await context.newPage();
-  page.on("response", (response) => {
-    const request = response.request();
-    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) recordNav(current.navigations, response.url(), response.status());
+  const run = await drivePlan({
+    browser,
+    plan,
+    base: ready.url,
+    origin: new URL(ready.url).origin,
+    shotsRoot: shotsDir,
+    evidenceDir,
+    cookies: cookiesFromHeader(seeded.CORE_SMOKE_COOKIE, ready.url),
+    ...smokeDriveIds(seeded),
   });
-  const run = await runJourneys({ page, plan, base: ready.url, ...smokeDriveIds(seeded), shotsRoot: shotsDir, offOrigin, nextNavigations: () => (current.navigations = []) });
   writeEvidence({ ...binding, journeys: run.journeys, steps: run.steps, expects: run.expects, navigations: run.navigations, offOrigin: run.offOrigin });
   if (process.env.PSTACK_BASE_CACHE && process.env.BASE_SHA) {
-    const written = writeBaseCache({ plan, evidence: { journeys: run.journeys }, dir: path.join(work, BASE_CACHE_DIR), baseSha: process.env.BASE_SHA, mapSha: process.env.GITHUB_SHA });
+    const primary = planViewports(plan)[0];
+    const written = writeBaseCache({ plan, evidence: { journeys: run.journeys.filter((item) => runViewport(item) === primary) }, dir: path.join(work, BASE_CACHE_DIR), baseSha: process.env.BASE_SHA, mapSha: process.env.GITHUB_SHA });
     console.log(`base cache entries written: ${written}`);
   }
 } finally {
-  await context?.close();
   await browser.close();
 }

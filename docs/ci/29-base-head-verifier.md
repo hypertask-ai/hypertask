@@ -16,8 +16,8 @@ Verdicts:
 - a head journey failed earlier than base did, or at the same step with a different failure, or the repro passed on base: FAIL.
 - an unavailable base comparison: the run could not evaluate the change, so the status is error and the recheck drives it again; it is never a FAIL on the change itself.
 - the same failure at the same step on base and head: the change is not the cause, so it is PASS+NOTES naming it. For a repro that fails the same way on both sides, the run could not evaluate the change, so the status is error.
-- a bug fix whose repro cannot be built, or a change that reaches a screen but whose plan found no user path: the run could not evaluate the change, so the status is error, never FAIL on the change itself.
+- a bug fix whose repro cannot be built, or a change that reaches a screen but whose plan found no user path: the run could not evaluate the change, so the status is error, never FAIL on the change itself. This needs app code in the diff: a `[BUGFIX]` whose file list holds nothing under `src/`, no API route, no page and no shipped asset plans no repro journey, asks no model, and settles like any non-app change.
 - some journey got further than base without passing: PASS+NOTES naming it.
-- non-app files only: PASS+NOTES, no app path.
+- non-app files only, and a `[BUGFIX]` with no app code: PASS+NOTES, no app path.
 
 An identical diff is not an identity: a rebase onto a new base can bring production files the diff never shows, and `git patch-id --stable` ignores whitespace inside a value. Reuse is therefore anchored on the head tree, and the recheck re-runs a green head whose base has moved. That machinery is not in this change yet.

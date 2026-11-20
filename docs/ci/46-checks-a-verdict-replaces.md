@@ -19,19 +19,12 @@ status is a signal within the hour instead of a job on every push. The rules in
 
 ### Feature-map coverage
 
-The separate `feature-map-coverage` workflow is gone; its strict counter runs in
-the `ci-checks` lane of `ci-tests.yml` (`feature-map-coverage`), which was already
-paid for. The counter prints `N of M`, the unmapped names and the map rows out of
-sync. `M` is every `page.tsx` route under `src/app` plus flag definitions whose
-kind is `feature` or `improvement`, and `N` is how many of those names appear in a
-feature-map area page. Bugfix and internal flags are repairs, not extra features.
-
-The strict counter fails when a mapped area is unmapped, an area page has no row
-in `rows/`, or a row has no area page (HTPR-9415). It runs only when the diff
-touches `src/app/`, `src/lib/flags/definitions/` or the feature-map pages, so a
-pull request that cannot change the count pays nothing for it. The unit test
-`tests/feature-map-coverage.test.cjs` runs in the test shards, and the counter
-itself runs no browser, no secrets and no database.
+The coverage-growth counter left the pull request gate (HTPR-9512). A pull
+request no longer has to grow the map: `.github/scripts/feature-map-coverage.cjs`
+and its unit test are deleted, because no workflow, report or nightly run read
+them once the lane went. What a pull request keeps is the
+[feature-map change gate](../ci.md#feature-map-change-gate-htpr-9415): a new
+feature or improvement still needs its area page.
 
 ### The feature-map citation check
 

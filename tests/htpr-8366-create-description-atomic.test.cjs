@@ -32,6 +32,7 @@ function harness() {
   const stubs = {
     '@/lib/prisma': {
       default: {
+        project: { findUnique: async () => ({ name: 'project-15', title: 'Hypertask Product', status: 'Normal' }) },
         $transaction: async (run) => run({ task: { create: async ({ data }) => ({ ...createdRow, ...data }) } }),
         task: { findFirst: async () => null },
         team_Activity: { update: async () => {} },

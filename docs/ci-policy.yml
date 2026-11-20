@@ -385,6 +385,7 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/user-unit-check.test.sh
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
     - python3 .claude/skills/ship/scripts/pr-drain-pick.test.py
+    - python3 .claude/skills/ship/scripts/pr-merge-pass.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
     - python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
@@ -422,23 +423,6 @@ feature_map_weekly:
     - node --test .claude/skills/maintain-verification-skill/scripts/feature-map-check.test.mjs
     - node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs
   fixtures: offline_with_temporary_home_and_no_secrets
-  app_driving: false
-
-feature_map_coverage:
-  ticket: https://app.hypertask.ai/detail/project-15/9406
-  # HTPR-9450 folded the separate workflow into the ci-checks lane, which was
-  # already paid for.
-  context: null
-  workflow: .github/workflows/ci-tests.yml
-  job: ci-checks
-  lane: feature-map-coverage
-  required: false
-  triggers: [pull_request_only_through_ci-tests]
-  runs_when: [src/app, src/lib/flags/definitions, feature_map_pages]
-  commands:
-    - node .github/scripts/feature-map-coverage.cjs --strict
-  test: tests/feature-map-coverage.test.cjs
-  additional_jobs: 0
   app_driving: false
 
 feature_map_live_weekly:

@@ -18,20 +18,29 @@ test("a verifier stuck on FAIL fails the eval, so a strict model cannot block go
   }
 });
 
-test("both cases come out right for both model families", async () => {
-  const { runEval, FLASH } = await load();
+test("every case comes out right for both model families", async () => {
+  const { runEval, CASES, FLASH } = await load();
   const result = await runEval({ alt, replay: "correct" });
   assert.equal(result.ok, true);
   assert.deepEqual(result.models, [FLASH, alt]);
-  assert.equal(result.results.length, 4);
+  assert.equal(result.results.length, CASES.length * 2);
   for (const row of result.results) {
     assert.equal(row.ok, true, `${row.case} ${row.model}`);
     assert.equal(row.failure, "");
     assert.ok(row.verdict === row.expected || (row.expected === "PASS" && row.verdict === "PASS+NOTES"));
   }
-  const planted = result.results.filter((row) => row.case === "planted-bug");
-  for (const row of planted) {
-    assert.match(row.notes, /a step failed|text not visible/);
+  for (const row of result.results.filter((item) => item.case === "planted-bug")) assert.match(row.notes, /regression at step/);
+});
+
+test("a bug that only shows at phone width fails and names the phone viewport", async () => {
+  const { runEval, CASES } = await load();
+  const result = await runEval({ alt, replay: "correct", cases: CASES.filter((item) => item.name === "planted-phone-bug") });
+  assert.equal(result.ok, true);
+  assert.equal(result.results.length, 2);
+  for (const row of result.results) {
+    assert.equal(row.verdict, "FAIL");
+    assert.match(row.notes, /change:primary \[phone\]: regression at step/);
+    assert.doesNotMatch(row.notes, /\[desktop\]/);
   }
 });
 
@@ -71,7 +80,7 @@ test("a failed step still fails when the model says PASS", async () => {
   assert.equal(result.ok, true);
   for (const row of result.results) {
     assert.equal(row.verdict, "FAIL");
-    assert.match(row.notes, /a step failed/);
+    assert.match(row.notes, /regression at step/);
   }
 });
 
@@ -98,8 +107,8 @@ test("the live run plans and judges every case through the model", async () => {
   };
   const result = await runEval({ alt, key: "test-key", complete });
   assert.equal(result.ok, true);
-  assert.equal(prompts.length, 8);
-  assert.equal(prompts.filter((prompt) => prompt.includes("Plan one user check")).length, 4);
+  assert.equal(prompts.filter((prompt) => prompt.includes("Plan one user check")).length, CASES.length * 2);
+  assert.equal(prompts.filter((prompt) => prompt.includes("Judge whether the changed user path worked")).length, 6);
   assert.equal(new Set(result.results.map((row) => row.model)).size, 2);
 });
 

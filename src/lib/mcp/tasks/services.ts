@@ -9,6 +9,7 @@ import prisma from '@/lib/prisma';
 import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, type CreationChannel } from '@/lib/telemetry/savedWork';
 import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
+import { archivedBoardTicketRefusal } from '@/utils/controllers/projects/archivedBoardTickets';
 import { taskDetailInclude } from './mappers';
 import { unresolvedLabelMessage } from '@/lib/mcp/labelMessages';
 import { sectionRefusal } from '@/lib/mcp/boards/sectionLookup';
@@ -67,6 +68,7 @@ export async function validateProjectAccess(
     userId: number,
     agentId?: string | null,
     teamScope?: AgentTokenTeamScope | null,
+    options: { refuseArchivedBoard?: boolean } = {},
 ): Promise<{ project: any; error: null } | { project: null; error: { status: number; message: string } }> {
     const projectExists = await prisma.project.findFirst({
         where: { id: projectId, status: 'Normal' },
@@ -74,6 +76,25 @@ export async function validateProjectAccess(
     });
 
     if (!projectExists) {
+        if (options.refuseArchivedBoard) {
+            const archivedBoard = await prisma.project.findFirst({
+                where: {
+                    id: projectId,
+                    status: 'Archive',
+                    ...getProjectWhere(userId, agentId, teamScope),
+                },
+                select: { id: true, name: true, title: true, status: true }
+            });
+            const refusal = archivedBoard
+                ? await archivedBoardTicketRefusal(archivedBoard, userId)
+                : null;
+            if (refusal) {
+                return {
+                    project: null,
+                    error: { status: 400, message: refusal.message }
+                };
+            }
+        }
         return {
             project: null,
             error: { status: 404, message: `Project with ID ${projectId} not found` }
