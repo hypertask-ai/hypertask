@@ -2,6 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { readFileSync } = require('node:fs')
 const path = require('node:path')
+const yaml = require('js-yaml')
 const {
   BOARD, MAP_INDEX, TICKET_TITLE, readMapRows, driveScriptName, planFeatures, tagStatuses, gradeFeatures,
   mergeTagStatus, summaryLines, fileFindings,
@@ -15,9 +16,11 @@ const report = { suites: [{ specs: [{ tags: ['id:view-inbox', 'mobile'], tests: 
   { specs: [{ tags: ['id:login'], tests: [{ results: [{ status: 'failed' }] }] }] },
   { specs: [{ tags: ['id:open-board'], tests: [{ results: [{ status: 'skipped' }] }] }, { tags: ['id:ai-chat'], tests: [{ results: [{ status: 'failed' }, { status: 'passed' }] }] }] },
 ] }] }
-
+const passStep = yaml.load(readFileSync('.github/workflows/feature-map-live-daily.yml', 'utf8'))
+  .jobs['live-pass'].steps.find((step) => step.run?.includes('.github/scripts/feature-map-live-daily.mjs'))
 test('the map index gives one row per area and a driver only when the map names one', () => {
   assert.ok(rows.length >= 55, `read ${rows.length} rows`)
+  assert.equal(passStep.env.FEATURE_MAP_LIVE, '1', 'the pass step needs the live opt-in')
   assert.deepEqual(rows.find((row) => row.file === 'inbox.md').tokens.slice(0, 1), ['view-inbox'])
   const scripts = ['board-drive-live.mjs']
   assert.equal(driveScriptName('node .claude/skills/verify-qa/scripts/board-drive-live.mjs', scripts), 'board-drive-live.mjs')
