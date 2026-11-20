@@ -37,6 +37,12 @@ cookie is used. Work on a board the QA account owns.
 Snippets: open `/snippets`, create one with a title and some content, reload,
 and confirm it is in Saved snippets. Delete it and confirm it is gone.
 
+```text
+/snippets: "New snippet" opens Title (placeholder "e.g. Weekly update") and a
+content editor. Create -> the row appears with its text preview. Reload -> still
+listed. Open it -> Delete -> it leaves the list.
+```
+
 Gallery: open a page that has an image, with `htpr-6872-page-image-gallery`
 on. Click the image. The gallery opens on that image, can move through the
 page's other images, and can download. Close it and confirm you are still on
@@ -45,12 +51,17 @@ the page. With the flag off, the same click does not open a gallery.
 Page search: on the Pages list, search for words that are not a literal title
 or body match for a page you can open. With `htpr-9017-smart-page-search` on,
 that page can appear. With it off, only a literal title or body match appears.
-A page on a board you cannot open stays hidden either way.
+A page on a board you cannot open stays hidden either way. `/pages` loads with
+`Pages <count>`, `Archived pages`, `New page`, `This board`, `All boards` and a
+`Search pages…` field. A standalone page (created with `project_id` and no
+`task_id`) reads **Back to Pages** at the top left; only a page whose flags are
+off, or that has a linked ticket, reads **Back to board** / **Back to task**.
 
 ## Gotchas
 
 - A page with no visible ticket crashing the editor or "Back to task"
-  pointing nowhere (it should read "Back to board" when the flag is on).
+  pointing nowhere (it should read "Back to Pages" while `htpr-7298-standalone-pages`
+  and `htpr-7309-pages-screens` are both on, and "Back to board" only when one is off).
 - A page or its title showing on a ticket to someone who cannot open the
   page's board, or counts that include hidden pages.
 - Moving a ticket to another board: a page moves only when that ticket is its
@@ -63,9 +74,12 @@ A page on a board you cannot open stays hidden either way.
 
 Ticket with "Pages (1)", the page editor with "Saved", reload keeping the
 title, and "Back to task" returning to the ticket, desktop and 390x844.
-Flagged: a standalone page opening with "Back to board", a link making it
+Flagged: a standalone page opening with "Back to Pages", a link making it
 appear on the ticket, unlink removing it, and the Pages list including it. Search, board scope, Archived pages,
-Commands entries and Link page from the ticket must also work. On a fresh ticket load, search for Link page immediately; late flag or route updates must refresh the open search without retyping or reloading. Repeat at desktop and phone width. Flag-off: 404 from each flagged call. Shoot the changed page screen in
+Commands entries and Link page from the ticket must also work. On a fresh ticket load, search for Link page immediately; late flag or route updates must refresh the open search without retyping or reloading. Repeat at desktop and phone width. Flag-off: 404 from
+`POST /api/pages/create` with `project_id`, `GET /api/pages/list` and the
+`/api/pages/<publicId>/links` routes. `GET /api/pages/search` is not gated and
+still answers 200 with plain matches. Shoot the changed page screen in
 all four themes. Also shoot `/snippets` after creating and after deleting a
 snippet, a page image gallery open and closed for `htpr-6872-page-image-gallery`,
 and a Pages search that finds a non-literal page only while
@@ -74,4 +88,5 @@ and a Pages search that finds a non-literal page only while
 ### Cleanup
 
 Archive every page you created (the page's Delete) and delete the test
-tickets you created.
+tickets you created. A standalone page is archived with
+`POST /api/pages/<publicId>/archive`; there is no DELETE on that path.
