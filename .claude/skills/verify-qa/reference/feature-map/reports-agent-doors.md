@@ -17,13 +17,35 @@ Saved reports and the velocity list live at `/report`. One saved report lives at
 
 ## Driving it with agent-browser
 
-Use any agent token, not a human session: `curl -H "Authorization: Bearer <agent token>" "https://app.hypertask.ai/api/mcp/reports/velocity?project_id=15"`. Compare `report.totals` and `report.speed` with the numbers the report screen shows for the same board and range.
+Both doors need an agent token, not a human session, so a cookie-only QA run proves the door is
+refused and the pages render, and records the doors as `verified-unreachable` until an agent
+token on board 15's team is in hand:
 
-For the status update, `curl -X POST -H "Authorization: Bearer <agent token>" -H 'content-type: application/json' -d '{"project_id":15,"range":"7d"}' https://app.hypertask.ai/api/mcp/reports/status-update`, then open `https://app.hypertask.ai/report/15/status-update` and confirm the headline and bullets match the response. A second call updates the same report instead of creating a duplicate.
+```bash
+curl -s -w '\nHTTP %{http_code}\n' "https://app.hypertask.ai/api/mcp/reports/velocity?project_id=15"
+# want: {"error":"Unauthorized"} HTTP 401
+```
+
+With a token, `curl -H "Authorization: Bearer <agent token>" "https://app.hypertask.ai/api/mcp/reports/velocity?project_id=15"` compares `report.totals` and `report.speed` with the numbers the velocity screen shows for the same board and range.
+
+For the status update, `curl -X POST -H "Authorization: Bearer <agent token>" -H 'content-type: application/json' -d '{"project_id":15,"range":"7d"}' https://app.hypertask.ai/api/mcp/reports/status-update`, then open `https://app.hypertask.ai/report/project-15/status-update` and confirm the headline and title match the response `headline` and `title`. The saved page renders the bullets from the report body. A second call updates the same report instead of creating a duplicate.
 
 `scripts/verify-qa`-style evidence: the door response, the screen text, and desktop 1440x900 plus phone 390x844 screenshots.
 
-Open `/report` signed in. Confirm the Reports heading, a saved row or the empty sentence, and a Velocity row. Open one saved row and confirm the title on `/report/<projectSlug>/<reportSlug>` matches the list. Reload. Signed out, both URLs send you to `/login`.
+Page drive, signed in as QA 985:
+
+```bash
+ht-verify open /report --wait h1                       # h1 Reports, sentence "Saved reports and board velocity in one place."
+ht-verify probe "a[href^='/report/project-15/']" --attr href   # a saved row, e.g. /report/project-15/status-update
+ht-verify open "$THAT_HREF" --wait h1                  # h1 matches the saved row's title
+ht-verify open /report/project-15/velocity --wait h1    # h1 Velocity
+ht-verify shot --session --out report.png
+ht-verify shot https://app.hypertask.ai/report --out report-390x844.png --viewport 390x844
+```
+
+Signed out, `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://app.hypertask.ai/report`
+gives `307 https://app.hypertask.ai/login`. The board segment is the project slug: `/report/15/status-update`
+lands on `/unauthorized`, because `parseProjectSlug` reads the id after `project-`.
 
 ## Gotchas
 

@@ -18,7 +18,9 @@ Usage:
   --dry-run  print the request shape and send nothing.
 
 A write without --confirm is refused. The response body is returned as JSON up to
-4000 characters. A 401 or 403 means the state expired, exit 3.
+4000 characters. A 401 means the state expired, exit 3. A 403 is a permission,
+flag or origin refusal from the route, reported with its body, exit 1, so a
+refusal is never mistaken for an expired identity.
 
 Examples:
   ht-verify api GET /api/flags
@@ -67,8 +69,16 @@ module.exports = {
       signal: AbortSignal.timeout(30_000),
     }).catch((error) => fail(`request failed: ${error.message}`, "Check the base URL and that the server is up, then retry.", "unreadable", 2));
     const text = (await response.text()).slice(0, 4_000);
-    if (response.status === 401 || response.status === 403) {
-      fail(`identity expired: the server refused this state (${response.status})`, "Refresh the state through verify-qa reference/logins.md, then retry.", "identity-expired", 3);
+    if (response.status === 401) {
+      fail(`identity expired: the server refused this state (401)`, "Refresh the state through verify-qa reference/logins.md, then retry.", "identity-expired", 3);
+    }
+    if (response.status === 403) {
+      return {
+        target: base.includes("127.0.0.1") ? "local" : "production",
+        data: { method, url, status: 403, ok: false, body: text },
+        ok: false,
+        error: { code: "forbidden", message: "the route refused this request (403)", next: "Read the body: a flag, role, origin or scope refused it. That is not an expired identity." },
+      };
     }
     return {
       target: base.includes("127.0.0.1") ? "local" : "production",

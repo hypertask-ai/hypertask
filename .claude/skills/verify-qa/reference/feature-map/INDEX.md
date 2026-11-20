@@ -63,19 +63,19 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
 | Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
-| Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | MCP velocity numbers and status update draft match /report/<slug>/velocity |
-| Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
-| Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
-| Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |
-| Starred tasks and comments | [starred.md](starred.md) | real document shortcut regression; live tab change, unstar and reload |
-| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-qa/scripts/task-drive-live.mjs` |
-| Task share links | [task-share-links.md](task-share-links.md) | no smoke id; no-login 401 and signed-in join checks on `/api/members/share` |
-| Board task templates | [task-templates.md](task-templates.md) | QA 985 settings edit, authoring, saved reload and permission controls |
-| Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | production workflow dispatch, QA-only fixtures and score artifacts |
-| Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | 62 real PostgreSQL cases in CI; live doctor, MCP reads and core inbox only |
-| Themes | [themes.md](themes.md) | Settings and Ctrl+K selection, reload, all-theme desktop/phone comparison |
-| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | no smoke id; delete one QA fixture, recover it, delete it again, permanent delete it, then drive the two refusals |
-| Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
+| Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | `ht-verify open /report` and one saved row; velocity page; the two MCP doors need an agent token (401 without) |
+| Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only); `ht-verify` filter icon > Tags > cycle Match ANY / Match ALL / Hide tags; flags EVERYONE |
+| Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); `ht-verify` /search tips, type `fr` then Tab, full load of a `searchTerm` URL |
+| Slack app | [slack-app.md](slack-app.md) | `ht-verify` page loads, `/api/slack/install` redirect, manifest events; live workspace parity UNREACHABLE |
+| Starred tasks and comments | [starred.md](starred.md) | `ht-verify` /starred and /pinned with `toggleSaved` fixtures; Ctrl+Shift+S and Ctrl+Shift+P removal, reload |
+| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-qa/scripts/task-drive-live.mjs`; `ht-verify` description PUT + reload, right column, /time empty |
+| Task share links | [task-share-links.md](task-share-links.md) | `ht-verify` createShareLink, 401 members/share, public /share HTML; agent door 401 without a token |
+| Board task templates | [task-templates.md](task-templates.md) | flag OFF: `ht-verify` GET/POST/DELETE `/api/task-templates` and PATCH 403; settings section absent |
+| Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | newest scheduled task-writer-eval run plus its score artifact; Ctrl+J window |
+| Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | CI Tests run log with 62 `real PG` cases; `/my-tasks` and the core inbox cycle |
+| Themes | [themes.md](themes.md) | `ht-verify` Appearance pick, `html[data-theme]` + `theme` cookie, Ctrl+K switch, AMOLED switch inner span |
+| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | `ht-verify` taskDeleteReminder > /trash/<board> > recover > deleteTask, then the 409 and 404 refusals |
+| Webhooks | [webhooks.md](webhooks.md) | Playwright request with `Origin` to `/api/settings/webhooks` create/test/delete; `lastDeliveryOk` true |
 <!-- shared-list rows end -->
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
