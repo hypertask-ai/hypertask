@@ -19,7 +19,8 @@ Saved reports and the velocity list live at `/report`. One saved report lives at
 
 Both doors need an agent token, not a human session, so a cookie-only QA run proves the door is
 refused and the pages render, and records the doors as `verified-unreachable` until an agent
-token on board 15's team is in hand:
+token on board 15's team is in hand. Both flags read EVERYONE live, so no flag switch is needed:
+`ht-verify flags show htpr-8219-velocity-report` and `ht-verify flags show htpr-8219-status-update-door`.
 
 ```bash
 curl -s -w '\nHTTP %{http_code}\n' "https://app.hypertask.ai/api/mcp/reports/velocity?project_id=15"
@@ -37,7 +38,7 @@ Page drive, signed in as QA 985:
 ```bash
 ht-verify open /report --wait h1                       # h1 Reports, sentence "Saved reports and board velocity in one place."
 ht-verify probe "a[href^='/report/project-15/']" --attr href   # a saved row, e.g. /report/project-15/status-update
-ht-verify open "$THAT_HREF" --wait h1                  # h1 matches the saved row's title
+ht-verify open /report/project-15/status-update --wait h1      # h1 matches the saved row's title
 ht-verify open /report/project-15/velocity --wait h1    # h1 Velocity
 ht-verify shot --session --out report.png
 ht-verify shot https://app.hypertask.ai/report --out report-390x844.png --viewport 390x844
