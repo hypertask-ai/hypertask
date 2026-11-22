@@ -330,6 +330,7 @@ Write `<TICKET>/proof.md`:
 Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
 Doctor: sha <latest-merge-sha> deployment success; /my-tasks signed in as user <id>
 Run: <YYYY-MM-DD>-qa-run-<n>
+Leftovers: none
 
 ## Cases
 - PASS: <case> -> <nonempty-file-in-run-folder>
@@ -337,9 +338,9 @@ Run: <YYYY-MM-DD>-qa-run-<n>
 - UNREACHABLE: <case> -> <reason; closest real check>
 ```
 
-`ship-check proof <TICKET>` must print `proof ok`, and it belongs to the production target
+`Leftovers` is `none`, or a list of what the run left on production: a test login, a label, a switched setting, a reminder. `ship-check proof <TICKET>` must print `proof ok`, and it belongs to the production target
 only: it reads the merge sha and requires the `Doctor:` line to name that sha and its
-`success`, so it cannot pass before a merge exists. A local or PR-visual run proves itself
+`success`, so it cannot pass before a merge exists. A proof with no `Leftovers` line fails that check. A local or PR-visual run proves itself
 with its own run folder: the cases, the served HTML, the 390x844 shot, that folder named in
 the ticket comment, and, for a visual run, the current-head run URL. A FAIL case cannot pass.
 Publish the self-contained HTML report as a ticket page with `vcc pages create`, then post one
@@ -365,7 +366,10 @@ docker volume rm hypertask-verify-db
 ```
 
 Remove your own fixtures through product surfaces only, never SQL:
-`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`. It targets
+`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`.
+Ticket deletion does not undo a test login, a label, or a switched setting.
+Put those back as `.claude/skills/verify-qa/reference/fixture-cleanup.md` describes
+before writing `Leftovers: none`. It targets
 production by default; `--base-url` accepts only an `http://127.0.0.1` origin, so pass it for a
 local run and omit it for production. Design and phone runs start and close their own headless
 browsers and create no
