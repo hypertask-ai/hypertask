@@ -459,15 +459,6 @@ export async function linkTaskPullRequest({
         );
       }
 
-      await transaction.taskPullRequestUnlink.deleteMany({
-        where: {
-          taskId,
-          repositoryOwner: parsed.owner,
-          repositoryName: parsed.repository,
-          number: parsed.number,
-        },
-      });
-
       const created = await transaction.taskPullRequest.create({
         data: {
           taskId,
@@ -626,21 +617,44 @@ export async function unlinkTaskPullRequests({
         repositoryOwner: true,
         repositoryName: true,
         number: true,
+        url: true,
+        title: true,
+        lifecycle: true,
+        checkState: true,
       },
     });
     if (links.length === 0) return { removed: 0 };
 
     await transaction.taskPullRequest.deleteMany({ where: { taskId } });
-    await transaction.taskPullRequestUnlink.createMany({
-      data: links.map((link) => ({
-        taskId,
-        repositoryOwner: link.repositoryOwner,
-        repositoryName: link.repositoryName,
-        number: link.number,
-        userId,
-      })),
-      skipDuplicates: true,
-    });
+    for (const link of links) {
+      const activity = sanitizeAgentCredentials({
+        type: "TaskPullRequest",
+        data: {
+          fromUserId: userId,
+          fromUser: user,
+          fromAgent: agent,
+          action: "unlinked",
+          pullRequest: {
+            url: link.url,
+            title: link.title,
+            number: link.number,
+            repository: `${link.repositoryOwner}/${link.repositoryName}`,
+            displayState: derivePullRequestDisplayState(
+              link.lifecycle as PullRequestLifecycle,
+              link.checkState as PullRequestCheckState,
+            ),
+          },
+        },
+      });
+      await transaction.comment.create({
+        data: {
+          text: "",
+          taskId,
+          agentId: agent?.id ?? null,
+          activity: activity as Prisma.InputJsonValue,
+        },
+      });
+    }
     await transaction.task.update({
       where: { id: taskId },
       data: {

@@ -41,8 +41,24 @@ function loadPullRequestField() {
 }
 
 const linkedPullRequests = [
-  { repositoryOwner: 'hypertask-ai', repositoryName: 'hypertask', number: 110 },
-  { repositoryOwner: 'hypertask-ai', repositoryName: 'cli', number: 7 },
+  {
+    repositoryOwner: 'hypertask-ai',
+    repositoryName: 'hypertask',
+    number: 110,
+    url: 'https://github.com/hypertask-ai/hypertask/pull/110',
+    title: 'Mistaken link',
+    lifecycle: 'open',
+    checkState: 'pending',
+  },
+  {
+    repositoryOwner: 'hypertask-ai',
+    repositoryName: 'cli',
+    number: 7,
+    url: 'https://github.com/hypertask-ai/cli/pull/7',
+    title: 'Other link',
+    lifecycle: 'open',
+    checkState: 'passing',
+  },
 ]
 
 function loadUnlink(fence = {}) {
@@ -74,7 +90,7 @@ function fakeDb({
   user = { id: 6, displayName: 'Valentin Yeo', photoURL: null, email: 'owner@example.test' },
   agent = null,
 } = {}) {
-  const calls = { deletes: [], updates: [], access: [], suppressions: [] }
+  const calls = { deletes: [], updates: [], access: [], activities: [] }
   const db = {
     calls,
     task: {
@@ -96,10 +112,10 @@ function fakeDb({
         return { count: links.length }
       },
     },
-    taskPullRequestUnlink: {
-      createMany: async (args) => {
-        calls.suppressions.push(args)
-        return { count: args.data.length }
+    comment: {
+      create: async (args) => {
+        calls.activities.push(args)
+        return args
       },
     },
     $queryRaw: async () => [],
@@ -202,10 +218,14 @@ test('unlinking removes every pull request link on a task the caller can write t
   assert.equal(db.calls.access.length, 1)
   assert.equal(db.calls.access[0].where.id, 42)
   assert.deepEqual(db.calls.deletes, [{ where: { taskId: 42 } }])
-  assert.deepEqual(db.calls.suppressions, [{
-    data: linkedPullRequests.map((link) => ({ ...link, taskId: 42, userId: 6 })),
-    skipDuplicates: true,
-  }])
+  assert.deepEqual(
+    db.calls.activities.map((entry) => entry.data.activity.data.action),
+    ['unlinked', 'unlinked'],
+  )
+  assert.deepEqual(
+    db.calls.activities.map((entry) => entry.data.activity.data.pullRequest.repository),
+    ['hypertask-ai/hypertask', 'hypertask-ai/cli'],
+  )
   assert.equal(db.calls.updates.length, 1)
   assert.equal(db.calls.updates[0].where.id, 42)
   assert.deepEqual(db.calls.updates[0].data.updatedByUserIds, { push: 6 })
@@ -238,7 +258,7 @@ test('an active agent lease blocks the unlink before any link is removed', async
     (error) => error.status === 409,
   )
   assert.deepEqual(db.calls.deletes, [])
-  assert.deepEqual(db.calls.suppressions, [])
+  assert.deepEqual(db.calls.activities, [])
   assert.deepEqual(db.calls.updates, [])
   assert.deepEqual(fence.cancels, [])
 })
@@ -253,7 +273,7 @@ test('unlinking keeps the links when the caller cannot write to the task', async
   )
   assert.equal(db.calls.access.length, 1)
   assert.deepEqual(db.calls.deletes, [])
-  assert.deepEqual(db.calls.suppressions, [])
+  assert.deepEqual(db.calls.activities, [])
   assert.deepEqual(db.calls.updates, [])
   assert.deepEqual(fence.asserts, [])
   assert.deepEqual(fence.cancels, [])
@@ -267,6 +287,6 @@ test('unlinking a task that has no pull request link leaves the task unchanged',
     { removed: 0 },
   )
   assert.deepEqual(db.calls.deletes, [])
-  assert.deepEqual(db.calls.suppressions, [])
+  assert.deepEqual(db.calls.activities, [])
   assert.deepEqual(db.calls.updates, [])
 })

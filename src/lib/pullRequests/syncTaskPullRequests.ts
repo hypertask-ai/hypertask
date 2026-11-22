@@ -43,6 +43,43 @@ interface CheckSuiteWebhookUpdate {
 
 type Transaction = Prisma.TransactionClient;
 
+function activityData(activity: unknown): Record<string, unknown> | null {
+  if (!activity || typeof activity !== "object" || Array.isArray(activity)) return null;
+  const data = (activity as { data?: unknown }).data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return data as Record<string, unknown>;
+}
+
+async function explicitUnlink(
+  transaction: Transaction,
+  taskId: number,
+  input: Pick<PullRequestWebhookUpdate, "repositoryOwner" | "repositoryName" | "number">,
+): Promise<boolean> {
+  const latest = await transaction.comment.findFirst({
+    where: {
+      taskId,
+      AND: [
+        { activity: { path: ["type"], equals: "TaskPullRequest" } },
+        {
+          activity: {
+            path: ["data", "pullRequest", "repository"],
+            equals: `${input.repositoryOwner}/${input.repositoryName}`,
+          },
+        },
+        {
+          activity: {
+            path: ["data", "pullRequest", "number"],
+            equals: input.number,
+          },
+        },
+      ],
+    },
+    orderBy: { id: "desc" },
+    select: { activity: true },
+  });
+  return activityData(latest?.activity)?.action === "unlinked";
+}
+
 async function writePullRequestActivity(
   transaction: Transaction,
   input: {
@@ -91,19 +128,6 @@ export async function syncPullRequestFromWebhook(
   suppressed: boolean;
 }> {
   return prisma.$transaction(async (transaction) => {
-    const removedLink = (taskId: number) =>
-      transaction.taskPullRequestUnlink.findUnique({
-        where: {
-          taskId_repositoryOwner_repositoryName_number: {
-            taskId,
-            repositoryOwner: input.repositoryOwner,
-            repositoryName: input.repositoryName,
-            number: input.number,
-          },
-        },
-        select: { id: true },
-      });
-
     const existingLinks = await transaction.taskPullRequest.findMany({
       where: {
         repositoryOwner: input.repositoryOwner,
@@ -144,7 +168,7 @@ export async function syncPullRequestFromWebhook(
         select: { id: true },
       });
       if (task) {
-        if (await removedLink(task.id)) {
+        if (await explicitUnlink(transaction, task.id, input)) {
           return { linked: 0, updated: 0, taskIds: [], suppressed: true };
         }
         taskIds = [task.id];
@@ -164,7 +188,7 @@ export async function syncPullRequestFromWebhook(
 
     for (const taskId of taskIds) {
       await lockAgentMutationFence(transaction, taskId);
-      if (await removedLink(taskId)) {
+      if (await explicitUnlink(transaction, taskId, input)) {
         suppressed = true;
         continue;
       }

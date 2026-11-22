@@ -1304,7 +1304,6 @@ model Task {
   numberAliases       TaskNumberAlias[]
   sectionEvents       TaskSectionEvent[]
   pullRequests        TaskPullRequest[]
-  pullRequestUnlinks  TaskPullRequestUnlink[]
   customFieldValues   CustomFieldValue[]
   updatedByUserIds    Int[]
   //If provided, task is created by an agent
@@ -1437,20 +1436,6 @@ model TaskPullRequest {
 
   @@unique([taskId, repositoryOwner, repositoryName, number], map: "TaskPullRequest_task_repo_pr_key")
   @@unique([repositoryOwner, repositoryName, number], map: "TaskPullRequest_repo_pr_key")
-  @@index([repositoryOwner, repositoryName, number])
-}
-
-model TaskPullRequestUnlink {
-  id               String   @id @default(uuid())
-  taskId           Int
-  task             Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  repositoryOwner  String   @db.VarChar(100)
-  repositoryName   String   @db.VarChar(100)
-  number           Int
-  userId           Int
-  createdAt        DateTime @default(now())
-
-  @@unique([taskId, repositoryOwner, repositoryName, number], map: "TaskPullRequestUnlink_task_repo_pr_key")
   @@index([repositoryOwner, repositoryName, number])
 }
 
