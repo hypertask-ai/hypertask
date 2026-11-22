@@ -4,7 +4,7 @@
 
 - `demo-board` Demo board.
 - `demo-entry` Open `/demo` while signed out. The page shows "Creating your private demo board…", POSTs `/api/demo/guest`, and sends the browser to the returned board URL. A failed create shows the error and a Try again button.
-- `learn-board` **Verified-unreachable** while the keyboard shortcut tutorial is off (`KEYBOARD_SHORTCUT_TUTORIAL_ENABLED = false`): `src/proxy.ts` (`isKeyboardShortcutTutorialPath`) redirects `/learn` before the page renders. Signed out it 307s to `/login`; signed in it 307s to the previous board (`/project?id=<id>`). The `/learn` page's own 410 alert never shows. `POST /api/learn/board` answers 410 `The keyboard shortcuts tutorial is temporarily unavailable` even signed out (the 410 branch runs before the session check), never 401. Prerequisite to reach the page: the tutorial switched on in `src/lib/tutorial/keyboardShortcutTutorial.ts`.
+- `learn-board` **Verified-unreachable** while the keyboard shortcut tutorial is off (`KEYBOARD_SHORTCUT_TUTORIAL_ENABLED = false`): `src/proxy.ts` (`isKeyboardShortcutTutorialPath`) redirects `/learn` before the page renders. Signed out it 307s to `/login`; signed in it 307s to the previous board (`/project?id=<id>`). The `/learn` page's own 410 alert never shows. Signed-out `POST /api/learn/board` answers 401 `Sign in to start the tutorial`. A signed-in caller still gets 410 `The keyboard shortcuts tutorial is temporarily unavailable` while the tutorial is off. Prerequisite to reach the page: the tutorial switched on in `src/lib/tutorial/keyboardShortcutTutorial.ts`.
 - `onboarding-wizard` A signed-in person opens `/onboarding`. `?resumeKey=connect-ai-screen` shows "Which AI will you drive Hypertask with?"; `?resumeKey=launch-screen` shows "You're all set." and Launch Hypertask (both verified live). A `companySize` query of Just me skips "Invite co-workers to your team". A new account starts at "Set up your workspace".
 - `tutorial-landing` **Verified-unreachable**, same prerequisite: the proxy sends every signed-in `/interactive-onboarding/*` request to the previous board, and a signed-out visitor to `/login`. No scene renders today.
 - `tutorial-inbox` **Verified-unreachable**, same prerequisite. When the tutorial is on, the sample inbox is below scene 17, and E at scene 13 only fires after `j j k k` (E before that only shakes the hint).
@@ -42,7 +42,7 @@ Verified on production 2026-11-20:
    board to chase it.
 3. Signed out, `curl -s -o /dev/null -D - /learn` gives 307 `/login`, and
    `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type:
-   application/json' -d '{}' /api/learn/board` gives 410. Signed in as QA 985,
+   application/json' -d '{}' /api/learn/board` gives 401. Signed in as QA 985,
    `/learn` 307s to `/project?id=<previousBoard>` and no alert renders.
 4. Open `/onboarding?companySize=Just%20me&resumeKey=connect-ai-screen`: the
    only heading is `Which AI will you drive Hypertask with?`. Then
@@ -68,7 +68,7 @@ first-load code path as a fresh signed-out visit.
 test suite itself (see `e2e/smoke/README.md`), not a product bug; don't cite
 it as a demo-board fix.
 - `/learn` and `/interactive-onboarding/*` are redirected by the proxy while the keyboard shortcut tutorial is off; the pages' own copy (410 alert, scenes) is not reachable.
-- `/learn`'s API returns 410 to signed-out callers too, because the disabled branch runs before the session check.
+- `/learn`'s API returns 401 to signed-out callers. A signed-in caller still receives 410 while the keyboard shortcut tutorial is off.
 - `/interactive-onboarding/end` without `funnel_completed` is the "Well Done!" screen. The same path with `funnel_completed` is the team-setup screen. Check the query before judging the heading.
 - With the tutorial on, J, K, and E on the sample inbox apply at scene 13, and E needs `j j k k` first. A fresh load is scene 0, so those keys do nothing on first paint.
 - A signed-out visitor who is not in the funnel cannot stay on the interactive tutorial.
