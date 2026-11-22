@@ -4,7 +4,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
-const ts = require("typescript");
 const { loadModule } = require("./helpers/loadModule.cjs");
 const { filters } = require("./board-filters/runtime.cjs");
 const { NOW, fixture, sectionIds } = require("./board-filters/fixture.cjs");
@@ -15,7 +14,10 @@ const jiti = require("jiti")(__filename, {
   alias: { "@": path.join(root, "src") },
 });
 const builtin = jiti(path.join(root, "src/lib/constants/builtinViews.ts"));
-const flag = jiti(path.join(root, "src/lib/flags/definitions/htpr-9361-blocked-view-done.ts"));
+const flagFile = path.join(root, "src/lib/flags/definitions/htpr-9361-blocked-view-done.ts");
+const flag = fs.existsSync(flagFile)
+  ? jiti(flagFile)
+  : { default: {}, HTPR_9361_BLOCKED_VIEW_DONE_FLAG: "htpr-9361-blocked-view-done" };
 const {
   BLOCKED_BY_ME_VIEW_RULE,
   BLOCKED_VIEW_RULE,
@@ -178,29 +180,14 @@ function tabCount(project, enabled) {
 }
 
 function loadMeta(enabled) {
-  const filename = path.join(
-    root,
-    "src/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta.tsx",
-  );
-  const js = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      jsx: ts.JsxEmit.ReactJSX,
-      module: ts.ModuleKind.CommonJS,
-      esModuleInterop: true,
+  return loadModule("src/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta.tsx", {
+    "@/lib/constants/builtinViews": builtin,
+    "@/lib/cycles": jiti(path.join(root, "src/lib/cycles.ts")),
+    "@/hooks/useFlag": {
+      useFlag: (key) => key === flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG && enabled,
     },
-  }).outputText;
-  const exports = {};
-  new Function("require", "exports", js)((name) => {
-    if (name === "react/jsx-runtime") return require("react/jsx-runtime");
-    if (name === "@/lib/constants/builtinViews") return builtin;
-    if (name === "@/lib/cycles") return jiti(path.join(root, "src/lib/cycles.ts"));
-    if (name === "@/hooks/useFlag") {
-      return { useFlag: (key) => key === flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG && enabled };
-    }
-    if (name === "@/lib/flags/definitions/htpr-9361-blocked-view-done") return flag;
-    throw new Error(`Unexpected dependency ${name}`);
-  }, exports);
-  return exports.default;
+    "@/lib/flags/definitions/htpr-9361-blocked-view-done": flag,
+  }).default;
 }
 
 function renderRule(enabled, activeViewId, project = { section: [], cycles: [] }) {
