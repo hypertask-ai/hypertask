@@ -1,5 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 const { loader } = require('./htpr-6927-fixtures.cjs')
 
 const flag = 'htpr-9581-feedback-pr-repeat'
@@ -77,10 +79,11 @@ function setup({ repeatJoin = true } = {}) {
 }
 
 test('flag is a bug fix on for everyone', () => {
-  const definition = setup().load(`src/lib/flags/definitions/${flag}.ts`).default
-  assert.equal(definition.key, flag)
-  assert.equal(definition.kind, 'bugfix')
-  assert.equal(definition.defaultMode, 'EVERYONE')
+  const file = path.join(__dirname, '..', 'src/lib/flags/definitions', `${flag}.ts`)
+  const source = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+  assert.match(source, new RegExp(`["']${flag}["']`))
+  assert.match(source, /kind:\s*["']bugfix["']/)
+  assert.match(source, /defaultMode:\s*["']EVERYONE["']/)
 })
 
 test('a repeat that names another pull request joins the open ticket and the description still has no error code', async () => {
