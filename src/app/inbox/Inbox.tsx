@@ -9,6 +9,7 @@ import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-809
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
+import { HTPR_9071_INBOX_ZERO_IMAGE_FLAG } from "@/lib/flags/definitions/htpr-9071-inbox-zero-image";
 import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
 
 import {
@@ -877,6 +878,7 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
+            <SplitTabsUnlessInboxZero isInboxZero={isInboxZero}>
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               narrowLayout={narrowInboxTabs}
@@ -917,6 +919,7 @@ const Inbox = ({
                 ),
               )}
             </SplitTitlesContainer>
+            </SplitTabsUnlessInboxZero>
 
             <div
               className={
@@ -988,6 +991,7 @@ const Inbox = ({
                 </>
               ))}
             </div>
+            <SplitTabsUnlessInboxZero isInboxZero={isInboxZero}>
             {!isMbl && !narrowInboxTabs && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
@@ -1014,6 +1018,8 @@ const Inbox = ({
                 )}
               </div>
             )}
+            </SplitTabsUnlessInboxZero>
+            <SplitTabsUnlessInboxZero isInboxZero={isInboxZero}>
             {isMbl && (
               <MobileInboxSplitDock
                 tabs={_notificationsTQ?.structuredData?.tabs ?? []}
@@ -1022,6 +1028,7 @@ const Inbox = ({
                 trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
               />
             )}
+            </SplitTabsUnlessInboxZero>
           </div>
           {!isMbl && (
             <Link
@@ -1061,6 +1068,18 @@ const Inbox = ({
 };
 
 export default Inbox;
+
+const SplitTabsUnlessInboxZero = ({
+  isInboxZero,
+  children,
+}: {
+  isInboxZero: boolean;
+  children?: ReactNode;
+}) => {
+  const hideInboxZeroTabs = useFlag(HTPR_9071_INBOX_ZERO_IMAGE_FLAG);
+  if (hideInboxZeroTabs && isInboxZero) return null;
+  return children;
+};
 
 interface IProps {
   children?: ReactNode;
