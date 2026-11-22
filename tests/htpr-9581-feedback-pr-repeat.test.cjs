@@ -17,15 +17,23 @@ const report = {
   client: 'hypertask-cli',
 }
 
-function needles(where) {
-  if (where?.text?.contains) return [where.text.contains]
-  return (where?.AND ?? []).map((item) => item.text?.contains).filter(Boolean)
+function clauseHolds(comment, clause) {
+  if (clause?.NOT?.text?.contains) return !comment.text.includes(clause.NOT.text.contains)
+  if (clause?.text?.contains) return comment.text.includes(clause.text.contains)
+  return false
+}
+
+function commentMatches(comment, where) {
+  if (where?.text?.contains) return comment.text.includes(where.text.contains)
+  const clauses = where?.AND ?? []
+  return clauses.length > 0 && clauses.every((clause) => clauseHolds(comment, clause))
 }
 
 function setup({ repeatJoin = true } = {}) {
   const created = []
   const comments = []
   const rows = []
+  const locks = []
   const on = async (key) => key !== flag || repeatJoin
   const db = {
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
@@ -39,8 +47,7 @@ function setup({ repeatJoin = true } = {}) {
     } },
     comment: {
       findFirst: async ({ where }) => {
-        const wanted = needles(where)
-        const matches = (comment) => wanted.every((needle) => comment.text.includes(needle))
+        const matches = (comment) => commentMatches(comment, where)
         if (where.task) {
           const comment = comments.find((comment) => matches(comment))
           const task = comment && rows.find((row) => row.id === comment.taskId && row.section !== 'Done')
@@ -50,7 +57,10 @@ function setup({ repeatJoin = true } = {}) {
       },
       update: async ({ where, data }) => Object.assign(comments.find((comment) => comment.id === where.id), data),
     },
-    $queryRaw: async () => [{ locked: true }],
+    $queryRaw: async (_query, value) => {
+      locks.push(value)
+      return [{ locked: true }]
+    },
     $transaction: async (run) => run(db),
   }
   const load = loader({
@@ -75,7 +85,7 @@ function setup({ repeatJoin = true } = {}) {
     } },
     '@/lib/realtime/server': { broadcastTaskChange: async () => {} },
   })
-  return { ...load('src/lib/aiFeedback/report.ts'), load, created, comments, rows }
+  return { ...load('src/lib/aiFeedback/report.ts'), load, created, comments, rows, locks }
 }
 
 test('flag is a bug fix on for everyone', () => {
@@ -108,6 +118,45 @@ test('a repeat that names another pull request joins the open ticket and the des
   assert.equal(f.created.length, 1)
   assert.equal(again.deduped, true)
   assert.equal(again.count, 3)
+  assert.equal(f.locks.length, 6)
+  assert.notEqual(f.locks[0], f.locks[2])
+  assert.equal(f.locks[1], f.locks[3])
+  assert.equal(f.locks[1], f.locks[5])
+})
+
+test('a report that leaves out the tool or the kind does not join a ticket that named it', async () => {
+  const withTool = setup()
+  await withTool.fileAiFeedback(report, 6, { origin: 'agent' })
+  const { tool, ...withoutTool } = report
+  const otherTool = await withTool.fileAiFeedback({
+    ...withoutTool,
+    note: note.replace('1188', '1200'),
+  }, 6, { origin: 'agent' })
+  assert.equal(otherTool.deduped, false)
+  assert.equal(withTool.created.length, 2)
+
+  const withKind = setup()
+  await withKind.fileAiFeedback(report, 6, { origin: 'agent' })
+  const { kind, ...withoutKind } = report
+  const otherKind = await withKind.fileAiFeedback({
+    ...withoutKind,
+    note: note.replace('1188', '1200'),
+  }, 6, { origin: 'agent' })
+  assert.equal(otherKind.deduped, false)
+  assert.equal(withKind.created.length, 2)
+})
+
+test('two reports that both leave the tool out still join on the same sentence', async () => {
+  const f = setup()
+  const { tool, ...withoutTool } = report
+  await f.fileAiFeedback(withoutTool, 6, { origin: 'agent' })
+  const second = await f.fileAiFeedback({
+    ...withoutTool,
+    note: note.replace('1188', '1200'),
+  }, 6, { origin: 'agent' })
+  assert.equal(second.deduped, true)
+  assert.equal(f.created.length, 1)
+  assert.equal(f.locks[1], f.locks[3])
 })
 
 test('a short note that only shares the pull request words still opens its own ticket', async () => {
@@ -153,4 +202,5 @@ test('turning the flag off opens a second ticket when the pull request number ch
   }, 6, { origin: 'agent' })
   assert.equal(second.deduped, false)
   assert.equal(f.created.length, 2)
+  assert.equal(f.locks.length, 2)
 })

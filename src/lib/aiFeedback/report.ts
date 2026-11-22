@@ -10,7 +10,7 @@ import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
-import { aiFeedbackSchema, feedbackFingerprint, repeatNoteAnchor, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
+import { aiFeedbackSchema, feedbackFingerprint, repeatJoinKey, repeatNoteAnchor, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
 
@@ -88,17 +88,18 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
-function repeatParts(input: AutomaticFeedbackInput, stored?: StoredNote): string[] | null {
+function repeatClauses(input: AutomaticFeedbackInput, stored?: StoredNote) {
   const anchor = stored?.note ? repeatNoteAnchor(stored.note) : undefined
   if (!anchor || !input.errorCode) return null
-  const parts = [
-    `<p>Error code: ${escapeHtml(input.errorCode)}</p>`,
-    `<p>Surface: ${escapeHtml(input.surface)}</p>`,
-    `<p>Note: ${escapeHtml(anchor)}`,
+  const has = (part: string) => ({ text: { contains: part } })
+  const lacks = (part: string) => ({ NOT: { text: { contains: part } } })
+  return [
+    has(`<p>Error code: ${escapeHtml(input.errorCode)}</p>`),
+    has(`<p>Surface: ${escapeHtml(input.surface)}</p>`),
+    has(`<p>Note: ${escapeHtml(anchor)}`),
+    input.tool ? has(`<p>Tool: ${escapeHtml(input.tool)}</p>`) : lacks('<p>Tool:'),
+    stored?.kind ? has(`<p>Kind: ${escapeHtml(stored.kind)}</p>`) : lacks('<p>Kind:'),
   ]
-  if (input.tool) parts.push(`<p>Tool: ${escapeHtml(input.tool)}</p>`)
-  if (stored?.kind) parts.push(`<p>Kind: ${escapeHtml(stored.kind)}</p>`)
-  return parts
 }
 
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
@@ -278,6 +279,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
     OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
   }
   const key = BigInt.asIntN(64, BigInt(`0x${fingerprint.slice(0, 16)}`))
+  const joinKey = joinPullRequestRepeat ? repeatJoinKey(input, stored) : undefined
   let changedTaskId: number | undefined
   const deadline = Date.now() + 30000
   try {
@@ -285,6 +287,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
       const result = await prisma.$transaction(async (tx) => {
         const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(${key}) AS locked`
         if (!lock.locked) return
+        if (joinKey !== undefined) {
+          const [joined] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(${joinKey}) AS locked`
+          if (!joined.locked) return
+        }
         const [project, user] = await Promise.all([
           prisma.project.findFirst({
             where: { id: PROJECT_ID, status: 'Normal' },
@@ -308,10 +314,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           })
           existing = logged?.task ?? null
         }
-        const parts = !existing && joinPullRequestRepeat ? repeatParts(input, stored) : null
-        if (parts && tx.comment?.findFirst) {
+        const clauses = !existing && joinPullRequestRepeat ? repeatClauses(input, stored) : null
+        if (clauses && tx.comment?.findFirst) {
           const logged = await tx.comment.findFirst({
-            where: { agentId: null, AND: parts.map((part) => ({ text: { contains: part } })), task: openWhere },
+            where: { agentId: null, AND: clauses, task: openWhere },
             select: { task: { select: ticketSelect } },
           })
           existing = logged?.task ?? null

@@ -69,6 +69,14 @@ export function repeatNoteAnchor(note: string): string | undefined {
   return anchor && anchor.length >= 24 ? anchor : undefined
 }
 
+export function repeatJoinKey(input: { errorCode?: string; surface: string; tool?: string }, stored?: { kind?: string; note?: string }): bigint | undefined {
+  const anchor = stored?.note ? repeatNoteAnchor(stored.note) : undefined
+  if (!anchor || !input.errorCode) return undefined
+  const material = [input.errorCode, input.surface, input.tool ?? '', stored?.kind ?? '', anchor].join('\n')
+  const hash = createHash('sha256').update(material).digest('hex')
+  return BigInt.asIntN(64, BigInt(`0x${hash.slice(0, 16)}`))
+}
+
 export function feedbackFingerprint(input: AutomaticFeedbackInput, stored?: { kind?: string; note?: string }): string {
   const parts = [input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? '', input.category ?? 'other']
   if (input.field) parts.push(input.field)
