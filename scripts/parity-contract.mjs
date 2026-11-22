@@ -397,26 +397,6 @@ function assertTrustedEntriesRemain(baseline, surfaces) {
   }
 }
 
-function plannedTransitionExpiryIsValid(expires) {
-  const expiry = new Date(`${expires}T23:59:59.999Z`);
-  const latestAllowed = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  return (
-    !Number.isNaN(expiry.getTime()) &&
-    expiry >= new Date() &&
-    expiry <= latestAllowed
-  );
-}
-
-function plannedTransitionRenewalOnly(trusted, candidate) {
-  if (!trusted || !candidate) return false;
-  return (
-    trusted.issue === candidate.issue &&
-    JSON.stringify(trusted.entries) === JSON.stringify(candidate.entries) &&
-    trusted.expires !== candidate.expires &&
-    plannedTransitionExpiryIsValid(candidate.expires)
-  );
-}
-
 function assertTrustedTransitionState(
   trustedContract,
   candidateContract,
@@ -442,9 +422,6 @@ function assertTrustedTransitionState(
         !completed &&
         JSON.stringify(candidateTransition) !== JSON.stringify(transition)
       ) {
-        if (plannedTransitionRenewalOnly(transition, candidateTransition)) {
-          continue;
-        }
         errors.push(
           `${trustedJob.id}: ${surface} transition changed before every trusted entry was implemented`,
         );
@@ -565,22 +542,18 @@ function assertTrustedContractEvolution(
 
 const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
 const surfaces = collectInventory(options.cliCapabilities);
+const assignments = validateContract(contract, surfaces);
+const inventory = generatedInventory(contract, surfaces, assignments);
+const inventoryText = stableJson(inventory);
+const reportText = renderReport(contract, inventory);
 
 if (options.mode === "write") {
-  const assignments = validateContract(contract, surfaces);
-  const inventory = generatedInventory(contract, surfaces, assignments);
-  const inventoryText = stableJson(inventory);
-  const reportText = renderReport(contract, inventory);
   fs.writeFileSync(inventoryPath, inventoryText);
   fs.writeFileSync(reportPath, reportText);
   console.log(
     `Wrote ${path.relative(root, inventoryPath)} and ${path.relative(root, reportPath)}`,
   );
 } else if (options.mode === "check") {
-  const assignments = validateContract(contract, surfaces);
-  const inventory = generatedInventory(contract, surfaces, assignments);
-  const inventoryText = stableJson(inventory);
-  const reportText = renderReport(contract, inventory);
   assertSame(inventoryPath, inventoryText);
   assertSame(reportPath, reportText);
   console.log("Five-surface parity contract is current");

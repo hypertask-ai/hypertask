@@ -77,7 +77,7 @@ jobs:
           fi
           chmod 755 "$CLI_BINARY"
           env -u GITHUB_TOKEN -u GH_TOKEN "$CLI_BINARY" capabilities --json > "$PARITY_TMP/capabilities.json"
-          env -u GITHUB_TOKEN -u GH_TOKEN node candidate/scripts/parity-contract.mjs \
+          env -u GITHUB_TOKEN -u GH_TOKEN node trusted/scripts/parity-contract.mjs \
             --root candidate \
             --validate-only \
             --contract trusted/config/parity/contract.json \
