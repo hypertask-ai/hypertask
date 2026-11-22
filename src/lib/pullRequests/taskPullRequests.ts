@@ -607,9 +607,6 @@ export async function unlinkTaskPullRequests({
       userId,
       { allowHumanOverride: !agentId },
     );
-    if (!agentId) {
-      await cancelAgentMutationLeaseForHumanOverride(transaction, taskId, userId);
-    }
 
     const links = await transaction.taskPullRequest.findMany({
       where: { taskId },
@@ -624,6 +621,10 @@ export async function unlinkTaskPullRequests({
       },
     });
     if (links.length === 0) return { removed: 0 };
+
+    if (!agentId) {
+      await cancelAgentMutationLeaseForHumanOverride(transaction, taskId, userId);
+    }
 
     await transaction.taskPullRequest.deleteMany({ where: { taskId } });
     for (const link of links) {

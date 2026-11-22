@@ -281,12 +281,65 @@ test('unlinking keeps the links when the caller cannot write to the task', async
 
 test('unlinking a task that has no pull request link leaves the task unchanged', async () => {
   const db = fakeDb({ links: [] })
-  const unlinkTaskPullRequests = loadUnlink()
+  const fence = { asserts: [], cancels: [] }
+  const unlinkTaskPullRequests = loadUnlink(fence)
   assert.deepEqual(
     await unlinkTaskPullRequests({ taskId: 42, userId: 6, agentId: null, db }),
     { removed: 0 },
   )
+  assert.equal(fence.asserts.length, 1)
+  assert.deepEqual(fence.cancels, [])
   assert.deepEqual(db.calls.deletes, [])
   assert.deepEqual(db.calls.activities, [])
   assert.deepEqual(db.calls.updates, [])
+})
+
+function loadDelete(comment) {
+  const calls = { deletes: [] }
+  const db = {
+    comment: {
+      findUnique: async () => comment,
+      deleteMany: async (args) => {
+        calls.deletes.push(args)
+        return { count: 1 }
+      },
+    },
+    notification: { updateMany: async () => ({ count: 0 }) },
+    attachment: { deleteMany: async () => ({ count: 0 }) },
+    task: { update: async () => ({}) },
+  }
+  const { deleteCommentService } = loadModule('src/utils/controllers/comments/deleteCommentService.ts', {
+    '@/lib/prisma': { default: db },
+    '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ({}) },
+    '@/utils/controllers/turbopuffer/turbopufferHelper': { deleteCommentInTurbopuffer: async () => {} },
+  })
+  return { deleteCommentService, calls }
+}
+
+test('a pull request removal activity cannot be deleted', async () => {
+  const { deleteCommentService, calls } = loadDelete({
+    id: 8,
+    taskId: 42,
+    creatorId: 6,
+    activity: {
+      type: 'TaskPullRequest',
+      data: { action: 'unlinked', pullRequest: { number: 110, repository: 'hypertask-ai/hypertask' } },
+    },
+  })
+  await assert.rejects(
+    () => deleteCommentService({ commentId: 8, userId: 6 }),
+    (error) => error.message === 'Comment cannot be deleted',
+  )
+  assert.deepEqual(calls.deletes, [])
+})
+
+test('a normal comment can still be deleted', async () => {
+  const { deleteCommentService, calls } = loadDelete({
+    id: 9,
+    taskId: 42,
+    creatorId: 6,
+    activity: null,
+  })
+  assert.deepEqual(await deleteCommentService({ commentId: 9, userId: 6 }), { deleted: true })
+  assert.deepEqual(calls.deletes, [{ where: { id: 9 } }])
 })
