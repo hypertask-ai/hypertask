@@ -929,11 +929,17 @@ function ladderBin() {
 function ladderLanesFile(model) {
   const chosen = String(model ?? "").startsWith("deepseek/") ? assertFlashModel(model) : String(model ?? "");
   if (!chosen || chosen === FLASH) return "";
-  const lanes = [{ name: "openrouter", key_env: "OPENROUTER_API_KEY", url: "https://openrouter.ai/api/v1/chat/completions", model: chosen }];
+  const root = String(process.env.LADDER_CALL_ROOT ?? "").trim() || path.dirname(path.dirname(ladderBin()));
+  let lanes = [];
+  try { lanes = JSON.parse(readFileSync(path.join(root, "ci", "lanes.json"), "utf8")); } catch { lanes = []; }
+  const updated = lanes.map((lane) => (lane.name === "openrouter" ? { ...lane, model: chosen } : { ...lane }));
+  if (!updated.some((lane) => lane.name === "openrouter")) {
+    updated.push({ name: "openrouter", key_env: "OPENROUTER_API_KEY", url: "https://openrouter.ai/api/v1/chat/completions", model: chosen });
+  }
   const dir = workDir();
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "ladder-lanes.json");
-  writeFileSync(file, `${JSON.stringify(lanes)}\n`, { mode: 0o600 });
+  writeFileSync(file, `${JSON.stringify(updated)}\n`, { mode: 0o600 });
   return file;
 }
 function ladderFailure(stderr, status) {
