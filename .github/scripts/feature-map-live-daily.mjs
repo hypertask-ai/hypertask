@@ -189,7 +189,7 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
   const options = { token, fetchImpl, projectId: BOARD.projectId }
   const existing = await findOpenWeeklyTicket(TICKET_TITLE, options)
   const comment = (ticket, text) => api('comments', { ...options, method: 'POST',
-    body: { ticket_number: ticket.ticketNumber ?? `HTPR-${ticket.uniqueIndex}`, project_id: BOARD.projectId, text, content_type: 'html' } })
+    body: { ticket_number: ticket.ticketNumber ?? `HTPR-${ticket.uniqueIndex}`, project_id: BOARD.projectId, kind: 'qa', text, content_type: 'html' } })
   const passing = graded.some((feature) => feature.verdict === 'pass')
   if (!failing && !problems.length && !suiteErrors.length) {
     if (!existing) return null
