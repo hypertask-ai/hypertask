@@ -1542,7 +1542,7 @@ test("Ctrl+K ellipsis flag is retired and the placeholder stays on for old tabs"
 });
 
 for (const [key, risk] of [
-  ["htpr-7982-cancelled-free", "money"],
+  ["htpr-7980-stripe-portal-billing", "money"],
   ["htpr-7575-phone-chat-delete", "data-deletion"],
   ["yper4-651-self-follow-quiet", "customer-email"],
 ]) {

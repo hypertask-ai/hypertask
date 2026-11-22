@@ -3,7 +3,6 @@ import { Prisma, Status } from "@prisma/client";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
 import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
 import { FREE_BOARD_LIMIT } from "@/lib/freePlanLimits";
 import { subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import { assertBoardRoom, assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
@@ -18,13 +17,6 @@ export class BoardLimitReachedError extends Error {
     this.name = "BoardLimitReachedError";
   }
 }
-
-const TERMINAL_SUBSCRIPTION_STATUSES = new Set<string>([
-  "Free",
-  "Expired",
-  "canceled",
-  "incomplete_expired",
-]);
 
 export function isOverFreeBoardLimit(
   ownedBoards: number,
@@ -45,8 +37,6 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
     },
   });
 
-  const cancelledFree = await isFeatureEnabled(HTPR_7982_CANCELLED_FREE_FLAG, userId);
-
   if (
     teams.some((team) => isInternalCompTeam(team.id)) &&
     !(await isFeatureEnabled("htpr-7852-internal-team-saved-plan", FEATURE_FLAG_OWNER_USER_ID))
@@ -55,10 +45,8 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
   return teams.some(
     (team) =>
       isTeamComped(team) ||
-      team.subscriptionPlan.some(
-        (plan) => cancelledFree
-          ? subscriptionStatusGrantsAccess(plan.subscriptionStatus)
-          : !TERMINAL_SUBSCRIPTION_STATUSES.has(plan.subscriptionStatus),
+      team.subscriptionPlan.some((plan) =>
+        subscriptionStatusGrantsAccess(plan.subscriptionStatus),
       ),
   );
 }

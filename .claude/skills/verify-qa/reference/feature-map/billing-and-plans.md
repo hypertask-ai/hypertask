@@ -179,7 +179,7 @@ Record the account, scope, existing ticket count, returned ticket identifiers an
 
 `node --test tests/stripe-subscription-entitlement.test.cjs tests/failed-payment-plan-gate.test.cjs tests/htpr-7686-free-plan-limits.test.cjs tests/seat-billing-concurrency.test.cjs` covers scheduled cancellation retaining Pro, terminal and unpaid events becoming Free, replay, legitimate payment recovery, monthly/yearly updates, retained data and skipped seat billing. These tests exercise the real status policies with persistence/provider boundaries replaced; they do not prove Stripe delivery.
 
-`htpr-7982-cancelled-free` aligns legacy board admission with the shared paid-access policy. Off retains legacy admission. Active, trialing, past_due, replacement paid subscriptions and explicit comps retain admission. The existing newer Free-plan rollout still bypasses that legacy precheck; do not alter either rollout to manufacture a live test.
+Legacy board admission follows the shared paid-access policy. Active, trialing, past_due, replacement paid subscriptions and explicit comps retain admission. Ended and unpaid subscriptions follow Free board admission. The existing newer Free-plan rollout still bypasses that legacy precheck; do not alter that rollout to manufacture a live test.
 
 Live QA remains read-only: record actual plan snapshots and reload persistence. A full cancellation or failed-payment event needs an authorized Stripe test-mode fixture, never a customer subscription. If unavailable, mark those paths UNREACHABLE and cite the behavioral suite as local evidence, not live proof. QA 985 may also bypass legacy admission through the newer Free-plan rollout; record that limitation explicitly.
 

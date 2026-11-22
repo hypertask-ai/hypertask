@@ -1088,7 +1088,7 @@ test("trusted lead source may record an earlier owner request", async () => {
 });
 
 for (const mode of ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"]) {
-  for (const flagKey of [key, "htpr-7982-cancelled-free", "htpr-8215-agent-archive-delete", "yper4-651-self-follow-quiet"]) {
+  for (const flagKey of [key, "htpr-7980-stripe-portal-billing", "htpr-8215-agent-archive-delete", "yper4-651-self-follow-quiet"]) {
     test(`owner request permits ${mode} for ${flagKey} without legacy flags`, async () => {
       const body = ownerBody();
       body.key = flagKey;
