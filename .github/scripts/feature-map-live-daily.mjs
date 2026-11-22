@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -146,8 +146,8 @@ export function ticketDescription({ graded, problems = [], suiteErrors = [], run
   const list = (entries) => `<ul>${entries.map((entry) => `<li>${entry}</li>`).join('')}</ul>`
   const body = [
     `<p><strong>What's wrong or wanted:</strong> ${failures.length} mapped areas failed today's daily live pass.</p>`,
-    '<p><strong>Who it affects:</strong> internal verification only; customers use the same flows on the live app.</p>',
-    '<p><strong>Recommended course and why:</strong> triage each failed area as map drift, harness gap, or product regression, then fix or re-map; why: the daily job must stay green without filing noise tickets.</p>',
+    '<p><strong>Who it affects:</strong> internal verification only.</p>',
+    '<p><strong>Recommended course and why:</strong> Fix or re-map each failed area. Keeps daily signal useful.</p>',
     '<p><strong>What Valentin must decide:</strong> nothing.</p>',
     '<p><strong>How to undo:</strong> disable the feature-map live daily schedule.</p>',
     '<hr><h2>Problem</h2>',
@@ -224,10 +224,17 @@ function runInvocation(invocation, dir) {
 function ensureQaFlagsState() {
   const stateFile = path.join(process.env.HOME ?? os.homedir(), '.config/hypertask-videos/storageState-qa.json')
   if (existsSync(stateFile)) return
-  const login = path.join(root, '.claude/skills/verify-qa/scripts/qa-login')
-  const child = spawnSync(login, ['flags', '--state'], { cwd: root, encoding: 'utf8', timeout: 3 * 60 * 1000, env: process.env })
+  const smoke = path.join(root, QA_STATE)
+  if (existsSync(smoke)) {
+    mkdirSync(path.dirname(stateFile), { recursive: true })
+    copyFileSync(smoke, stateFile)
+    return
+  }
+  const htVerify = path.join(root, '.claude/skills/verify-hypertask/bin/ht-verify')
+  const child = spawnSync(htVerify, ['login', 'flags', '--state', stateFile, '--base', APP, '--expect', '985'],
+    { cwd: root, encoding: 'utf8', timeout: 3 * 60 * 1000, env: process.env })
   if (child.status !== 0) {
-    throw new Error(`qa-login flags failed before feature-map drives (exit ${child.status})`)
+    throw new Error(`ht-verify login flags failed before feature-map drives (exit ${child.status})`)
   }
 }
 
