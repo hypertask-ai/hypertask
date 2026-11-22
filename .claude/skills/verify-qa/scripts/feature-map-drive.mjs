@@ -828,10 +828,10 @@ const featureRuns = {
   "task-labels-and-followers": async (dir, step) => {
     const labels = await api("flags", "GET", `/api/labels/getByProject?projectId=${SBX}`);
     step("labels by project", labels.status === 200, { status: labels.status, count: labels.json?.labels?.length ?? labels.json?.length });
-    const sections = await api("flags", "GET", `/api/section/getProjectSections?projectId=${SBX}`);
+    const sections = await api("flags", "POST", "/api/section/getProjectSections", { projectId: SBX });
     step("sections for sandbox", sections.status === 200, { status: sections.status });
-    const velocity = await api("flags", "GET", `/api/follower/getFollower?taskId=1&projectId=${SBX}`).catch(() => ({ status: 400 }));
-    step("follower read responds", [200, 400, 404].includes(velocity.status), { status: velocity.status });
+    const meta = await api("flags", "GET", "/api/tasks/detailMeta?taskId=1");
+    step("follower read responds", [200, 400, 404].includes(meta.status), { status: meta.status });
   },
 };
 

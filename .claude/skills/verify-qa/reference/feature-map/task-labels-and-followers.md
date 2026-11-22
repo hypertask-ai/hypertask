@@ -14,7 +14,7 @@ Ticket metadata APIs: `src/pages/api/labels/*`, `priority/*`, `follower/*`, `fav
 
 `agent-browser` or `ht-verify`, headless, `https://app.hypertask.ai/...?realtime=on`, QA state `~/.config/hypertask-videos/storageState-qa.json`.
 
-On QA Sandbox, `GET /api/labels/getByProject?projectId=7049` and `GET /api/priority/getByTask?taskId=<fixture>` as QA 985. Confirm 200 JSON. `POST /api/favorites/addEditFavorites` only with a throwaway toggle you revert.
+On QA Sandbox as QA 985: `GET /api/labels/getByProject?projectId=7049`; `POST /api/section/getProjectSections` with body `{ "projectId": 7049 }` (same as `getAllManageColumnsAPI` in `src/utils/api/global/apiHelpers/getAllManageColumnsAPI.ts:9`); followers on signed-in task detail via `GET /api/tasks/detailMeta?taskId=<fixture>` (`getTaskDetailMeta` in `src/utils/api/global/apiHelpers/getTaskDetailMeta.ts:21`, handler `src/pages/api/tasks/detailMeta.ts:5`). Confirm 200 JSON. `POST /api/favorites/addEditFavorites` only with a throwaway toggle you revert.
 
 ## Gotchas
 
