@@ -39,7 +39,9 @@ State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), s
 | `.claude/skills/verify-hypertask/bin/ht-verify open <path> [--wait <selector>]` | the page loads in the session and reports URL, status and title |
 | `.claude/skills/verify-hypertask/bin/ht-verify click <selector> [--double]` | a real click lands and the page reacts |
 | `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text> [--submit]` | a field accepts typed input on the real page |
-| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path> [--data] [--confirm] [--dry-run]` | an authenticated call through the run's cookies; a write needs `--confirm` |
+| `.claude/skills/verify-hypertask/bin/ht-verify press <keys> [--selector] [--count]` | a real key or chord lands, e.g. `Control+Shift+S`, `Shift+3`, `j` |
+| `.claude/skills/verify-hypertask/bin/ht-verify probe <selector> [--text\|--count\|--attr\|--style\|--html]` | what the page shows, read-only: text, count, attribute, computed style, or `--cookie theme` |
+| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path> [--data] [--confirm] [--dry-run]` | an authenticated call through the run's cookies; a write needs `--confirm`; 401 means the state expired, a 403 is a route's flag/role/origin refusal |
 | `.claude/skills/verify-hypertask/bin/ht-verify logs [--dev\|--browser] [--lines] [--grep]` | the dev or browser log shows what happened |
 | `.claude/skills/verify-hypertask/bin/ht-verify flags list\|show <key>\|set ...` | flag state, and a switch only through ht-flag's approval path, never Off |
 | `.claude/skills/verify-hypertask/bin/ht-verify drive <area> [--base] [--state] [--board]` | one hands-free area (board, task, comments, flags, ctrl-j, ai-chat, inbox) step by step |
@@ -191,9 +193,9 @@ Start from the map for the change: the customer map
 `.claude/skills/verify-qa/reference/feature-map/INDEX.md`, one file per customer area with
 Sub-features, How to get to it (user POV), Driving it with agent-browser and Gotchas, or the
 ops map `.claude/skills/verify-qa/reference/ops-map/INDEX.md` for build, release, runner, CI
-and monitoring recipes. Build and release tickets read the ops map, not the customer map. The
-counter `node .github/scripts/feature-map-coverage.cjs --strict` gates every PR and reads 310
-of 310 mapped. Design screens use the recipe in
+and monitoring recipes. Build and release tickets read the ops map, not the customer map. A
+`[FEATURE]` or `[IMPROVE]` PR adds or edits the area page it touches; coverage growth of old
+pages is not a gate. Design screens use the recipe in
 `.claude/skills/verify-design/features/README.md`, one `design-check run` per screen. Write
 the checklist from the ticket's acceptance criteria before testing, and correct a wrong or
 missing recipe in the same PR.
@@ -368,8 +370,10 @@ docker volume rm hypertask-verify-db
 ```
 
 Remove your own fixtures through product surfaces only, never SQL:
-`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...> --base-url
-<origin>`. Design and phone runs start and close their own headless browsers and create no
+`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`. It targets
+production by default; `--base-url` accepts only an `http://127.0.0.1` origin, so pass it for a
+local run and omit it for production. Design and phone runs start and close their own headless
+browsers and create no
 rows. Actions owns its disposable services. The daily pruner removes old allowlisted build
 debris and Done-ticket videos under its age rules (`evidence-prune` dry-runs by default, the
 timer applies it); it never removes a run folder you just wrote. Run cleanup after every failed
@@ -390,11 +394,14 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-hypertask/bin/ht-verify session start` | one persistent browser the later `open`, `click`, `fill` and `shot --session` share |
 | `.claude/skills/verify-hypertask/bin/ht-verify click <selector>` | a real click lands and the page reacts |
 | `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text>` | a field accepts typed input on the real page |
-| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path>` | an authenticated API call answers through the run's own cookies, writes behind `--confirm` |
+| `.claude/skills/verify-hypertask/bin/ht-verify press <keys>` | a key or chord lands, with `--selector` to focus first and `--count` to repeat |
+| `.claude/skills/verify-hypertask/bin/ht-verify probe <selector>` | read-only text, count, attribute, computed style or safe cookie from the page |
+| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path>` | an authenticated API call answers through the run's own cookies, writes behind `--confirm`, a 403 is a refusal not an expired identity |
 | `.claude/skills/verify-hypertask/bin/ht-verify logs` | the dev or browser log shows what happened |
 | `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
 | `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |
 | `.claude/skills/verify-qa/scripts/qa-teams` | the free, pro and byok team accounts load on their own plan and AI usage answers |
+| `.claude/skills/verify-qa/scripts/feature-map-drive.mjs <feature>` | one feature-map area driven read-only on production, `PASS`/`FAIL` per step plus screenshots |
 | `.claude/skills/verify-on-phone/scripts/phone-shot.sh <url> <out.png>` | one headless shot at 390x844, refusing a login landing |
 | `.claude/skills/verify-design/scripts/design-check doctor` | QA state, QA identity, board 7049 and the theme cookie |
 | `.claude/skills/verify-design/scripts/design-check run <TICKET> <url> --frame <png>` | per-theme live shot, score, purple, sparkle and corner audit |
@@ -402,7 +409,6 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <dir> [--phone]` | the core inbox cycle on production |
 | `.claude/skills/verify-qa/scripts/fixture-cleanup <state> <taskId...>` | deletes only fixtures the run created, through product surfaces |
 | `.claude/skills/verify-qa/scripts/evidence-prune` | ages out old build debris; dry-run unless `--apply` |
-| `.github/scripts/feature-map-coverage.cjs [--strict]` | map coverage count against real routes and flags |
 
 `verify-qa` and `verify-design` scripts are owned by
 `.github/workflows/ship-scripts-tests.yml`, which runs their tests on these paths; keep the

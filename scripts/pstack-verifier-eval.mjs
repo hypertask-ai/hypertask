@@ -36,7 +36,6 @@ export const CASES = [
     why: "The saved field name is not on the page, so the claimed behaviour is broken.",
     claim,
     pageShows: { desktop: false, phone: false },
-    baseShows: { desktop: true, phone: true },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
   {
@@ -45,7 +44,6 @@ export const CASES = [
     why: "The saved field name is on the desktop page and missing at phone width, which is the planted phone bug.",
     claim,
     pageShows: { desktop: true, phone: false },
-    baseShows: { desktop: true, phone: true },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
   {
@@ -54,7 +52,6 @@ export const CASES = [
     why: "The saved field name is on the page at desktop and phone width, so the claimed behaviour works.",
     claim,
     pageShows: { desktop: true, phone: true },
-    baseShows: { desktop: false, phone: false },
     plan: { actions, expect: [{ text: "Renewal date" }] },
   },
 ];
@@ -109,8 +106,7 @@ export async function driveEvalEvidence({ item = DRIVEN_CASE, html = PHONE_ONLY_
 
 export async function judgeDrivenCase({ item = DRIVEN_CASE, model = FLASH, ask = async () => ({ verdict: "PASS", notes: "The saved field is visible." }) } = {}) {
   const evidence = await driveEvalEvidence({ item });
-  const baseEvidence = await driveEvalEvidence({ item, html: FIELD_ON_EVERY_SIZE_HTML });
-  const result = await judgeJourneys({ plan: drivenPlan(item, model), binding: EVAL_BINDING, evidence, baseEvidence, picked: { model }, ask, work: "" });
+  const result = await judgeJourneys({ plan: drivenPlan(item, model), evidence, picked: { model }, ask, work: "" });
   return { case: item.name, model, expected: "FAIL", verdict: result.verdict, notes: result.notes, ok: result.verdict === "FAIL", evidence };
 }
 
@@ -140,7 +136,7 @@ export function evalPlan(item, model, plan = item.plan) {
     expect: plan.expect,
     reason: "",
     viewports: EVAL_VIEWPORTS,
-    journeys: [{ journey: EVAL_JOURNEY, page: "", actions: plan.actions, expect: plan.expect, base: null, planned: true }],
+    journeys: [{ journey: EVAL_JOURNEY, page: "", actions: plan.actions, expect: plan.expect }],
   };
 }
 
@@ -183,10 +179,6 @@ export function evalEvidence(item, plan = item.plan) {
   return evidenceFor(item, plan, item.pageShows ?? item.pageShowsField);
 }
 
-export function evalBaseEvidence(item, plan = item.plan) {
-  return evidenceFor({ ...item, stepFailure: undefined }, plan, item.baseShows ?? {});
-}
-
 export function answerFor(mode, item) {
   const plan = JSON.stringify(item.plan);
   if (mode === "correct") return { plan, judge: JSON.stringify({ verdict: "PASS", notes: item.why }) };
@@ -208,7 +200,7 @@ export async function judgeCase({ item, model, key, answer, complete = completeW
   if (!failure) {
     const judgement = answer ? answer.judge : undefined;
     const ask = live ? async (prompt, options) => parseAnswer(await complete(prompt, options)) : async () => parseAnswer(judgement);
-    result = await judgeJourneys({ plan: evalPlan(item, model, parsed), binding: EVAL_BINDING, evidence: evalEvidence(item, parsed), baseEvidence: evalBaseEvidence(item, parsed), picked: { model }, ask, key, work: "" });
+    result = await judgeJourneys({ plan: evalPlan(item, model, parsed), evidence: evalEvidence(item, parsed), picked: { model }, ask, key, work: "" });
   }
   return { case: item.name, model, expected: item.expected, verdict: result.verdict, notes: result.notes, ok: !failure && matches(item, result.verdict), failure, why: item.why };
 }

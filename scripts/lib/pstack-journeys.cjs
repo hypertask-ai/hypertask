@@ -1,4 +1,3 @@
-const { createHash } = require("node:crypto");
 const { readFileSync, readdirSync } = require("node:fs");
 const path = require("node:path");
 
@@ -41,16 +40,9 @@ const SURFACE_FILE = /^src\/(?:pages\/|app\/)/;
 const TRACE_HOPS = 2;
 const HUB_IMPORTERS = 30;
 const TRACE_LIMIT = 6;
-const HEX40 = /^[0-9a-f]{40}$/;
-const HEX64 = /^[0-9a-f]{64}$/;
-const SLOTS = ["primary", "repro"];
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort();
-}
-
-function sha256(text) {
-  return createHash("sha256").update(String(text)).digest("hex");
 }
 
 function normalizePages(pages) {
@@ -193,88 +185,12 @@ function journeyIds({ pages, bugfix = false } = {}) {
   return [...areas.filter((id) => id !== "area:undefined"), `change:${bugfix ? "repro" : "primary"}`];
 }
 
-function canonicalScript(actions, expect) {
-  return JSON.stringify({ actions: Array.isArray(actions) ? actions : [], expect: Array.isArray(expect) ? expect : [] });
-}
-
-function scriptHash(actions, expect) {
-  return sha256(canonicalScript(actions, expect));
-}
-
-function cacheKeyPrefix(baseSha) {
-  if (!HEX40.test(String(baseSha))) throw new Error("base sha is not a sha");
-  return `pstack-base-${baseSha}-`;
-}
-
-function cacheKey(baseSha, mapSha) {
-  if (!HEX40.test(String(mapSha))) throw new Error("map sha is not a sha");
-  return `${cacheKeyPrefix(baseSha)}${mapSha}`;
-}
-
-function validStep(step) {
-  return !!step && typeof step === "object" && typeof step.ok === "boolean";
-}
-
-function parseCacheEntry(value) {
-  let body;
-  try {
-    body = typeof value === "string" ? JSON.parse(value) : value;
-  } catch {
-    return null;
-  }
-  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
-  if (!HEX40.test(String(body.baseSha)) || !HEX40.test(String(body.mapSha))) return null;
-  if (!HEX64.test(String(body.scriptHash))) return null;
-  if (typeof body.journey !== "string" || body.journey.length > 80) return null;
-  if (typeof body.ok !== "boolean") return null;
-  if (!Array.isArray(body.steps) || !Array.isArray(body.expects) || body.steps.length > 12 || body.expects.length > 12) return null;
-  if (!body.steps.every(validStep) || !body.expects.every(validStep)) return null;
-  if (!Array.isArray(body.navigations) || !Array.isArray(body.offOrigin)) return null;
-  if (body.offOrigin.length) return null;
-  if (!HEX64.test(String(body.pageHash ?? ""))) return null;
-  if (typeof body.pageHash !== "string" || body.pageHash.length !== 64) return null;
-  const judged = body.judged && typeof body.judged === "object" ? body.judged : {};
-  return {
-    baseSha: body.baseSha,
-    mapSha: body.mapSha,
-    journey: body.journey,
-    scriptHash: body.scriptHash,
-    pageHash: body.pageHash,
-    apiOnly: body.apiOnly === true,
-    ok: body.ok,
-    judged: ["PASS", "PASS+NOTES", "FAIL"].includes(judged.verdict) ? { verdict: judged.verdict } : { verdict: "" },
-    steps: body.steps,
-    expects: body.expects,
-    navigations: body.navigations,
-    offOrigin: [],
-  };
-}
-
-function matchingEntry(entries, { baseSha, journey, scriptHash: wanted, mapSha }) {
-  for (const entry of Array.isArray(entries) ? entries : []) {
-    const parsed = parseCacheEntry(entry);
-    if (!parsed) continue;
-    if (parsed.baseSha !== baseSha || parsed.mapSha !== mapSha) continue;
-    if (parsed.journey !== journey || parsed.scriptHash !== wanted) continue;
-    return parsed;
-  }
-  return null;
-}
-
 module.exports = {
-
   DISTINCTIVE_BASENAME,
   GENERIC_BASENAMES,
   SHARED_DIRS,
   apiPathOf,
-  cacheKey,
-  cacheKeyPrefix,
-  canonicalScript,
   journeyIds,
-  matchingEntry,
   pagesForFiles,
-  parseCacheEntry,
-  scriptHash,
-  sha256,
   traceImports,
 };

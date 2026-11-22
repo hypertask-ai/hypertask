@@ -1,1 +1,1 @@
-| Team AI usage | [ai-usage.md](ai-usage.md) | read-only customer key error and successful report checks |
+| Team AI usage | [ai-usage.md](ai-usage.md) | `feature-map-drive.mjs ai-usage`; read-only key-error and successful report checks |

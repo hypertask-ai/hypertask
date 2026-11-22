@@ -7,11 +7,38 @@
 
 ## How to get to it (user POV)
 
-A team owner opens Settings > Webhooks and adds an endpoint for the whole team or one board. Hypertask signs every delivery with that endpoint's `whsec_` key (`X-Hypertask-Signature`, HMAC-SHA256 over `<timestamp>.<body>`). The key is shown once at create or rotate, and after that only as a `whsec_…abcd` hint. Agents get their own webhook through Agents > the agent, or through the MCP webhooks tools. The extra header is on that agent webhook, not on the team Settings endpoint. The MCP action is `configure`, with `auth_header_name` plus `auth_header_value`, or `bearer_secret`, or `clear_auth_header`.
+A team owner opens Settings > Webhooks and adds an endpoint for the whole team or one board. Hypertask signs every delivery with that endpoint's `whsec_` key (`X-Hypertask-Signature`, HMAC-SHA256 over `<timestamp>.<body>`). The key is shown once at create or rotate, and after that only as a `whsec_…abcd` hint. Agents get their own webhook through Agents > the agent, or through the MCP webhooks tools. The extra header is on that agent webhook, not on the team Settings endpoint. The MCP action is `configure`, with `auth_header_name` plus `auth_header_value`, or `bearer_secret`, or `clear_auth_header`. `authHeaderSet` is not on the Settings list: it comes from `/api/mcp/webhooks` GET with `agent_id`. The session agent-webhook route takes camelCase (`authHeaderName`, `authHeaderValue`, `bearerSecret`, `clearAuthHeader`), not the MCP snake_case.
 
 ## Driving it with agent-browser
 
-Sign in as QA user 985 (`~/.config/hypertask-videos/storageState-qa.json`) and call the same session route the Settings page uses: `GET /api/settings/webhooks?teamId=<team>`, and `POST` with `action: create | test | rotate` (send an `Origin: https://app.hypertask.ai` header for mutations). QA owns team `9bca4a7c-798a-492f-af71-9324259b98ce`. Use a team-wide endpoint (`projectId: null`), because QA is not the owner of the team that holds sandbox board 7049. Point it at a receiver that answers 2xx, such as `https://httpbin.org/status/204`. `test` queues a delivery. Poll the list until `lastDeliveryAt` changes and read `lastDeliveryOk`. Never print or store the returned key; compare only its last 4 characters with the hint. Do not save a live receiver secret on the shared QA webhook. `tests/htpr-7905-agent-webhook-auth-header.test.cjs` covers set, bearer, reserved names, clear, and that the value is not returned. A live read may show `authHeaderSet` true or false. Never print `authHeaderValue`.
+Sign in as QA user 985 (`~/.config/hypertask-videos/storageState-qa.json`) and call the same session route the Settings page uses: `GET /api/settings/webhooks?teamId=<team>`, and `POST` with `action: create | test | rotate` (send an `Origin: https://app.hypertask.ai` header for mutations). `PATCH` toggles `active`, and `POST` also accepts `retry` with `deliveryId` and `idempotencyKey`. QA owns team `9bca4a7c-798a-492f-af71-9324259b98ce`. Use a team-wide endpoint (`projectId: null`), because QA is not the owner of the team that holds sandbox board 7049. Point it at a receiver that answers 2xx, such as `https://httpbin.org/status/204`. `test` queues a delivery. Poll the list until `lastDeliveryAt` changes and read `lastDeliveryOk`. Never print or store the returned key; compare only its last 4 characters with the hint. Do not save a live receiver secret on the shared QA webhook. `tests/htpr-7905-agent-webhook-auth-header.test.cjs` covers set, bearer, reserved names, clear, and that the value is not returned. A live read may show `authHeaderSet` true or false on the MCP webhook list. Never print `authHeaderValue`.
+
+`ht-verify api` cannot send an `Origin` header, so a mutation through it answers
+403. Drive the writes with a Playwright request context, which sends the page's
+origin and cookies:
+
+```js
+const res = await context.request.fetch('/api/settings/webhooks', {
+  method: 'POST',
+  headers: { Origin: 'https://app.hypertask.ai' },
+  data: { teamId: TEAM, action: 'create', url: 'https://httpbin.org/status/204', events: ['task.created'] },
+});
+```
+
+Worked on production, 2026-11-20, QA 985, team `9bca4a7c-798a-492f-af71-9324259b98ce`:
+
+```text
+GET  ?teamId=<team>  200 {success:true, availableEvents:[task.created, task.updated, task.assigned,
+                          task.unassigned, comment.created, comment.mention], endpoints:[], deliveries:[]}
+POST action=create   201 success, secretHint "whsec_…16d4", one-time key present, its last 4 = 16d4
+POST action=test     202 {success:true, deliveryId}
+GET  (poll)          lastDeliveryAt set, lastDeliveryOk true on the first 5s poll
+DELETE {teamId,id}   200 {success:true}; the next GET has endpoints: []
+GET  (no teamId)     400 teamId is required
+```
+
+Use a fresh endpoint per run and delete it; a 5-second poll is enough against
+httpbin. `ht-verify api GET "/api/settings/webhooks"` prints the 400 body.
 
 ## Gotchas
 

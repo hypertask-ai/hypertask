@@ -3,28 +3,20 @@ const { mkdtempSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const test = require("node:test");
-const { sha256 } = require("../scripts/lib/pstack-compare.cjs");
-const { scriptHash } = require("../scripts/lib/pstack-journeys.cjs");
 
 const load = () => import("../scripts/pstack-verifier.mjs");
 const binding = { sha: "a".repeat(40), run: "9", attempt: "1" };
-const BASE = "b".repeat(40);
-const MAP = "c".repeat(40);
-const request = (files, extra = {}) => ({ ...binding, baseSha: BASE, title: "HYP-1 [BUGFIX] Fix the inbox", body: "Author-Model: deepseek", diff: "", files, filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1", ...extra });
+const request = (files, extra = {}) => ({ ...binding, baseSha: "b".repeat(40), title: "HYP-1 [BUGFIX] Fix the inbox", body: "Author-Model: deepseek", diff: "", files, filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1", ...extra });
 const page = (name, text) => ({ name, text });
 const INBOX_PAGE = "# Inbox\nInbox rows from `src/pages/api/queues/inboxReminder.ts`.";
 const pagePlan = (reason = "page") => ({ actions: [{ op: "goto", path: "/inbox" }], expect: [{ text: "Inbox" }], reason });
 const changePlan = () => ({ actions: [{ op: "goto", path: "/all-tasks" }], expect: [{ text: "All tasks" }], reason: "" });
-const cachedArea = (overrides = {}) => ({ baseSha: BASE, mapSha: MAP, journey: "area:inbox", scriptHash: scriptHash(pagePlan().actions, pagePlan().expect), pageHash: sha256(INBOX_PAGE), ok: true, judged: { verdict: "PASS" }, steps: [{ action: { op: "goto", path: "/inbox" }, ok: true }], expects: [{ expect: { text: "Inbox" }, ok: true }], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }], offOrigin: [], ...overrides });
 
 test("a mapped page gets its own journey from the page text, then the change journey", async () => {
   const prompts = [];
   const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), {
     binding,
-    mapSha: MAP,
     pages: [page("inbox", INBOX_PAGE)],
-    entries: [],
-    compare: true,
     ask(prompt) {
       prompts.push(prompt);
       return prompts.length === 1 ? pagePlan() : changePlan();
@@ -35,65 +27,21 @@ test("a mapped page gets its own journey from the page text, then the change jou
   assert.doesNotMatch(prompts[0], /DATA: TITLE/);
   assert.match(prompts[1], /DATA: TITLE/);
   assert.deepEqual(plan.journeys[0].actions, changePlan().actions);
+  assert.deepEqual(plan.journeys[1].actions, pagePlan().actions);
   assert.deepEqual(plan.actions, changePlan().actions);
-});
-
-const areaCases = [
-  ["a cached area journey is adopted with no model call for that page", INBOX_PAGE, [cachedArea()], 1, [false, true]],
-  ["a cached area journey for another base, map or page text is not adopted", `${INBOX_PAGE} changed`, [cachedArea(), cachedArea({ baseSha: "d".repeat(40) }), cachedArea({ mapSha: "e".repeat(40) })], 2, [true, null]],
-];
-for (const [name, text, entries, calls, want] of areaCases) test(name, async () => {
-  const asked = [];
-  const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), {
-    binding,
-    mapSha: MAP,
-    pages: [page("inbox", text)],
-    entries,
-    compare: true,
-    ask(prompt) {
-      asked.push(prompt);
-      return asked.length === 1 && calls > 1 ? pagePlan() : changePlan();
-    },
-  });
-  assert.equal(asked.length, calls);
-  assert.ok(asked.some((prompt) => /DATA: TITLE/.test(prompt)));
-  const area = plan.journeys.find((item) => item.journey === "area:inbox");
-  assert.deepEqual([area.planned, area.base?.ok ?? null], want);
-  assert.deepEqual(area.actions, pagePlan().actions);
 });
 
 test("a change that matches no page plans only the change journey", async () => {
   const plan = await (await load()).planFromRequest(request(["src/lib/api/task-writes/create-global.ts"]), {
     binding,
-    mapSha: MAP,
     pages: [page("inbox", INBOX_PAGE)],
-    entries: [],
-    compare: true,
     ask: () => changePlan(),
   });
   assert.deepEqual(plan.journeys.map((item) => item.journey), ["change:repro"]);
 });
 
-test("area planning waits for the comparison, so a page failure cannot reach the legacy plan", async () => {
-  const asked = [];
-  const plan = await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), { binding, mapSha: MAP, pages: [page("inbox", INBOX_PAGE)], entries: [], ask(prompt) { asked.push(prompt); return changePlan(); } });
-  assert.deepEqual([asked.length, plan.fail, plan.journeys.map((item) => item.journey)], [1, "", ["change:repro"]]);
-});
-
-test("journeys stay inert unless the workflow asks for the comparison", async () => {
-  const deps = { binding, mapSha: MAP, pages: [page("inbox", INBOX_PAGE)], entries: [], ask: () => changePlan() };
-  delete process.env.PSTACK_VERIFIER_COMPARE;
-  assert.equal((await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), deps)).compare, undefined);
-  process.env.PSTACK_VERIFIER_COMPARE = "true";
-  try {
-    assert.equal((await (await load()).planFromRequest(request(["src/pages/api/queues/inboxReminder.ts"]), deps)).compare, true);
-  } finally {
-    delete process.env.PSTACK_VERIFIER_COMPARE;
-  }
-});
-
 test("non-app changes still skip the model and carry no journeys", async () => {
-  const plan = await (await load()).planFromRequest(request(["docs/ci.md"], { title: "HYP-2 [INFRA] Docs" }), { binding, mapSha: MAP, pages: [], entries: [], ask() { throw new Error("model"); } });
+  const plan = await (await load()).planFromRequest(request(["docs/ci.md"], { title: "HYP-2 [INFRA] Docs" }), { binding, pages: [], ask() { throw new Error("model"); } });
   assert.equal(plan.reason, "no user path");
   assert.equal(plan.journeys, undefined);
 });
@@ -130,10 +78,10 @@ test("a planned area journey drives the run, and a failed plan never does", asyn
   assert.deepEqual([true, false], [driveNeeded({ actions: [], journeys }), driveNeeded({ actions: [], journeys, fail: "model failed" })]);
 });
 
-test("a failed plan never reaches the comparison, even with area journeys", async () => {
-  const comparisonMode = (await load()).comparisonMode;
-  const plan = { compare: true, journeys: [{ journey: "area:inbox" }] };
-  assert.deepEqual([true, false, false], [comparisonMode(plan), comparisonMode({ ...plan, fail: "the change plan failed" }), comparisonMode({ ...plan, compare: undefined })]);
+test("a failed plan never reaches the journeys, even with area journeys", async () => {
+  const journeyMode = (await load()).journeyMode;
+  const plan = { journeys: [{ journey: "area:inbox" }] };
+  assert.deepEqual([true, false, false], [journeyMode(plan), journeyMode({ ...plan, fail: "the change plan failed" }), journeyMode({ ...plan, journeys: [] })]);
 });
 
 test("an api-only journey is marked so a missing document response is not a failure", async () => {
@@ -143,38 +91,58 @@ test("an api-only journey is marked so a missing document response is not a fail
   assert.equal(result.journeys[0].apiOnly, true);
 });
 
-const headRun = (ok = true) => ({ journey: "change:repro", steps: [{ action: { op: "goto", path: "/inbox" }, ok }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }] });
-const planFor = (extra = {}) => ({
-  ...binding,
-  actions: [{ op: "goto", path: "/inbox" }],
-  expect: [],
-  authorFamily: "deepseek",
-  verifierModel: "deepseek/deepseek-v4.1-flash",
-  compare: true,
-  bugfix: true,
-  journeys: [{ journey: "change:repro", actions: [{ op: "goto", path: "/inbox" }], expect: [], base: null, planned: true }],
-  ...extra,
-});
-const judgeDeps = (overrides = {}) => ({ plan: planFor(), evidence: { ...binding, journeys: [headRun()] }, picked: { model: "deepseek/deepseek-v4.1-flash" }, baseEvidence: { ...binding, journeys: [{ ...headRun(false) }] }, ask: () => ({ verdict: "PASS", notes: "saw it" }), ...overrides });
+const headRun = (journey, ok = true) => ({ journey, steps: [{ action: { op: "goto", path: "/inbox" }, ok }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/inbox", status: 200 }] });
+const journeyItem = (journey) => ({ journey, actions: [{ op: "goto", path: "/inbox" }], expect: [] });
+const planFor = (journeys, extra = {}) => ({ ...binding, actions: [], expect: [], authorFamily: "deepseek", verifierModel: "deepseek/deepseek-v4.1-flash", journeys, ...extra });
+const judgeDeps = (overrides = {}) => ({ plan: planFor([journeyItem("change:repro")], { bugfix: true }), evidence: { ...binding, journeys: [headRun("change:repro")] }, picked: { model: "deepseek/deepseek-v4.1-flash" }, ask: () => ({ verdict: "PASS", notes: "saw it" }), work: "", ...overrides });
 
-const cachedPlan = (steps, extra = {}) => planFor({
-  journeys: [{ journey: "change:repro", actions: steps.map((step) => step.action), expect: [], base: cachedArea({ journey: "change:repro", steps, expects: [], ...extra }), planned: false }],
+test("a repro that passes on head is a pass", async () => {
+  const judged = await (await load()).judgeJourneys(judgeDeps());
+  assert.equal(judged.verdict, "PASS");
 });
-const apiBase = cachedPlan([{ action: { op: "api", method: "POST", path: "/api/mcp/tasks", body: {}, expectStatus: 200 }, ok: true }], { navigations: [] });
-const judgeCases = [
-  ["a repro that failed on base and passes on head is a pass", {}, "PASS"],
-  ["a repro that also passed on base is not proof, so it fails", { baseEvidence: { ...binding, journeys: [headRun(true)] } }, "FAIL", /does not reproduce the bug/],
-  ["a head journey that fails against a passing base is a fail even when the model would pass it", { evidence: { ...binding, journeys: [headRun(false)] }, baseEvidence: { ...binding, journeys: [headRun(true)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }, "FAIL", /regression at step 1/],
-  ["a head journey that fails the same way as base could not be evaluated", { evidence: { ...binding, journeys: [headRun(false)] }, ask: () => ({ verdict: "PASS", notes: "looks fine" }) }, "UNEVALUATED", /same failure is on base/],
-  ["no base evidence could not be evaluated instead of passing it", { baseEvidence: null }, "UNEVALUATED", /base comparison did not run/],
-  ["a cached base result stands in for a base run", { plan: cachedPlan([{ action: { op: "goto", path: "/inbox" }, ok: false }]), baseEvidence: null }, "PASS"],
-  ["a cached api-only base that passed means the repro did not reproduce", { plan: apiBase, evidence: { ...binding, journeys: [{ ...apiBase.journeys[0].base, apiOnly: true }] }, baseEvidence: null }, "FAIL", /does not reproduce the bug/],
-  ["a model failure on the head lane still fails the journey", { ask: () => ({ verdict: "FAIL", notes: "wrong total" }) }, "FAIL", /still fails on head/],
-];
-for (const [name, overrides, verdict, notes] of judgeCases) test(name, async () => {
-  const judged = await (await load()).judgeJourneys(judgeDeps(overrides));
-  assert.equal(judged.verdict, verdict);
-  if (notes) assert.match(judged.notes, notes);
+
+test("a repro that fails on head fails the pull request", async () => {
+  const judged = await (await load()).judgeJourneys(judgeDeps({ evidence: { ...binding, journeys: [headRun("change:repro", false)] } }));
+  assert.equal(judged.verdict, "FAIL");
+  assert.match(judged.notes, /change:repro: failed at step 1/);
+});
+
+test("a head journey that is red in the newest nightly pass does not block", async () => {
+  const judged = await (await load()).judgeJourneys({
+    plan: planFor([journeyItem("area:inbox")]),
+    evidence: { ...binding, journeys: [headRun("area:inbox", false)] },
+    picked: { model: "deepseek/deepseek-v4.1-flash" },
+    redFeatures: ["inbox"],
+    ask: () => ({ verdict: "PASS", notes: "" }),
+    work: "",
+  });
+  assert.equal(judged.verdict, "PASS+NOTES");
+  assert.match(judged.notes, /already red on production/);
+});
+
+test("a head journey that fails while the nightly pass is green for it fails", async () => {
+  const judged = await (await load()).judgeJourneys({
+    plan: planFor([journeyItem("area:inbox")]),
+    evidence: { ...binding, journeys: [headRun("area:inbox", false)] },
+    picked: { model: "deepseek/deepseek-v4.1-flash" },
+    redFeatures: [],
+    ask: () => ({ verdict: "PASS", notes: "" }),
+    work: "",
+  });
+  assert.equal(judged.verdict, "FAIL");
+  assert.match(judged.notes, /area:inbox: failed at step 1/);
+});
+
+test("a model failure on a passing run still fails the journey", async () => {
+  const judged = await (await load()).judgeJourneys(judgeDeps({ plan: planFor([journeyItem("area:inbox")]), evidence: { ...binding, journeys: [headRun("area:inbox")] }, ask: () => ({ verdict: "FAIL", notes: "wrong total" }) }));
+  assert.equal(judged.verdict, "FAIL");
+});
+
+test("the nightly pass names the mapped pages it fails", async () => {
+  const failedFeatures = (await load()).failedFeatures;
+  const nightly = { graded: [{ area: "Inbox", file: "inbox.md", verdict: "fail" }, { area: "Boards", file: "boards-and-views.md", verdict: "pass" }, { area: "Agents", file: "agents.md", verdict: "not-drivable" }] };
+  assert.deepEqual(failedFeatures(nightly), ["inbox"]);
+  assert.deepEqual(failedFeatures(null), []);
 });
 
 test("journey evidence must match the run binding", async () => {

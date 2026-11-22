@@ -91,7 +91,7 @@ export async function breakTestsFromModel({ prompt, key, model, fetchImpl, say =
       return parseBreakTests(answer);
     } catch (error) {
       if (attempt === 2) throw error;
-      say(`Break-it review: the model answer could not be read (${String(error.message ?? error).slice(0, 200)}); asking once more.`);
+      say(`Break-it review: the model answer could not be read (${String(error.message ?? error).slice(0, 200)}) from ${redact(String(answer).replace(/\s+/g, " ").trim().slice(0, 300), [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN]) || "(empty)"}; asking once more.`);
     }
   }
   throw new Error("the model answered nothing twice");
