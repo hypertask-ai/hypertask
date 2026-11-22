@@ -459,6 +459,15 @@ export async function linkTaskPullRequest({
         );
       }
 
+      await transaction.taskPullRequestUnlink.deleteMany({
+        where: {
+          taskId,
+          repositoryOwner: parsed.owner,
+          repositoryName: parsed.repository,
+          number: parsed.number,
+        },
+      });
+
       const created = await transaction.taskPullRequest.create({
         data: {
           taskId,
@@ -567,15 +576,16 @@ export async function unlinkTaskPullRequests({
   db = prisma,
 }: UnlinkTaskPullRequestsInput): Promise<{ removed: number }> {
   return db.$transaction(async (transaction) => {
-    const authorizedTask = await transaction.task.findFirst({
+    if (teamScope != null) await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`;
+    const task = await transaction.task.findFirst({
       where: {
         id: taskId,
         status: { not: "Deleted" },
         project: taskWriteAccessWhere(userId, agentId, teamScope),
       },
-      select: { id: true },
+      select: { id: true, updatedByUserIds: true },
     });
-    if (!authorizedTask) {
+    if (!task) {
       throw new PullRequestLinkError(
         "Task not found or access denied",
         404,
@@ -583,14 +593,64 @@ export async function unlinkTaskPullRequests({
       );
     }
 
-    const { count } = await transaction.taskPullRequest.deleteMany({ where: { taskId } });
-    if (count > 0) {
-      await transaction.task.update({
-        where: { id: taskId },
-        data: { updatedAt: new Date() },
-      });
+    const [user, agent] = await Promise.all([
+      transaction.user.findUnique({
+        where: { id: userId },
+        select: { id: true, displayName: true, photoURL: true, email: true },
+      }),
+      agentId
+        ? transaction.agent.findFirst({
+            where: { id: agentId, userId, revokedAt: null },
+            select: { id: true, userId: true, displayName: true, photoURL: true },
+          })
+        : null,
+    ]);
+    if (!user || (agentId && !agent)) {
+      throw new PullRequestLinkError("Unauthorized", 401, "unauthorized");
     }
-    return { removed: count };
+
+    await assertAgentAssignmentChangeAllowed(
+      transaction,
+      taskId,
+      agentId,
+      userId,
+      { allowHumanOverride: !agentId },
+    );
+    if (!agentId) {
+      await cancelAgentMutationLeaseForHumanOverride(transaction, taskId, userId);
+    }
+
+    const links = await transaction.taskPullRequest.findMany({
+      where: { taskId },
+      select: {
+        repositoryOwner: true,
+        repositoryName: true,
+        number: true,
+      },
+    });
+    if (links.length === 0) return { removed: 0 };
+
+    await transaction.taskPullRequest.deleteMany({ where: { taskId } });
+    await transaction.taskPullRequestUnlink.createMany({
+      data: links.map((link) => ({
+        taskId,
+        repositoryOwner: link.repositoryOwner,
+        repositoryName: link.repositoryName,
+        number: link.number,
+        userId,
+      })),
+      skipDuplicates: true,
+    });
+    await transaction.task.update({
+      where: { id: taskId },
+      data: {
+        updatedAt: new Date(),
+        ...(!task.updatedByUserIds.includes(userId)
+          ? { updatedByUserIds: { push: userId } }
+          : {}),
+      },
+    });
+    return { removed: links.length };
   });
 }
 

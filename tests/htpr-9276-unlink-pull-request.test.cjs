@@ -40,7 +40,12 @@ function loadPullRequestField() {
   return loadModule('src/lib/mcp/tasks/fields/pullRequest.ts')
 }
 
-function loadUnlink() {
+const linkedPullRequests = [
+  { repositoryOwner: 'hypertask-ai', repositoryName: 'hypertask', number: 110 },
+  { repositoryOwner: 'hypertask-ai', repositoryName: 'cli', number: 7 },
+]
+
+function loadUnlink(fence = {}) {
   return loadModule('src/lib/pullRequests/taskPullRequests.ts', {
     '@prisma/client': {
       Prisma: {
@@ -51,32 +56,53 @@ function loadUnlink() {
     '@/lib/agents/publicAgent': { sanitizeAgentCredentials: (value) => value },
     '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: () => ({}) },
     '@/lib/mcp/tasks/agentMutationFence': {
-      assertAgentAssignmentChangeAllowed: async () => {},
-      cancelAgentMutationLeaseForHumanOverride: async () => {},
+      assertAgentAssignmentChangeAllowed: async (...args) => {
+        fence.asserts?.push(args)
+        if (fence.assertError) throw fence.assertError
+      },
+      cancelAgentMutationLeaseForHumanOverride: async (...args) => {
+        fence.cancels?.push(args)
+      },
     },
   }).unlinkTaskPullRequests
 }
 
-function fakeDb({ authorized = true, removed = 2 } = {}) {
-  const calls = { deletes: [], updates: [], access: [] }
+function fakeDb({
+  authorized = true,
+  links = linkedPullRequests,
+  updatedByUserIds = [],
+  user = { id: 6, displayName: 'Valentin Yeo', photoURL: null, email: 'owner@example.test' },
+  agent = null,
+} = {}) {
+  const calls = { deletes: [], updates: [], access: [], suppressions: [] }
   const db = {
     calls,
     task: {
       findFirst: async (args) => {
         calls.access.push(args)
-        return authorized ? { id: 42 } : null
+        return authorized ? { id: 42, updatedByUserIds } : null
       },
       update: async (args) => {
         calls.updates.push(args)
         return { id: 42 }
       },
     },
+    user: { findUnique: async () => user },
+    agent: { findFirst: async () => agent },
     taskPullRequest: {
+      findMany: async () => links,
       deleteMany: async (args) => {
         calls.deletes.push(args)
-        return { count: removed }
+        return { count: links.length }
       },
     },
+    taskPullRequestUnlink: {
+      createMany: async (args) => {
+        calls.suppressions.push(args)
+        return { count: args.data.length }
+      },
+    },
+    $queryRaw: async () => [],
     $transaction: async (run) => run(db),
   }
   return db
@@ -167,7 +193,8 @@ test('the update still links when a pull request URL is parsed', async () => {
 
 test('unlinking removes every pull request link on a task the caller can write to', async () => {
   const db = fakeDb()
-  const unlinkTaskPullRequests = loadUnlink()
+  const fence = { asserts: [], cancels: [] }
+  const unlinkTaskPullRequests = loadUnlink(fence)
   assert.deepEqual(
     await unlinkTaskPullRequests({ taskId: 42, userId: 6, agentId: null, db }),
     { removed: 2 },
@@ -175,29 +202,71 @@ test('unlinking removes every pull request link on a task the caller can write t
   assert.equal(db.calls.access.length, 1)
   assert.equal(db.calls.access[0].where.id, 42)
   assert.deepEqual(db.calls.deletes, [{ where: { taskId: 42 } }])
+  assert.deepEqual(db.calls.suppressions, [{
+    data: linkedPullRequests.map((link) => ({ ...link, taskId: 42, userId: 6 })),
+    skipDuplicates: true,
+  }])
   assert.equal(db.calls.updates.length, 1)
   assert.equal(db.calls.updates[0].where.id, 42)
+  assert.deepEqual(db.calls.updates[0].data.updatedByUserIds, { push: 6 })
+  assert.equal(fence.asserts.length, 1)
+  assert.equal(fence.asserts[0][4].allowHumanOverride, true)
+  assert.deepEqual(fence.cancels, [[db, 42, 6]])
+})
+
+test('unlinking records a caller who already edited the task without adding them twice', async () => {
+  const db = fakeDb({ updatedByUserIds: [6] })
+  await loadUnlink()({ taskId: 42, userId: 6, agentId: null, db })
+  assert.equal(db.calls.updates[0].data.updatedByUserIds, undefined)
+  assert.ok(db.calls.updates[0].data.updatedAt instanceof Date)
+})
+
+test('an agent unlink keeps the active lease and still removes the links', async () => {
+  const db = fakeDb({ agent: { id: 'agent-6', userId: 6, displayName: 'Runner 6', photoURL: null } })
+  const fence = { asserts: [], cancels: [] }
+  const removed = await loadUnlink(fence)({ taskId: 42, userId: 6, agentId: 'agent-6', db })
+  assert.deepEqual(removed, { removed: 2 })
+  assert.equal(fence.asserts[0][4].allowHumanOverride, false)
+  assert.deepEqual(fence.cancels, [])
+})
+
+test('an active agent lease blocks the unlink before any link is removed', async () => {
+  const db = fakeDb()
+  const fence = { asserts: [], cancels: [], assertError: Object.assign(new Error('lease'), { status: 409 }) }
+  await assert.rejects(
+    () => loadUnlink(fence)({ taskId: 42, userId: 6, agentId: null, db }),
+    (error) => error.status === 409,
+  )
+  assert.deepEqual(db.calls.deletes, [])
+  assert.deepEqual(db.calls.suppressions, [])
+  assert.deepEqual(db.calls.updates, [])
+  assert.deepEqual(fence.cancels, [])
 })
 
 test('unlinking keeps the links when the caller cannot write to the task', async () => {
   const db = fakeDb({ authorized: false })
-  const unlinkTaskPullRequests = loadUnlink()
+  const fence = { asserts: [], cancels: [] }
+  const unlinkTaskPullRequests = loadUnlink(fence)
   await assert.rejects(
     () => unlinkTaskPullRequests({ taskId: 42, userId: 9, agentId: null, db }),
     (error) => error.status === 404 && error.code === 'task_not_found',
   )
   assert.equal(db.calls.access.length, 1)
   assert.deepEqual(db.calls.deletes, [])
+  assert.deepEqual(db.calls.suppressions, [])
   assert.deepEqual(db.calls.updates, [])
+  assert.deepEqual(fence.asserts, [])
+  assert.deepEqual(fence.cancels, [])
 })
 
 test('unlinking a task that has no pull request link leaves the task unchanged', async () => {
-  const db = fakeDb({ removed: 0 })
+  const db = fakeDb({ links: [] })
   const unlinkTaskPullRequests = loadUnlink()
   assert.deepEqual(
     await unlinkTaskPullRequests({ taskId: 42, userId: 6, agentId: null, db }),
     { removed: 0 },
   )
-  assert.deepEqual(db.calls.deletes, [{ where: { taskId: 42 } }])
+  assert.deepEqual(db.calls.deletes, [])
+  assert.deepEqual(db.calls.suppressions, [])
   assert.deepEqual(db.calls.updates, [])
 })

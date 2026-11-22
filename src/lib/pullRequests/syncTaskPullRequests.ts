@@ -123,7 +123,20 @@ export async function syncPullRequestFromWebhook(
         },
         select: { id: true },
       });
-      if (task) taskIds = [task.id];
+      if (task) {
+        const suppressed = await transaction.taskPullRequestUnlink.findUnique({
+          where: {
+            taskId_repositoryOwner_repositoryName_number: {
+              taskId: task.id,
+              repositoryOwner: input.repositoryOwner,
+              repositoryName: input.repositoryName,
+              number: input.number,
+            },
+          },
+          select: { id: true },
+        });
+        if (!suppressed) taskIds = [task.id];
+      }
     }
     if (taskIds.length === 0) return { linked: 0, updated: 0, taskIds: [] };
 

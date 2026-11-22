@@ -399,6 +399,7 @@ function fakeLinkDb({
     activities: [],
     taskUpdates: [],
     taskWhere: null,
+    unsuppress: [],
   };
   const tx = {
     $executeRaw: async () => 0,
@@ -445,6 +446,12 @@ function fakeLinkDb({
       }),
     },
     agent: { findFirst: async () => null },
+    taskPullRequestUnlink: {
+      deleteMany: async (input) => {
+        calls.unsuppress.push(input);
+        return { count: 1 };
+      },
+    },
     comment: {
       create: async ({ data }) => {
         calls.activities.push(data);
@@ -479,6 +486,14 @@ test("linkTaskPullRequest authorizes the task and writes one durable activity", 
   assert.equal(calls.activities.length, 1);
   assert.equal(calls.activities[0].activity.type, "TaskPullRequest");
   assert.equal(calls.activities[0].activity.data.action, "linked");
+  assert.deepEqual(calls.unsuppress, [{
+    where: {
+      taskId: 36202,
+      repositoryOwner: "hypertask-ai",
+      repositoryName: "hypertask",
+      number: 110,
+    },
+  }]);
 });
 
 test("linkTaskPullRequest updates the task timestamp for a repeated user", async () => {
@@ -657,6 +672,7 @@ test("webhook does not return a fallback task after a concurrent global link win
             return { id: 36202 };
           },
         },
+        taskPullRequestUnlink: { findUnique: async () => null },
         $executeRaw: async () => 0,
         $queryRaw: async () => [],
         user: { findUnique: async () => null },
@@ -693,6 +709,72 @@ test("webhook does not return a fallback task after a concurrent global link win
 
     assert.deepEqual(result, { linked: 0, updated: 0, taskIds: [] });
     assert.equal(taskFallbackLookups, 1);
+  } finally {
+    if (previousPrisma) require.cache[prismaPath] = previousPrisma;
+    else delete require.cache[prismaPath];
+    if (previousSync) require.cache[syncPath] = previousSync;
+    else delete require.cache[syncPath];
+  }
+});
+
+test("webhook does not recreate a pull request the task owner unlinked", async () => {
+  const prismaPath = path.join(root, "src/lib/prisma.ts");
+  const syncPath = path.join(
+    root,
+    "src/lib/pullRequests/syncTaskPullRequests.ts",
+  );
+  const previousPrisma = require.cache[prismaPath];
+  const previousSync = require.cache[syncPath];
+  let creates = 0;
+  const prisma = {
+    $transaction: async (callback) =>
+      callback({
+        taskPullRequest: {
+          findMany: async () => [],
+          findUnique: async () => null,
+          createMany: async () => {
+            creates += 1;
+            return { count: 1 };
+          },
+        },
+        task: { findFirst: async () => ({ id: 36202 }) },
+        taskPullRequestUnlink: { findUnique: async () => ({ id: "suppressed" }) },
+        $executeRaw: async () => 0,
+        $queryRaw: async () => [],
+        user: { findUnique: async () => null },
+      }),
+  };
+  delete require.cache[prismaPath];
+  delete require.cache[syncPath];
+  require.cache[prismaPath] = {
+    id: prismaPath,
+    filename: prismaPath,
+    loaded: true,
+    exports: { default: prisma },
+  };
+
+  try {
+    const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
+      .syncPullRequestFromWebhook;
+    const result = await syncPullRequestFromWebhook({
+      boardId: 15,
+      ticketNumber: "HTPR-5899",
+      repositoryOwner: "hypertask-ai",
+      repositoryName: "hypertask",
+      repositoryId: "1",
+      pullRequestId: "110",
+      number: 110,
+      url: canonicalPullRequestUrl,
+      title: "HTPR-5899 linked PR property",
+      lifecycle: "open",
+      headSha: "abc123",
+      sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
+      action: "synchronize",
+      actorUserId: 6,
+    });
+
+    assert.deepEqual(result, { linked: 0, updated: 0, taskIds: [] });
+    assert.equal(creates, 0);
   } finally {
     if (previousPrisma) require.cache[prismaPath] = previousPrisma;
     else delete require.cache[prismaPath];
