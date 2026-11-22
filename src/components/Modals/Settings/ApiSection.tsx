@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import McpTokenControls, { useSettingsMcpToken } from "./McpTokenControls";
 import SettingsCard from "./SettingsCard";
 import SettingsCodeRow from "./SettingsCodeRow";
@@ -12,13 +10,7 @@ const CURL_EXAMPLE = `curl "${API_BASE_URL}/projects" \\
   -H "Authorization: Bearer $HYPERTASK_TOKEN"`;
 
 const ApiSection = () => {
-  const [confirmRevokeToken, setConfirmRevokeToken] = useState(false);
   const tokenState = useSettingsMcpToken();
-
-  const confirmMcpTokenRevoke = async () => {
-    const revoked = await tokenState.revokeToken();
-    if (revoked) setConfirmRevokeToken(false);
-  };
 
   return (
     <SettingsSectionShell title="REST API">
@@ -33,7 +25,8 @@ const ApiSection = () => {
           isLoading={tokenState.isLoading}
           isRevoking={tokenState.isRevokingAll}
           onGenerate={tokenState.generateToken}
-          onRevoke={() => setConfirmRevokeToken(true)}
+          revokeConfirmMessage="Revoke this bearer token? API and MCP clients using it stop working until you generate a new one."
+          revokeToken={tokenState.revokeToken}
           token={tokenState.token}
         />
       </SettingsCard>
@@ -43,7 +36,7 @@ const ApiSection = () => {
       </SettingsCard>
 
       <SettingsCard title="Example">
-        <p className="px-2 text-dense font-medium text-text-light-gray">
+        <p className="px-2 text-dense font-medium leading-relaxed text-text-light-gray">
           List the projects available to the authenticated account.
         </p>
         <SettingsCodeRow value={CURL_EXAMPLE} />
@@ -62,19 +55,6 @@ const ApiSection = () => {
           Read the API docs
         </a>
       </SettingsCard>
-
-      {confirmRevokeToken && (
-        <ConfirmDialog
-          confirmLabel="Revoke token"
-          footerVerb="revoke"
-          id="confirm-revoke-api-mcp-token"
-          loading={tokenState.isRevokingAll}
-          loadingLabel="Revoking token"
-          message="Revoke this bearer token? API and MCP clients using it stop working until you generate a new one."
-          onCancel={() => setConfirmRevokeToken(false)}
-          onConfirm={() => void confirmMcpTokenRevoke()}
-        />
-      )}
     </SettingsSectionShell>
   );
 };
