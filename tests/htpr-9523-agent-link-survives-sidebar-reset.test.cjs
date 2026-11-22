@@ -98,7 +98,7 @@ test("a viewer reset after the roster lands still opens the linked agent", async
         assert.equal(selectedAgentId(sidebar.state.header), sidebar.agent.id, "the cold load opens the linked agent");
         await sidebar.setViewer(986);
         assert.equal(selectedAgentId(sidebar.state.header), sidebar.agent.id, `${role} sidesteps the AI chat after the reset, sessions ${sessions}`);
-        if (sessions) assert.deepEqual(sidebar.state.posts.at(-1), { projectId: 7049, agentId: sidebar.agent.id });
+        if (role === "NATIVE" || sessions) assert.deepEqual(sidebar.state.posts.at(-1), { projectId: 7049, agentId: sidebar.agent.id });
         else assert.deepEqual(sidebar.state.posts, []);
       } finally { sidebar.close(); }
     }
@@ -113,6 +113,7 @@ test("a reset that lands while the linked agent is opening leaves it open", asyn
     assert.equal(selectedAgentId(sidebar.state.header), null, "the open is still in flight");
     await sidebar.setViewer(986);
     postGate.resolve();
+    await React.act(async () => {});
     await React.act(async () => {});
     assert.equal(selectedAgentId(sidebar.state.header), linkedAgent.id);
     assert.equal(sidebar.state.posts.length, 2, "the reset reopens the link instead of dropping it");
