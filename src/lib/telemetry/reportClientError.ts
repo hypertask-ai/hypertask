@@ -1,3 +1,5 @@
+import { isInjectedWalletExceptionMessage } from '@/lib/analytics/injectedWalletNoise.mjs'
+
 let sent = 0
 
 const CHUNK_LOAD_TIMEOUT_MS = 120_000
@@ -19,6 +21,7 @@ export function reportClientError(payload: ClientErrorPayload) {
     payload.componentStack,
   ].filter(Boolean).join('\n')
   if (payload.message?.trim().toLowerCase() === 'script error.') return
+  if (isInjectedWalletExceptionMessage(payload.message)) return
   if (payload.message === 'CancelledError') return
   if (
     payload.source === 'window.onerror' &&

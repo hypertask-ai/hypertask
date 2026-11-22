@@ -2,6 +2,11 @@ import type { CaptureResult } from "posthog-js";
 
 import { isChunkLoadError } from "@/utils/helperFunctions/isChunkLoadError";
 
+export {
+  dropInjectedWalletException,
+  isInjectedWalletExceptionMessage,
+} from "./injectedWalletNoise.mjs";
+
 const RESIZE_OBSERVER_LOOP_MESSAGE =
   "ResizeObserver loop completed with undelivered notifications.";
 

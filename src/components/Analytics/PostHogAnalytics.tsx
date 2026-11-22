@@ -21,6 +21,7 @@ import {
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
 import {
+  dropInjectedWalletException,
   dropNetworkBlipException,
   dropResizeObserverLoopException,
   dropSelfRecoveringChunkLoadException,
@@ -403,9 +404,11 @@ export default function PostHogAnalytics({
               event.properties.source = "web";
             }
             return scopeProjectWebVitalsEvent(
-              dropNetworkBlipException(
-                dropSelfRecoveringChunkLoadException(
-                  dropResizeObserverLoopException(event),
+              dropInjectedWalletException(
+                dropNetworkBlipException(
+                  dropSelfRecoveringChunkLoadException(
+                    dropResizeObserverLoopException(event),
+                  ),
                 ),
               ),
               {
