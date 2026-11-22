@@ -1,4 +1,5 @@
 const { spawn } = require("node:child_process");
+const { createHash } = require("node:crypto");
 const { closeSync, existsSync, lstatSync, openSync, readFileSync, unlinkSync } = require("node:fs");
 const path = require("node:path");
 const {
@@ -26,10 +27,10 @@ Usage:
 
 Repeat runs reuse containers and the server and wait up to 240s for /login 200.
 A symlinked node_modules, a dead server or a fatal line in dev.log stops it in
-seconds instead of at the timeout. The first up in a checkout builds Next for
-that port; later runs on the same port reuse the build. State: env.json,
-dev.log, dev.pid. Secrets are placeholders. Needs Docker and node_modules here;
-a symlink fails.
+seconds instead of at the timeout. Up builds Next unless the build matches this
+port, HEAD and the working tree; edits or a branch switch rebuild, so a run
+never serves code from before the change. State: env.json, dev.log, dev.pid.
+Secrets are placeholders. Needs Docker and node_modules here; a symlink fails.
 
 Example:
   ht-verify up`;
@@ -114,8 +115,29 @@ function ensureContainer(name, runArgs, startHint) {
   }
 }
 
-function ensureProductionBuild(env, baseUrl, previous) {
-  const current = existsSync(path.join(repoRoot, ".next", "BUILD_ID")) && previous.builtBaseUrl === baseUrl;
+function sourceStamp() {
+  const head = run("git", ["rev-parse", "HEAD"], { timeout: 60_000 }).stdout.trim();
+  const diff = run("git", ["diff", "HEAD"], { timeout: 60_000 }).stdout;
+  const untracked = run("git", ["ls-files", "--others", "--exclude-standard"], { timeout: 60_000 }).stdout
+    .split("\n")
+    .filter(Boolean)
+    .sort()
+    .map((file) => `${file}\u0000${readText(path.join(repoRoot, file))}`)
+    .join("\n");
+  return createHash("sha256").update(`${head}\n${diff}\n${untracked}`).digest("hex");
+}
+
+function buildReusable(buildId, builtBaseUrl, baseUrl, builtStamp, stamp) {
+  return buildId && builtBaseUrl === baseUrl && builtStamp === stamp;
+}
+
+function reuseServer({ previous, port, pidAlive, answered }) {
+  const reused = previous.mode === "production" && previous.port === port && pidAlive && answered;
+  return { reused, conflict: !reused && answered };
+}
+
+function ensureProductionBuild(env, baseUrl, previous, stamp) {
+  const current = buildReusable(existsSync(path.join(repoRoot, ".next", "BUILD_ID")), previous.builtBaseUrl, baseUrl, previous.buildStamp, stamp);
   if (current) return;
   const result = run("npx", ["next", "build"], { env, timeout: 900_000 });
   if (result.status !== 0) {
@@ -149,7 +171,10 @@ function verifyPusherEnv(baseUrl) {
 }
 
 module.exports = {
+  buildReusable,
   name: "up",
+  reuseServer,
+  sourceStamp,
   summary: "start the disposable local stack (Postgres, Redis, Soketi, Next production)",
   usage,
   async run(argv) {
@@ -216,15 +241,24 @@ module.exports = {
     );
     prisma(env, ["prisma", "generate"]);
     prisma(env, ["prisma", "migrate", "deploy"]);
-    ensureProductionBuild(env, baseUrl, previous);
+    const stamp = sourceStamp();
+    ensureProductionBuild(env, baseUrl, previous, stamp);
     const pidFile = readJson(path.join(runDir(), "dev.pid"), {});
-    const reused = previous.mode === "production" && previous.port === port &&
-      (await httpStatus(`${baseUrl}/login`)) === 200;
+    const { reused, conflict } = reuseServer({
+      previous,
+      port,
+      pidAlive: serverAlive(pidFile.pid ?? 0),
+      answered: (await httpStatus(`${baseUrl}/login`)) === 200,
+    });
+    if (conflict) {
+      fail(`port ${port} answers /login but this run does not own that server`, `Run ht-verify down, then ht-verify up --port ${port} to serve this checkout's build.`, "refused");
+    }
     const pid = reused ? pidFile.pid ?? null : startServer(env, port);
     writeJson(path.join(runDir(), "env.json"), {
       baseUrl,
       mode: "production",
       builtBaseUrl: baseUrl,
+      buildStamp: stamp,
       databaseUrl,
       dbContainer: dbName,
       redisContainer: redisName,

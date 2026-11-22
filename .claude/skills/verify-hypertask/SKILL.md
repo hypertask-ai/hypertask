@@ -52,7 +52,9 @@ State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), s
 ```
 
 A bare `ht-verify up` serves a production build with Redis and Soketi, so the board
-renders its columns and cards locally and a new ticket lands through realtime. `up`
+renders its columns and cards locally and a new ticket lands through realtime. It rebuilds
+when HEAD or the working tree changed since the last build, so no run serves stale code,
+and it refuses to report a port another server already answers. `up`
 refuses a `node_modules` symlink that resolves outside this checkout and stops in seconds
 on a fatal line in `dev.log`, so a stack that cannot serve never waits out the 240s timeout
 or leaves `env.json` behind for the next command.
