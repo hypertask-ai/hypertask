@@ -15,6 +15,7 @@ import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
 import { findIdParamOutOfRange, idOutOfRangeMessage, parseSectionFilter } from '@/lib/mcp/listParams'
+import { nameMovedTicketKeys } from '@/lib/mcp/tasks/previousTicketNumbers'
 
 const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -307,21 +308,22 @@ export async function GET(request: NextRequest) {
           a.task.createdAt.getTime() - b.task.createdAt.getTime()
       )
 
+    const page = rankedTasks.slice(0, limit).map(({ task, score }) => ({
+      id: task.id,
+      ticketNumber: task.ticketNumber || undefined,
+      title: task.title,
+      section: task.section,
+      priority: task.priority?.Priority_Value || undefined,
+      dueDate: task.dueDate?.toISOString() || undefined,
+      score,
+      labels: task.taskLabels.map(({ label }) => ({
+        id: label.id,
+        name: label.value || '',
+      })),
+    }))
     return NextResponse.json({
       success: true,
-      tasks: rankedTasks.slice(0, limit).map(({ task, score }) => ({
-        id: task.id,
-        ticketNumber: task.ticketNumber || undefined,
-        title: task.title,
-        section: task.section,
-        priority: task.priority?.Priority_Value || undefined,
-        dueDate: task.dueDate?.toISOString() || undefined,
-        score,
-        labels: task.taskLabels.map(({ label }) => ({
-          id: label.id,
-          name: label.value || '',
-        })),
-      })),
+      tasks: await nameMovedTicketKeys(ctx.user.id, page),
       total: rankedTasks.length,
     })
   } catch (error) {
