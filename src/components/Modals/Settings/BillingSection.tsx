@@ -16,8 +16,11 @@ import { getSettingsPath } from "./settingsNavigation";
 import { useSettingsTeam } from "./useSettingsTeam";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7980_STRIPE_PORTAL_BILLING_FLAG } from "@/lib/flags/definitions/htpr-7980-stripe-portal-billing";
+import { HTPR_9529_COMPED_PRO_BILLING_FLAG } from "@/lib/flags/definitions/htpr-9529-comped-pro-billing";
+import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { settingsBillingSummary } from "@/lib/settingsBillingSummary";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
+import { teamCompPlan } from "@/lib/teamComp";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
@@ -51,6 +54,7 @@ type SettingsBillingData = {
 const BillingSection = () => {
   const router = useRouter();
   const portalBillingEnabled = useFlag(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG);
+  const showCompedPlanRows = useFlag(HTPR_9529_COMPED_PRO_BILLING_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
   const [choosingPlan, setChoosingPlan] = useState(false);
   const [openingCheckout, setOpeningCheckout] = useState(false);
@@ -81,8 +85,13 @@ const BillingSection = () => {
       id: type.stripePriceId ?? "",
       label: `${plan.name} · ${type.title} · ${type.price} ${type.description}`,
     }))).filter((option) => option.id.startsWith("price_"));
+  let compPlan = showCompedPlanRows ? teamCompPlan(team) : null;
+  if (showCompedPlanRows && !compPlan && isInternalCompTeam(team?.id)) compPlan = "Pro";
+  const emptyPlanLabel = compPlan ? "Complimentary" : "Free Plan";
   const planLabel = billing?.storePlanId ?? "Free";
-  const billingCycle = billing?.billingInterval ?? "Free Plan";
+  const billingCycle = billing?.billingInterval ?? emptyPlanLabel;
+  const formatBillingDate = (timestamp: number | null | undefined) =>
+    timestamp ? convertTimestampToFormattedDate(timestamp) : emptyPlanLabel;
   const usedSeats =
     (ownerAndMembers.owner ? 1 : 0) + ownerAndMembers.members.length;
   const hasPaidPlan = Boolean(team?.activeSubscriptionPlanId);
@@ -92,29 +101,29 @@ const BillingSection = () => {
   const nextInvoiceDate = hasPaidPlan
     ? billingLoading
       ? "Loading"
-      : formatTimestamp(
+      : formatBillingDate(
           upcomingInvoice?.nextPaymentAttempt ?? upcomingInvoice?.created
         )
-    : "Free Plan";
+    : emptyPlanLabel;
   const renewalDate = hasPaidPlan
     ? billingLoading
       ? "Loading"
-      : formatTimestamp(
+      : formatBillingDate(
           upcomingInvoice?.periodEnd ??
             upcomingInvoice?.nextPaymentAttempt ??
             upcomingInvoice?.created
         )
-    : "Free Plan";
+    : emptyPlanLabel;
   const invoiceTotal = hasPaidPlan
     ? billingLoading
       ? "Loading"
       : formatMoney(upcomingInvoice?.amountDue, upcomingInvoice?.currency)
-    : "Free Plan";
+    : emptyPlanLabel;
   const fullPrice = hasPaidPlan
     ? billingLoading
       ? "Loading"
       : formatMoney(upcomingInvoice?.subtotal, upcomingInvoice?.currency)
-    : "Free Plan";
+    : emptyPlanLabel;
   const discountAmount = upcomingInvoice?.discountTotal ?? 0;
   const hasDiscount = discountAmount > 0;
   const perSeatAmount =
