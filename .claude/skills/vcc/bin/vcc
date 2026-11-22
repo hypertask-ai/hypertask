@@ -363,31 +363,37 @@ completion_move() {
   out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
 }
 
-# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
+SHARED_IDENTITY="Valentins Claude Code"
+SHIP_IDENTITY="$HOME/.agents/skills/ship/scripts/ship-identity"
 TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-IDENTITY="Valentins Claude Code"
-if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
-  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+IDENTITY="$SHARED_IDENTITY"
+[ -x "$SHIP_IDENTITY" ] || { printf 'vcc: %s is missing; refusing to write as %s\n' "$SHIP_IDENTITY" "$SHARED_IDENTITY" >&2; exit 2; }
+IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$SHIP_IDENTITY")
+SESSION_NAME=${SHIP_SESSION_NAME:-}
+if [ -z "$SESSION_NAME" ]; then
+  SESSION_NAME=$("$SHIP_IDENTITY" --name)
+  SESSION_NAME=${SESSION_NAME%%$'\t'*}
+  [ "$SESSION_NAME" = "$SHARED_IDENTITY" ] && SESSION_NAME=''
 fi
-# A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
-# token exists, which would post a runner's words under his name (YPER4-960).
-# HYCI-408: a session named for its tmux slot ("ht-or-runner-5") resolves to "RUNNER 5" in ship-identity, so the
-# name differs while the slot is the same. That is the same runner, not Valentin: accept it, and still refuse a
-# name whose slot differs from the resolved identity or a name with no slot at all ("SPEED RUNNER").
+SESSION_NAME=${SESSION_NAME%% | *}
 runner_slot() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
     | grep -oE '(^|[^a-z0-9])runner[-_ ]?[0-9]+([^a-z0-9]|$)' \
     | grep -oE '[0-9]+' | head -1 || true
 }
-case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
+case "$(printf '%s' "$SESSION_NAME" | tr '[:upper:]' '[:lower:]')" in
   *runner*)
-    if [ "$IDENTITY" != "${SHIP_SESSION_NAME%% | *}" ]; then
-      session_slot=$(runner_slot "${SHIP_SESSION_NAME}")
+    if [ "$IDENTITY" != "$SESSION_NAME" ]; then
+      session_slot=$(runner_slot "$SESSION_NAME")
       identity_slot=$(runner_slot "$IDENTITY")
       [ -n "$session_slot" ] && [ "$session_slot" = "$identity_slot" ] \
-        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; }
+        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SESSION_NAME" "$IDENTITY" >&2; exit 2; }
     fi ;;
 esac
+if [ -n "$SESSION_NAME" ] && [ "$IDENTITY" = "$SHARED_IDENTITY" ]; then
+  printf 'vcc: %s has no board login; refusing to write as %s\n' "$SESSION_NAME" "$IDENTITY" >&2
+  exit 2
+fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
