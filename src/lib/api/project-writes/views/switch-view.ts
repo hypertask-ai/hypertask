@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { taskWriteRoute } from "@/lib/api/task-writes/route";
 import { viewWriteJson } from "./response";
+import { isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import { tableSettingsPromotedFromDraft } from "@/lib/table-view/tableViewSettings";
 import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
@@ -16,6 +19,7 @@ const route = taskWriteRoute({
       return viewWriteJson({ message: "Missing required information" }, 400);
     }
     const userId = session.userId;
+    const keepTableSettings = await isFeatureEnabled("htpr-8973-table-sort-columns", userId);
     const where = {
       id: newViewId,
       project_view: { projectId, project: savedViewBoardAccessWhere(userId) },
@@ -31,6 +35,10 @@ const route = taskWriteRoute({
         if (!view) return false;
         const pv = view.project_view;
         const appliedViewId = pv.default_view_id === newViewId ? null : newViewId;
+        const previous = await tx.user_Project_View.findUnique({
+          where: { user_project: { userId, project_view_id: pv.id } },
+          select: { appliedViewId: true, unsavedViewId: true },
+        });
         const state = await tx.user_Project_View.upsert({
           create: { userId, project_view_id: pv.id, appliedViewId },
           update: { appliedViewId },
@@ -45,6 +53,37 @@ const route = taskWriteRoute({
         });
         if (state.unsavedViewId) {
           const draft = await tx.view.findFirst({ where: { id: state.unsavedViewId, userId, project_view_id: pv.id } });
+          if (draft && keepTableSettings) {
+            const ownerId = previous?.appliedViewId ?? pv.default_view_id;
+            const owner = ownerId && ownerId !== draft.id
+              ? await tx.view.findFirst({
+                where: { id: ownerId, project_view_id: pv.id },
+                select: {
+                  id: true,
+                  table_sort_stack: true,
+                  table_columns: true,
+                },
+              })
+              : null;
+            if (owner) {
+              const promoted = tableSettingsPromotedFromDraft(owner, draft);
+              if (promoted.table_sort_stack || promoted.table_columns) {
+                await tx.view.update({
+                  where: { id: owner.id },
+                  data: {
+                    ...(promoted.table_sort_stack ? {
+                      table_sort_column: promoted.table_sort_column,
+                      table_sort_direction: promoted.table_sort_direction,
+                      table_sort_stack: promoted.table_sort_stack as Prisma.InputJsonValue,
+                    } : {}),
+                    ...(promoted.table_columns ? {
+                      table_columns: promoted.table_columns as Prisma.InputJsonValue,
+                    } : {}),
+                  },
+                });
+              }
+            }
+          }
           if (draft) await tx.view.delete({ where: { id: draft.id, userId, project_view_id: pv.id, project_view: { project: savedViewBoardAccessWhere(userId) } } });
         }
         return true;

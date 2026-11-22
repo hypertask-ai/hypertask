@@ -103,3 +103,129 @@ export const hideColumnOnView = (
   ...views,
   [viewId]: hideTableColumn(resolveTableColumns(views[viewId] ?? null), key),
 });
+
+export type StoredTableView = {
+  id: string;
+  table_sort_column: string | null;
+  table_sort_direction: string | null;
+  table_sort_stack: TableSortLevel[] | null;
+  table_columns: TableColumnSettings | null;
+};
+
+export type TableBoard = {
+  defaultViewId: string;
+  appliedViewId: string | null;
+  unsavedViewId: string | null;
+  views: StoredTableView[];
+};
+
+export type TableSettingsPersist = {
+  persistStack: boolean;
+  persistColumns: boolean;
+  table_sort_column: string | null;
+  table_sort_direction: string | null;
+  table_sort_stack: TableSortLevel[] | null;
+  table_columns: TableColumnSettings | null;
+};
+
+export const tableSettingsTargetIds = (input: {
+  viewId: string;
+  appliedViewId: string | null;
+  defaultViewId: string | null;
+  unsavedViewId: string | null;
+}): string[] => {
+  const ids = [input.viewId];
+  const draftCoversView = input.unsavedViewId != null
+    && input.unsavedViewId !== input.viewId
+    && (input.appliedViewId === input.viewId
+      || (input.appliedViewId == null && input.defaultViewId === input.viewId));
+  if (draftCoversView && input.unsavedViewId) ids.push(input.unsavedViewId);
+  return ids;
+};
+
+export const tableSettingsPromotedFromDraft = (
+  owner: { table_sort_stack?: unknown; table_columns?: unknown },
+  draft: { table_sort_stack?: unknown; table_columns?: unknown },
+): Partial<StoredTableView> => {
+  const draftStack = storedTableSortStack(draft.table_sort_stack);
+  const ownerStack = storedTableSortStack(owner.table_sort_stack);
+  const draftColumns = sanitizeTableColumns(draft.table_columns);
+  const ownerColumns = sanitizeTableColumns(owner.table_columns);
+  return {
+    ...(ownerStack == null && draftStack != null ? {
+      table_sort_column: draftStack[0].column,
+      table_sort_direction: draftStack[0].direction,
+      table_sort_stack: draftStack,
+    } : {}),
+    ...(ownerColumns == null && draftColumns != null ? {
+      table_columns: draftColumns,
+    } : {}),
+  };
+};
+
+export const tableSettingsPatch = (settings: TableSettingsPersist): Partial<StoredTableView> => ({
+  ...(settings.persistStack ? {
+    table_sort_column: settings.table_sort_column,
+    table_sort_direction: settings.table_sort_direction,
+    table_sort_stack: settings.table_sort_stack,
+  } : {}),
+  ...(settings.persistColumns ? {
+    table_columns: settings.table_columns,
+  } : {}),
+});
+
+export const commitTableSettings = (
+  board: TableBoard,
+  viewId: string,
+  settings: TableSettingsPersist,
+): TableBoard => {
+  const ids = new Set(tableSettingsTargetIds({
+    viewId,
+    appliedViewId: board.appliedViewId,
+    defaultViewId: board.defaultViewId,
+    unsavedViewId: board.unsavedViewId,
+  }));
+  const patch = tableSettingsPatch(settings);
+  return {
+    ...board,
+    views: board.views.map((view) => ids.has(view.id) ? { ...view, ...patch } : view),
+  };
+};
+
+const withDraftTableSettings = (board: TableBoard): TableBoard => {
+  if (!board.unsavedViewId) return board;
+  const draft = board.views.find((view) => view.id === board.unsavedViewId);
+  const ownerId = board.appliedViewId ?? board.defaultViewId;
+  const owner = board.views.find((view) => view.id === ownerId);
+  if (!draft || !owner || owner.id === draft.id) return board;
+  const patch = tableSettingsPromotedFromDraft(owner, draft);
+  return {
+    ...board,
+    views: board.views.map((view) => view.id === owner.id ? { ...view, ...patch } : view),
+  };
+};
+
+export const switchTableBoard = (board: TableBoard, nextViewId: string): TableBoard => {
+  const kept = withDraftTableSettings(board);
+  return {
+    ...kept,
+    appliedViewId: nextViewId === kept.defaultViewId ? null : nextViewId,
+    unsavedViewId: null,
+    views: kept.unsavedViewId
+      ? kept.views.filter((view) => view.id !== kept.unsavedViewId)
+      : kept.views,
+  };
+};
+
+export const projectFromTableBoard = (board: TableBoard) => {
+  const view = (id: string | null) => board.views.find((item) => item.id === id) ?? null;
+  return {
+    project_view: {
+      default_view: view(board.defaultViewId),
+      user_project_views: [{
+        appliedView: board.appliedViewId ? view(board.appliedViewId) : null,
+        unsavedView: board.unsavedViewId ? view(board.unsavedViewId) : null,
+      }],
+    },
+  };
+};

@@ -11,6 +11,7 @@ import {
   getActiveSortingModeFromProject,
   getActiveSortingStackFromProject,
   getActiveTableSortStackFromProject,
+  stableTableViewId,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions"
 import { ArrowUpDown, Funnel, Layers, MoreHorizontal, Timer } from "lucide-react"
 import OptionPickerModal from "@/components/Modals/OptionPicker"
@@ -72,10 +73,7 @@ const ShellViewControls = ({ project }: { project: IProject }) => {
   const groupByLabel: Record<TableGroupBy, string> = { column: "Column", tag: "Tags", assignee: "Assignee", priority: "Priority", size: "Size" }
   const hasActiveFilters =
     getActiveFiltersFromProject(project).addedFilters.length > 0
-  const tableViewId =
-    project.project_view?.user_project_views?.[0]?.unsavedView?.id ??
-    project.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    project.project_view?.default_view?.id
+  const tableViewId = stableTableViewId(project)
   const tableSortMode = tableSortColumnsEnabled && boardLayout === "table"
   const projectTableSort = getActiveTableSortStackFromProject(project)
   const tableSort = tableSortMode && sortAccount && sortAccount.viewId === tableViewId

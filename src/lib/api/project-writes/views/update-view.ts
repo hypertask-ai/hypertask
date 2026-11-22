@@ -7,11 +7,13 @@ import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
+  TABLE_SETTINGS_UPDATE_MODE,
 } from "@/models/Views/model";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { gatedTableGroupByForViewWrite } from "./gate-table-group-by";
-import { tableViewChangedJson, tableViewSettingsForWrite } from "./gate-table-view-settings";
+import { tableViewChangedJson, tableViewSettingsForWrite, toJsonField } from "./gate-table-view-settings";
+import { tableSettingsTargetIds } from "@/lib/table-view/tableViewSettings";
 import { viewColumnsToWrite } from "@/utils/controllers/section/viewColumnVisibility";
 import { ISection } from "@/models/model";
 import {
@@ -40,6 +42,7 @@ const route = taskWriteRoute({
     const layoutOnly = req.body.updateMode === "layout";
     const personalEmptySectionsOnly =
       req.body.updateMode === PERSONAL_EMPTY_SECTIONS_UPDATE_MODE;
+    const tableSettingsOnly = req.body.updateMode === TABLE_SETTINGS_UPDATE_MODE;
     const hasBoardLayout = Object.prototype.hasOwnProperty.call(
       view_settings ?? {},
       "board_layout"
@@ -96,6 +99,46 @@ const route = taskWriteRoute({
           viewId,
           board_empty_sections: boardEmptySections,
         }, 200);
+      }
+      if (tableSettingsOnly) {
+        const tableSettings = await tableViewSettingsForWrite(
+          userId,
+          (view_settings ?? {}) as Record<string, unknown>,
+          null,
+        );
+        if (!tableSettings.persistStack && !tableSettings.persistColumns) {
+          return viewWriteJson({ message: "Table settings are unavailable" }, 400);
+        }
+        const state = await prisma.user_Project_View.findFirst({
+          where: { userId, project_view: { projectId } },
+          select: {
+            appliedViewId: true,
+            unsavedViewId: true,
+            project_view: { select: { default_view_id: true } },
+          },
+        });
+        const ids = tableSettingsTargetIds({
+          viewId,
+          appliedViewId: state?.appliedViewId ?? null,
+          defaultViewId: state?.project_view.default_view_id ?? null,
+          unsavedViewId: state?.unsavedViewId ?? null,
+        });
+        const data = {
+          ...(tableSettings.persistStack ? {
+            table_sort_column: tableSettings.table_sort_column,
+            table_sort_direction: tableSettings.table_sort_direction,
+            table_sort_stack: toJsonField(tableSettings.table_sort_stack),
+          } : {}),
+          ...(tableSettings.persistColumns ? {
+            table_columns: toJsonField(tableSettings.table_columns),
+          } : {}),
+        };
+        await prisma.view.updateMany({
+          where: { id: { in: ids }, project_view: { projectId } },
+          data,
+        });
+        broadcastBoardChange(projectId, { originUserId: userId });
+        return viewWriteJson(await getProjectView(projectId, userId), 200);
       }
       const mutateView = <T>(
         boardFilters: unknown,

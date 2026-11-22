@@ -21,7 +21,7 @@ import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8972_TABLE_GROUP_FOLD_FLAG } from "@/lib/flags/definitions/htpr-8972-table-group-fold";
-import { getActiveTableColumnsFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getActiveTableColumnsFromProject, stableTableViewId } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import {
   buildTableSectionsForGrouping,
@@ -46,10 +46,7 @@ export function useTableState(context: Context) {
   const tableGroupFoldEnabled = useFlag(HTPR_8972_TABLE_GROUP_FOLD_FLAG);
   const tableSortColumnsEnabled =
     useFlag("htpr-8973-table-sort-columns");
-  const tableViewId =
-    _currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
-    _currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    _currentProject?.project_view?.default_view?.id;
+  const tableViewId = stableTableViewId(_currentProject);
   const tableGroupModesEnabled = useFlag("htpr-8974-table-group-modes");
   const legacyTableGroupEnabled = useFlag("htpr-8630-table-group-by-tag");
   const queryClient = useQueryClient();
@@ -223,6 +220,13 @@ export function useTableState(context: Context) {
   } = useKanbanViews(_currentProject);
   const lastSavedColumns = useRef("");
   const pendingColumnsWrite = useRef<(() => void) | null>(null);
+  const columnsOwnerId = useRef<string | null>(tableViewId);
+  useEffect(() => {
+    if (columnsOwnerId.current === tableViewId) return;
+    pendingColumnsWrite.current?.();
+    pendingColumnsWrite.current = null;
+    columnsOwnerId.current = tableViewId;
+  }, [tableViewId]);
   useEffect(() => {
     if (!tableSortColumnsEnabled || myTasksColumnsControlled || !tableViewId || !_currentProject) return;
     if (!accountColumns || accountColumns.viewId !== tableViewId) return;
@@ -272,7 +276,7 @@ export function useTableState(context: Context) {
   ]);
   useEffect(() => {
     if (!tableSortColumnsEnabled) return;
-    if (sortAccount != null && sortAccount.viewId === activeSortViewId && sortAccount.sort) {
+    if (sortAccount != null && sortAccount.viewId === tableViewId && sortAccount.sort) {
       setSortState(sortAccount.sort as SortState);
       return;
     }
@@ -280,12 +284,12 @@ export function useTableState(context: Context) {
       myTasksSort ? resolveMyTasksSortState(myTasksSort) : resolveSortState(_currentProject, true),
     );
   }, [
-    activeSortViewId,
     myTasksSort?.direction,
     myTasksSort?.field,
     myTasksSortKey,
     sortAccount,
     tableSortColumnsEnabled,
+    tableViewId,
     _currentProject,
   ]);
   useEffect(() => {

@@ -16,6 +16,7 @@ import {
 import {
   isBoardEmptySectionSetting,
   PERSONAL_EMPTY_SECTIONS_UPDATE_MODE,
+  TABLE_SETTINGS_UPDATE_MODE,
   TBoardEmptySections,
   TBoardSortingLevel,
   TBoardSortingViewMode,
@@ -41,6 +42,7 @@ import {
   getActiveTableSortFromProject,
   getActiveTableSortStackFromProject,
   getActiveTableColumnsFromProject,
+  stableTableViewId,
   getViewFromProject,
   getProjectForViewMutation,
   enqueueBoardViewMutation,
@@ -418,28 +420,72 @@ const useKanbanViews = (project: IProject | null) => {
     project,
   );
 
+  const saveOwnedTableSettings = (
+    project: IProject,
+    viewSettings: {
+      table_sort_column?: string | null;
+      table_sort_direction?: string | null;
+      table_sort_stack?: TableSortLevel[] | null;
+      table_columns?: TableColumnSettings | null;
+    },
+  ) => {
+    const viewId = stableTableViewId(project);
+    if (!viewId) {
+      return apiHandler(
+        (queuedProject) => buildUnsavedBody(queuedProject, viewSettings),
+        project,
+      );
+    }
+    return enqueueBoardViewMutation(project.id, async () => {
+      try {
+        await apiAndCacheHandler(updateViewAPIRoute, {
+          projectId: project.id,
+          viewId,
+          updateMode: TABLE_SETTINGS_UPDATE_MODE,
+          view_settings: viewSettings,
+        }, { call: "update" });
+      } catch (error) {
+        console.log("🚀 ~ saveOwnedTableSettings ~ error:", error);
+      }
+    });
+  };
+
   const setTableSortViewAndReturn = async (
     project: IProject,
     tableSort: TTableSort,
     stack?: TableSortLevel[] | null,
-  ) => apiHandler(
-    (queuedProject) => buildUnsavedBody(queuedProject, {
-      table_sort_column: tableSort?.column ?? null,
-      table_sort_direction: tableSort?.direction ?? null,
-      ...(stack === undefined ? {} : { table_sort_stack: stack ?? [] }),
-    }),
-    project,
-  );
+  ) => {
+    if (tableSortColumnsEnabled && stack !== undefined) {
+      return saveOwnedTableSettings(project, {
+        table_sort_column: tableSort?.column ?? null,
+        table_sort_direction: tableSort?.direction ?? null,
+        table_sort_stack: stack ?? [],
+      });
+    }
+    return apiHandler(
+      (queuedProject) => buildUnsavedBody(queuedProject, {
+        table_sort_column: tableSort?.column ?? null,
+        table_sort_direction: tableSort?.direction ?? null,
+        ...(stack === undefined ? {} : { table_sort_stack: stack ?? [] }),
+      }),
+      project,
+    );
+  };
 
   const setTableColumnsViewAndReturn = async (
     project: IProject,
     columns: TableColumnSettings | null,
-  ) => apiHandler(
-    (queuedProject) => buildUnsavedBody(queuedProject, {
-      table_columns: columns,
-    }),
-    project,
-  );
+  ) => {
+    if (tableSortColumnsEnabled) {
+      return saveOwnedTableSettings(project, { table_columns: columns });
+    }
+    return apiHandler(
+      (queuedProject) => buildUnsavedBody(queuedProject, {
+        table_columns: columns,
+      }),
+      project,
+    );
+  };
 
   const setTableGroupByViewAndReturn = async (
     project: IProject,

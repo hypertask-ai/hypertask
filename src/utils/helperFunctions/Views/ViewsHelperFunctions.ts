@@ -651,6 +651,11 @@ const activeTableView = (project?: IProject | null) => {
     return view?.unsavedView ?? view?.appliedView ?? project?.project_view?.default_view
 }
 
+export const stableTableViewId = (project?: IProject | null): string | null => {
+    const row = project?.project_view?.user_project_views?.[0]
+    return row?.appliedView?.id ?? project?.project_view?.default_view?.id ?? null
+}
+
 export const getActiveTableSortStackFromProject = (project?: IProject | null): { column: string; direction: "asc" | "desc" }[] => {
     const stored = activeTableView(project)?.table_sort_stack
     if (Array.isArray(stored) && stored.length) return stored as { column: string; direction: "asc" | "desc" }[]

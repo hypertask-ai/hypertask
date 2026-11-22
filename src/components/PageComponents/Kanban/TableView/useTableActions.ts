@@ -6,7 +6,7 @@ import globalConstants from "@/lib/constants";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
 import { getTaskShortcutAction } from "@/lib/keyboard/taskShortcuts";
 import { CommandMode } from "@/models/enums";
-import { MAX_SORT_LEVELS } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { MAX_SORT_LEVELS, stableTableViewId } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { toggleTaskTimer } from "@/hooks/Task Detail/useTimeTracking";
 import toast from "react-hot-toast";
 import { HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-8625-board-inbox-archive";
@@ -72,10 +72,7 @@ export function useTableActions(context: Context) {
       }
       setSortState(next);
       if (tableSortColumnsEnabled && _currentProject) {
-        const viewId =
-          _currentProject.project_view?.user_project_views?.[0]?.unsavedView?.id ??
-          _currentProject.project_view?.user_project_views?.[0]?.appliedView?.id ??
-          _currentProject.project_view?.default_view?.id;
+        const viewId = stableTableViewId(_currentProject);
         if (viewId) setSortAccount({ viewId, sort: next });
       }
       if (_currentProject) {
