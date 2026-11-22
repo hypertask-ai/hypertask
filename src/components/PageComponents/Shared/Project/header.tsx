@@ -9,6 +9,7 @@ import HeaderIconWrapper from "../../Kanban/HeaderComponents/HeaderIconWrapper";
 import { Share2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import UserAvatar from "@/components/Common/UserAvatar";
+import { GuestInviteBar } from "@/components/PageComponents/TaskDetail/SharedTask/Footer/Footer";
 
 interface Props {
   project: IProject;
@@ -134,15 +135,7 @@ const ReadOnlyHeader = ({
           toggleFilter={setShowSearch}
         />
       </div>
-      <div className="flex items-center gap-2 text-content text-[#8E9093]">
-        Part of the team? You&apos;re almost there to begin working in Hypertask
-        <div
-          className="flex items-center border-2 border-border-active-modal-element rounded cursor-pointer text-content bg-inherit hover:bg-active-modal-element px-2 py-1 font-medium text-[#8E9093] hover:text-white"
-          onClick={routeToInvitePage}
-        >
-          Sign up or Login
-        </div>
-      </div>
+      {!isMbl && <GuestInviteBar onAction={routeToInvitePage} />}
     </div>
   );
 };
