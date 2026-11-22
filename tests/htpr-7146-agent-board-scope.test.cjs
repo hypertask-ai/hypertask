@@ -232,7 +232,7 @@ test('WATCH mode and Accepted grants are request-cached; miss capture is ids-onl
   } finally { Date.now = originalNow; }
 });
 
-test('only flag-read failure falls back to WATCH with a safe log; grant errors propagate', async () => {
+test('flag-read failure still limits an agent that already has boards and leaves a zero-board agent open', async () => {
   const f = fixture();
   f.state.flagError = new Error('private flag failure');
   const warnings = [];

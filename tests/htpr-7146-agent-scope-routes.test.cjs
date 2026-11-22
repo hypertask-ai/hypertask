@@ -549,7 +549,7 @@ test('priority and estimate refuse an ungranted board for an agent that already 
   }
 });
 
-test('priority and estimate retain human and WATCH body-agent content access, including teamless boards and 404s', async () => {
+test('priority and estimate keep human access and refuse a body agent on a board it was not given', async () => {
   for (const mode of ['WATCH', 'ENFORCE']) {
     for (const field of ['priority', 'estimate']) {
       for (const bodyAgent of [false, true]) {

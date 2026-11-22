@@ -21,7 +21,7 @@ function actor(mode, kind, board = 15) {
   if (kind === 'invited') f.projects.find(p => p.id === board).members[0].status = 'Invited';
   return f;
 }
-function miss(f, _mode, _kind, board, action) {
+function assertNoScopeMiss(f, board, action) {
   assert.equal(f.state.events.some(e => e.properties.projectId === board && e.properties.action === action), false);
 }
 
@@ -105,8 +105,8 @@ for (const [mode, kind] of cases) {
     assert.equal(lockCount, allowed ? 2 : 0);
     assert.equal(f.writes.length, allowed ? 1 : 0);
     if (allowed) assert.equal((await patch.json()).flag.ticketTitle, 'Task 15');
-    miss(f, mode, kind, 15, 'read');
-    miss(f, mode, kind, 15, 'write');
+    assertNoScopeMiss(f, 15, 'read');
+    assertNoScopeMiss(f, 15, 'write');
     comment.task = f.tasks[2];
     const foreign = await route.PATCH(request('/api/mcp/flags', 'PATCH', { key, mode: 'OFF', reason: 'https://app.hypertask.ai/detail/project-15/7146#comment-123' }));
     assert.equal(foreign.status, 403);
@@ -138,7 +138,7 @@ for (const [mode, kind] of cases) {
     assert.equal(locks, allowed ? 1 : 0);
     const body = await result.json();
     assert.equal(body.probe.lockedTaskId, allowed ? 150 : undefined);
-    miss(f, mode, kind, 15, 'write');
+    assertNoScopeMiss(f, 15, 'write');
   });
 
   test(`team board replay ${mode} ${kind}: principal key and fresh authorization`, async () => {
@@ -163,7 +163,7 @@ for (const [mode, kind] of cases) {
     assert.equal(replay.status, allowed ? 200 : 403);
     if (allowed) assert.equal((await replay.json()).idempotent_replayed, true);
     assert.deepEqual(f.writes, ['create']);
-    miss(f, mode, kind, 15, 'read');
+    assertNoScopeMiss(f, 15, 'read');
     f.user.agents.push({ ...f.agent, id: 'second-agent' });
     f.state.ctx.agentId = 'second-agent';
     const other = await invoke();
@@ -208,7 +208,7 @@ test('write probe rechecks revoked grants inside its lock before writing', async
   assert.deepEqual(f.writes, []);
 });
 
-test('native tool execution adapter initializes WATCH for a dynamically selected agent', async () => {
+test('native tool execution refuses a board the agent was not given and still opens a granted board', async () => {
   const f = actor('WATCH', 'outside');
   const execution = f.load('src/lib/ai/tools/execution.ts', {
     '@/lib/mcp/tasks/agentMutationLeaseAdoption': { withAdoptedAgentMutationLease: async (_db, _actor, run) => run() },
@@ -237,7 +237,7 @@ test('chat team context adapter initializes WATCH for an internal session agent'
   assert.equal(f.state.flagReads, 1);
 });
 
-test('Pages comment adapter prepares a body agent and preserves production board access in WATCH', async () => {
+test('Pages comment adapter refuses a board the body agent was not given and still returns a granted task', async () => {
   const f = actor('WATCH', 'outside');
   const audienceReads = [];
   const handler = f.load('src/pages/api/comments/create.ts', {
@@ -258,7 +258,7 @@ test('Pages comment adapter prepares a body agent and preserves production board
   assert.equal(f.state.flagReads, 1);
 });
 
-test('Pages delete-reminder adapter preserves WATCH access for a signed agent outside the target board', async () => {
+test('Pages delete-reminder refuses a board the signed agent was not given and still updates a granted task', async () => {
   const f = actor('WATCH', 'outside');
   f.prisma.$transaction = async () => f.tasks[0];
   const handler = f.load('src/pages/api/queues/tasks/taskDeleteReminder.ts', {
@@ -278,7 +278,7 @@ test('Pages delete-reminder adapter preserves WATCH access for a signed agent ou
   assert.equal(f.state.flagReads, 2);
 });
 
-test('proposal adapter prepares its session agent before checking the target board in WATCH', async () => {
+test('proposal adapter refuses a target board the session agent was not given', async () => {
   const f = actor('WATCH', 'outside');
   const proposal = { id: 'proposal', status: 'PENDING', targetProjectId: 15, targetSectionId: 15, ticketTitle: 'New' };
   f.prisma.chatTicketProposal = { findFirst: async () => proposal, findUnique: async () => proposal, updateMany: async () => ({ count: 1 }) };
@@ -327,7 +327,7 @@ test('mention adapter prepares the internal bridge body agent even with an owner
   assert.notEqual(allowed.statusCode, 500);
 });
 
-test('shared task-write adapter prepares a production body agent on a human-owned request', async () => {
+test('shared task-write adapter refuses an ungranted board and still writes a granted board', async () => {
   const f = actor('WATCH', 'outside');
   const { taskWriteRoute } = f.load('src/lib/api/task-writes/route.ts', {
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
@@ -344,7 +344,7 @@ test('shared task-write adapter prepares a production body agent on a human-owne
   assert.equal((await result.json()).id, 4060);
 });
 
-test('bound MCP adapter prepares WATCH even when the operation reuses an authenticated principal directly', async () => {
+test('bound MCP adapter limits a principal that already has boards when the operation reuses it', async () => {
   const f = actor('WATCH', 'outside');
   const wrapper = f.load('src/lib/mcp/routeWrapper.ts', {
     '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} },
