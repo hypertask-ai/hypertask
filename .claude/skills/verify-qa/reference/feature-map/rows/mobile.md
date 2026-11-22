@@ -1,1 +1,1 @@
-| Mobile | [mobile.md](mobile.md) | `@mobile` smoke: `open-board`, `open-task`; create-task smoke stale for inline entry |
+| Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
