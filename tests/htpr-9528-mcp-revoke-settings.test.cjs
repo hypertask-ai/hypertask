@@ -22,9 +22,11 @@ test("settings MCP revoke posts without routing through window.confirm", () => {
   assert.match(controls, /revokePageMcpToken/);
   assert.doesNotMatch(controls, /handleRevokeAll/);
   assert.match(controls, /void revokeToken\(\)/);
-  assert.match(connections, /revokePageMcpToken = async/);
-  const revokeBlock = connections.split("const handleRevokeAll")[0];
-  assert.doesNotMatch(revokeBlock, /confirm\(/);
+  const revokeFn = connections.match(
+    /const revokePageMcpToken = async[\s\S]*?(?=\n  const handleRevokeAll)/,
+  );
+  assert.ok(revokeFn, "revokePageMcpToken must exist");
+  assert.doesNotMatch(revokeFn[0], /confirm\(/);
   assert.match(
     tokenHook,
     /mcp_token=; path=\/; expires=Thu, 01 Jan 1970 00:00:00 GMT/,

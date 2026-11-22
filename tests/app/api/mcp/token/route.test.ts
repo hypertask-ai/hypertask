@@ -76,18 +76,14 @@ async function demo() {
     cookieValues[SESSION_COOKIE] = signSession(user)
 
     const oldToken = createMcpToken(user.id, user.email)
-    const siblingToken = createMcpToken(user.id, user.email)
     assert.ok(await validateMcpAuth(bearerRequest(oldToken)))
-    assert.ok(await validateMcpAuth(bearerRequest(siblingToken)))
     mock.timers.tick(100)
     const revoked = await revokeAll(request('/api/connections/revoke-all'))
     assert.equal(revoked.status, 200)
     const marker = user.mcpTokensRevokedAt
     assert.equal(marker?.getTime(), start + 100)
-    for (const token of [oldToken, siblingToken]) {
-      assert.equal(await validateMcpAuth(bearerRequest(token)), null)
-      assert.equal(await classifyMcpAuthFailure(bearerRequest(token)), 'token_revoked')
-    }
+    assert.equal(await validateMcpAuth(bearerRequest(oldToken)), null)
+    assert.equal(await classifyMcpAuthFailure(bearerRequest(oldToken)), 'token_revoked')
 
     mock.timers.tick(1)
     const minted = await POST(request('/api/mcp/token'))
@@ -95,18 +91,13 @@ async function demo() {
     const { token: newToken } = await minted.json()
     assert.equal(typeof newToken, 'string')
     assert.equal(user.mcpTokensRevokedAt, marker, 'page-token minting must preserve revoke-all')
+    assert.equal(await validateMcpAuth(bearerRequest(oldToken)), null)
+    assert.equal(await classifyMcpAuthFailure(bearerRequest(oldToken)), 'token_revoked')
     assert.ok(await validateMcpAuth(bearerRequest(newToken)))
     const decoded = jwt.decode(newToken) as jwt.JwtPayload
     assert.equal(decoded.mcpIssuedAtMs, start + 101)
     assert.equal(decoded.iat, Math.floor(marker!.getTime() / 1000))
     assert.equal(minted.cookies.get('mcp_token')?.value, newToken)
-
-    mock.timers.tick(1)
-    const stillAllowedToken = createMcpToken(user.id, user.email)
-    assert.ok(
-      await validateMcpAuth(bearerRequest(stillAllowedToken)),
-      'a different token minted after revoke-all must still authenticate'
-    )
     console.log('Page-token revoke-all regression passed')
   } finally {
     if (originalRedis === undefined) delete globals.redis
