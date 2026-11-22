@@ -402,6 +402,8 @@ create_project() {
     case "$1" in
       --project) project=${2:-}; shift ;;
       --project=*) project=${1#--project=} ;;
+      --team) shift ;;
+      --team=*|--json|--human) ;;
       -*) ;;
       *) [ "${#words[@]}" -ge 2 ] || words+=("$1") ;;
     esac

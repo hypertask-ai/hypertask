@@ -931,6 +931,15 @@ run bash "$vcc" tasks create --project=4060 --labels Infra,brain-light --title T
 [ "$status" = 0 ] || fail "equals-form archived board create did not file: $status $(< "$T/err")"
 [[ $(< "$T/out") == *'<--project=11514>'* ]] || fail "equals-form project was not moved: $(< "$T/out")"
 [[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- tasks create --project=11514'* ]] || fail "filing-gate missed equals-form retarget: $(< "$VCC_TEST_TRACE")"
+run bash "$vcc" --team TEAM task create --project 4060 --labels Infra,brain-light --title T
+[ "$status" = 0 ] || fail "a leading --team skipped the archived-board filing: $status $(< "$T/err")"
+[[ $(< "$T/err") == 'vcc: board 4060 is archived; filing this CI ticket on board 11514' ]] || fail "leading --team hid the archive notice: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--team> <TEAM>'*'<--project> <11514>'* ]] || fail "leading --team left the create on 4060: $(< "$T/out")"
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- --team TEAM task create --project 11514'* ]] || fail "filing-gate missed a leading --team create: $(< "$VCC_TEST_TRACE")"
+run bash "$vcc" --team=TEAM --json tasks create --project=4060 --labels Infra,brain-light --title T
+[ "$status" = 0 ] || fail "equals-form --team skipped the archived-board filing: $status $(< "$T/err")"
+[[ $(< "$T/out") == *'<--team=TEAM>'*'<--project=11514>'* ]] || fail "equals-form --team left the create on 4060: $(< "$T/out")"
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- --team=TEAM --json tasks create --project=11514'* ]] || fail "filing-gate missed equals-form --team: $(< "$VCC_TEST_TRACE")"
 allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBOARD
 [[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail 'filing-gate asked for board 15'
 [[ $(< "$T/out") == *'<--project> <15>'* ]] || fail "board 15 create was moved: $(< "$T/out")"
