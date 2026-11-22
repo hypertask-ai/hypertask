@@ -109,6 +109,7 @@ test("empty Blocked by me remains discoverable without changing other empty tabs
     "@/hooks/useFlag": { useFlag: () => true },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7804-blocked-by-me": flag,
+    "@/lib/flags/definitions/htpr-9362-hide-active-view": { HTPR_9362_HIDE_ACTIVE_VIEW_FLAG: "htpr-9362-hide-active-view" },
     "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
     "@/models/Views/model": { DEFAULT_SUBTASK_SETTING: "None" },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveColumnsViewFromProject: () => [] },
