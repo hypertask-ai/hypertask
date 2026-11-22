@@ -1481,6 +1481,8 @@ echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:
 N nochange YPER4-901 >/dev/null && bad "nochange accepted a Control line that names no check" || ok "nochange refuses a Control line that names no check"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found zero old errors on the previous build.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted a control that found nothing" || ok "nochange refuses a control that found nothing"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found the README on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a control that found something other than the fault" || ok "nochange refuses a control that found something other than the fault"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"},{"text":"<p>Control: the search found the fault on the previous build.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange borrowed a Control line from another comment" || ok "nochange needs the Control line in the opener comment"
 jq -n --arg c "$CTRL" '{success:true,comments:[{text:("<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>" + $c)}]}' > "$NC/comments"

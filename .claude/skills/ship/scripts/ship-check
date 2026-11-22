@@ -10,7 +10,8 @@
 #                                links that PR. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
 #                                with evidence (an https URL or a <pre>/<code> block) and a Control: line naming a search or a drive that found
-#                                the fault on a known bad build. A zero result does not count. No open PR titled with T, no bound PR, and no origin
+#                                the fault on a known bad build. The thing found is the fault, an error, a match, a hit, or the same kind of defect.
+#                                A zero result does not count. No open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     test click removed for every PR (hookless sessions)
@@ -329,7 +330,7 @@ resolution_comment() {
       | ($lines | length) > 0
       and any($lines[];
           test("(?i)\\b(search|drive)\\b")
-          and test("(?i)\\bfound\\b")
+          and test("(?i)\\bfound\\b(?:[ \\t]+(?:the|a|an|this|that|same|old|known|reported|original|exact|failing|broken|thrown|missing|wrong|expected|[1-9][0-9]*|one|two|three|four|five|six|seven|eight|nine|ten|several|many|some))*[ \\t]+(faults?|errors?|matches?|hits?|defects?|bugs?|failures?|exceptions?|regressions?)\\b")
           and (test("(?i)\\bfound[ \\t]+(0|zero|no|none|nothing)\\b") | not)
           and (test("(?i)\\b(0|zero)[ \\t]+(old[ \\t]+)?(errors?|faults?|hits?|matches?)\\b") | not)
           and (test("(?i)\\b(did not|didn.t|not)[ \\t]+find\\b") | not)
