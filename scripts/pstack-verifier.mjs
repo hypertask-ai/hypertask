@@ -930,15 +930,17 @@ function readLadderLanes() {
   const root = String(process.env.LADDER_CALL_ROOT ?? "").trim() || path.dirname(path.dirname(ladderBin()));
   try { return JSON.parse(readFileSync(path.join(root, "ci", "lanes.json"), "utf8")); } catch { return []; }
 }
+const ROUTER_HOSTS = new Set(["openrouter.ai", "ai-gateway.vercel.sh"]);
+function laneHost(lane) {
+  try { return new URL(String(lane?.url ?? "")).hostname.toLowerCase(); } catch { return ""; }
+}
 function routerLane(lane) {
   const name = String(lane?.name ?? "");
-  const url = String(lane?.url ?? "");
-  return name === "openrouter" || name === "vercel-ai-gateway" || url.includes("openrouter.ai") || url.includes("ai-gateway.vercel.sh");
+  return name === "openrouter" || name === "vercel-ai-gateway" || ROUTER_HOSTS.has(laneHost(lane));
 }
 function deepseekApiLane(lane) {
   const name = String(lane?.name ?? "");
-  const url = String(lane?.url ?? "");
-  return name === "deepseek" || url.includes("api.deepseek.com");
+  return name === "deepseek" || laneHost(lane) === "api.deepseek.com";
 }
 const DEEPSEEK_API_VISION = new Set(["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]);
 export function modelAcceptsImages(model, lane = {}) {
