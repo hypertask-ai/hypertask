@@ -301,6 +301,7 @@ export const AI_Chat_Sidebar = ({
     aiSessionRef.current = null;
     drafts.current.clear();
     handledDeepLink.current = null;
+    rosterProject.current = null;
     return () => {
       ++intentRef.current;
       if (getNativeSidebarChat()) {
@@ -317,8 +318,9 @@ export const AI_Chat_Sidebar = ({
   }, [sidebarEnabled, projectId, currentUser?.id]);
 
   useEffect(() => {
+    if (rosterProject.current !== projectId) return;
     if (target.kind !== "ai" && !agents.some((agent) => agent.id === target.agent.id)) void selectTargetRef.current({ kind: "ai" });
-  }, [agents]);
+  }, [agents, projectId]);
 
   useEffect(() => {
     if (!sidebarEnabled || !deepLink || handledDeepLink.current === deepLink) return;
