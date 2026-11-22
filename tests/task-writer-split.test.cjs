@@ -280,9 +280,8 @@ test("batch result escapes model titles instead of injecting HTML", () => {
   assert.match(message, /&lt;script&gt;/);
 });
 
-test("actual composer send caches every saved ticket and publishes the complete result in the existing intro", async () => {
-  const h = harness({ failAt: [2] });
-  const result = await h.compose();
+function compileComposerSend() {
+  if (compileComposerSend.cached) return compileComposerSend.cached;
   const source = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/ComposeTaskWriter.tsx"), "utf8");
   const ast = ts.createSourceFile("writer.tsx", source, ts.ScriptTarget.Latest, true);
   let send;
@@ -292,12 +291,20 @@ test("actual composer send caches every saved ticket and publishes the complete 
   }
   visit(ast);
   assert.ok(send);
+  compileComposerSend.cached = ts.transpileModule(`return (${send});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  return compileComposerSend.cached;
+}
+
+test("actual composer send caches every saved ticket and publishes the complete result in the existing intro", async () => {
+  const h = harness({ failAt: [2] });
+  const result = await h.compose();
   const cache = [], intros = [], navigations = [], questionsTaskIds = [];
   const context = {
     enabled: true, targetBoardId: 15, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, aiStepTimingEnabled: false, completeTaskCreatePerformanceTrace() {}, completeTaskCreatePerformanceTraceAfterPaint() {}, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
+    fastComposeOpen: false, openSavedComposeTask: (fastOpen, openCached) => fastOpen && openCached(),
     user: { id: 985 }, currentProject: board, mounted: { current: true }, writerModelPicker: true, writerModel: { id: "claude-sonnet-5-5-instant", source: "anthropic" }, writerReasonEnabled: false, inlineAgentImages: false, guaranteeScreenshots: false, applyWriterProperties: false, skillFollowupEnabled: false, actionChipsEnabled: true,
     createComposedTask: async () => result,
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
@@ -307,11 +314,52 @@ test("actual composer send caches every saved ticket and publishes the complete 
     updateActiveItemAndItemInView() {}, setScope() {}, setSidebar() {}, setSuppressed() {}, setExplicitOpen() {}, setShowChat() {},
     router: { push: url => navigations.push(url) },
   };
-  const compiled = ts.transpileModule(`return (${send});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  await new Function(...Object.keys(context), compiled)(...Object.values(context))();
+  await new Function(...Object.keys(context), compileComposerSend())(...Object.values(context))();
   assert.deepEqual(questionsTaskIds, []);
   assert.deepEqual(cache, result.tasks);
   assert.equal(intros[0].content, h.composeTaskAssistantMessage("HTPR-101", false, false, result));
   assert.equal(navigations[0], "/detail/project-15/101");
   assert.ok(!intros[0].content.includes("/detail/project-15/102"));
+});
+
+test("a saved Ctrl+J task opens from the copy already in hand when the fast open is on", async () => {
+  const note = "<p>Retry failed checkout payments.</p>";
+  const task = { id: 9300, projectId: 15, uniqueIndex: 9300, title: "Retry checkout", status: "Normal", ticketNumber: "HTPR-9300", description_: { content: note }, sectionId: 1 };
+  const project = { id: 15, uniqueIdentifier: "HTPR" };
+  async function run({ fastComposeOpen, cacheHit }) {
+    const navigations = [];
+    const cacheOpens = [];
+    const context = {
+      queueEnterWhileBoardsLoad: false, waitingForBoards: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
+      text: "Retry failed checkout payments.", textHeldUntilBoardsLoad: { current: null },
+      setWritingHeight() {}, showProgress: false, composer: { current: null }, setWriting() {}, setStage() {}, onBusyChange() {},
+      setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null },
+      window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } },
+      newTaskWindow: true, destinationProject: project, inView: null, targetBoardId: 15, user: { id: 985 }, currentProject: project,
+      mounted: { current: true },
+      createComposedTask: async () => ({ task, writerFailed: false, tasks: [task], failedTitles: [] }),
+      files: [], writerReasonEnabled: false, inlineAgentImages: false, guaranteeScreenshots: false, invokeSkills: false, applyWriterProperties: false, writerModelPicker: false,
+      aiStepTimingEnabled: false, completeTaskCreatePerformanceTrace() {}, completeTaskCreatePerformanceTraceAfterPaint() {}, beginTaskCreatePerformanceTrace() { return null; },
+      createTaskGlobally() {}, mobile: false, onCreated() {},
+      composeTaskAssistantMessage: () => "I created HTPR-9300 from your note.",
+      ticketQuestionsEnabled: false, skillFollowupEnabled: false, setIntro() {}, updateActiveItemAndItemInView() {}, setScope() {},
+      chatAutoOpenAllowed: { current: false }, setNewTicketPath() {},
+      fastComposeOpen,
+      openSavedComposeTask: (fastOpen, openCached) => fastOpen && openCached(),
+      openCachedTaskDetail: (input) => { cacheOpens.push(input.task.description_.content); return cacheHit; },
+      queryClient: {},
+      router: { push: (url) => navigations.push(url) },
+    };
+    await new Function(...Object.keys(context), compileComposerSend())(...Object.values(context))();
+    return { navigations, cacheOpens };
+  }
+  const fast = await run({ fastComposeOpen: true, cacheHit: true });
+  assert.deepEqual(fast.navigations, []);
+  assert.deepEqual(fast.cacheOpens, [note]);
+  const slow = await run({ fastComposeOpen: false, cacheHit: true });
+  assert.deepEqual(slow.navigations, ["/detail/project-15/9300"]);
+  assert.deepEqual(slow.cacheOpens, []);
+  const miss = await run({ fastComposeOpen: true, cacheHit: false });
+  assert.deepEqual(miss.navigations, ["/detail/project-15/9300"]);
+  assert.equal(miss.cacheOpens.length, 1);
 });

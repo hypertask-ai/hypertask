@@ -20,6 +20,7 @@ import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
 import Tooltip from "@/components/Common/Tooltip";
 import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/keys";
 import { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG } from "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing";
+import { HTPR_9300_COMPOSE_CACHED_OPEN_FLAG } from "@/lib/flags/definitions/htpr-9300-compose-cached-open";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
@@ -29,7 +30,7 @@ import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoard
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
+import { cachedTaskDetailKey, openCachedTaskDetail, openSavedComposeTask } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
@@ -87,6 +88,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
   const guaranteeScreenshots = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
   const aiStepTimingEnabled = useFlag(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG);
+  const fastComposeOpen = useFlag(HTPR_9300_COMPOSE_CACHED_OPEN_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
@@ -376,6 +378,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     const assigneesAtFetchStart = taskContextRef.current?.currentTask?.assignees;
     let traceScope: TaskCreateTraceScope | null = null;
     try {
+      if (fastComposeOpen) void import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").catch(() => undefined);
       let existingTaskId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       if (newTaskWindow && !destinationProject && detail && inView?.taskId &&
@@ -478,7 +481,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }
       const taskPath = `/detail/project-${projectId}/${task.uniqueIndex}`;
       setNewTicketPath(taskPath);
-      router.push(taskPath);
+      if (!openSavedComposeTask(fastComposeOpen, () => openCachedTaskDetail({
+        queryClient,
+        accountId: user.id,
+        projectId,
+        uniqueIndex: task.uniqueIndex,
+        href: taskPath,
+        task,
+      }))) router.push(taskPath);
       completeTaskCreatePerformanceTraceAfterPaint("task_detail", traceScope);
       if (!mobile || !newTaskWindow) onCreated();
     } catch (failure) {
