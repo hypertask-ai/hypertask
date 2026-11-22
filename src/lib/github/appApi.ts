@@ -35,11 +35,24 @@ function createAppJwt(): string {
   return `${unsigned}.${sign("RSA-SHA256", Buffer.from(unsigned), key).toString("base64url")}`;
 }
 
+const REPOSITORY_PULL_REQUEST_READ = {
+  metadata: "read",
+  pull_requests: "read",
+  checks: "read",
+} as const;
+
+function repositoryIdNumber(value: string): number | null {
+  if (!/^[1-9][0-9]{0,15}$/.test(value)) return null;
+  const id = Number(value);
+  return Number.isSafeInteger(id) && String(id) === value ? id : null;
+}
+
 async function appRequest(
   path: string,
   token: string,
   method: "GET" | "POST",
   fetcher: typeof fetch,
+  body?: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   const response = await fetcher(`${GITHUB_API_URL}${path}`, {
     method,
@@ -48,7 +61,9 @@ async function appRequest(
       Authorization: `Bearer ${token}`,
       "User-Agent": "Hypertask-GitHub-Connect",
       "X-GitHub-Api-Version": "2022-11-28",
+      ...(body ? { "Content-Type": "application/json" } : {}),
     },
+    body: body ? JSON.stringify(body) : undefined,
     cache: "no-store",
     redirect: "error",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -68,14 +83,25 @@ function githubId(value: unknown): string | null {
 export async function fetchInstallationToken(
   installationId: string,
   fetcher: typeof fetch = fetch,
+  scope?: { repositoryId: string },
 ): Promise<string> {
   try {
     if (!githubId(installationId)) throw new GithubRequestError(400);
+    let tokenBody: Record<string, unknown> | undefined;
+    if (scope) {
+      const repositoryId = repositoryIdNumber(scope.repositoryId);
+      if (repositoryId === null) throw new GithubRequestError(400);
+      tokenBody = {
+        repository_ids: [repositoryId],
+        permissions: REPOSITORY_PULL_REQUEST_READ,
+      };
+    }
     const body = await appRequest(
       `/app/installations/${installationId}/access_tokens`,
       createAppJwt(),
       "POST",
       fetcher,
+      tokenBody,
     );
     if (typeof body.token !== "string" || !body.token.trim() || body.token.length > 2048) {
       throw new GithubRequestError(502);

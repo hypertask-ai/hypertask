@@ -166,3 +166,48 @@ test("fetchGithubPullRequest uses a read-only token for public installation repo
     else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = saved.key;
   }
 });
+
+test("fetchGithubPullRequest reads a private pull request with the ticket board token and refuses the same pull request without it", async () => {
+  const calls = [];
+  const original = global.fetch;
+  const saved = {
+    token: process.env.GITHUB_TOKEN,
+    id: process.env.GITHUB_PR_LINK_APP_ID,
+    key: process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY,
+  };
+  delete process.env.GITHUB_TOKEN;
+  delete process.env.GITHUB_PR_LINK_APP_ID;
+  delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+  resetPullRequestGithubAuthCache();
+  const privateUrl = "https://github.com/hypertask-ai/new-private/pull/7";
+  global.fetch = async (url, init) => {
+    const authorization = init?.headers?.Authorization ?? null;
+    calls.push(authorization);
+    if (authorization !== "Bearer board-token") return new Response("missing", { status: 404 });
+    if (String(url).includes("/check-runs")) {
+      return Response.json({ total_count: 1, check_runs: [{ status: "completed", conclusion: "success" }] });
+    }
+    return Response.json(pull(privateUrl, 77, "New private repository"));
+  };
+  try {
+    const metadata = await fetchGithubPullRequest(parseGithubPullRequestUrl(privateUrl), "Bearer board-token");
+    assert.equal(metadata.title, "New private repository");
+    assert.equal(metadata.checkState, "passing");
+    assert.deepEqual(calls, [null, "Bearer board-token", "Bearer board-token"]);
+    calls.length = 0;
+    await assert.rejects(
+      fetchGithubPullRequest(parseGithubPullRequestUrl(privateUrl)),
+      (error) => error instanceof PullRequestLinkError && error.code === "pr_not_found",
+    );
+    assert.deepEqual(calls, [null]);
+  } finally {
+    global.fetch = original;
+    resetPullRequestGithubAuthCache();
+    if (saved.token === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = saved.token;
+    if (saved.id === undefined) delete process.env.GITHUB_PR_LINK_APP_ID;
+    else process.env.GITHUB_PR_LINK_APP_ID = saved.id;
+    if (saved.key === undefined) delete process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY;
+    else process.env.GITHUB_PR_LINK_APP_PRIVATE_KEY = saved.key;
+  }
+});
