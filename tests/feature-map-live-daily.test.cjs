@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { readFileSync } = require('node:fs')
+const { existsSync, readFileSync } = require('node:fs')
 const path = require('node:path')
 const yaml = require('js-yaml')
 const {
@@ -126,8 +126,16 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   const closed = await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([openTicket, commented, archivedComment]) })
   assert.equal(closed.action, 'archived')
   assert.equal(await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([noTicket]) }), null)
-  assert.equal((await fileFindings({ graded: gradeFeatures(inboxPlan, {}, {}), token: 'test-token',
-    fetchImpl: fetchFor([openTicket, commented, archivedComment]) })).action, 'archived')
+  assert.equal(await fileFindings({ graded: gradeFeatures(inboxPlan, {}, {}), token: 'test-token',
+    fetchImpl: fetchFor([openTicket, commented, archivedComment]) }), null)
+  const unreachableCalls = []
+  const unreachableGraded = [
+    { area: 'Inbox', verdict: 'pass', targets: [{ target: 'driver', status: 'passed' }] },
+    { area: 'Billing', verdict: 'unreachable', targets: [{ target: 'driver', status: 'unreachable' }] },
+  ]
+  assert.equal(await fileFindings({ graded: unreachableGraded, token: 'test-token',
+    fetchImpl: fetchFor([openTicket, commented, archivedComment], unreachableCalls) }), null)
+  assert.equal(unreachableCalls.some((call) => call.url.endsWith('/api/mcp/comments') || call.url.endsWith('/api/mcp/tasks/update')), false)
   const crashed = await fileFindings({ graded: passing, suiteErrors: ['journeys set up failed'], token: 'test-token',
     fetchImpl: fetchFor([noTicket, create, commented]) })
   assert.equal(crashed.action, 'created')
@@ -148,7 +156,8 @@ test('ticket descriptions stay plain-language for board lint', () => {
       assert.ok(words(sentence) <= 12, `too long: ${sentence}`)
     }
   }
-  const lint = spawnSync(process.env.HOME + '/.claude/skills/hypertask/scripts/ticket-lint', ['--shape', '-'],
-    { input: html, encoding: 'utf8' })
+  const lintPath = `${process.env.HOME}/.claude/skills/hypertask/scripts/ticket-lint`
+  if (!existsSync(lintPath)) return
+  const lint = spawnSync(lintPath, ['--shape', '-'], { input: html, encoding: 'utf8' })
   assert.equal(lint.status, 0, lint.stderr)
 })

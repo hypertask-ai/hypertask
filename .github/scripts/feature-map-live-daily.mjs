@@ -64,7 +64,7 @@ export function planFeatures(rows, { tags, scripts }) {
       invocations.push(parsed)
     }
     const drives = [...new Set(invocations.map((invocation) => invocation.script))]
-    const missing = tokens.filter((token) => /\.mjs/.test(token) && !parseDriveToken(token, scripts))
+    const missing = tokens.filter((token) => /\.mjs\b/.test(token) && !parseDriveToken(token, scripts))
     const drivable = tagged.length + invocations.length > 0
     return { area, file, tags: tagged, scripts: drives, invocations, missing, drivable,
       reason: drivable ? '' : `the map names no live driver${tokens.length ? ` (${tokens.join('; ')})` : ''}` }
@@ -180,7 +180,7 @@ export function ticketDescription({ graded, problems = [], suiteErrors = [] }) {
     '<h2>Risk</h2><p>Low. Internal verification only.</p>',
     '<h2>Decision</h2><p>Nothing.</p>',
   ].filter(Boolean).join('')
-  if (FILE_TOKEN.test(body)) throw new Error('ticket description must not contain file names')
+  if (body.match(FILE_TOKEN)) throw new Error('ticket description must not contain file names')
   return body
 }
 
@@ -191,11 +191,11 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
   const comment = (ticket, text) => api('comments', { ...options, method: 'POST',
     body: { ticket_number: ticket.ticketNumber ?? `HTPR-${ticket.uniqueIndex}`, project_id: BOARD.projectId, kind: 'qa', text, content_type: 'html' } })
   const passing = graded.some((feature) => feature.verdict === 'pass')
+  const unreachable = graded.some((feature) => feature.verdict === 'unreachable')
   if (!failing && !problems.length && !suiteErrors.length) {
+    if (!passing || unreachable) return null
     if (!existing) return null
-    const note = passing
-      ? `<p>Every mapped feature passed the daily live pass on ${now.toISOString().slice(0, 10)}. Archived.</p>`
-      : `<p>No mapped areas failed on ${now.toISOString().slice(0, 10)}. Archived.</p>`
+    const note = `<p>Every mapped feature passed the daily live pass on ${now.toISOString().slice(0, 10)}. Archived.</p>`
     await comment(existing, note)
     await api('tasks/update', { ...options, method: 'POST', body: { task_id: existing.id, status: 'Archive' } })
     return { url: `${APP}/detail/project-${BOARD.projectId}/${existing.uniqueIndex}`, action: 'archived' }
@@ -325,7 +325,7 @@ async function main() {
   const failing = graded.filter((feature) => feature.verdict === 'fail').length
   const passing = graded.filter((feature) => feature.verdict === 'pass').length
   const unreachable = graded.filter((feature) => feature.verdict === 'unreachable').length
-  if (failing || problems.length || suiteErrors.length || filing) {
+  if (failing || !passing || problems.length || suiteErrors.length || filing) {
     throw new Error(`feature map live pass: ${failing} failing, ${passing} passing, ${unreachable} unreachable, ${problems.length} stale, ${suiteErrors.length} suite errors`)
   }
 }
