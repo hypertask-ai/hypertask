@@ -46,14 +46,17 @@ export async function prepareAgentScope(ownerUserId: number, agentId?: string | 
   await (scope.prepared ??= (async () => {
     const { crossTeamProjectFence } = await import("@/lib/agents/crossTeam");
     setCrossTeamRequestFence(await crossTeamProjectFence(agentId, ownerUserId));
-    scope.enforced = crossTeamRequestFence() !== null || await agentScopeMode(ownerUserId) === "ENFORCE";
-    if (scope.enforced) return;
+    if (crossTeamRequestFence() !== null || await agentScopeMode(ownerUserId) === "ENFORCE") {
+      scope.enforced = true;
+      return;
+    }
     const { default: prisma } = await import("@/lib/prisma");
     const members = await prisma.member.findMany({
       where: { agentId, status: "Accepted", agent: { userId: ownerUserId, revokedAt: null } },
       select: { projectId: true },
     });
     scope.actor = { agentId, ownerUserId, projectIds: new Set(members.map(member => member.projectId)) };
+    scope.enforced = scope.actor.projectIds.size > 0;
   })());
 }
 

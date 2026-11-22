@@ -507,13 +507,14 @@ for (const mode of ['WATCH', 'ENFORCE']) {
         for (const board of [15, 2128]) {
           f.writes.length = 0;
           const result = await invoke(board);
-          const valid = !['revoked', 'other-owner'].includes(kind);
-          const allowed = kind === 'human' || valid && (mode === 'WATCH' || kind === 'granted' && board === 15);
+          const allowed = kind === 'human'
+            || (kind === 'granted' && board === 15)
+            || (mode === 'WATCH' && (kind === 'zero' || kind === 'pending'));
           if (!allowed && ['search', 'list'].includes(action) && result.status === 200) assert.deepEqual((await result.json()).tasks, []);
           else assert.ok(allowed ? [200, 201].includes(result.status) : [403, 404].includes(result.status), `${board}: got ${result.status}, allowed=${allowed}`);
           if (['write', 'comment'].includes(action)) assert.equal(f.writes.length, allowed ? 1 : 0);
           const event = f.state.events.find(event => event.properties.projectId === board);
-          const miss = mode === 'WATCH' && valid && kind !== 'human' && (board === 2128 || kind !== 'granted');
+          const miss = mode === 'WATCH' && (kind === 'zero' || kind === 'pending');
           assert.equal(Boolean(event), miss, `miss for ${board}`);
           if (event) assert.deepEqual(event, { distinctId: '6', event: 'agent_board_scope_miss', properties: { agentId: f.agent.id, ownerUserId: f.user.id, projectId: board, route: action === 'write' ? '/api/priority/setPriority' : action === 'comment' ? '/api/mcp/comments' : `/api/mcp/tasks${action === 'search' ? '/search' : ''}`, action: ['write', 'comment'].includes(action) ? 'write' : 'read', zeroBoard: kind === 'zero' || kind === 'pending' } });
         }
@@ -523,7 +524,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
   }
 }
 
-test('WATCH priority and estimate preserve production writes on owned teamless boards', async () => {
+test('priority and estimate refuse an ungranted board for an agent that already has boards', async () => {
   for (const mode of ['WATCH', 'ENFORCE']) {
     for (const field of ['priority', 'estimate']) {
       const f = fixture();
@@ -537,7 +538,12 @@ test('WATCH priority and estimate preserve production writes on owned teamless b
       }).default;
       const res = response();
       await handler({ url: `/api/${field}`, method: 'POST', headers: {}, body: { taskId: 21280, agentId: f.agent.id, priority_index: 0, Priority_Value: 'None', estimate_index: 0, estimate_value: 'None' } }, res);
-      assert.equal(res.statusCode, mode === 'WATCH' ? 200 : 403);
+      assert.equal(res.statusCode, 403);
+      assert.equal(f.state.events.length, 0);
+      f.projects.forEach(project => { project.members = []; });
+      const open = response();
+      await handler({ url: `/api/${field}`, method: 'POST', headers: {}, body: { taskId: 21280, agentId: f.agent.id, priority_index: 0, Priority_Value: 'None', estimate_index: 0, estimate_value: 'None' } }, open);
+      assert.equal(open.statusCode, mode === 'WATCH' ? 200 : 403);
       assert.equal(f.state.events.length, mode === 'WATCH' ? 1 : 0);
     }
   }
@@ -567,11 +573,11 @@ test('priority and estimate retain human and WATCH body-agent content access, in
           } }, res);
           return res;
         };
-        const allowed = !bodyAgent || mode === 'WATCH';
+        const allowed = !bodyAgent;
         assert.equal((await invoke()).statusCode, allowed ? 200 : 403);
         assert.deepEqual(f.writes, allowed ? [field] : []);
         assert.equal(queries.length, allowed ? 1 : 0);
-        assert.equal(f.state.events.length, bodyAgent && mode === 'WATCH' ? 1 : 0);
+        assert.equal(f.state.events.length, 0);
         if (allowed) {
           assert.deepEqual(Object.keys(queries[0]).sort(), ['include', 'where']);
           f.projects[2].ownerId = 7;
@@ -584,4 +590,35 @@ test('priority and estimate retain human and WATCH body-agent content access, in
       }
     }
   }
+});
+
+test('an agent given boards 15 and 2128 cannot open any other board while the flag is off', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  const board = id => f.projects.find(project => project.id === id);
+  board(4060).members = [];
+  board(2128).members = [{ userId: f.user.id, agentId: f.agent.id, status: 'Accepted', agent: f.agent }];
+  const open = f.load('src/lib/mcp/operations/projects/[projectId]/manifest/operation.ts').GET;
+  const read = async projectId => open(
+    request(`/api/mcp/projects/${projectId}/manifest`),
+    { params: Promise.resolve({ projectId: String(projectId) }) },
+  );
+  const denied = await read(4060);
+  assert.equal(denied.status, 404);
+  assert.equal((await denied.json()).success, false);
+  const home = await read(15);
+  assert.equal(home.status, 200);
+  assert.equal((await home.json()).projectId, 15);
+  const given = await read(2128);
+  assert.equal(given.status, 200);
+  assert.equal((await given.json()).projectId, 2128);
+  f.state.ctx.agentId = null;
+  const human = await read(4060);
+  assert.equal(human.status, 200);
+  assert.equal((await human.json()).projectId, 4060);
+  f.state.ctx.agentId = f.agent.id;
+  f.projects.forEach(project => { project.members = []; });
+  const zeroBoardAgent = await read(4060);
+  assert.equal(zeroBoardAgent.status, 200);
+  assert.equal((await zeroBoardAgent.json()).projectId, 4060);
 });
