@@ -94,7 +94,22 @@ export function mergeTagStatus(into, from) {
 }
 
 export const verdictOf = (status) =>
-  status === 'passed' || status === 'ok' ? 'pass' : status === 'skipped' || status === 'not-run' ? 'not-drivable' : 'fail'
+  status === 'passed' || status === 'ok' ? 'pass'
+    : status === 'unreachable' ? 'unreachable'
+    : status === 'skipped' || status === 'not-run' ? 'not-drivable' : 'fail'
+
+export function driveResultStatus(child, output = '') {
+  if (child.status === 0) return 'ok'
+  const head = (output || `${child.stdout ?? ''}${child.stderr ?? ''}`).split('\n').map((line) => line.trim()).find(Boolean) ?? ''
+  if (child.status === 4 || /^UNREACHABLE missing state:/.test(head)) return 'unreachable'
+  return 'failed'
+}
+
+export function unreachableAccount(output = '') {
+  const line = output.split('\n').find((entry) => /UNREACHABLE missing state:/.test(entry)) ?? ''
+  const match = /UNREACHABLE missing state: (\w+)/.exec(line)
+  return match?.[1] ?? 'extra'
+}
 
 export function gradeFeatures(plan, tagStatus, scriptStatus) {
   return plan.map((feature) => {
@@ -109,6 +124,7 @@ export function gradeFeatures(plan, tagStatus, scriptStatus) {
     const verdicts = targets.map((entry) => verdictOf(entry.status))
     return { ...feature, targets,
       verdict: !feature.drivable ? 'not-drivable' : verdicts.includes('fail') ? 'fail'
+        : verdicts.includes('unreachable') ? 'unreachable'
         : verdicts.includes('pass') ? 'pass' : 'not-drivable' }
   })
 }
@@ -125,11 +141,16 @@ const driver = (feature) => [
 export function summaryLines(graded, { problems = [], ticketUrl = '', suiteErrors = [] } = {}) {
   const counts = Object.groupBy(graded, (feature) => feature.verdict)
   const lines = ['## Daily feature-map live pass', '', `Mapped features: ${graded.length}`, `Pass: ${(counts.pass ?? []).length}`,
-    `Fail: ${(counts.fail ?? []).length}`, `Not drivable: ${(counts['not-drivable'] ?? []).length}`]
+    `Fail: ${(counts.fail ?? []).length}`, `Unreachable: ${(counts.unreachable ?? []).length}`,
+    `Not drivable: ${(counts['not-drivable'] ?? []).length}`]
   if (ticketUrl) lines.push(`Ticket: ${ticketUrl}`)
   lines.push('', '| Area | Verdict | Driver |', '|---|---|---|',
     ...graded.map((feature) => `| ${feature.area} | ${feature.verdict} | ${driver(feature)} |`))
   for (const feature of graded.filter((entry) => entry.verdict === 'fail')) lines.push('', `- ${feature.area}: ${brokenTargets(feature).join(', ')}`)
+  for (const feature of graded.filter((entry) => entry.verdict === 'unreachable')) {
+    const log = feature.unreachableReason ?? `needs ${unreachableAccount('')} login on the runner`
+    lines.push('', `- ${feature.area}: ${log}`)
+  }
   if (problems.length) lines.push('', '### Stale map entries', ...problems.map((entry) => `- ${entry}`))
   if (suiteErrors.length) lines.push('', '### Suite errors', ...suiteErrors.map((entry) => `- ${entry}`))
   return lines
@@ -141,7 +162,7 @@ export function scrubFileTokens(text) {
   return String(text).replace(FILE_TOKEN, 'driver').replace(/\s+/g, ' ').trim()
 }
 
-export function ticketDescription({ graded, problems = [], suiteErrors = [], runUrl = '' }) {
+export function ticketDescription({ graded, problems = [], suiteErrors = [] }) {
   const failures = graded.filter((feature) => feature.verdict === 'fail')
   const list = (entries) => `<ul>${entries.map((entry) => `<li>${entry}</li>`).join('')}</ul>`
   const body = [
@@ -154,12 +175,17 @@ export function ticketDescription({ graded, problems = [], suiteErrors = [], run
     failures.length ? list(failures.map((feature) => feature.area)) : '',
     problems.length ? list(problems.map(scrubFileTokens)) : '',
     suiteErrors.length ? list(suiteErrors.map(scrubFileTokens)) : '',
-    '<h2>Fix</h2><p>Each listed area passes on the next daily run or its map entry is corrected.</p>',
-    '<h2>Done when</h2><p>One daily run reports every mapped feature as pass or explicitly not drivable.</p>',
-    runUrl ? `<p>Run: ${runUrl}</p>` : '',
+    '<h2>Fix</h2><p>Each listed area passes on the next daily run.</p><p>Or its map entry is corrected.</p>',
+    '<h2>Done when</h2><p>One daily run reports pass or not drivable for each mapped feature.</p>',
+    '<h2>Risk</h2><p>Low. Internal verification only.</p>',
+    '<h2>Decision</h2><p>Nothing.</p>',
   ].filter(Boolean).join('')
   if (FILE_TOKEN.test(body)) throw new Error('ticket description must not contain file names')
   return body
+}
+
+export function ticketAgentComment({ runUrl = '' }) {
+  return runUrl ? `<p>Run: <a href="${runUrl}">${runUrl}</a></p>` : ''
 }
 
 export async function fileFindings({ graded, problems = [], suiteErrors = [], runUrl = '', token, fetchImpl = fetch, now = new Date() }) {
@@ -169,17 +195,22 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
   const comment = (ticket, text) => api('comments', { ...options, method: 'POST',
     body: { ticket_number: ticket.ticketNumber ?? `HTPR-${ticket.uniqueIndex}`, project_id: BOARD.projectId, text, content_type: 'html' } })
   const passing = graded.some((feature) => feature.verdict === 'pass')
-  if (!failing && passing && !problems.length && !suiteErrors.length) {
+  if (!failing && !problems.length && !suiteErrors.length) {
     if (!existing) return null
-    await comment(existing, `<p>Every mapped feature passed the daily live pass on ${now.toISOString().slice(0, 10)}. Archived.</p>`)
+    const note = passing
+      ? `<p>Every mapped feature passed the daily live pass on ${now.toISOString().slice(0, 10)}. Archived.</p>`
+      : `<p>No mapped areas failed on ${now.toISOString().slice(0, 10)}. Archived.</p>`
+    await comment(existing, note)
     await api('tasks/update', { ...options, method: 'POST', body: { task_id: existing.id, status: 'Archive' } })
     return { url: `${APP}/detail/project-${BOARD.projectId}/${existing.uniqueIndex}`, action: 'archived' }
   }
-  const description = ticketDescription({ graded, problems, suiteErrors, runUrl })
+  const description = ticketDescription({ graded, problems, suiteErrors })
+  const agentNote = ticketAgentComment({ runUrl })
   const ticket = existing ?? (await api('tasks/create', { ...options, method: 'POST',
     idempotencyKey: `feature-map-live-daily-${now.toISOString().slice(0, 10)}`,
     body: { project_id: BOARD.projectId, section_id: BOARD.sectionId, title: TICKET_TITLE, description, content_type: 'html' } })).task
   if (existing) await comment(ticket, description)
+  if (agentNote) await comment(ticket, agentNote)
   return { url: `${APP}/detail/project-${BOARD.projectId}/${ticket.uniqueIndex}`, action: existing ? 'updated' : 'created' }
 }
 
@@ -201,8 +232,9 @@ function runDrive(name, dir) {
   mkdirSync(folder, { recursive: true })
   const child = spawnSync(process.execPath, [path.join(DRIVE_DIR, name), folder, '--base', APP,
     '--state', QA_STATE, '--board', QA_BOARD_PATH], { cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000 })
-  writeFileSync(path.join(folder, 'drive.log'), `${child.stdout ?? ''}${child.stderr ?? ''}`)
-  return child.status === 0 ? 'ok' : 'failed'
+  const output = `${child.stdout ?? ''}${child.stderr ?? ''}`
+  writeFileSync(path.join(folder, 'drive.log'), output)
+  return driveResultStatus(child, output)
 }
 
 function runFeatureMapDrive(area, dir) {
@@ -210,15 +242,16 @@ function runFeatureMapDrive(area, dir) {
   mkdirSync(folder, { recursive: true })
   const child = spawnSync(process.execPath, [path.join(DRIVE_DIR, 'feature-map-drive.mjs'), area, '--dir', folder],
     { cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000, env: { ...process.env, FEATURE_MAP_LIVE: '1' } })
-  writeFileSync(path.join(folder, 'drive.log'), `${child.stdout ?? ''}${child.stderr ?? ''}`)
-  return child.status === 0 ? 'ok' : 'failed'
+  const output = `${child.stdout ?? ''}${child.stderr ?? ''}`
+  writeFileSync(path.join(folder, 'drive.log'), output)
+  return { status: driveResultStatus(child, output), output }
 }
 
 function runInvocation(invocation, dir) {
   if (invocation.script === 'feature-map-drive.mjs' && invocation.args[0]) {
     return runFeatureMapDrive(invocation.args[0], dir)
   }
-  return runDrive(invocation.script, dir)
+  return { status: runDrive(invocation.script, dir), output: '' }
 }
 
 function ensureQaFlagsState() {
@@ -266,9 +299,22 @@ async function main() {
     return [key, invocation]
   }))).values()]
   if (invocations.some((invocation) => invocation.script === 'feature-map-drive.mjs')) ensureQaFlagsState()
-  for (const invocation of invocations) scriptStatus[driveInvocationKey(invocation)] = runInvocation(invocation, dir)
+  const unreachableNotes = {}
+  for (const invocation of invocations) {
+    const key = driveInvocationKey(invocation)
+    const run = runInvocation(invocation, dir)
+    scriptStatus[key] = run.status
+    if (run.status === 'unreachable') {
+      const account = unreachableAccount(run.output ?? '')
+      unreachableNotes[key] = `needs ${account} login on the runner`
+    }
+  }
 
-  const graded = gradeFeatures(plan, tagStatus, scriptStatus)
+  const graded = gradeFeatures(plan, tagStatus, scriptStatus).map((feature) => {
+    const invocation = feature.invocations?.find((entry) => scriptStatus[driveInvocationKey(entry)] === 'unreachable')
+    const note = invocation ? unreachableNotes[driveInvocationKey(invocation)] : ''
+    return note ? { ...feature, unreachableReason: note } : feature
+  })
   const problems = graded.flatMap((feature) => feature.missing.map(() => `${feature.area}: the map names a drive script that is missing from the repo`))
 
   writeFileSync(path.join(dir, 'result.json'), JSON.stringify({ runUrl, tagStatus, scriptStatus, graded, problems, suiteErrors }, null, 2))
@@ -284,8 +330,9 @@ async function main() {
 
   const failing = graded.filter((feature) => feature.verdict === 'fail').length
   const passing = graded.filter((feature) => feature.verdict === 'pass').length
-  if (failing || !passing || problems.length || suiteErrors.length || filing) {
-    throw new Error(`feature map live pass: ${failing} failing, ${passing} passing, ${problems.length} stale, ${suiteErrors.length} suite errors`)
+  const unreachable = graded.filter((feature) => feature.verdict === 'unreachable').length
+  if (failing || problems.length || suiteErrors.length || filing) {
+    throw new Error(`feature map live pass: ${failing} failing, ${passing} passing, ${unreachable} unreachable, ${problems.length} stale, ${suiteErrors.length} suite errors`)
   }
 }
 

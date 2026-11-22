@@ -6,7 +6,9 @@ const yaml = require('js-yaml')
 const {
   BOARD, MAP_INDEX, TICKET_TITLE, readMapRows, driveScriptName, parseDriveToken, driveInvocationKey,
   planFeatures, tagStatuses, gradeFeatures, mergeTagStatus, summaryLines, fileFindings, ticketDescription,
+  verdictOf, driveResultStatus, unreachableAccount,
 } = require('../.github/scripts/feature-map-live-daily.mjs')
+const { spawnSync } = require('node:child_process')
 
 const rows = readMapRows(readFileSync(path.join(__dirname, '..', MAP_INDEX), 'utf8'))
 const inboxPlan = planFeatures([{ area: 'Inbox', file: 'inbox.md', tokens: ['view-inbox'] }], { tags: ['view-inbox'], scripts: [] })
@@ -54,7 +56,36 @@ test('grading says pass, fail or not-drivable per mapped feature', () => {
   assert.deepEqual(graded.map((feature) => [feature.area, feature.verdict]), [
     ['Inbox', 'pass'], ['Login', 'fail'], ['Drag', 'not-drivable'], ['Figma', 'not-drivable'],
   ])
-  assert.match(summaryLines(graded).join('\n'), /Pass: 1\nFail: 1\nNot drivable: 2/)
+  assert.match(summaryLines(graded).join('\n'), /Pass: 1\nFail: 1\nUnreachable: 0\nNot drivable: 2/)
+})
+
+test('missing runner logins grade unreachable, not fail', () => {
+  const plan = planFeatures([
+    { area: 'Billing', file: 'billing-and-plans.md', tokens: ['feature-map-drive.mjs billing-and-plans'], tags: [], scripts: ['feature-map-drive.mjs'],
+      invocations: [{ script: 'feature-map-drive.mjs', args: ['billing-and-plans'], token: 'feature-map-drive.mjs billing-and-plans' }],
+      missing: [], drivable: true, reason: '' },
+    { area: 'Inbox', file: 'inbox.md', tokens: ['view-inbox'], tags: ['view-inbox'], scripts: [], invocations: [], missing: [], drivable: true, reason: '' },
+  ], { tags: ['view-inbox'], scripts: ['feature-map-drive.mjs'] })
+  const graded = gradeFeatures(plan, { 'view-inbox': 'passed' }, { 'feature-map-drive.mjs\0billing-and-plans': 'unreachable' })
+  assert.deepEqual(graded.map((feature) => [feature.area, feature.verdict]), [['Billing', 'unreachable'], ['Inbox', 'pass']])
+  assert.equal(verdictOf('unreachable'), 'unreachable')
+  const output = 'UNREACHABLE missing state: pro\n'
+  assert.equal(driveResultStatus({ status: 4, stdout: '', stderr: output }, output), 'unreachable')
+  assert.equal(unreachableAccount(output), 'pro')
+  const summary = summaryLines(graded.map((feature) => feature.area === 'Billing'
+    ? { ...feature, unreachableReason: 'needs pro login on the runner' } : feature)).join('\n')
+  assert.match(summary, /Unreachable: 1/)
+  assert.match(summary, /needs pro login on the runner/)
+})
+
+test('unreachable alone does not file a failure ticket', async () => {
+  const plan = planFeatures([
+    { area: 'Billing', file: 'billing-and-plans.md', tokens: [], tags: [], scripts: [], invocations: [],
+      missing: [], drivable: true, reason: '', verdict: 'unreachable',
+      targets: [{ target: 'feature-map-drive.mjs billing-and-plans', status: 'unreachable' }] },
+  ], { tags: [], scripts: [] })
+  const unreachableOnly = [{ ...plan[0], verdict: 'unreachable', targets: [{ target: 'driver', status: 'unreachable' }] }]
+  assert.equal(await fileFindings({ graded: unreachableOnly, token: 'test-token', fetchImpl: fetchFor([noTicket]) }), null)
 })
 
 function fetchFor(routes, calls = []) {
@@ -96,19 +127,28 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   assert.equal(closed.action, 'archived')
   assert.equal(await fileFindings({ graded: passing, token: 'test-token', fetchImpl: fetchFor([noTicket]) }), null)
   assert.equal((await fileFindings({ graded: gradeFeatures(inboxPlan, {}, {}), token: 'test-token',
-    fetchImpl: fetchFor([openTicket, commented]) })).action, 'updated')
+    fetchImpl: fetchFor([openTicket, commented, archivedComment]) })).action, 'archived')
   const crashed = await fileFindings({ graded: passing, suiteErrors: ['journeys set up failed'], token: 'test-token',
     fetchImpl: fetchFor([noTicket, create, commented]) })
   assert.equal(crashed.action, 'created')
 })
 
 test('ticket descriptions stay plain-language for board lint', () => {
-  const graded = gradeFeatures([
-    { area: 'Command palette', file: 'command-palette.md', tags: [], invocations: [{ script: 'ctrl-j-drive.mjs', args: [], token: 'ctrl-j-drive.mjs' }],
-      scripts: ['ctrl-j-drive.mjs'], missing: [], drivable: true, reason: '', targets: [{ target: 'ctrl-j-drive.mjs', status: 'failed' }],
-      verdict: 'fail' },
-  ], {}, { 'ctrl-j-drive.mjs': 'failed' })
-  const html = ticketDescription({ graded, suiteErrors: ['journeys.spec.ts: setup blew up'] })
+  const graded = [
+    { area: 'Billing', verdict: 'fail' },
+    { area: 'Board invites', verdict: 'fail' },
+    { area: 'Command palette', verdict: 'fail' },
+  ]
+  const html = ticketDescription({ graded, suiteErrors: ['journeys set up failed'] })
   assert.doesNotMatch(html, /\.mjs|\.md\b|\.ts\b/)
-  assert.match(html, /Command palette/)
+  const words = (sentence) => sentence.split(/\s+/).filter(Boolean).length
+  const plain = html.replace(/<[^>]+>/g, '\n')
+  for (const line of plain.split('\n').map((entry) => entry.trim()).filter(Boolean)) {
+    for (const sentence of line.split(/(?<=[.!?:;])\s+/).filter(Boolean)) {
+      assert.ok(words(sentence) <= 12, `too long: ${sentence}`)
+    }
+  }
+  const lint = spawnSync(process.env.HOME + '/.claude/skills/hypertask/scripts/ticket-lint', ['--shape', '-'],
+    { input: html, encoding: 'utf8' })
+  assert.equal(lint.status, 0, lint.stderr)
 })
