@@ -24,6 +24,7 @@ const {
   PullRequestLinkError,
 } = jiti(path.join(root, "src/lib/pullRequests/taskPullRequests.ts"));
 const { load } = require("./task-route-loader.cjs");
+const { reloadModule, stubModule } = require("./helpers/loadModule.cjs");
 
 test("parseGithubPullRequestUrl accepts only canonical GitHub pull request URLs", () => {
   assert.deepEqual(
@@ -712,14 +713,12 @@ test("webhook does not return a fallback task after a concurrent global link win
   }
 });
 
-test("webhook does not recreate a pull request the task owner unlinked", async () => {
+test("webhook does not recreate a pull request the task owner unlinked", async (t) => {
   const prismaPath = path.join(root, "src/lib/prisma.ts");
   const syncPath = path.join(
     root,
     "src/lib/pullRequests/syncTaskPullRequests.ts",
   );
-  const previousPrisma = require.cache[prismaPath];
-  const previousSync = require.cache[syncPath];
   let creates = 0;
   const prisma = {
     $transaction: async (callback) =>
@@ -746,58 +745,43 @@ test("webhook does not recreate a pull request the task owner unlinked", async (
         user: { findUnique: async () => null },
       }),
   };
-  delete require.cache[prismaPath];
-  delete require.cache[syncPath];
-  require.cache[prismaPath] = {
-    id: prismaPath,
-    filename: prismaPath,
-    loaded: true,
-    exports: { default: prisma },
-  };
+  stubModule(t, prismaPath, { default: prisma });
+  reloadModule(syncPath);
 
-  try {
-    const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
-      .syncPullRequestFromWebhook;
-    const result = await syncPullRequestFromWebhook({
-      boardId: 15,
-      ticketNumber: "HTPR-5899",
-      repositoryOwner: "hypertask-ai",
-      repositoryName: "hypertask",
-      repositoryId: "1",
-      pullRequestId: "110",
-      number: 110,
-      url: canonicalPullRequestUrl,
-      title: "HTPR-5899 linked PR property",
-      lifecycle: "open",
-      headSha: "abc123",
-      sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
-      action: "synchronize",
-      actorUserId: 6,
-    });
+  const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
+    .syncPullRequestFromWebhook;
+  const result = await syncPullRequestFromWebhook({
+    boardId: 15,
+    ticketNumber: "HTPR-5899",
+    repositoryOwner: "hypertask-ai",
+    repositoryName: "hypertask",
+    repositoryId: "1",
+    pullRequestId: "110",
+    number: 110,
+    url: canonicalPullRequestUrl,
+    title: "HTPR-5899 linked PR property",
+    lifecycle: "open",
+    headSha: "abc123",
+    sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
+    action: "synchronize",
+    actorUserId: 6,
+  });
 
-    assert.deepEqual(result, {
-      linked: 0,
-      updated: 0,
-      taskIds: [],
-      suppressed: true,
-    });
-    assert.equal(creates, 0);
-  } finally {
-    if (previousPrisma) require.cache[prismaPath] = previousPrisma;
-    else delete require.cache[prismaPath];
-    if (previousSync) require.cache[syncPath] = previousSync;
-    else delete require.cache[syncPath];
-  }
+  assert.deepEqual(result, {
+    linked: 0,
+    updated: 0,
+    taskIds: [],
+    suppressed: true,
+  });
+  assert.equal(creates, 0);
 });
 
-test("webhook can attach a pull request again after a later link activity", async () => {
+test("webhook can attach a pull request again after a later link activity", async (t) => {
   const prismaPath = path.join(root, "src/lib/prisma.ts");
   const syncPath = path.join(
     root,
     "src/lib/pullRequests/syncTaskPullRequests.ts",
   );
-  const previousPrisma = require.cache[prismaPath];
-  const previousSync = require.cache[syncPath];
   let creates = 0;
   const prisma = {
     $transaction: async (callback) =>
@@ -824,53 +808,38 @@ test("webhook can attach a pull request again after a later link activity", asyn
         user: { findUnique: async () => null },
       }),
   };
-  delete require.cache[prismaPath];
-  delete require.cache[syncPath];
-  require.cache[prismaPath] = {
-    id: prismaPath,
-    filename: prismaPath,
-    loaded: true,
-    exports: { default: prisma },
-  };
+  stubModule(t, prismaPath, { default: prisma });
+  reloadModule(syncPath);
 
-  try {
-    const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
-      .syncPullRequestFromWebhook;
-    const result = await syncPullRequestFromWebhook({
-      boardId: 15,
-      ticketNumber: "HTPR-5899",
-      repositoryOwner: "hypertask-ai",
-      repositoryName: "hypertask",
-      repositoryId: "1",
-      pullRequestId: "110",
-      number: 110,
-      url: canonicalPullRequestUrl,
-      title: "HTPR-5899 linked PR property",
-      lifecycle: "open",
-      headSha: "abc123",
-      sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
-      action: "synchronize",
-      actorUserId: 6,
-    });
+  const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
+    .syncPullRequestFromWebhook;
+  const result = await syncPullRequestFromWebhook({
+    boardId: 15,
+    ticketNumber: "HTPR-5899",
+    repositoryOwner: "hypertask-ai",
+    repositoryName: "hypertask",
+    repositoryId: "1",
+    pullRequestId: "110",
+    number: 110,
+    url: canonicalPullRequestUrl,
+    title: "HTPR-5899 linked PR property",
+    lifecycle: "open",
+    headSha: "abc123",
+    sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
+    action: "synchronize",
+    actorUserId: 6,
+  });
 
-    assert.equal(creates, 1);
-    assert.equal(result.suppressed, false);
-  } finally {
-    if (previousPrisma) require.cache[prismaPath] = previousPrisma;
-    else delete require.cache[prismaPath];
-    if (previousSync) require.cache[syncPath] = previousSync;
-    else delete require.cache[syncPath];
-  }
+  assert.equal(creates, 1);
+  assert.equal(result.suppressed, false);
 });
 
-test("webhook rechecks a removed link after the task lock and does not recreate it", async () => {
+test("webhook rechecks a removed link after the task lock and does not recreate it", async (t) => {
   const prismaPath = path.join(root, "src/lib/prisma.ts");
   const syncPath = path.join(
     root,
     "src/lib/pullRequests/syncTaskPullRequests.ts",
   );
-  const previousPrisma = require.cache[prismaPath];
-  const previousSync = require.cache[syncPath];
   let creates = 0;
   let locks = 0;
   const prisma = {
@@ -909,47 +878,34 @@ test("webhook rechecks a removed link after the task lock and does not recreate 
         $queryRaw: async () => [],
       }),
   };
-  delete require.cache[prismaPath];
-  delete require.cache[syncPath];
-  require.cache[prismaPath] = {
-    id: prismaPath,
-    filename: prismaPath,
-    loaded: true,
-    exports: { default: prisma },
-  };
+  stubModule(t, prismaPath, { default: prisma });
+  reloadModule(syncPath);
 
-  try {
-    const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
-      .syncPullRequestFromWebhook;
-    const result = await syncPullRequestFromWebhook({
-      boardId: 15,
-      ticketNumber: "HTPR-5899",
-      repositoryOwner: "hypertask-ai",
-      repositoryName: "hypertask",
-      repositoryId: "1",
-      pullRequestId: "110",
-      number: 110,
-      url: canonicalPullRequestUrl,
-      title: "HTPR-5899 linked PR property",
-      lifecycle: "open",
-      headSha: "abc123",
-      sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
-      action: "synchronize",
-      actorUserId: 6,
-    });
+  const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
+    .syncPullRequestFromWebhook;
+  const result = await syncPullRequestFromWebhook({
+    boardId: 15,
+    ticketNumber: "HTPR-5899",
+    repositoryOwner: "hypertask-ai",
+    repositoryName: "hypertask",
+    repositoryId: "1",
+    pullRequestId: "110",
+    number: 110,
+    url: canonicalPullRequestUrl,
+    title: "HTPR-5899 linked PR property",
+    lifecycle: "open",
+    headSha: "abc123",
+    sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
+    action: "synchronize",
+    actorUserId: 6,
+  });
 
-    assert.deepEqual(result, {
-      linked: 0,
-      updated: 0,
-      taskIds: [],
-      suppressed: true,
-    });
-    assert.equal(locks, 1);
-    assert.equal(creates, 0);
-  } finally {
-    if (previousPrisma) require.cache[prismaPath] = previousPrisma;
-    else delete require.cache[prismaPath];
-    if (previousSync) require.cache[syncPath] = previousSync;
-    else delete require.cache[syncPath];
-  }
+  assert.deepEqual(result, {
+    linked: 0,
+    updated: 0,
+    taskIds: [],
+    suppressed: true,
+  });
+  assert.equal(locks, 1);
+  assert.equal(creates, 0);
 });

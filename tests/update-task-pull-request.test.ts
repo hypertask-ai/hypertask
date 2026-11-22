@@ -300,5 +300,7 @@ async function main() {
 }
 
 void main().then(() => {
+  console.log('# tests 1')
+  console.log('# pass 1')
   console.log('updatePullRequest.test.ts: all assertions passed')
 })
