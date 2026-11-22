@@ -1,12 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const Module = require("node:module");
-const ts = require("typescript");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
 const builtin = loadModule("src/lib/constants/builtinViews.ts");
 const { parseBoardDisplay } = loadModule("src/lib/firstScreen/boardDisplay.ts");
 const { DEFAULT_TABLE_COLUMNS } = loadModule("src/utils/helperFunctions/Views/TableColumnsHelperFunctions.ts");
@@ -132,22 +127,8 @@ test("a hidden Blocked view is still hidden when the board display is read back"
   }), 985), null);
 });
 
-function loadHook(stubs) {
-  const filename = path.join(root, "src/hooks/Homepage/Views/useRenderedViews.ts");
-  const loaded = new Module(filename, module);
-  loaded.filename = filename;
-  loaded.require = (name) => {
-    assert.ok(Object.hasOwn(stubs, name), `Unexpected dependency: ${name}`);
-    return stubs[name];
-  };
-  loaded._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true },
-  }).outputText, filename);
-  return loaded.exports.default;
-}
-
 function renderedIds(hideOpenView) {
-  const hook = loadHook({
+  const hook = loadModule("src/hooks/Homepage/Views/useRenderedViews.ts", {
     "@/lib/flags/definitions/htpr-7865-agent-creator-filter": { HTPR_7865_AGENT_CREATOR_FILTER_FLAG: "htpr-7865-agent-creator-filter" },
     "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
     "@/lib/flags/definitions/htpr-9362-hide-active-view": { HTPR_9362_HIDE_ACTIVE_VIEW_FLAG: "htpr-9362-hide-active-view" },
@@ -177,7 +158,7 @@ function renderedIds(hideOpenView) {
       HTPR_8826_BLOCKED_BY_ME_LIST_FLAG: "htpr-8826-blocked-by-me-list",
       HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG: "htpr-7725-saved-view-assignee",
     },
-  });
+  }).default;
   return hook(project()).renderedViews.map((view) => view.id);
 }
 
