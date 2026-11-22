@@ -2,15 +2,15 @@ import type { PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 
-const ALLOCATION_ATTEMPTS = 8;
-
 type TaskIndexDb = Pick<PrismaClient, "task" | "taskNumberAlias" | "project">;
 
 export const getNextUniqueTaskIndex = async (
   projectId: number,
   db: TaskIndexDb = prisma,
 ): Promise<number> => {
-  for (let attempt = 0; attempt < ALLOCATION_ATTEMPTS; attempt += 1) {
+  let next = 0;
+  let saved = { count: 0 };
+  while (saved.count !== 1) {
     const [tasks, aliases, project] = await Promise.all([
       db.task.aggregate({
         where: { projectId },
@@ -26,16 +26,15 @@ export const getNextUniqueTaskIndex = async (
       }),
     ]);
     if (!project) throw new Error("Board not found while allocating a task number");
-    const next = Math.max(
+    next = Math.max(
       project.issuedUniqueIndex,
       tasks._max.uniqueIndex ?? 0,
       aliases._max.uniqueIndex ?? 0,
     ) + 1;
-    const saved = await db.project.updateMany({
+    saved = await db.project.updateMany({
       where: { id: projectId, issuedUniqueIndex: { lt: next } },
       data: { issuedUniqueIndex: next },
     });
-    if (saved.count === 1) return next;
   }
-  throw new Error("Board task number changed while it was being allocated");
+  return next;
 };

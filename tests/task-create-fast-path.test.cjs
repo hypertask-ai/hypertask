@@ -78,14 +78,16 @@ test("a moved-away task number is not issued again", async () => {
   assert.equal(await getNextUniqueTaskIndex(15, board.db), 51);
 });
 
-test("two allocations at once receive different numbers", async () => {
+test("many allocations at once each receive a different number", async () => {
   const board = memoryBoard({ tasks: [10], issued: 10 });
-  const numbers = await Promise.all([
-    getNextUniqueTaskIndex(15, board.db),
-    getNextUniqueTaskIndex(15, board.db),
-  ]);
-  assert.deepEqual(numbers.sort((left, right) => left - right), [11, 12]);
-  assert.equal(board.state.issued, 12);
+  const numbers = await Promise.all(
+    Array.from({ length: 12 }, () => getNextUniqueTaskIndex(15, board.db)),
+  );
+  assert.deepEqual(
+    numbers.sort((left, right) => left - right),
+    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
+  );
+  assert.equal(board.state.issued, 22);
 });
 
 test("task number allocation refuses a missing board", async () => {
