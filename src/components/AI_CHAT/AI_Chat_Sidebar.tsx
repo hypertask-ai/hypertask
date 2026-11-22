@@ -286,8 +286,10 @@ export const AI_Chat_Sidebar = ({
     const timer = setInterval(refresh, 30_000);
     document.addEventListener("visibilitychange", refresh);
     return () => { ++rosterGeneration.current; clearInterval(timer); document.removeEventListener("visibilitychange", refresh); };
-  }, [sidebarEnabled, loadRoster]);
+  }, [sidebarEnabled, loadRoster, currentUser?.id]);
 
+  const deepLink = searchParams?.get("sidebarAgent");
+  const handledDeepLink = useRef<string | null>(null);
   useEffect(() => {
     ++intentRef.current;
     setNativeSidebarChat(null);
@@ -298,6 +300,7 @@ export const AI_Chat_Sidebar = ({
     setAgents([]);
     aiSessionRef.current = null;
     drafts.current.clear();
+    handledDeepLink.current = null;
     return () => {
       ++intentRef.current;
       if (getNativeSidebarChat()) {
@@ -317,16 +320,14 @@ export const AI_Chat_Sidebar = ({
     if (target.kind !== "ai" && !agents.some((agent) => agent.id === target.agent.id)) void selectTargetRef.current({ kind: "ai" });
   }, [agents]);
 
-  const deepLink = searchParams?.get("sidebarAgent");
-  const handledDeepLink = useRef<string | null>(null);
-  useEffect(() => { handledDeepLink.current = null; }, [projectId, currentUser?.id, sidebarEnabled]);
   useEffect(() => {
     if (!sidebarEnabled || !deepLink || handledDeepLink.current === deepLink) return;
+    if (rosterProject.current !== projectId) return;
     const agent = agents.find((item) => item.id === deepLink);
     if (!agent) return;
     handledDeepLink.current = deepLink;
     void selectTargetRef.current({ kind: agent.runtimeType === "EXTERNAL" ? "external-agent" : "native-agent", agent });
-  }, [agents, deepLink, sidebarEnabled]);
+  }, [agents, deepLink, sidebarEnabled, projectId, currentUser?.id]);
 
   const embeddedAgents = useMemo(() => visited.map((agent): TAgent => ({
     id: agent.id, displayName: agent.displayName, photoURL: agent.photoURL, runtimeType: agent.runtimeType,
