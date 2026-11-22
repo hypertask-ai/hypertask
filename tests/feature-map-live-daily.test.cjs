@@ -4,8 +4,8 @@ const { readFileSync } = require('node:fs')
 const path = require('node:path')
 const yaml = require('js-yaml')
 const {
-  BOARD, MAP_INDEX, TICKET_TITLE, readMapRows, driveScriptName, planFeatures, tagStatuses, gradeFeatures,
-  mergeTagStatus, summaryLines, fileFindings,
+  BOARD, MAP_INDEX, TICKET_TITLE, readMapRows, driveScriptName, parseDriveToken, driveInvocationKey,
+  planFeatures, tagStatuses, gradeFeatures, mergeTagStatus, summaryLines, fileFindings, ticketDescription,
 } = require('../.github/scripts/feature-map-live-daily.mjs')
 
 const rows = readMapRows(readFileSync(path.join(__dirname, '..', MAP_INDEX), 'utf8'))
@@ -22,11 +22,19 @@ test('the map index gives one row per area and a driver only when the map names 
   assert.ok(rows.length >= 55, `read ${rows.length} rows`)
   assert.equal(passStep.env.FEATURE_MAP_LIVE, '1', 'the pass step needs the live opt-in')
   assert.deepEqual(rows.find((row) => row.file === 'inbox.md').tokens.slice(0, 1), ['view-inbox'])
-  const scripts = ['board-drive-live.mjs']
+  const scripts = ['board-drive-live.mjs', 'feature-map-drive.mjs']
   assert.equal(driveScriptName('node .claude/skills/verify-qa/scripts/board-drive-live.mjs', scripts), 'board-drive-live.mjs')
+  assert.deepEqual(parseDriveToken('feature-map-drive.mjs activation-analytics', scripts), {
+    script: 'feature-map-drive.mjs', args: ['activation-analytics'], token: 'feature-map-drive.mjs activation-analytics',
+  })
   const plan = planFeatures(rows, { tags: ['view-inbox', 'open-board'], scripts })
   assert.deepEqual(plan.find((feature) => feature.file === 'inbox.md').tags, ['view-inbox'])
-  assert.deepEqual(plan.find((feature) => feature.file === 'boards-and-views.md').scripts, scripts)
+  assert.deepEqual(plan.find((feature) => feature.file === 'boards-and-views.md').scripts.sort(), scripts.sort())
+  const activation = plan.find((feature) => feature.file === 'activation-analytics.md')
+  assert.ok(activation.drivable)
+  assert.deepEqual(activation.invocations.map(driveInvocationKey), ['feature-map-drive.mjs\0activation-analytics'])
+  const commandPalette = plan.find((feature) => feature.file === 'command-palette.md')
+  assert.equal(commandPalette.scripts.includes('ctrl-j-drive.mjs'), false)
   const figma = plan.find((feature) => feature.file === 'figma-connect.md')
   assert.match(figma.reason, /no live driver/)
 })
@@ -69,14 +77,16 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   const create = { when: (url) => url === '/api/mcp/tasks/create', body: { success: true, task: { id: 7, ticketNumber: 'HTPR-7', uniqueIndex: 7 } } }
   const createdCalls = []
   const created = await fileFindings({
-    graded: failing, problems: ['login.md: missing file: gone.md'], runUrl: 'https://run', token: 'test-token',
+    graded: failing, problems: ['Login: the map names a drive script that is missing from the repo'],
+    runUrl: 'https://run', token: 'test-token',
     fetchImpl: fetchFor([noTicket, create, commented], createdCalls),
   })
   const body = createdCalls.find((call) => call.url.endsWith('/api/mcp/tasks/create')).body
   assert.equal(created.url, `https://app.hypertask.ai/detail/project-${BOARD.projectId}/7`)
   assert.equal(body.title, TICKET_TITLE)
-  assert.match(body.description, /1 mapped features failed/)
-  assert.match(body.description, /login\.md: missing file: gone\.md/)
+  assert.match(body.description, /1 mapped feature area/)
+  assert.match(body.description, /What Valentin must decide/)
+  assert.doesNotMatch(body.description, /\.mjs|\.md\b/)
   const updatedCalls = []
   const updated = await fileFindings({ graded: failing, token: 'test-token', fetchImpl: fetchFor([openTicket, commented], updatedCalls) })
   assert.equal(updated.action, 'updated')
@@ -90,4 +100,15 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   const crashed = await fileFindings({ graded: passing, suiteErrors: ['journeys set up failed'], token: 'test-token',
     fetchImpl: fetchFor([noTicket, create, commented]) })
   assert.equal(crashed.action, 'created')
+})
+
+test('ticket descriptions stay plain-language for board lint', () => {
+  const graded = gradeFeatures([
+    { area: 'Command palette', file: 'command-palette.md', tags: [], invocations: [{ script: 'ctrl-j-drive.mjs', args: [], token: 'ctrl-j-drive.mjs' }],
+      scripts: ['ctrl-j-drive.mjs'], missing: [], drivable: true, reason: '', targets: [{ target: 'ctrl-j-drive.mjs', status: 'failed' }],
+      verdict: 'fail' },
+  ], {}, { 'ctrl-j-drive.mjs': 'failed' })
+  const html = ticketDescription({ graded, suiteErrors: ['journeys.spec.ts: setup blew up'] })
+  assert.doesNotMatch(html, /\.mjs|\.md\b|\.ts\b/)
+  assert.match(html, /Command palette/)
 })

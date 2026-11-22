@@ -29,18 +29,43 @@ export const readMapRows = (markdown) => markdown.split('\n').flatMap((line) => 
   return cells.length < 5 || !link ? [] : [{ area: cells[1], file: link[1], tokens: [...cells[3].matchAll(/`([^`]+)`/g)].map((match) => match[1].trim()) }]
 })
 
+const DRIVE_SCRIPT = /^([\w.-]+\.mjs)(?:\s+(.+))?$/
+
+export function parseDriveToken(token, scripts) {
+  const match = DRIVE_SCRIPT.exec(token.trim())
+  if (match && scripts.includes(match[1])) {
+    const args = match[2] ? match[2].trim().split(/\s+/) : []
+    return { script: match[1], args, token: token.trim() }
+  }
+  const pathy = /(?:^|\/)(([\w.-]+)\.mjs)\s*$/.exec(token.trim())
+  return pathy && scripts.includes(pathy[1]) ? { script: pathy[1], args: [], token: pathy[1] } : null
+}
+
 export function driveScriptName(token, scripts) {
-  const name = /([\w.-]+\.mjs)$/.exec(token)?.[1]
-  return name && scripts.includes(name) ? name : null
+  return parseDriveToken(token, scripts)?.script ?? null
+}
+
+export function driveInvocationKey(invocation) {
+  return invocation.args.length ? `${invocation.script}\0${invocation.args.join('\0')}` : invocation.script
 }
 
 export function planFeatures(rows, { tags, scripts }) {
   return rows.map(({ area, file, tokens }) => {
     const tagged = tokens.filter((token) => tags.includes(token))
-    const drives = [...new Set(tokens.map((token) => driveScriptName(token, scripts)).filter(Boolean))]
-    const missing = tokens.filter((token) => /\.mjs$/.test(token) && !driveScriptName(token, scripts))
-    const drivable = tagged.length + drives.length > 0
-    return { area, file, tags: tagged, scripts: drives, missing, drivable,
+    const invocations = []
+    const seen = new Set()
+    for (const token of tokens) {
+      const parsed = parseDriveToken(token, scripts)
+      if (!parsed) continue
+      const key = driveInvocationKey(parsed)
+      if (seen.has(key)) continue
+      seen.add(key)
+      invocations.push(parsed)
+    }
+    const drives = [...new Set(invocations.map((invocation) => invocation.script))]
+    const missing = tokens.filter((token) => /\.mjs/.test(token) && !parseDriveToken(token, scripts))
+    const drivable = tagged.length + invocations.length > 0
+    return { area, file, tags: tagged, scripts: drives, invocations, missing, drivable,
       reason: drivable ? '' : `the map names no live driver${tokens.length ? ` (${tokens.join('; ')})` : ''}` }
   })
 }
@@ -72,9 +97,13 @@ export const verdictOf = (status) =>
 
 export function gradeFeatures(plan, tagStatus, scriptStatus) {
   return plan.map((feature) => {
+    const invocations = feature.invocations ?? []
     const targets = [
       ...feature.tags.map((id) => ({ target: `@id:${id}`, status: tagStatus[id] ?? 'skipped' })),
-      ...feature.scripts.map((name) => ({ target: name, status: scriptStatus[name] ?? 'not-run' })),
+      ...invocations.map((invocation) => ({
+        target: invocation.args.length ? `${invocation.script} ${invocation.args.join(' ')}` : invocation.script,
+        status: scriptStatus[driveInvocationKey(invocation)] ?? 'not-run',
+      })),
     ]
     const verdicts = targets.map((entry) => verdictOf(entry.status))
     return { ...feature, targets,
@@ -86,7 +115,11 @@ export function gradeFeatures(plan, tagStatus, scriptStatus) {
 export const brokenTargets = (feature) => feature.targets
   .filter((entry) => verdictOf(entry.status) === 'fail').map((entry) => `${entry.target} (${entry.status})`)
 
-const driver = (feature) => [...feature.tags.map((id) => `@id:${id}`), ...feature.scripts].join(', ') || feature.reason
+const driver = (feature) => [
+  ...feature.tags.map((id) => `@id:${id}`),
+  ...(feature.invocations ?? []).map((invocation) => invocation.args.length
+    ? `${invocation.script} ${invocation.args.join(' ')}` : invocation.script),
+].join(', ') || feature.reason
 
 export function summaryLines(graded, { problems = [], ticketUrl = '', suiteErrors = [] } = {}) {
   const counts = Object.groupBy(graded, (feature) => feature.verdict)
@@ -101,21 +134,32 @@ export function summaryLines(graded, { problems = [], ticketUrl = '', suiteError
   return lines
 }
 
-function ticketDescription({ graded, problems = [], suiteErrors = [], runUrl = '' }) {
+const FILE_TOKEN = /\b[\w./-]+\.(?:mjs|cjs|tsx?|md)\b/g
+
+export function scrubFileTokens(text) {
+  return String(text).replace(FILE_TOKEN, 'driver').replace(/\s+/g, ' ').trim()
+}
+
+export function ticketDescription({ graded, problems = [], suiteErrors = [], runUrl = '' }) {
   const failures = graded.filter((feature) => feature.verdict === 'fail')
+  const areaNames = failures.map((feature) => feature.area)
   const list = (entries) => `<ul>${entries.map((entry) => `<li>${entry}</li>`).join('')}</ul>`
-  return [
-    `<p><strong>What's wrong or wanted:</strong> ${failures.length} mapped features failed the daily live pass.</p>`,
-    `<p><strong>Who it affects:</strong> internal only. Customers see the pages these features drive.</p>`,
-    '<p><strong>Recommended course and why:</strong> fix or re-map each entry below.</p>',
-    '<p><strong>How to undo:</strong> turn the daily schedule off.</p><hr><h2>Problem</h2>',
-    failures.length ? list(failures.map((feature) => `${feature.area}: ${brokenTargets(feature).join(', ')}`)) : '',
-    problems.length ? list(problems) : '',
-    suiteErrors.length ? list(suiteErrors) : '',
-    '<h2>Fix</h2><p>Fix the failing feature or correct its map entry.</p>',
-    '<h2>Done when</h2><p>One daily run passes every mapped feature.</p>',
+  const body = [
+    `<p><strong>What's wrong or wanted:</strong> ${failures.length} mapped feature area${failures.length === 1 ? '' : 's'} failed the daily live pass${areaNames.length ? `: ${areaNames.join(', ')}` : ''}.</p>`,
+    '<p><strong>Who it affects:</strong> internal verification only; customers use the same flows on the live app.</p>',
+    '<p><strong>Recommended course and why:</strong> triage each failed area as map drift, harness gap, or product regression, then fix or re-map; why: the daily job must stay green without filing noise tickets.</p>',
+    '<p><strong>What Valentin must decide:</strong> nothing.</p>',
+    '<p><strong>How to undo:</strong> disable the feature-map live daily schedule.</p>',
+    '<hr><h2>Problem</h2>',
+    failures.length ? list(failures.map((feature) => feature.area)) : '',
+    problems.length ? list(problems.map(scrubFileTokens)) : '',
+    suiteErrors.length ? list(suiteErrors.map(scrubFileTokens)) : '',
+    '<h2>Fix</h2><p>Each listed area passes on the next daily run or its map entry is corrected.</p>',
+    '<h2>Done when</h2><p>One daily run reports every mapped feature as pass or explicitly not drivable.</p>',
     runUrl ? `<p>Run: ${runUrl}</p>` : '',
   ].filter(Boolean).join('')
+  if (FILE_TOKEN.test(body)) throw new Error('ticket description must not contain file names')
+  return body
 }
 
 export async function fileFindings({ graded, problems = [], suiteErrors = [], runUrl = '', token, fetchImpl = fetch, now = new Date() }) {
@@ -161,6 +205,22 @@ function runDrive(name, dir) {
   return child.status === 0 ? 'ok' : 'failed'
 }
 
+function runFeatureMapDrive(area, dir) {
+  const folder = path.join(dir, `feature-map-drive-${area}`)
+  mkdirSync(folder, { recursive: true })
+  const child = spawnSync(process.execPath, [path.join(DRIVE_DIR, 'feature-map-drive.mjs'), area, '--dir', folder],
+    { cwd: root, encoding: 'utf8', timeout: 4 * 60 * 1000, env: { ...process.env, FEATURE_MAP_LIVE: '1' } })
+  writeFileSync(path.join(folder, 'drive.log'), `${child.stdout ?? ''}${child.stderr ?? ''}`)
+  return child.status === 0 ? 'ok' : 'failed'
+}
+
+function runInvocation(invocation, dir) {
+  if (invocation.script === 'feature-map-drive.mjs' && invocation.args[0]) {
+    return runFeatureMapDrive(invocation.args[0], dir)
+  }
+  return runDrive(invocation.script, dir)
+}
+
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
     throw new Error('feature-map-live-daily runs only on a GitHub-hosted runner, never the VPS')
@@ -184,10 +244,14 @@ async function main() {
   const scripts = readdirSync(path.join(root, DRIVE_DIR)).filter((name) => name.endsWith('.mjs'))
   const plan = planFeatures(readMapRows(readFileSync(path.join(root, MAP_INDEX), 'utf8')), { tags: Object.keys(tagStatus), scripts })
   const scriptStatus = {}
-  for (const name of [...new Set(plan.flatMap((feature) => feature.scripts))]) scriptStatus[name] = runDrive(name, dir)
+  const invocations = [...new Map(plan.flatMap((feature) => feature.invocations.map((invocation) => {
+    const key = driveInvocationKey(invocation)
+    return [key, invocation]
+  }))).values()]
+  for (const invocation of invocations) scriptStatus[driveInvocationKey(invocation)] = runInvocation(invocation, dir)
 
   const graded = gradeFeatures(plan, tagStatus, scriptStatus)
-  const problems = graded.flatMap((feature) => feature.missing.map((token) => `${feature.file}: missing drive script: ${token}`))
+  const problems = graded.flatMap((feature) => feature.missing.map(() => `${feature.area}: the map names a drive script that is missing from the repo`))
 
   writeFileSync(path.join(dir, 'result.json'), JSON.stringify({ runUrl, tagStatus, scriptStatus, graded, problems, suiteErrors }, null, 2))
   let filing = ''

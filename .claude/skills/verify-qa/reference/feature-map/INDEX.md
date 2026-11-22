@@ -34,7 +34,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Board invites | [board-invites.md](board-invites.md) | `feature-map-drive.mjs board-invites`; owner resend 200, outsider 403 |
 | Board member list | [board-member-list.md](board-member-list.md) | `feature-map-drive.mjs board-member-list`; query `teamId` ignored |
 | Board skills | [board-skills.md](board-skills.md) | `feature-map-drive.mjs board-skills`; create a throwaway skill, prove 201 and the reload, delete it |
-| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `feature-map-drive.mjs boards-and-views`; `board-drive-live.mjs` hands-free |
+| Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`; `feature-map-drive.mjs boards-and-views`; `board-drive-live.mjs`; switch-boards smoke stale (loopback hands-free) |
 | Calendar | [calendar.md](calendar.md) | `feature-map-drive.mjs calendar` read-only |
 | Chat sessions | [chat-sessions.md](chat-sessions.md) | `feature-map-drive.mjs chat-sessions` read-only |
 | CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | `ci-runner-policy.cjs` on the production SHA, self-hosted negative control, `pr-title` status |
@@ -42,7 +42,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Required-check settings | [ci-settings.md](ci-settings.md) | live ruleset read, hourly `verify`/`chain` run log, no settings step in `ci-tests` |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | `ci-prepare` then 4 PR / 8 push shards, `Run independent static checks`, `shard-proof … duplicates=0` |
 | CLI install commands and login | [cli-install.md](cli-install.md) | Settings CLI desktop/phone, `llms.txt`, real install, Ctrl+K `#cliInstallModal`, management-key Team row |
-| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via `ht-verify session`; `;`/`SHIFT ;` chips, plus composer (`ctrl-j-drive.mjs` is stale for QA 985) |
+| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via ht-verify session; `;`/`SHIFT ;` chips, plus composer; loopback ctrl-j-drive only (stale on QA 985) |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | post, `@` picker, reload and delete on board 7049; `comments-drive-live.mjs` for loopback |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | Ctrl+K Create task, attach file, `Save`, request chain 200, reload |
 | Board custom instructions | [custom-instructions.md](custom-instructions.md) | board 7049 GET, save, reload/reopen, unsaved edit, restore |
@@ -63,7 +63,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP task moves | [mcp-task-moves.md](mcp-task-moves.md) | disposable fixture refusal, unchanged column, successful moves; delete fixture |
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; single-token mint/revoke steps in the file; never revoke-all on QA 2343 (MCP watcher) or on 985 (shared agent token) |
-| Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
+| Mobile | [mobile.md](mobile.md) | `@mobile` smoke: `open-board`, `open-task`; create-task smoke stale for inline entry |
 | AI model canary | [model-canary.md](model-canary.md) | internal cron, dedicated internal-key request identity, read-only MCP status |
 | My Tasks | [my-tasks.md](my-tasks.md) | no smoke id; drive steps in my-tasks.md (list, settings button, `/scheduled`, board-tab absence) |
 | OAuth and API clients | [oauth-and-api-clients.md](oauth-and-api-clients.md) | `feature-map-drive.mjs oauth-and-api-clients` read-only |
@@ -71,7 +71,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Pinned and archived | [pinned-and-archived.md](pinned-and-archived.md) | `feature-map-drive.mjs pinned-and-archived` read-only |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
 | Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
-| Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and drafts via the steps in quick-entry-cards.md; Table view needs a board view |
+| Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | ht-verify inline column plus (see map); @id:create-task smoke stale for inline box; Table view needs a board view |
 | Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | `ht-verify open /report` and one saved row; velocity page; the two MCP doors need an agent token (401 without) |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only); `ht-verify` filter icon > Tags > cycle Match ANY / Match ALL / Hide tags; flags EVERYONE |
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); `ht-verify` /search tips, type `fr` then Tab, full load of a `searchTerm` URL |
