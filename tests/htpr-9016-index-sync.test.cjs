@@ -400,6 +400,7 @@ function driftCron({ labels }) {
   const comments = [];
   const tasks = [];
   let saved = null;
+  const lookedUp = [];
   const later = "2026-11-12T09:00:00.000Z";
   const earlier = "2026-11-10T09:00:00.000Z";
   const indexedTask = { id: "11", updatedAt: later };
@@ -445,6 +446,10 @@ function driftCron({ labels }) {
         },
         comment: {
           groupBy: async () => [{ taskId: 11, _count: { _all: 2 } }],
+          findFirst: async (args) => {
+            lookedUp.push(args.where);
+            return notes.some((note) => note.commentText.includes(args.where.commentText.contains)) ? { id: 1 } : null;
+          },
           create: async ({ data }) => { notes.push(data); return data; },
         },
       },
@@ -465,7 +470,7 @@ function driftCron({ labels }) {
       upsertAllCommentsToTurbopuffer: async (id) => { comments.push(id); },
     },
   });
-  return { route, notes, comments, tasks };
+  return { route, notes, comments, tasks, lookedUp, dropPostMarker() { const state = JSON.parse(saved); delete state.countPostedOn; saved = JSON.stringify(state); } };
 }
 
 function cronRequest(secret) {
@@ -480,7 +485,8 @@ test("a finished pass posts the drift count on the ticket once", async (t) => {
   const previous = process.env.CRON_SECRET;
   process.env.CRON_SECRET = "drift-secret";
   t.after(() => { process.env.CRON_SECRET = previous; });
-  const { route, notes, comments, tasks } = driftCron({ labels: true });
+  const today = new Date().toISOString().slice(0, 10);
+  const { route, notes, comments, tasks, lookedUp, dropPostMarker } = driftCron({ labels: true });
   const denied = await route.GET(cronRequest(null));
   assert.equal(denied.status, 401);
   assert.deepEqual(notes, []);
@@ -491,12 +497,17 @@ test("a finished pass posts the drift count on the ticket once", async (t) => {
   assert.deepEqual(tasks, []);
   assert.equal(notes.length, 1);
   assert.equal(notes[0].taskId, 9016);
-  assert.equal(notes[0].commentText, "Search index drift 0");
-  assert.equal(notes[0].text, "<p>Search index drift 0</p>");
+  assert.equal(notes[0].commentText, `Search index drift 0 on ${today}`);
+  assert.equal(notes[0].text, `<p>Search index drift 0 on ${today}</p>`);
   const second = await route.GET(cronRequest("drift-secret"));
   assert.equal(second.body.skipped, "pass recorded today");
   assert.equal(second.body.drift, 0);
   assert.equal(notes.length, 1);
+  dropPostMarker();
+  const retried = await route.GET(cronRequest("drift-secret"));
+  assert.equal(retried.body.skipped, "pass recorded today");
+  assert.equal(notes.length, 1);
+  assert.deepEqual(lookedUp.at(-1).commentText, { startsWith: "Search index drift ", contains: ` on ${today}` });
 });
 
 test("the old edit-clock comparison still rewrites comment copies when the flag is off", async (t) => {
@@ -507,5 +518,8 @@ test("the old edit-clock comparison still rewrites comment copies when the flag 
   const result = await route.GET(cronRequest("drift-secret"));
   assert.equal(result.body.passFound, 1);
   assert.deepEqual(comments, [11]);
-  assert.equal(notes[0].commentText, "Search index drift 1");
+  assert.deepEqual(notes, []);
+  const again = await route.GET(cronRequest("drift-secret"));
+  assert.equal(again.body.skipped, "pass recorded today");
+  assert.deepEqual(notes, []);
 });

@@ -32,10 +32,10 @@ function readState(raw: string | null): DriftState {
   }
 }
 
-async function publishCount(state: DriftState, found: number, date: string): Promise<DriftState> {
-  if (state.countPostedOn === date) return state;
+async function publishCount(state: DriftState, found: number, date: string, enabled: boolean): Promise<DriftState> {
+  if (!enabled || state.countPostedOn === date) return state;
   try {
-    const posted = await postSearchIndexDriftCount(found);
+    const posted = await postSearchIndexDriftCount(found, date);
     return posted ? { ...state, countPostedOn: date } : state;
   } catch (error) {
     console.log(`[search-index-drift] count post failed ${String((error as Error)?.message ?? error).slice(0, 200)}`);
@@ -50,19 +50,19 @@ export async function GET(request: NextRequest) {
   const redis = await getRedis();
   const state = readState(await redis.get(DRIFT_STATE_KEY));
   const today = new Date().toISOString().slice(0, 10);
+  const labels = await isFeatureEnabled(HTPR_9016_COMMENT_COPY_LABELS_FLAG, FEATURE_FLAG_OWNER_USER_ID);
   if (driftPassRecorded(state.results, today)) {
     const recorded = state.results.find((pass) => pass.date === today)?.found ?? 0;
-    const posted = await publishCount(state, recorded, today);
+    const posted = await publishCount(state, recorded, today, labels);
     if (posted.countPostedOn !== state.countPostedOn) await redis.set(DRIFT_STATE_KEY, JSON.stringify(posted));
     console.log(`[search-index-drift] pass complete drift ${recorded} already recorded for ${today}`);
     return NextResponse.json({ skipped: "pass recorded today", today, drift: recorded, results: posted.results });
   }
-  const labels = await isFeatureEnabled(HTPR_9016_COMMENT_COPY_LABELS_FLAG, FEATURE_FLAG_OWNER_USER_ID);
   const result = await runIndexDriftRepair(state, {
     commentDrift: labels ? commentCopyDrifted : commentCopyDriftedByEditClock,
   });
   const finished = result.passComplete && result.passFound != null
-    ? await publishCount(result.state, result.passFound, today)
+    ? await publishCount(result.state, result.passFound, today, labels)
     : result.state;
   await redis.set(DRIFT_STATE_KEY, JSON.stringify(finished));
   const progress = `scanned ${result.scanned} reindexed ${result.reindexed} cursor ${result.state.afterId} found ${result.state.found} failed ${result.failed.length}`;

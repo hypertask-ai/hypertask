@@ -27,8 +27,8 @@ export const DRIFT_STATE_KEY = "search-index-drift:htpr-9016";
 export const DRIFT_COUNT_TICKET = "HTPR-9016";
 export const DRIFT_COUNT_BOARD_ID = 15;
 
-export function driftCountText(found: number): string {
-  return `Search index drift ${found}`;
+export function driftCountText(found: number, date: string): string {
+  return `Search index drift ${found} on ${date}`;
 }
 
 type Page = {
@@ -128,13 +128,22 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
   return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };
 }
 
-export async function postSearchIndexDriftCount(found: number): Promise<boolean> {
+export async function postSearchIndexDriftCount(found: number, date: string): Promise<boolean> {
   const task = await prisma.task.findFirst({
     where: { ticketNumber: DRIFT_COUNT_TICKET, projectId: DRIFT_COUNT_BOARD_ID },
     select: { id: true },
   });
   if (!task) return false;
-  const text = driftCountText(found);
+  const text = driftCountText(found, date);
+  const existing = await prisma.comment.findFirst({
+    where: {
+      taskId: task.id,
+      agentDisplayName: "Hypertask",
+      commentText: { startsWith: "Search index drift ", contains: ` on ${date}` },
+    },
+    select: { id: true },
+  });
+  if (existing) return true;
   await prisma.comment.create({
     data: { taskId: task.id, text: `<p>${text}</p>`, commentText: text, agentDisplayName: "Hypertask" },
   });
