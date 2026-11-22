@@ -10,7 +10,7 @@ import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
-import { aiFeedbackSchema, feedbackFingerprint, repeatJoinKey, repeatNoteAnchor, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
+import { aiFeedbackSchema, feedbackFingerprint, repeatJoinKey, repeatNoteShape, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
 
@@ -88,18 +88,32 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
-function repeatClauses(input: AutomaticFeedbackInput, stored?: StoredNote) {
-  const anchor = stored?.note ? repeatNoteAnchor(stored.note) : undefined
-  if (!anchor || !input.errorCode) return null
+function repeatLookup(input: AutomaticFeedbackInput, stored?: StoredNote) {
+  const shape = stored?.note ? repeatNoteShape(stored.note) : undefined
+  if (!shape || !input.errorCode) return null
   const has = (part: string) => ({ text: { contains: part } })
   const lacks = (part: string) => ({ NOT: { text: { contains: part } } })
-  return [
-    has(`<p>Error code: ${escapeHtml(input.errorCode)}</p>`),
-    has(`<p>Surface: ${escapeHtml(input.surface)}</p>`),
-    has(`<p>Note: ${escapeHtml(anchor)}`),
-    input.tool ? has(`<p>Tool: ${escapeHtml(input.tool)}</p>`) : lacks('<p>Tool:'),
-    stored?.kind ? has(`<p>Kind: ${escapeHtml(stored.kind)}</p>`) : lacks('<p>Kind:'),
-  ]
+  const line = (label: string, value: string | number | undefined) => value !== undefined && value !== ''
+    ? has(`<p>${label}: ${escapeHtml(String(value))}</p>`)
+    : lacks(`<p>${label}:`)
+  return {
+    shape,
+    clauses: [
+      line('Error code', input.errorCode),
+      line('Surface', input.surface),
+      line('Tool', input.tool),
+      line('HTTP status', input.status),
+      line('Field', input.field),
+      line('Category', input.category ?? 'other'),
+      line('Kind', stored?.kind),
+      has(`<p>Note: ${escapeHtml(shape.prefix)}`),
+    ],
+  }
+}
+
+function noteRepeats(text: string, shape: { prefix: string; suffix: string }): boolean {
+  const quoted = (value: string) => escapeHtml(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`<p>Note: ${quoted(shape.prefix)}\\d+${quoted(shape.suffix)}</p>`).test(text)
 }
 
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
@@ -314,13 +328,14 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           })
           existing = logged?.task ?? null
         }
-        const clauses = !existing && joinPullRequestRepeat ? repeatClauses(input, stored) : null
-        if (clauses && tx.comment?.findFirst) {
-          const logged = await tx.comment.findFirst({
-            where: { agentId: null, AND: clauses, task: openWhere },
-            select: { task: { select: ticketSelect } },
+        const lookup = !existing && joinPullRequestRepeat ? repeatLookup(input, stored) : null
+        if (lookup && tx.comment?.findMany) {
+          const logged = await tx.comment.findMany({
+            where: { agentId: null, AND: lookup.clauses, task: openWhere },
+            select: { text: true, task: { select: ticketSelect } },
+            take: 20,
           })
-          existing = logged?.task ?? null
+          existing = logged.find((row) => noteRepeats(row.text, lookup.shape))?.task ?? null
           joinedByAnchor = Boolean(existing)
         }
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {

@@ -46,6 +46,11 @@ function setup({ repeatJoin = true } = {}) {
       return rows.find((row) => row.section !== 'Done' && row.description.includes(marker)) ?? null
     } },
     comment: {
+      findMany: async ({ where }) => comments.flatMap((comment) => {
+        if (!commentMatches(comment, where)) return []
+        const task = rows.find((row) => row.id === comment.taskId && row.section !== 'Done')
+        return task ? [{ text: comment.text, task: { id: task.id, userId: task.userId, ticketNumber: task.ticketNumber, uniqueIndex: task.uniqueIndex, createdAt: task.createdAt } }] : []
+      }),
       findFirst: async ({ where }) => {
         const matches = (comment) => commentMatches(comment, where)
         if (where.task) {
@@ -157,6 +162,28 @@ test('two reports that both leave the tool out still join on the same sentence',
   assert.equal(second.deduped, true)
   assert.equal(f.created.length, 1)
   assert.equal(f.locks[1], f.locks[3])
+})
+
+test('a different status or category does not join', async () => {
+  const f = setup()
+  await f.fileAiFeedback(report, 6, { origin: 'agent' })
+  const status = await f.fileAiFeedback({ ...report, status: 500, note: note.replace('1188', '1200') }, 6, { origin: 'agent' })
+  const category = await f.fileAiFeedback({ ...report, category: 'call_failed', note: note.replace('1188', '1300') }, 6, { origin: 'agent' })
+  assert.equal(status.deduped, false)
+  assert.equal(category.deduped, false)
+  assert.equal(f.created.length, 3)
+})
+
+test('text after the pull request number has to match', async () => {
+  const stem = 'Cursor session appended Co-authored-by trailer to bot commits on PR '
+  const f = setup()
+  await f.fileAiFeedback({ ...report, note: `${stem}1188 failed validation.` }, 6, { origin: 'agent' })
+  const other = await f.fileAiFeedback({ ...report, note: `${stem}1200 deleted production.` }, 6, { origin: 'agent' })
+  assert.equal(other.deduped, false)
+  const same = await f.fileAiFeedback({ ...report, note: `${stem}1300 failed validation.` }, 6, { origin: 'agent' })
+  assert.equal(same.deduped, true)
+  assert.equal(f.created.length, 2)
+  assert.equal(f.locks[1], f.locks[5])
 })
 
 test('a short note that only shares the pull request words still opens its own ticket', async () => {

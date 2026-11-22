@@ -63,16 +63,20 @@ export function scrubFeedbackNote(value: string): string {
   return note
 }
 
-export function repeatNoteAnchor(note: string): string | undefined {
-  const match = /^(.*\b(?:PR|pull request)\s+#?)\d+\b/i.exec(note)
-  const anchor = match?.[1]?.replace(/\s+/g, ' ').trim()
-  return anchor && anchor.length >= 24 ? anchor : undefined
+export function repeatNoteShape(note: string): { prefix: string; suffix: string } | undefined {
+  const match = /^(.*\b(?:PR|pull request)\s+#?)(\d+)\b(.*)$/i.exec(note)
+  if (!match || match[1].trim().length < 24) return undefined
+  return { prefix: match[1], suffix: match[3] }
 }
 
-export function repeatJoinKey(input: { errorCode?: string; surface: string; tool?: string }, stored?: { kind?: string; note?: string }): bigint | undefined {
-  const anchor = stored?.note ? repeatNoteAnchor(stored.note) : undefined
-  if (!anchor || !input.errorCode) return undefined
-  const material = [input.errorCode, input.surface, input.tool ?? '', stored?.kind ?? '', anchor].join('\n')
+export function repeatJoinKey(input: { errorCode?: string; surface: string; tool?: string; status?: number; category?: string; field?: string }, stored?: { kind?: string; note?: string }): bigint | undefined {
+  const shape = stored?.note ? repeatNoteShape(stored.note) : undefined
+  if (!shape || !input.errorCode) return undefined
+  const material = [
+    input.errorCode, input.surface, input.tool ?? '', input.status ?? '',
+    input.category ?? 'other', input.field ?? '', stored?.kind ?? '',
+    shape.prefix, shape.suffix,
+  ].join('\n')
   const hash = createHash('sha256').update(material).digest('hex')
   return BigInt.asIntN(64, BigInt(`0x${hash.slice(0, 16)}`))
 }
