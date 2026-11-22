@@ -926,21 +926,68 @@ function ladderBin() {
   const root = String(process.env.LADDER_CALL_ROOT ?? "").trim();
   return root ? path.join(root, "ci", "ladder-call") : "";
 }
-function ladderLanesFile(model) {
-  const chosen = String(model ?? "").startsWith("deepseek/") ? assertFlashModel(model) : String(model ?? "");
-  if (!chosen || chosen === FLASH) return "";
+function readLadderLanes() {
   const root = String(process.env.LADDER_CALL_ROOT ?? "").trim() || path.dirname(path.dirname(ladderBin()));
-  let lanes = [];
-  try { lanes = JSON.parse(readFileSync(path.join(root, "ci", "lanes.json"), "utf8")); } catch { lanes = []; }
-  const updated = lanes.map((lane) => (lane.name === "openrouter" ? { ...lane, model: chosen } : { ...lane }));
-  if (!updated.some((lane) => lane.name === "openrouter")) {
-    updated.push({ name: "openrouter", key_env: "OPENROUTER_API_KEY", url: "https://openrouter.ai/api/v1/chat/completions", model: chosen });
+  try { return JSON.parse(readFileSync(path.join(root, "ci", "lanes.json"), "utf8")); } catch { return []; }
+}
+function routerLane(lane) {
+  const name = String(lane?.name ?? "");
+  const url = String(lane?.url ?? "");
+  return name === "openrouter" || name === "vercel-ai-gateway" || url.includes("openrouter.ai") || url.includes("ai-gateway.vercel.sh");
+}
+function deepseekApiLane(lane) {
+  const name = String(lane?.name ?? "");
+  const url = String(lane?.url ?? "");
+  return name === "deepseek" || url.includes("api.deepseek.com");
+}
+const DEEPSEEK_API_VISION = new Set(["deepseek-flash", "deepseek-v4-flash", "deepseek-v4-flash-vision-exp"]);
+export function modelAcceptsImages(model, lane = {}) {
+  const full = String(model ?? "").toLowerCase();
+  const id = full.split("/").pop();
+  if (!id || /deepseek-v4-pro|deepseek-chat|deepseek-reasoner/.test(full)) return false;
+  if (deepseekApiLane(lane)) return DEEPSEEK_API_VISION.has(id);
+  if (/deepseek-v4\.1-flash|deepseek-flash|deepseek-v4-flash|vision/.test(full)) return true;
+  if (/gpt-4o|gpt-4\.1|gpt-5|claude|sonnet|opus|haiku|gemini|grok/.test(full)) return true;
+  return false;
+}
+function laneModel(lane, chosen) {
+  if (modelFamily(lane?.model) === modelFamily(chosen)) return lane.model;
+  if (routerLane(lane) && String(chosen).includes("/")) return String(chosen);
+  return "";
+}
+export function verifierLanes(lanes, { model, images = false } = {}) {
+  const chosen = String(model ?? "");
+  const source = Array.isArray(lanes) ? lanes : [];
+  const next = [];
+  for (const lane of source) {
+    const hosted = laneModel(lane, chosen);
+    if (!hosted) continue;
+    if (images && !modelAcceptsImages(hosted, lane)) continue;
+    next.push({ ...lane, model: hosted });
   }
+  return next;
+}
+function sameLaneModels(left, right) {
+  return left.length === right.length && left.every((lane, index) => lane?.name === right[index]?.name && lane?.model === right[index]?.model);
+}
+function ladderLanesFile(model, { images = false } = {}) {
+  const chosen = String(model ?? "").startsWith("deepseek/") ? assertFlashModel(model) : String(model ?? "");
+  if (!chosen) return "";
+  const lanes = readLadderLanes();
+  const updated = verifierLanes(lanes, { model: chosen, images });
+  if (chosen !== FLASH && chosen.includes("/") && !lanes.some((lane) => lane?.name === "openrouter")) {
+    const extra = { name: "openrouter", key_env: "OPENROUTER_API_KEY", url: "https://openrouter.ai/api/v1/chat/completions", model: chosen };
+    if (!images || modelAcceptsImages(chosen, extra)) updated.push(extra);
+  }
+  if (!images && chosen === FLASH && sameLaneModels(lanes, updated)) return "";
   const dir = workDir();
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "ladder-lanes.json");
   writeFileSync(file, `${JSON.stringify(updated)}\n`, { mode: 0o600 });
   return file;
+}
+function payloadHasImages(payload) {
+  return (payload?.messages ?? []).some((message) => Array.isArray(message?.content) && message.content.some((part) => part?.type === "image_url" || part?.type === "image" || part?.type === "input_image"));
 }
 function ladderFailure(stderr, status) {
   const log = String(stderr ?? "");
@@ -958,7 +1005,7 @@ export function modelRequest(prompt, { model, images = [] } = {}) {
 export function callLadder(payload, spawnImpl = spawnSync) {
   const bin = ladderBin();
   if (!bin) throw new Error("ladder-call is missing");
-  const lanes = ladderLanesFile(payload.model);
+  const lanes = ladderLanesFile(payload.model, { images: payloadHasImages(payload) });
   const env = lanes ? { ...process.env, LADDER_CALL_LANES: lanes } : process.env;
   const result = spawnImpl(bin, ["--purpose", LADDER_CALL_PURPOSE], { input: `${JSON.stringify(payload)}\n`, encoding: "utf8", env });
   if (result.status !== 0) throw new Error(ladderFailure(result.stderr, result.status));
