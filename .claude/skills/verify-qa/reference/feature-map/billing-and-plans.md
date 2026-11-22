@@ -15,7 +15,7 @@
 - `trial-checkout-return` `/trial-plan-confirmation` shows Choose Trial Plan, or "Your Pro Plan trial is now active!" after a matching checkout. Anything else shows "Something Went Wrong".
 - `plan-ai-caps` With `htpr-7324-plan-ai-caps` on for the team owner, included AI is $5 per paid seat each month, $2.50 per member on BYOK, and $1 a month plus $0.25 a day on Free. Off keeps the older $40 paid and $1 free monthly caps.
 - `remaining-ai-spend` With `htpr-7394-remaining-ai-spend` on for the team owner, Slack and label batches and embeddings reserve spend against that cap, and native web search stays off on Hypertask keys.
-- `internal-team-saved-plan` With `htpr-7852-internal-team-saved-plan` on, the internal team uses its saved subscription or comp for AI access and board admission. Off still treats that team as Pro.
+- `internal-team-saved-plan` The internal team uses its saved subscription or comp for AI access, board admission, and the open board billing chip.
 - `vercel-budget-alerts` With `htpr-8101-vercel-budget-alerts` on, a signed Vercel budget alert files one Urgent ticket and later alerts update that same ticket. At 100% the owner is emailed once.
 
 ## How to get to it (user POV)
@@ -75,7 +75,7 @@ Open `/trial-plan-confirmation` while signed in. The page tries to create a Stri
 
 ### Internal team saved plan
 
-`htpr-7852-internal-team-saved-plan` has no page of its own. It defaults to Owner + QA. The internal team is the one named in `src/lib/internalCompTeams.ts`. On for the feature-flag owner, that team's AI access and free-board check use its saved subscription or comp. The open board's billing chip does the same when the flag is on for the person using the app. Off, those checks treat the team as Pro even when the saved plan is not Pro.
+The internal team named in `src/lib/internalCompTeams.ts` uses its saved subscription or comp for AI access and free-board admission. The open board billing chip does the same. A team id by itself does not grant Pro.
 
 ### Vercel budget alerts
 
@@ -123,7 +123,7 @@ Do not run a Slack summary, a smart label, or an embedding to prove `htpr-7394-r
 
 ### Internal team saved plan
 
-Do not switch `htpr-7852-internal-team-saved-plan`. Leave the internal team's plan untouched. The saved-plan and forced-Pro branches are `node --test tests/htpr-7852-internal-team-saved-plan.test.cjs`.
+Leave the internal team's plan untouched. Saved subscription, comp, and an empty saved plan are `node --test tests/htpr-7852-internal-team-saved-plan.test.cjs`.
 
 ### Vercel budget alerts
 
@@ -211,7 +211,7 @@ If the flag check throws and the owner can still be read, `htpr-7324-plan-ai-cap
 
 ### Internal team saved plan
 
-`htpr-7852-internal-team-saved-plan` changes access for one internal team. Off restores forced Pro. Do not flip it to prove either side. A Billing page on any other team does not show this flag.
+The internal team uses its saved plan for AI access, board admission, and the open board billing chip. Checkout and other plan reads that never used this switch still treat that team as Pro. A Billing page on any other team does not show this. Do not change the internal team's saved plan to prove it.
 
 ### Vercel budget alerts
 
