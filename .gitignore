@@ -68,3 +68,6 @@ src/service_key.json
 
 # Last verified required-check settings (YPER4-721); kept in the Actions cache.
 /.settings-proof/
+
+# Deepsec scan state (HTPR-9587). Findings stay off this public repo.
+/.deepsec/
