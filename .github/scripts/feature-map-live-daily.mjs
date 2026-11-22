@@ -184,10 +184,6 @@ export function ticketDescription({ graded, problems = [], suiteErrors = [] }) {
   return body
 }
 
-export function ticketAgentComment({ runUrl = '' }) {
-  return runUrl ? `<p>Run: <a href="${runUrl}">${runUrl}</a></p>` : ''
-}
-
 export async function fileFindings({ graded, problems = [], suiteErrors = [], runUrl = '', token, fetchImpl = fetch, now = new Date() }) {
   const failing = graded.some((feature) => feature.verdict === 'fail')
   const options = { token, fetchImpl, projectId: BOARD.projectId }
@@ -205,13 +201,11 @@ export async function fileFindings({ graded, problems = [], suiteErrors = [], ru
     return { url: `${APP}/detail/project-${BOARD.projectId}/${existing.uniqueIndex}`, action: 'archived' }
   }
   const description = ticketDescription({ graded, problems, suiteErrors })
-  const agentNote = ticketAgentComment({ runUrl })
   const ticket = existing ?? (await api('tasks/create', { ...options, method: 'POST',
     idempotencyKey: `feature-map-live-daily-${now.toISOString().slice(0, 10)}`,
     body: { project_id: BOARD.projectId, section_id: BOARD.sectionId, title: TICKET_TITLE, description, content_type: 'html' } })).task
   if (existing) await comment(ticket, description)
-  if (agentNote) await comment(ticket, agentNote)
-  return { url: `${APP}/detail/project-${BOARD.projectId}/${ticket.uniqueIndex}`, action: existing ? 'updated' : 'created' }
+  return { url: `${APP}/detail/project-${BOARD.projectId}/${ticket.uniqueIndex}`, action: existing ? 'updated' : 'created', runUrl }
 }
 
 function runSuite(suite, dir) {
