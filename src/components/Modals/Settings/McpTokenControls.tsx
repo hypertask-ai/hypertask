@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import { useMcpConnections } from "@/components/Modals/McpToken/hooks/useMcpConnections";
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { isUsableMcpBearerToken } from "@/lib/mcp/bearerAuth";
@@ -24,7 +22,6 @@ const McpTokenControls = ({
   isLoading,
   isRevoking,
   onGenerate,
-  revokeConfirmMessage,
   revokeToken,
   token,
 }: {
@@ -33,16 +30,10 @@ const McpTokenControls = ({
   isLoading: boolean;
   isRevoking: boolean;
   onGenerate: () => void;
-  revokeConfirmMessage?: string;
   revokeToken: () => Promise<boolean | void>;
   token: string | null;
 }) => {
-  const [confirmRevoke, setConfirmRevoke] = useState(false);
   const isActive = Boolean(token) && !isLoading;
-  const confirmMcpTokenRevoke = async () => {
-    const revoked = await revokeToken();
-    if (revoked) setConfirmRevoke(false);
-  };
   const copyToken = async () => {
     if (!isUsableMcpBearerToken(token)) {
       toast.error("Renew the token before copying it");
@@ -84,7 +75,7 @@ const McpTokenControls = ({
               <TokenAction onClick={copyToken}>Copy</TokenAction>
               <TokenAction
                 disabled={isRevoking}
-                onClick={() => setConfirmRevoke(true)}
+                onClick={() => void revokeToken()}
               >
                 {isRevoking ? "Revoking" : "Revoke"}
               </TokenAction>
@@ -98,22 +89,6 @@ const McpTokenControls = ({
           </TokenAction>
         </div>
       </div>
-
-      {confirmRevoke && (
-        <ConfirmDialog
-          confirmLabel="Revoke token"
-          footerVerb="revoke"
-          id="confirm-revoke-mcp-page-token"
-          loading={isRevoking}
-          loadingLabel="Revoking token"
-          message={
-            revokeConfirmMessage ??
-            "Revoke this bearer token? MCP clients using it stop working until you generate a new one."
-          }
-          onCancel={() => setConfirmRevoke(false)}
-          onConfirm={() => void confirmMcpTokenRevoke()}
-        />
-      )}
     </div>
   );
 };

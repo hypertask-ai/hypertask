@@ -25,7 +25,6 @@ const ApiSection = () => {
           isLoading={tokenState.isLoading}
           isRevoking={tokenState.isRevokingAll}
           onGenerate={tokenState.generateToken}
-          revokeConfirmMessage="Revoke this bearer token? API and MCP clients using it stop working until you generate a new one."
           revokeToken={tokenState.revokeToken}
           token={tokenState.token}
         />
