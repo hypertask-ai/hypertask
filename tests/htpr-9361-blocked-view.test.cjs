@@ -1,0 +1,163 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
+const { filters } = require("./board-filters/runtime.cjs");
+const { NOW, fixture, sectionIds } = require("./board-filters/fixture.cjs");
+
+const root = path.resolve(__dirname, "..");
+const jiti = require("jiti")(__filename, {
+  interopDefault: true,
+  alias: { "@": path.join(root, "src") },
+});
+const builtin = jiti(path.join(root, "src/lib/constants/builtinViews.ts"));
+const flag = jiti(path.join(root, "src/lib/flags/definitions/htpr-9361-blocked-view-done.ts"));
+const {
+  BLOCKED_BY_ME_VIEW_RULE,
+  BLOCKED_VIEW_RULE,
+  blockedByMePredicate,
+  blockedPredicate,
+  blockedViewRule,
+  buildBuiltinViewContext,
+} = builtin;
+
+const finished = (leaveFinishedOut) => ({
+  leaveFinishedOut,
+  doneSectionTitles: new Set(["done", "live"]),
+});
+
+test("finished tickets stay out of Blocked and open blocked tickets stay in", () => {
+  const waiting = { waitingOnUserId: 6, section: "Doing" };
+  const blockedByTicket = { blockingTasks: [{ id: 9 }], section: "Inbox" };
+  const finishedWaiting = { waitingOnUserId: 6, section: "Done" };
+  const finishedLive = { waitingOnUserId: 6, section: "Live" };
+
+  assert.equal(blockedPredicate(finishedWaiting, finished(true)), false);
+  assert.equal(blockedPredicate(finishedLive, finished(true)), false);
+  assert.equal(blockedPredicate(waiting, finished(true)), true);
+  assert.equal(blockedPredicate(blockedByTicket, finished(true)), true);
+  assert.equal(blockedPredicate(finishedWaiting, finished(false)), true);
+  assert.equal(blockedPredicate({ waitingOnUserId: null, blockingTasks: [] }, finished(true)), false);
+});
+
+test("Blocked by me leaves out a finished ticket waiting on the viewer", () => {
+  const context = { currentUserId: 6, ...finished(true) };
+  assert.equal(blockedByMePredicate({ waitingOnUserId: 6, section: "Done" }, context), false);
+  assert.equal(blockedByMePredicate({ waitingOnUserId: 6, section: "Doing" }, context), true);
+  assert.equal(blockedByMePredicate({ waitingOnUserId: 7, section: "Doing" }, context), false);
+  assert.equal(
+    blockedByMePredicate({ waitingOnUserId: 6, section: "Done" }, { currentUserId: 6, ...finished(false) }),
+    true,
+  );
+});
+
+test("board rows and tab counts drop the Done-column ticket together", () => {
+  const { project, sections } = fixture();
+  const done = sections.find((section) => section.section_title === "Done").items[0];
+  done.waitingOnUserId = 6;
+  const off = buildBuiltinViewContext(project, 6, NOW, "Valentin", false);
+  const on = buildBuiltinViewContext(project, 6, NOW, "Valentin", true);
+  assert.equal(done.section, "Done");
+  assert.deepEqual(
+    sectionIds(filters.getFilteredSections(sections, project, "builtin:blocked", off)),
+    ["a", "b", "c", "d"],
+  );
+  assert.deepEqual(
+    sectionIds(filters.getFilteredSections(sections, project, "builtin:blocked", on)),
+    ["a", "b", "c"],
+  );
+  assert.deepEqual(
+    sectionIds(filters.getFilteredSections(sections, project, "builtin:blocked-by-me", off)),
+    ["a", "d"],
+  );
+  assert.deepEqual(
+    sectionIds(filters.getFilteredSections(sections, project, "builtin:blocked-by-me", on)),
+    ["a"],
+  );
+
+  assert.equal(tabCount(project, false), 4);
+  assert.equal(tabCount(project, true), 3);
+});
+
+test("Blocked states its rule and a cycle view keeps its own line", () => {
+  assert.equal(blockedViewRule("builtin:blocked"), BLOCKED_VIEW_RULE);
+  assert.equal(blockedViewRule("builtin:blocked-by-me"), BLOCKED_BY_ME_VIEW_RULE);
+  assert.equal(blockedViewRule("builtin:overdue"), null);
+
+  const blocked = renderRule(true, "builtin:blocked");
+  assert.match(blocked, new RegExp(`data-testid="blocked-view-rule"[^>]*>${BLOCKED_VIEW_RULE}`));
+  assert.doesNotMatch(blocked, /cycle-board-meta/);
+  assert.match(renderRule(true, "builtin:blocked-by-me"), new RegExp(BLOCKED_BY_ME_VIEW_RULE));
+  assert.equal(renderRule(false, "builtin:blocked"), "");
+  assert.equal(renderRule(true, "builtin:overdue"), "");
+
+  const cycle = renderRule(true, "builtin:current-cycle", {
+    cyclesEnabled: true,
+    cycles: [{ id: 1, number: 4, projectId: 15, startDate: "2020-01-01", endDate: "2100-01-01" }],
+    section: [],
+  });
+  assert.match(cycle, /data-testid="cycle-board-meta"/);
+  assert.match(cycle, /Cycle 4/);
+  assert.doesNotMatch(cycle, /blocked-view-rule/);
+});
+
+test("the Blocked done-column switch ships on for everyone", () => {
+  assert.equal(flag.default.kind, "bugfix");
+  assert.equal(flag.default.defaultMode, "EVERYONE");
+  assert.equal(flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG, "htpr-9361-blocked-view-done");
+});
+
+function tabCount(project, enabled) {
+  const { default: useRenderedViews } = loadModule("src/hooks/Homepage/Views/useRenderedViews.ts", {
+    react: { useMemo: (fn) => fn() },
+    "@/lib/state": {
+      useRecoilValue: (atom) => (atom === "user" ? { id: 6, displayName: "Valentin" } : {}),
+    },
+    "@/store": { currentUserAtom: "user" },
+    "./useOrderedViews": { default: () => builtin.BUILTIN_VIEWS },
+    "@/hooks/Task Detail/useTimeTracking": { useBoardRunningTimers: () => ({ timers: new Map() }) },
+    "@/hooks/useFlag": {
+      useFlag: (key) => (key === flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG ? enabled : false),
+    },
+    "@/lib/constants/builtinViews": builtin,
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveColumnsViewFromProject: () => [] },
+    "@/lib/savedViews/savedViewTaskCounts": { countTasksInSavedView: () => 0 },
+  });
+  return useRenderedViews(project).viewTaskCounts.get("builtin:blocked");
+}
+
+function loadMeta(enabled) {
+  const filename = path.join(
+    root,
+    "src/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta.tsx",
+  );
+  const js = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: {
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.CommonJS,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const exports = {};
+  new Function("require", "exports", js)((name) => {
+    if (name === "react/jsx-runtime") return require("react/jsx-runtime");
+    if (name === "@/lib/constants/builtinViews") return builtin;
+    if (name === "@/lib/cycles") return jiti(path.join(root, "src/lib/cycles.ts"));
+    if (name === "@/hooks/useFlag") {
+      return { useFlag: (key) => key === flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG && enabled };
+    }
+    if (name === "@/lib/flags/definitions/htpr-9361-blocked-view-done") return flag;
+    throw new Error(`Unexpected dependency ${name}`);
+  }, exports);
+  return exports.default;
+}
+
+function renderRule(enabled, activeViewId, project = { section: [], cycles: [] }) {
+  return renderToStaticMarkup(
+    React.createElement(loadMeta(enabled), { activeViewId, project }),
+  );
+}
