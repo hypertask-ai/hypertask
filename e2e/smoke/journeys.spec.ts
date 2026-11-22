@@ -90,17 +90,20 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
 
-  const createResponse = page.waitForResponse(
-    (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
-    { timeout: 15_000 },
-  )
   const modalTitleInput = page.locator('#title-input-modal')
-  const inlineInput = page.locator('textarea[placeholder*="task" i], input[placeholder*="task" i]').first()
+  const inlineInput = page.locator('#newTask textarea[aria-label="Title"]')
   await expect(async () => {
     await page.locator('.create-new-task-button').first().click()
     await expect(modalTitleInput.or(inlineInput)).toBeVisible({ timeout: 2_000 })
   }, 'the + column button never opened a create-task form').toPass({ timeout: 15_000 })
 
+  const createResponse = page.waitForResponse(
+    (res) => {
+      const pathname = new URL(res.url()).pathname
+      return res.request().method() === 'POST' && (pathname === '/api/tasks/create' || pathname === '/api/tasks/createGlobally')
+    },
+    { timeout: 15_000 },
+  )
   if (await modalTitleInput.isVisible()) {
     await modalTitleInput.fill(title)
     const saveAndClose = page.locator('span', { hasText: /^Save & close/ }).first()
