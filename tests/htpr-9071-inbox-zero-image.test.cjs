@@ -46,13 +46,18 @@ function loadSplitTabs(hideOnInboxZero) {
   return exports.component;
 }
 
-function tabs(hideOnInboxZero, isInboxZero) {
+function tabs(hideOnInboxZero, isInboxZero, splitLengths = [0], unsavedCommentDrafts = 0) {
   const SplitTabsUnlessInboxZero = loadSplitTabs(hideOnInboxZero);
   return renderToString(React.createElement(
     SplitTabsUnlessInboxZero,
-    { isInboxZero },
+    { isInboxZero, splitLengths, unsavedCommentDrafts },
     React.createElement("div", { "data-testid": "inbox-split-titles" }, "All"),
   ));
+}
+
+function showsAll(html) {
+  assert.match(html, /All/);
+  assert.match(html, /data-testid="inbox-split-titles"/);
 }
 
 test("the flag is a bugfix that starts on for everyone", () => {
@@ -67,19 +72,20 @@ test("the flag is a bugfix that starts on for everyone", () => {
 });
 
 test("an empty inbox drops the split tabs, and an inbox with items keeps them", () => {
-  const empty = tabs(true, true);
+  const empty = tabs(true, true, [0], 0);
   assert.equal(empty.includes("All"), false);
   assert.equal(empty.includes("inbox-split-titles"), false);
 
-  const filled = tabs(true, false);
-  assert.match(filled, /All/);
-  assert.match(filled, /data-testid="inbox-split-titles"/);
+  showsAll(tabs(true, false, [4], 0));
+  showsAll(tabs(false, true, [0], 0));
+  showsAll(tabs(false, false, [4], 0));
+});
 
-  const emptyWithFlagOff = tabs(false, true);
-  assert.match(emptyWithFlagOff, /All/);
-  assert.match(emptyWithFlagOff, /data-testid="inbox-split-titles"/);
+test("an empty split keeps the tabs when another split or a draft still has something", () => {
+  showsAll(tabs(true, true, [0, 2], 0));
+  showsAll(tabs(true, true, [0, 0], 1));
+  showsAll(tabs(true, true, [], 0));
 
-  const filledWithFlagOff = tabs(false, false);
-  assert.match(filledWithFlagOff, /All/);
-  assert.match(filledWithFlagOff, /data-testid="inbox-split-titles"/);
+  const everySplitEmpty = tabs(true, true, [0, 0], 0);
+  assert.equal(everySplitEmpty.includes("All"), false);
 });

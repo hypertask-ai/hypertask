@@ -81,6 +81,7 @@ import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG, HTPR_7841_INBOX_KEEPS_SCROLL_FLAG 
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
+import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 
@@ -143,6 +144,7 @@ const Inbox = ({
     return cached?.serverDocumentGeneration === candidate?.scope.generation ? candidate : null;
   });
   const [seeded] = useState(() => Boolean(inboxDocument));
+  const { drafts } = useGetUserDrafts(currentUser.id, inboxDocument?.data.drafts);
   const InboxSplit = seeded ? SeededInboxSplit : ClientInboxSplit;
   const isMbl = useMobileView();
   const [appShellRail] = useRecoilState(appShellRailAtom);
@@ -761,6 +763,9 @@ const Inbox = ({
     toast.dismiss(toastId);
   };
   const { isInboxZero } = useInboxZeroStyling();
+  const splitRows = _notificationsTQ?.structuredData?.data ?? inboxDocument?.data.payload.structuredData.data ?? [];
+  const splitLengths = splitRows.map((rows) => rows.length);
+  const unsavedCommentDrafts = drafts.filter((draft) => draft.type === "Comment" && draft.saved !== true).length;
   const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
   const canArchiveSafe = archiveSafeEnabled &&
     (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
@@ -878,7 +883,11 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
-            <SplitTabsUnlessInboxZero isInboxZero={isInboxZero}>
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               narrowLayout={narrowInboxTabs}
@@ -991,7 +1000,11 @@ const Inbox = ({
                 </>
               ))}
             </div>
-            <SplitTabsUnlessInboxZero isInboxZero={isInboxZero}>
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             {!isMbl && !narrowInboxTabs && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
@@ -1019,7 +1032,11 @@ const Inbox = ({
               </div>
             )}
             </SplitTabsUnlessInboxZero>
-            <SplitTabsUnlessInboxZero isInboxZero={isInboxZero}>
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             {isMbl && (
               <MobileInboxSplitDock
                 tabs={_notificationsTQ?.structuredData?.tabs ?? []}
@@ -1071,13 +1088,20 @@ export default Inbox;
 
 const SplitTabsUnlessInboxZero = ({
   isInboxZero,
+  splitLengths,
+  unsavedCommentDrafts,
   children,
 }: {
   isInboxZero: boolean;
+  splitLengths: readonly number[];
+  unsavedCommentDrafts: number;
   children?: ReactNode;
 }) => {
   const hideInboxZeroTabs = useFlag(HTPR_9071_INBOX_ZERO_IMAGE_FLAG);
-  if (hideInboxZeroTabs && isInboxZero) return null;
+  const wholeInboxEmpty = splitLengths.length > 0
+    && splitLengths.every((length) => length === 0)
+    && unsavedCommentDrafts === 0;
+  if (hideInboxZeroTabs && isInboxZero && wholeInboxEmpty) return null;
   return children;
 };
 
