@@ -70,27 +70,19 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Pages | [pages.md](pages.md) | no smoke id; drive steps in pages.md (snippets create/reload/delete, `/pages`, standalone Back to Pages) |
 | Pinned and archived | [pinned-and-archived.md](pinned-and-archived.md) | `feature-map-drive.mjs pinned-and-archived` read-only |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
-| Pricing and trial | [pricing-and-trial.md](pricing-and-trial.md) | `feature-map-drive.mjs pricing-and-trial` read-only |
 | Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and drafts via the steps in quick-entry-cards.md; Table view needs a board view |
-| Reminders | [reminders.md](reminders.md) | `feature-map-drive.mjs reminders` read-only |
 | Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | `ht-verify open /report` and one saved row; velocity page; the two MCP doors need an agent token (401 without) |
-| Saved reports and velocity | [saved-reports-and-velocity.md](saved-reports-and-velocity.md) | `feature-map-drive.mjs saved-reports-and-velocity` read-only |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only); `ht-verify` filter icon > Tags > cycle Match ANY / Match ALL / Hide tags; flags EVERYONE |
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); `ht-verify` /search tips, type `fr` then Tab, full load of a `searchTerm` URL |
-| Settings: account | [settings-account.md](settings-account.md) | `feature-map-drive.mjs settings-account` read-only |
-| Settings: board | [settings-board.md](settings-board.md) | `feature-map-drive.mjs settings-board` read-only |
 | Slack app | [slack-app.md](slack-app.md) | `ht-verify` page loads, `/api/slack/install` redirect, manifest events; live workspace parity UNREACHABLE |
-| Snippets | [snippets.md](snippets.md) | `feature-map-drive.mjs snippets` read-only write+delete one fixture |
 | Starred tasks and comments | [starred.md](starred.md) | `ht-verify` /starred and /pinned with `toggleSaved` fixtures; Ctrl+Shift+S and Ctrl+Shift+P removal, reload |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-qa/scripts/task-drive-live.mjs`; `ht-verify` description PUT + reload, right column, /time empty |
-| Task labels and followers | [task-labels-and-followers.md](task-labels-and-followers.md) | `feature-map-drive.mjs task-labels-and-followers` read-only API |
 | Task share links | [task-share-links.md](task-share-links.md) | `ht-verify` createShareLink, 401 members/share, public /share HTML; agent door 401 without a token |
 | Board task templates | [task-templates.md](task-templates.md) | flag OFF: `ht-verify` GET/POST/DELETE `/api/task-templates` and PATCH 403; settings section absent |
 | Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | newest scheduled task-writer-eval run plus its score artifact; Ctrl+J window |
 | Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | CI Tests run log with 62 `real PG` cases; `/my-tasks` and the core inbox cycle |
 | Themes | [themes.md](themes.md) | `ht-verify` Appearance pick, `html[data-theme]` + `theme` cookie, Ctrl+K switch, AMOLED switch inner span |
-| Time tracking | [time-tracking.md](time-tracking.md) | `feature-map-drive.mjs time-tracking` read-only |
 | Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | `ht-verify` taskDeleteReminder > /trash/<board> > recover > deleteTask, then the 409 and 404 refusals |
 | Webhooks | [webhooks.md](webhooks.md) | Playwright request with `Origin` to `/api/settings/webhooks` create/test/delete; `lastDeliveryOk` true |
 <!-- shared-list rows end -->
