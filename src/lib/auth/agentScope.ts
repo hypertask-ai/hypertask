@@ -52,7 +52,12 @@ export async function prepareAgentScope(ownerUserId: number, agentId?: string | 
     }
     const { default: prisma } = await import("@/lib/prisma");
     const members = await prisma.member.findMany({
-      where: { agentId, status: "Accepted", agent: { userId: ownerUserId, revokedAt: null } },
+      where: {
+        agentId,
+        status: "Accepted",
+        agent: { userId: ownerUserId, revokedAt: null },
+        project: { status: { not: "Deleted" } },
+      },
       select: { projectId: true },
     });
     scope.actor = { agentId, ownerUserId, projectIds: new Set(members.map(member => member.projectId)) };

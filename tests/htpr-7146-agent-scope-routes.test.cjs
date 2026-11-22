@@ -622,3 +622,30 @@ test('an agent given boards 15 and 2128 cannot open any other board while the fl
   assert.equal(zeroBoardAgent.status, 200);
   assert.equal((await zeroBoardAgent.json()).projectId, 4060);
 });
+
+test('a deleted board left by a failed create does not lock an agent that has no usable board', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  const board = id => f.projects.find(project => project.id === id);
+  board(4060).members = [];
+  board(15).status = 'Deleted';
+  const open = f.load('src/lib/mcp/operations/projects/[projectId]/manifest/operation.ts').GET;
+  const read = async projectId => open(
+    request(`/api/mcp/projects/${projectId}/manifest`),
+    { params: Promise.resolve({ projectId: String(projectId) }) },
+  );
+  const inherited = await read(4060);
+  assert.equal(inherited.status, 200);
+  assert.equal((await inherited.json()).projectId, 4060);
+  board(15).status = 'Archive';
+  const archivedGrant = await read(4060);
+  assert.equal(archivedGrant.status, 404);
+  board(15).status = 'Normal';
+  board(4060).status = 'Deleted';
+  board(4060).members = [{ userId: f.user.id, agentId: f.agent.id, status: 'Accepted', agent: f.agent }];
+  const other = await read(2128);
+  assert.equal(other.status, 404);
+  const live = await read(15);
+  assert.equal(live.status, 200);
+  assert.equal((await live.json()).projectId, 15);
+});
