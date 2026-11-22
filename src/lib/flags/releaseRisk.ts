@@ -1,3 +1,4 @@
+import "./ensureFlagIndex";
 import { FLAG_DEFINITIONS } from "./definitions/index.generated";
 
 export const RELEASE_RISK_REQUIRED_FROM = "2026-10-11";

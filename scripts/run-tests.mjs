@@ -14,6 +14,11 @@ import { LANE_BATCH, batchLaneFiles, chainBatches, chainBudgets, classifySuite, 
 
 const startedAt = performance.now();
 const root = process.cwd();
+const flagDefinitions = path.join(root, "src/lib/flags/definitions");
+if (existsSync(flagDefinitions) && !existsSync(path.join(flagDefinitions, "index.generated.ts"))) {
+  const { generateFlagIndex } = await import("./generate-flag-index.mjs");
+  generateFlagIndex(root);
+}
 const durationReporter = fileURLToPath(new URL("./test-duration-reporter.mjs", import.meta.url));
 const fileDurations = [];
 const sharedFileDurations = [];
