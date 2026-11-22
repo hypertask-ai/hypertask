@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9016_COMMENT_COPY_LABELS_FLAG } from "@/lib/flags/definitions/htpr-9016-comment-copy-labels";
 import { getRedis } from "@/lib/redis";
-import { emptyDriftState, driftPassRecorded, type DriftState } from "@/lib/search/indexDrift";
-import { DRIFT_STATE_KEY, runIndexDriftRepair } from "@/lib/search/runIndexDriftRepair";
+import {
+  commentCopyDrifted,
+  commentCopyDriftedByEditClock,
+  emptyDriftState,
+  driftPassRecorded,
+  type DriftState,
+} from "@/lib/search/indexDrift";
+import { DRIFT_STATE_KEY, postSearchIndexDriftCount, runIndexDriftRepair } from "@/lib/search/runIndexDriftRepair";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +25,21 @@ function readState(raw: string | null): DriftState {
       afterId: Number.isInteger(parsed.afterId) ? Number(parsed.afterId) : 0,
       found: Number.isInteger(parsed.found) ? Number(parsed.found) : 0,
       results: Array.isArray(parsed.results) ? parsed.results.filter((row) => row && typeof row.date === "string") : [],
+      countPostedOn: typeof parsed.countPostedOn === "string" ? parsed.countPostedOn : "",
     };
   } catch {
     return emptyDriftState();
+  }
+}
+
+async function publishCount(state: DriftState, found: number, date: string): Promise<DriftState> {
+  if (state.countPostedOn === date) return state;
+  try {
+    const posted = await postSearchIndexDriftCount(found);
+    return posted ? { ...state, countPostedOn: date } : state;
+  } catch (error) {
+    console.log(`[search-index-drift] count post failed ${String((error as Error)?.message ?? error).slice(0, 200)}`);
+    return state;
   }
 }
 
@@ -32,11 +52,19 @@ export async function GET(request: NextRequest) {
   const today = new Date().toISOString().slice(0, 10);
   if (driftPassRecorded(state.results, today)) {
     const recorded = state.results.find((pass) => pass.date === today)?.found ?? 0;
+    const posted = await publishCount(state, recorded, today);
+    if (posted.countPostedOn !== state.countPostedOn) await redis.set(DRIFT_STATE_KEY, JSON.stringify(posted));
     console.log(`[search-index-drift] pass complete drift ${recorded} already recorded for ${today}`);
-    return NextResponse.json({ skipped: "pass recorded today", today, drift: recorded, results: state.results });
+    return NextResponse.json({ skipped: "pass recorded today", today, drift: recorded, results: posted.results });
   }
-  const result = await runIndexDriftRepair(state);
-  await redis.set(DRIFT_STATE_KEY, JSON.stringify(result.state));
+  const labels = await isFeatureEnabled(HTPR_9016_COMMENT_COPY_LABELS_FLAG, FEATURE_FLAG_OWNER_USER_ID);
+  const result = await runIndexDriftRepair(state, {
+    commentDrift: labels ? commentCopyDrifted : commentCopyDriftedByEditClock,
+  });
+  const finished = result.passComplete && result.passFound != null
+    ? await publishCount(result.state, result.passFound, today)
+    : result.state;
+  await redis.set(DRIFT_STATE_KEY, JSON.stringify(finished));
   const progress = `scanned ${result.scanned} reindexed ${result.reindexed} cursor ${result.state.afterId} found ${result.state.found} failed ${result.failed.length}`;
   console.log(result.passComplete
     ? `[search-index-drift] pass complete drift ${result.passFound} ${progress}`
@@ -46,7 +74,7 @@ export async function GET(request: NextRequest) {
   }
   return NextResponse.json({
     scanned: result.scanned, reindexed: result.reindexed, passComplete: result.passComplete,
-    passFound: result.passFound, afterId: result.state.afterId, found: result.state.found, results: result.state.results,
+    passFound: result.passFound, afterId: finished.afterId, found: finished.found, results: finished.results,
     failed: result.failed,
   });
 }

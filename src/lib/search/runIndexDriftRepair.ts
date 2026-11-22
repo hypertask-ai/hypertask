@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   advanceIndexDrift,
+  commentCopyDrifted,
   emptyDriftState,
   recordDriftPass,
   type DriftFailure,
@@ -23,6 +24,12 @@ export const DRIFT_MAX_REINDEX = 100;
 export const DRIFT_MAX_FAILURES = 20;
 export const DRIFT_TIME_BUDGET_MS = 250_000;
 export const DRIFT_STATE_KEY = "search-index-drift:htpr-9016";
+export const DRIFT_COUNT_TICKET = "HTPR-9016";
+export const DRIFT_COUNT_BOARD_ID = 15;
+
+export function driftCountText(found: number): string {
+  return `Search index drift ${found}`;
+}
 
 type Page = {
   tasks: DriftTask[];
@@ -31,12 +38,15 @@ type Page = {
   batchFull: boolean;
 };
 
+type CommentDrift = (task: DriftTask, indexed: IndexedCommentCopy | null) => boolean;
+
 type DriftDeps = {
   loadPage: (afterId: number, take: number) => Promise<Page>;
   reindexTask: (taskId: number) => Promise<unknown>;
   reindexComments: (taskId: number) => Promise<unknown>;
   today: () => string;
   now?: () => number;
+  commentDrift?: CommentDrift;
 };
 
 function textAttr(row: { [key: string]: unknown } | undefined, key: string) {
@@ -54,7 +64,10 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
     where: { id: { gt: afterId } },
     orderBy: { id: "asc" },
     take,
-    select: { id: true, title: true, updatedAt: true },
+    select: {
+      id: true, title: true, status: true, ticketNumber: true,
+      uniqueIndex: true, projectId: true, updatedAt: true,
+    },
   });
   const ids = rows.map((row) => row.id);
   const groups = ids.length
@@ -68,6 +81,10 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
   const tasks: DriftTask[] = rows.map((row) => ({
     id: row.id,
     title: row.title ?? "",
+    status: row.status ?? "",
+    ticketNumber: row.ticketNumber,
+    uniqueIndex: row.uniqueIndex,
+    projectId: row.projectId,
     updatedAt: row.updatedAt?.toISOString() ?? "",
     commentCount: counts.get(row.id) ?? 0,
   }));
@@ -94,29 +111,55 @@ export async function loadIndexDriftPage(afterId: number, take: number): Promise
       filters: ["taskId", "Eq", String(task.id)],
       rank_by: ["taskUpdatedAt", "asc"],
       top_k: 1,
-      include_attributes: ["taskTitle", "taskUpdatedAt"],
+      include_attributes: ["taskTitle", "taskStatus", "taskTicketNumber", "taskUniqueIndex", "taskProjectId", "taskUpdatedAt"],
       consistency: { level: "strong" },
     });
     indexedComments.set(task.id, row
-      ? { taskTitle: textAttr(row, "taskTitle"), taskUpdatedAt: textAttr(row, "taskUpdatedAt") }
+      ? {
+          taskTitle: textAttr(row, "taskTitle"),
+          taskStatus: textAttr(row, "taskStatus"),
+          taskTicketNumber: textAttr(row, "taskTicketNumber"),
+          taskUniqueIndex: textAttr(row, "taskUniqueIndex"),
+          taskProjectId: textAttr(row, "taskProjectId"),
+          taskUpdatedAt: textAttr(row, "taskUpdatedAt"),
+        }
       : null);
   }
   return { tasks, indexedTasks, indexedComments, batchFull: rows.length === take };
 }
 
+export async function postSearchIndexDriftCount(found: number): Promise<boolean> {
+  const task = await prisma.task.findFirst({
+    where: { ticketNumber: DRIFT_COUNT_TICKET, projectId: DRIFT_COUNT_BOARD_ID },
+    select: { id: true },
+  });
+  if (!task) return false;
+  const text = driftCountText(found);
+  await prisma.comment.create({
+    data: { taskId: task.id, text: `<p>${text}</p>`, commentText: text, agentDisplayName: "Hypertask" },
+  });
+  return true;
+}
+
+const DEFAULT_DEPS: DriftDeps = {
+  loadPage: loadIndexDriftPage,
+  reindexTask: (taskId) => upsertTaskToTurbopuffer(taskId, { strict: true }),
+  reindexComments: (taskId) => upsertAllCommentsToTurbopuffer(taskId, { strict: true }),
+  today: () => new Date().toISOString().slice(0, 10),
+  now: () => Date.now(),
+  commentDrift: commentCopyDrifted,
+};
+
 export async function runIndexDriftRepair(
   state: DriftState = emptyDriftState(),
-  deps: DriftDeps = {
-    loadPage: loadIndexDriftPage,
-    reindexTask: (taskId) => upsertTaskToTurbopuffer(taskId, { strict: true }),
-    reindexComments: (taskId) => upsertAllCommentsToTurbopuffer(taskId, { strict: true }),
-    today: () => new Date().toISOString().slice(0, 10),
-    now: () => Date.now(),
-  },
+  overrides: Partial<DriftDeps> = {},
 ) {
+  const deps: DriftDeps = { ...DEFAULT_DEPS, ...overrides };
   const clock = deps.now ?? (() => Date.now());
   const deadline = clock() + DRIFT_TIME_BUDGET_MS;
-  let current = { afterId: state.afterId, found: state.found, results: state.results ?? [] };
+  let current: DriftState = {
+    afterId: state.afterId, found: state.found, results: state.results ?? [], countPostedOn: state.countPostedOn,
+  };
   let scanned = 0;
   let reindexed = 0;
   const failed: DriftFailure[] = [];
@@ -133,6 +176,7 @@ export async function runIndexDriftRepair(
       state: current,
       reindexTask: deps.reindexTask,
       reindexComments: deps.reindexComments,
+      commentDrift: deps.commentDrift,
     });
     current = outcome.state;
     reindexed += outcome.reindexed;
@@ -144,6 +188,7 @@ export async function runIndexDriftRepair(
           afterId: 0,
           found: 0,
           results: recordDriftPass(current.results, deps.today(), outcome.passFound),
+          countPostedOn: current.countPostedOn,
         },
         scanned,
         reindexed,

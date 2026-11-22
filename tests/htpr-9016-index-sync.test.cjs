@@ -33,19 +33,85 @@ test("a title edit waits for the task index before comment copies update", async
   assert.equal(drift().commentsFollowTaskEdit({ titleChanged: false, status: "Archive" }), true);
 });
 
+function labeledTask(id, extra = {}) {
+  return {
+    id,
+    title: `T${id}`,
+    status: "Normal",
+    ticketNumber: `HTPR-${id}`,
+    uniqueIndex: id,
+    projectId: 15,
+    updatedAt: "2026-11-10T12:00:00.000Z",
+    commentCount: 1,
+    ...extra,
+  };
+}
+
+function labeledCopy(task, extra = {}) {
+  return {
+    taskTitle: task.title,
+    taskStatus: task.status,
+    taskTicketNumber: task.ticketNumber,
+    taskUniqueIndex: String(task.uniqueIndex),
+    taskProjectId: String(task.projectId),
+    taskUpdatedAt: task.updatedAt,
+    ...extra,
+  };
+}
+
+test("an unrelated ticket edit leaves comment copies alone", async () => {
+  const lib = drift();
+  const task = labeledTask(11, { updatedAt: "2026-11-12T09:00:00.000Z", commentCount: 3 });
+  const copy = labeledCopy(labeledTask(11, { updatedAt: "2026-11-10T09:00:00.000Z" }));
+  assert.equal(lib.commentCopyDrifted(task, copy), false);
+  assert.equal(lib.commentCopyDriftedByEditClock(task, copy), true);
+  const comments = [];
+  const outcome = await lib.advanceIndexDrift({
+    tasks: [task],
+    indexedTasks: new Map([[11, { updatedAt: task.updatedAt }]]),
+    indexedComments: new Map([[11, copy]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, []);
+  assert.equal(outcome.passFound, 0);
+});
+
+test("a changed status on a comment copy is repaired", async () => {
+  const lib = drift();
+  const task = labeledTask(12, { status: "Archive", commentCount: 2 });
+  const copy = labeledCopy(labeledTask(12, { status: "Normal" }));
+  assert.equal(lib.commentCopyDrifted(task, copy), true);
+  const comments = [];
+  await lib.advanceIndexDrift({
+    tasks: [task],
+    indexedTasks: new Map([[12, { updatedAt: task.updatedAt }]]),
+    indexedComments: new Map([[12, copy]]),
+    batchFull: false,
+    maxReindex: 10,
+    state: lib.emptyDriftState(),
+    reindexTask: async () => {},
+    reindexComments: async (id) => comments.push(id),
+  });
+  assert.deepEqual(comments, [12]);
+});
+
 test("a stale comment title is repaired", async () => {
   const lib = drift();
   const at = "2026-11-10T12:00:00.000Z";
   const comments = [];
   const outcome = await lib.advanceIndexDrift({
     tasks: [
-      { id: 7, title: "New title", updatedAt: at, commentCount: 2 },
-      { id: 8, title: "Same", updatedAt: at, commentCount: 1 },
+      labeledTask(7, { title: "New title", updatedAt: at, commentCount: 2 }),
+      labeledTask(8, { title: "Same", updatedAt: at }),
     ],
     indexedTasks: new Map([[7, { updatedAt: at }], [8, { updatedAt: at }]]),
     indexedComments: new Map([
-      [7, { taskTitle: "Old title", taskUpdatedAt: at }],
-      [8, { taskTitle: "Same", taskUpdatedAt: at }],
+      [7, labeledCopy(labeledTask(7, { title: "Old title", updatedAt: at }))],
+      [8, labeledCopy(labeledTask(8, { title: "Same", updatedAt: at }))],
     ]),
     batchFull: false,
     maxReindex: 10,
@@ -62,8 +128,8 @@ test("a failed write names the task and the scan keeps moving", async () => {
   const at = "2026-11-10T12:00:00.000Z";
   const outcome = await lib.advanceIndexDrift({
     tasks: [
-      { id: 3, title: "A", updatedAt: at, commentCount: 0 },
-      { id: 4, title: "B", updatedAt: at, commentCount: 0 },
+      labeledTask(3, { title: "A", updatedAt: at, commentCount: 0 }),
+      labeledTask(4, { title: "B", updatedAt: at, commentCount: 0 }),
     ],
     indexedTasks: new Map([[3, null], [4, null]]),
     indexedComments: new Map(),
@@ -87,7 +153,7 @@ test("a run stops once writes keep failing", async () => {
   const lib = drift();
   const at = "2026-11-10T12:00:00.000Z";
   const outcome = await lib.advanceIndexDrift({
-    tasks: [3, 4, 5].map((id) => ({ id, title: `T${id}`, updatedAt: at, commentCount: 0 })),
+    tasks: [3, 4, 5].map((id) => labeledTask(id, { updatedAt: at, commentCount: 0 })),
     indexedTasks: new Map([[3, null], [4, null], [5, null]]),
     indexedComments: new Map(),
     batchFull: false,
@@ -133,12 +199,7 @@ test("a finished pass records one drift count for that date", async () => {
 });
 
 function totalTasks(count) {
-  return Array.from({ length: count }, (_, index) => ({
-    id: index + 1,
-    title: `T${index + 1}`,
-    updatedAt: "2026-11-10T12:00:00.000Z",
-    commentCount: 0,
-  }));
+  return Array.from({ length: count }, (_, index) => labeledTask(index + 1, { commentCount: 0 }));
 }
 
 test("one run scans past the old 400-row budget until the pass finishes", async () => {
@@ -326,4 +387,125 @@ test("a failed embedding still writes a row the index accepts", async () => {
   });
   await helper.upsertCommentRowsToTurbopuffer([commentRow(1, 15), commentRow(2, 15)]);
   assertKeywordVectors(writes, helper.EMBEDDING_DIM);
+});
+
+function attributesOnly(full, attributes, id) {
+  const row = { id };
+  for (const key of attributes ?? []) row[key] = full[key];
+  return row;
+}
+
+function driftCron({ labels }) {
+  const notes = [];
+  const comments = [];
+  const tasks = [];
+  let saved = null;
+  const later = "2026-11-12T09:00:00.000Z";
+  const earlier = "2026-11-10T09:00:00.000Z";
+  const indexedTask = { id: "11", updatedAt: later };
+  const indexedComment = {
+    id: "c11",
+    taskTitle: "Same",
+    taskStatus: "Normal",
+    taskTicketNumber: "HTPR-11",
+    taskUniqueIndex: 11,
+    taskProjectId: 15,
+    taskUpdatedAt: earlier,
+  };
+  const route = load("src/app/api/cron/search-index-drift/route.ts", {
+    "next/server": {
+      NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) },
+    },
+    "@prisma/client": { Prisma: { DbNull: null } },
+    "@/lib/flags": {
+      FEATURE_FLAG_OWNER_USER_ID: 6,
+      isFeatureEnabled: async () => labels,
+    },
+    "@/lib/flags/definitions/htpr-9016-comment-copy-labels": {
+      HTPR_9016_COMMENT_COPY_LABELS_FLAG: "htpr-9016-comment-copy-labels",
+    },
+    "@/lib/redis": {
+      getRedis: async () => ({
+        get: async () => saved,
+        set: async (_key, value) => { saved = value; },
+      }),
+    },
+    "@/lib/prisma": {
+      default: {
+        task: {
+          findMany: async () => [{
+            id: 11, title: "Same", status: "Normal", ticketNumber: "HTPR-11",
+            uniqueIndex: 11, projectId: 15, updatedAt: new Date(later),
+          }],
+          findFirst: async (args) => {
+            assert.equal(args.where.ticketNumber, "HTPR-9016");
+            assert.equal(args.where.projectId, 15);
+            return { id: 9016 };
+          },
+        },
+        comment: {
+          groupBy: async () => [{ taskId: 11, _count: { _all: 2 } }],
+          create: async ({ data }) => { notes.push(data); return data; },
+        },
+      },
+    },
+    "@/lib/turbopuffer": {
+      default: {
+        namespace: (name) => ({
+          query: async (body) => {
+            const full = name === "comments" ? indexedComment : indexedTask;
+            return { rows: [attributesOnly(full, body.include_attributes, full.id)] };
+          },
+        }),
+      },
+      turbopufferNamespaces: { task: { name: "tasks" }, comment: { name: "comments" } },
+    },
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {
+      upsertTaskToTurbopuffer: async (id) => { tasks.push(id); },
+      upsertAllCommentsToTurbopuffer: async (id) => { comments.push(id); },
+    },
+  });
+  return { route, notes, comments, tasks };
+}
+
+function cronRequest(secret) {
+  return {
+    headers: {
+      get: (name) => (name === "authorization" && secret ? `Bearer ${secret}` : null),
+    },
+  };
+}
+
+test("a finished pass posts the drift count on the ticket once", async (t) => {
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = "drift-secret";
+  t.after(() => { process.env.CRON_SECRET = previous; });
+  const { route, notes, comments, tasks } = driftCron({ labels: true });
+  const denied = await route.GET(cronRequest(null));
+  assert.equal(denied.status, 401);
+  assert.deepEqual(notes, []);
+  const first = await route.GET(cronRequest("drift-secret"));
+  assert.equal(first.body.passComplete, true);
+  assert.equal(first.body.passFound, 0);
+  assert.deepEqual(comments, []);
+  assert.deepEqual(tasks, []);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].taskId, 9016);
+  assert.equal(notes[0].commentText, "Search index drift 0");
+  assert.equal(notes[0].text, "<p>Search index drift 0</p>");
+  const second = await route.GET(cronRequest("drift-secret"));
+  assert.equal(second.body.skipped, "pass recorded today");
+  assert.equal(second.body.drift, 0);
+  assert.equal(notes.length, 1);
+});
+
+test("the old edit-clock comparison still rewrites comment copies when the flag is off", async (t) => {
+  const previous = process.env.CRON_SECRET;
+  process.env.CRON_SECRET = "drift-secret";
+  t.after(() => { process.env.CRON_SECRET = previous; });
+  const { route, notes, comments } = driftCron({ labels: false });
+  const result = await route.GET(cronRequest("drift-secret"));
+  assert.equal(result.body.passFound, 1);
+  assert.deepEqual(comments, [11]);
+  assert.equal(notes[0].commentText, "Search index drift 1");
 });
