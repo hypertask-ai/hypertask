@@ -17,6 +17,10 @@ import {
   getSectionForTask,
 } from "@/lib/mcp/tasks/services";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
+import { buildFieldError } from '@/lib/mcp/fieldError';
 
 
 interface MoveTaskBody {
@@ -222,6 +226,19 @@ export async function POST(request: NextRequest) {
           error: targetAccess.error.message,
         },
         { status: targetAccess.error.status }
+      );
+    }
+
+    if (ctx.agentId && !(await isAgentOnBoard(target_project_id, ctx.agentId))) {
+      const boardAccessGuidance = await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id);
+      return NextResponse.json(
+        {
+          ...buildFieldError("forbidden", "target_project_id", "Permission error"),
+          message: boardAccessGuidance
+            ? `This agent is not a member of this board. Request access with the hypertask_request_board_access tool (project_id ${target_project_id}); your owner approves it in Inbox → Decisions.`
+            : "This agent is not a member of this board. Ask the board owner to add it.",
+        },
+        { status: 403 }
       );
     }
 
