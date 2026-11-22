@@ -147,9 +147,13 @@ test("visual viewport offsets keep the sheet on the visible area", () => {
 
 
 test("tall phone sheets keep editor content inside the description card", () => {
-  const definition = load(
-    "src/lib/flags/definitions/htpr-9440-phone-sheet-editor-card.ts",
-  ).default;
+  const flagFile = "src/lib/flags/definitions/htpr-9440-phone-sheet-editor-card.ts";
+  assert.equal(
+    fs.existsSync(path.join(root, flagFile)),
+    true,
+    "tall phone editor is not contained in the card",
+  );
+  const definition = load(flagFile).default;
   assert.equal(definition.key, "htpr-9440-phone-sheet-editor-card");
   assert.equal(definition.kind, "bugfix");
   assert.equal(definition.defaultMode, "EVERYONE");
