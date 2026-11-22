@@ -94,7 +94,7 @@ export type AgentTaskUpdate = {
   risk_level?: string;
   acceptance_criteria?: string;
   verify_command?: string;
-  pull_request_url?: string;
+  pull_request_url?: string | null;
 };
 
 export type AgentAttachment =
