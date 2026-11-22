@@ -73,6 +73,8 @@ export default defineConfig([
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
       "src/app/\\[...boardURL\\]/page.tsx",
+      // HTPR-9286: server component; gates the sign-out page.
+      "src/app/signout/page.tsx",
       // Server root layout reads feature flags during SSR.
       "src/app/layout.tsx",
     ],

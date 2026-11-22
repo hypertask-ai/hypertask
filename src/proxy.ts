@@ -216,6 +216,7 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
       currentPath === '/add-to-slack' ||
       currentPath === '/slack/support' ||
       currentPath === '/qa/login' ||
+      currentPath === '/signout' ||
       currentPath.startsWith('/qa/login/') ||
       currentPath.startsWith('/firebase-messaging-sw.js')) {
       return NextResponse.next();
@@ -359,6 +360,7 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
   if (
     !checkIfOnboarded(user) &&
     currentPath !== onboarding &&
+    currentPath !== '/signout' &&
     currentPath !== '/add-to-slack' &&
     currentPath !== '/slack/support' &&
     currentPath !== '/qa/login' &&

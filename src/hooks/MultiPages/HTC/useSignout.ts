@@ -7,7 +7,11 @@ import { ALL_UTM_COOKIE_NAMES } from "@/lib/constants/utm";
 import { showAIChatInterfaceAtom } from "@/store";
 import { signOutAllAccounts } from "@/lib/auth/accounts";
 
-export const useSignout = (_appHandler?: any) => {
+export const useSignout = (
+  _appHandler?: any,
+  options?: { redirectTo?: string | null },
+) => {
+  const redirectTo = options?.redirectTo === undefined ? "/login" : options.redirectTo;
   const { fcmToken } = useFcmToken();
   const queryClient = useQueryClient();
   const resetAIChatInterface = useResetRecoilState(showAIChatInterfaceAtom);
@@ -81,11 +85,11 @@ export const useSignout = (_appHandler?: any) => {
       console.error("Could not reset app state during sign out:", error);
     }
 
-    if (typeof window !== "undefined") {
-      window.location.href = "/login";
+    if (redirectTo !== null && typeof window !== "undefined") {
+      window.location.href = redirectTo;
     }
 
-    toast("Signed out successfully!");
+    if (redirectTo !== null) toast("Signed out successfully!");
     return true;
   };
 
