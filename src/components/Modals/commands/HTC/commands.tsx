@@ -845,6 +845,9 @@ const Commands = (props: Props) => {
         value={keyword}
         onKeyDown={(e) => {
           if (e.key === "Enter" && selectedCommand) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.nativeEvent.stopImmediatePropagation();
             updateCommandFrequency(selectedCommand);
           }
         }}
@@ -938,8 +941,10 @@ const Commands = (props: Props) => {
                value={keyword}
                onKeyDown={(e) => {
                  if (e.key === "Enter" && selectedCommand) {
-                   updateCommandFrequency(selectedCommand)
-
+                   e.preventDefault();
+                   e.stopPropagation();
+                   e.nativeEvent.stopImmediatePropagation();
+                   updateCommandFrequency(selectedCommand);
                  }
                }}
                className="px-0"

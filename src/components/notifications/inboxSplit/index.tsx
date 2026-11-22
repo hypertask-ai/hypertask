@@ -521,7 +521,9 @@ const InboxSplit = ({
         return;
       }
     }
+    const keyTarget = e.target instanceof Element ? e.target : null;
     if (
+      keyTarget?.closest("input, textarea, select, [contenteditable]") ||
       returnIfModalOrInputActive() ||
       showCommands.show ||
       document?.activeElement?.role === "dialog" ||
