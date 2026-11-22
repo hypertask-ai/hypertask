@@ -4,7 +4,7 @@ import {
 } from "@/components/Common/CommonModalComponents";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
-import { getActiveTableColumnsFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getActiveTableColumnsFromProject, stableTableViewId } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import {
   DEFAULT_TABLE_COLUMNS,
   normalizeTableVisibleColumns,
@@ -84,10 +84,7 @@ const TableColumnsPicker = ({
   const [atomColumns, setAtomColumns] = useRecoilState(tableVisibleColumnsAtom);
   const setColumnWidths = useSetRecoilState(tableColumnWidthsAtom);
   const [accountColumns, setAccountColumns] = useRecoilState(tableColumnsAccountAtom);
-  const viewId =
-    currentProject?.project_view?.user_project_views?.[0]?.unsavedView?.id ??
-    currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id ??
-    currentProject?.project_view?.default_view?.id;
+  const viewId = stableTableViewId(currentProject);
   const savedColumns = tableSortColumnsEnabled && !controlled
     ? getActiveTableColumnsFromProject(currentProject)
     : null;
