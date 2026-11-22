@@ -89,6 +89,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6938-my-tasks-icon-controls",
   "htpr-7871-ctrlk-ellipsis",
   "htpr-7852-internal-team-saved-plan",
+  "htpr-7924-free-storage-2gb",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,
@@ -125,6 +126,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6938-my-tasks-icon-controls": true,
   "htpr-7871-ctrlk-ellipsis": true,
   "htpr-7852-internal-team-saved-plan": true,
+  "htpr-7924-free-storage-2gb": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
