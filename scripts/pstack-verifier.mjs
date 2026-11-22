@@ -32,7 +32,8 @@ export function runViewport(run) {
 }
 
 export const FLASH = "deepseek/deepseek-v4.1-flash";
-export const PSTACK_VERIFIER = { model: FLASH, endpoint: "https://openrouter.ai/api/v1/chat/completions" };
+export const PSTACK_VERIFIER = { model: FLASH };
+export const LADDER_CALL_PURPOSE = "pr-verifier";
 export const CONTEXT = "pstack-verifier";
 const APP_ID = 5264284;
 const APP_LOGIN = "hypertask-runners[bot]";
@@ -909,7 +910,57 @@ function holdSecret(value, mask = true) {
   if (mask) process.stdout.write(`::add-mask::${value}\n`);
 }
 function secretValues() {
-  return [process.env.OPENROUTER_EVAL_KEY, process.env.GH_TOKEN, process.env.HYPERTASK_RUNNERS_KEY, ...heldSecrets].filter(Boolean);
+  return [
+    process.env.AI_GATEWAY_API_KEY,
+    process.env.OPENCODE_API_KEY,
+    process.env.DEEPSEEK_API_KEY,
+    process.env.OPENROUTER_API_KEY,
+    process.env.GH_TOKEN,
+    process.env.HYPERTASK_RUNNERS_KEY,
+    ...heldSecrets,
+  ].filter(Boolean);
+}
+function ladderBin() {
+  const fromEnv = String(process.env.LADDER_CALL_BIN ?? "").trim();
+  if (fromEnv) return fromEnv;
+  const root = String(process.env.LADDER_CALL_ROOT ?? "").trim();
+  return root ? path.join(root, "ci", "ladder-call") : "";
+}
+function ladderLanesFile(model) {
+  const chosen = String(model ?? "").startsWith("deepseek/") ? assertFlashModel(model) : String(model ?? "");
+  if (!chosen || chosen === FLASH) return "";
+  const lanes = [{ name: "openrouter", key_env: "OPENROUTER_API_KEY", url: "https://openrouter.ai/api/v1/chat/completions", model: chosen }];
+  const dir = workDir();
+  mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "ladder-lanes.json");
+  writeFileSync(file, `${JSON.stringify(lanes)}\n`, { mode: 0o600 });
+  return file;
+}
+function ladderFailure(stderr, status) {
+  const log = String(stderr ?? "");
+  const skips = [...log.matchAll(/ladder-call: lane \S+ skipped: ([^\n]+)/g)].map((match) => match[1]);
+  const note = skips.at(-1) || (status === 3 ? "no lane answered" : `exit ${status}`);
+  return `model ladder failed: ${note}`;
+}
+export function modelRequest(prompt, { model, images = [] } = {}) {
+  const chosen = String(model).startsWith("deepseek/") ? assertFlashModel(model) : String(model);
+  const content = images.length ? [{ type: "text", text: prompt }, ...images.slice(0, 6).map((data) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${data}` } }))] : prompt;
+  const payload = { model: chosen, temperature: 0, max_tokens: 2000, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] };
+  if (chosen.startsWith("deepseek/")) payload.reasoning = { enabled: false };
+  return payload;
+}
+export function callLadder(payload, spawnImpl = spawnSync) {
+  const bin = ladderBin();
+  if (!bin) throw new Error("ladder-call is missing");
+  const lanes = ladderLanesFile(payload.model);
+  const env = lanes ? { ...process.env, LADDER_CALL_LANES: lanes } : process.env;
+  const result = spawnImpl(bin, ["--purpose", LADDER_CALL_PURPOSE], { input: `${JSON.stringify(payload)}\n`, encoding: "utf8", env });
+  if (result.status !== 0) throw new Error(ladderFailure(result.stderr, result.status));
+  let body;
+  try { body = JSON.parse(String(result.stdout ?? "").trim()); } catch { throw new Error("model ladder failed: invalid response"); }
+  const text = body.choices?.[0]?.message?.content;
+  if (!text) throw new Error("model returned nothing");
+  return text;
 }
 function block(label, text, limit, fence) {
   return `${fence}${label}\n${String(text ?? "").slice(0, limit).split(fence).join("")}\n${fence}`;
@@ -935,21 +986,23 @@ export function buildPrompt({ kind, title, body, diff, page, boardPath, taskPath
   }
   return redact(parts.join("\n"), secretValues());
 }
-export async function completeWithOpenRouter(prompt, { key, model, images = [], fetchImpl = globalThis.fetch } = {}) {
-  if (!key) throw new Error("model login is missing");
-  const chosen = String(model).startsWith("deepseek/") ? assertFlashModel(model) : String(model);
-  const content = images.length ? [{ type: "text", text: prompt }, ...images.slice(0, 6).map((data) => ({ type: "image_url", image_url: { url: `data:image/png;base64,${data}` } }))] : prompt;
-  const payload = { model: chosen, temperature: 0, max_tokens: 2000, messages: [{ role: "system", content: "Answer with only the JSON object the user described. Never reveal a token." }, { role: "user", content }] };
-  if (chosen.startsWith("deepseek/")) payload.reasoning = { enabled: false };
-  const response = await fetchImpl(PSTACK_VERIFIER.endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(60000) });
-  if (!response.ok) {
-    let raw = "";
-    try { raw = await response.text(); } catch { raw = ""; }
-    throw new Error(modelHttpError(response.status, raw, [key]));
+export async function completeWithOpenRouter(prompt, { key, model, images = [], fetchImpl, ladderImpl, fetchUrl, fetchTimeoutMs = 60000 } = {}) {
+  const payload = modelRequest(prompt, { model, images });
+  if (fetchImpl) {
+    if (!key) throw new Error("model login is missing");
+    const endpoint = fetchUrl || "https://openrouter.ai/api/v1/chat/completions";
+    const response = await fetchImpl(endpoint, { method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: AbortSignal.timeout(fetchTimeoutMs) });
+    if (!response.ok) {
+      let raw = "";
+      try { raw = await response.text(); } catch { raw = ""; }
+      throw new Error(modelHttpError(response.status, raw, [key]));
+    }
+    const text = (await response.json()).choices?.[0]?.message?.content;
+    if (!text) throw new Error("model returned nothing");
+    return text;
   }
-  const text = (await response.json()).choices?.[0]?.message?.content;
-  if (!text) throw new Error("model returned nothing");
-  return text;
+  const run = ladderImpl ?? ((body) => callLadder(body));
+  return run(payload);
 }
 function invalidModelOutput(error) {
   const wrapped = new Error(String(error?.message ?? error));
@@ -1237,7 +1290,7 @@ export async function planFromRequest(request, deps = {}) {
       pages,
       reach,
       ask,
-      key: deps.key ?? process.env.OPENROUTER_EVAL_KEY,
+      key: deps.key,
       model: picked.model,
       models: picked.models,
       bugfix,
@@ -1332,7 +1385,7 @@ export function readNightlyRed(call = gh) {
   console.log(`already red on production: ${red.join(", ") || "(none)"}`);
   return red;
 }
-export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key = process.env.OPENROUTER_EVAL_KEY, work = workDir() }) {
+export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key, work = workDir() }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     for (const viewport of planViewports(plan)) {
@@ -1389,7 +1442,7 @@ async function judgeCommand() {
     compared = await judgeJourneys({ plan, evidence, picked, redFeatures: readNightlyRed(), bugfixProved });
   } else if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
-      const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { key: process.env.OPENROUTER_EVAL_KEY, model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
+      const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
       model = { verdict: parsed.verdict, notes: parsed.notes };
     } catch (error) { model = { unevaluated: failureText(error, 220) }; }
   }

@@ -558,22 +558,30 @@ test("fill reaches a search box and a number box", async () => {
   assert.deepEqual(none.filled, []);
 });
 
-test("the model call uses the eval headers and AbortSignal.timeout", async () => {
-  const { completeWithOpenRouter, PSTACK_VERIFIER } = await load();
+test("the model call uses token ladder with the pr-verifier purpose", async () => {
+  const { completeWithOpenRouter, callLadder, LADDER_CALL_PURPOSE } = await load();
   const seen = [];
-  const original = AbortSignal.timeout;
-  AbortSignal.timeout = (ms) => { seen.push(ms); return original(ms); };
+  await completeWithOpenRouter("{}", {
+    model: "deepseek/deepseek-v4.1-flash",
+    ladderImpl: (payload) => {
+      seen.push(payload);
+      return "{\"verdict\":\"PASS\"}";
+    },
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].model, "deepseek/deepseek-v4.1-flash");
+  assert.equal(seen[0].reasoning?.enabled, false);
+  assert.equal(LADDER_CALL_PURPOSE, "pr-verifier");
+  const spawnImpl = (bin, args, options) => {
+    seen.push(bin, args, options.input);
+    return { status: 0, stdout: "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}\n", stderr: "" };
+  };
+  process.env.LADDER_CALL_BIN = "/tmp/ladder-call";
   try {
-    await completeWithOpenRouter("{}", {
-      key: "secret",
-      model: "deepseek/deepseek-v4.1-flash",
-      fetchImpl: async (url, options) => {
-        seen.push(url, options.headers.Authorization, options.headers["Content-Type"], options.signal instanceof AbortSignal);
-        return { ok: true, async json() { return { choices: [{ message: { content: "{\"verdict\":\"PASS\"}" } }] }; } };
-      },
-    });
-  } finally { AbortSignal.timeout = original; }
-  assert.deepEqual(seen, [60000, PSTACK_VERIFIER.endpoint, "Bearer secret", "application/json", true]);
+    await callLadder({ model: "deepseek/deepseek-v4.1-flash", messages: [{ role: "user", content: "hi" }] }, spawnImpl);
+  } finally { delete process.env.LADDER_CALL_BIN; }
+  assert.equal(seen[1], "/tmp/ladder-call");
+  assert.deepEqual(seen[2], ["--purpose", "pr-verifier"]);
 });
 
 test("the model call turns reasoning off and leaves room for a full plan", async () => {
