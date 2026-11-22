@@ -74,7 +74,7 @@ test(`switch boards`, { tag: [idTag('switch-boards')] }, async ({ page, request 
     const entry = page.locator(`#project-${projectId}:visible`)
     if ((await entry.count()) === 0) {
       await page.keyboard.press('Control+b')
-      await expect(entry).toBeVisible({ timeout: 5_000 })
+      await expect(entry.first()).toBeVisible({ timeout: 5_000 })
     }
     await entry.first().click({ timeout: 5_000 })
     await expect(page).toHaveURL(new RegExp(`[?&]id=${projectId}(?:&|$)`))
