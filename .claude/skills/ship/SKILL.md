@@ -61,9 +61,9 @@ The done comment lists every decision you made on Valentin's behalf, one line ea
 An agent driving more than one PR owns its loop from this repo. No lead session nudges it.
 
 1. Write the exit predicate before the first round: a check a machine can run, such as "these N PRs are merged, the verifier is green, the live behaviour is proven". Keep iterating until it passes. A plateau is not the end; change approach instead.
-2. Watch events first: a merge, a check verdict or a ref move wakes the loop, from a background watcher. Fall back to an hourly heartbeat when no event can wake it, and never re-check a merge pass more often.
+2. Wake mechanism: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/autonomous-run.md. Hypertask uses a background watcher on merges and ref moves, an hourly heartbeat when nothing can wake it, and never polls a successful merge more often than that.
 3. Write one decision row per round in the ticket's checkpoint file: what changed, whether the predicate moved, what runs next.
-4. Merge through `scripts/pr-merge-pass --queue <file>` or `--label <label>`. It merges only when the pstack-verifier status from the verifier app is success, pins the merge to the head it read, never passes `--admin`, and prints one JSON document per round.
+4. Merge gating: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/shipping.md. Hypertask uses the queue merger in `.claude/skills/ship/scripts/` with `--queue <file>` or `--label <label>` on the pinned head, never with `--admin`, printing one JSON document per round. The merger consults the repository's configured verifier GitHub status before each squash.
 
 ## Scripted chores
 
@@ -106,7 +106,7 @@ Write agent activity at claim, fix, PR, checks green, merge, deploy, and QA; at 
 
 Human comments are for decisions, QA, and completion. Claims, releases, handoffs, status, session names, and resume commands belong in agent activity only. Use the shared `tickets` rules and the appropriate `--kind`. Before waiting on CI, a helper, deployment, or a person, post the required agent activity record through `vcc activity add` with separate **Next**, **Helpers**, **Branch/PR**, and **Outputs** lines. Include the resume command. Do not message another session.
 
-Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-hypertask's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
+Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Evidence checklist: https://github.com/cursor/plugins/blob/main/pstack/skills/show-me-your-work/SKILL.md. Mark each case green, red, or UNREACHABLE with evidence; reds include steps and actual behavior. Record account ID and role, never credentials. Use verify-hypertask's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA summary with the report link and key attachments. No bare "tests green" claims.
 
 After successful live proof, explain the user-visible problem and changed result before Done. Link the PR and report. Put the flag's dedicated link last in its ticket description, preserving other text; use the same link whenever naming it. Make the required release announcement with Valentin's mention. Follow [flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior), not historical defaults in old comments.
 
