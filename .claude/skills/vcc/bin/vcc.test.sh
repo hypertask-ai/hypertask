@@ -49,6 +49,10 @@ cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/usr/bin/env bash
 printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
 if [ "${1:-}" = --name ]; then
+  if [ "${VCC_TEST_LEGACY_NAME:-}" = 1 ]; then
+    printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+    exit 0
+  fi
   printf '%s\n' "${VCC_TEST_DISCOVERED_NAME:-}"
   exit 0
 fi
@@ -155,6 +159,8 @@ allowed env VCC_TEST_IDENTITY='Valentins Claude Code' VCC_TEST_DISCOVERED_NAME='
 login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' VCC_TEST_DISCOVERED_NAME='HT Pstack Boss' bash "$vcc" comment add X-1 --text hi
 login_refused env VCC_TEST_DISCOVERED_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
 allowed env bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_LEGACY_NAME=1 VCC_TEST_IDENTITY='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
+grep -q 'did not report the session name' "$T/err" || fail "legacy login script message unclear: $(cat "$T/err")"
 login_refused env HOME="$T/no-identity" bash "$vcc" comment add X-1 --text hi
 grep -q 'is missing; refusing to write as Valentins Claude Code' "$T/err" || fail "missing login lookup message unclear: $(cat "$T/err")"
 printf 'ok a named session without its own login is refused\n'

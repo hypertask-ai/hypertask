@@ -372,7 +372,12 @@ IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$SHIP_IDENTITY")
 SESSION_NAME=${SHIP_SESSION_NAME:-}
 if [ -z "$SESSION_NAME" ]; then
   SESSION_NAME=$("$SHIP_IDENTITY" --name)
-  SESSION_NAME=${SESSION_NAME%%$'\t'*}
+  case "$SESSION_NAME" in
+    *$'\t'*)
+      printf 'vcc: %s did not report the session name; refusing to write as %s\n' "$SHIP_IDENTITY" "$IDENTITY" >&2
+      exit 2
+      ;;
+  esac
   [ "$SESSION_NAME" = "$SHARED_IDENTITY" ] && SESSION_NAME=''
 fi
 SESSION_NAME=${SESSION_NAME%% | *}
