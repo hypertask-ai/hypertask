@@ -3,7 +3,7 @@
 ## Sub-features
 
 - `board-invites` Board invites.
-- `invite-accept` `/invite` (`src/app/invite/page.tsx`) needs `?key=<invite key>`. No key, or a key with no invite row, redirects to `/` (`src/app/invite/page.tsx:27-34`). A signed-in join that returns 200 opens `/project?id=<projectId>`, and keeps `view` when the link has one. A signed-out visitor who reaches `/` is then carried into the guest demo (`/` to `/demo` to `/project?id=<guest board>`), not to the login page, so read the invite redirect on the invite page itself, not on the final landing. The page stores `inviteKey`, and `project` plus `projectInvite` when those query values are present, for 10080 seconds (`src/app/invite/InviteComp.tsx:16-29`).
+- `invite-accept` `/invite` (`src/app/invite/page.tsx`) needs `?key=<invite key>`. No key sends a signed-out visitor to `/login`. A key with no invite row sends a signed-out visitor to `/login` with `project`, `key`, `projectId` and `view` kept, so signing in can still join. A signed-in join that returns 200 opens `/project?id=<projectId>`, and keeps `view` when the link has one. A guest demo cookie is not a member: the page does not redeem it, and the visitor stays on the invite sign-in screen instead of `/` and the guest demo. The page stores `inviteKey`, and `project` plus `projectInvite` when those values are present, for 10080 seconds (`src/app/invite/InviteComp.tsx:16-29`).
 
 ## How to get to it (user POV)
 
@@ -17,7 +17,7 @@ Use the shared fixture board 7283 (**QA Team Board**): owner 4036 (`~/.config/ht
 2. As owner 4036, click Resend on that pending invite: `reSendInvite` answers 200 and the pending row stays.
 3. As the outsider, `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId: 7283, email: <that address> }`: both answer 403, and the owner still sees the pending invite after reload (HTPR-7176).
 4. Without any login both routes answer 401.
-5. Open `/invite?key=<that invite key>` signed out. An auto-created guest demo session means the browser does not stay on the invite page: `/invite` redirects to `/` and `/` continues to the demo board, so read the `inviteKey` cookie and the first redirect hop rather than the final URL. A signed-in QA account that is not on board 7283 and redeems a live key gets a 200 join and lands on `/project?id=<projectId>`. Open `/invite` with no `key` and confirm the redirect chain starts `/invite` then `/`. The redemption itself is `verified-unreachable: needs the key the owner's Invite dialog displays plus a fresh non-member mailbox; tried /invite with no key, /invite with a dead key, and createInviteLink, which returns only the invited address`.
+5. Open `/invite` with no `key` while signed out and confirm the landing is `/login`, not `/demo`. Open `/invite?key=<that invite key>` signed out and confirm the page stays on sign-in (it does not continue into the guest demo). A signed-in QA account that is not on board 7283 and redeems a live key gets a 200 join and lands on `/project?id=<projectId>`. The redemption itself is `verified-unreachable: needs the key the owner's Invite dialog displays plus a fresh non-member mailbox; tried /invite with no key, /invite with a dead key, and createInviteLink, which returns only the invited address`.
 
 ### Hands-free drive on production
 
