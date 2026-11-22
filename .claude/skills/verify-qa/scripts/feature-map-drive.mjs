@@ -35,6 +35,17 @@ const FEATURES = [
   "integrations", "oauth-and-api-clients", "pinned-and-archived",
 ];
 
+const FEATURE_ACCOUNTS = {
+  "activation-analytics": ["plain"],
+  "agent-chat-roster": ["plain"],
+  "agent-runs": ["pro"],
+  "ai-feedback-reports": ["agent"],
+  "ai-usage": ["pro", "free", "byok"],
+  "billing-and-plans": ["pro"],
+  "board-invites": ["owner", "pro"],
+  "board-member-list": ["plain"],
+};
+
 function readArgs(argv) {
   const out = { features: [], dir: path.join(os.tmpdir(), `feature-map-drive-${Date.now()}`) };
   for (let index = 0; index < argv.length; index += 1) {
@@ -81,6 +92,25 @@ function state(account) {
   const file = STATES[account];
   if (!file) throw new Error(`unknown account ${account}`);
   return file;
+}
+
+async function assertAccounts(feature) {
+  for (const account of FEATURE_ACCOUNTS[feature] ?? []) {
+    if (account === "agent") {
+      const fixture = JSON.parse(await fs.readFile(AGENT_FIXTURE, "utf8").catch(() => "{}"));
+      if (!fixture.token) {
+        console.error("UNREACHABLE missing state: agent");
+        process.exit(4);
+      }
+      continue;
+    }
+    try {
+      await fs.access(STATES[account]);
+    } catch {
+      console.error(`UNREACHABLE missing state: ${account}`);
+      process.exit(4);
+    }
+  }
 }
 
 async function api(account, method, route, data) {
@@ -766,6 +796,7 @@ async function main() {
   const summary = [];
   for (const feature of selected) {
     console.log(`\n=== ${feature}`);
+    await assertAccounts(feature);
     runner.steps = [];
     runner.notes = [];
     const dir = path.join(args.dir, feature);

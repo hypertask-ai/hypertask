@@ -42,7 +42,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Required-check settings | [ci-settings.md](ci-settings.md) | live ruleset read, hourly `verify`/`chain` run log, no settings step in `ci-tests` |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | `ci-prepare` then 4 PR / 8 push shards, `Run independent static checks`, `shard-proof … duplicates=0` |
 | CLI install commands and login | [cli-install.md](cli-install.md) | Settings CLI desktop/phone, `llms.txt`, real install, Ctrl+K `#cliInstallModal`, management-key Team row |
-| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via `ht-verify session`; `;`/`SHIFT ;` chips, plus composer (`ctrl-j-drive.mjs` is stale for QA 985) |
+| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via ht-verify session; `;`/`SHIFT ;` chips, plus composer; loopback ctrl-j-drive only (stale on QA 985) |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | post, `@` picker, reload and delete on board 7049; `comments-drive-live.mjs` for loopback |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | Ctrl+K Create task, attach file, `Save`, request chain 200, reload |
 | Board custom instructions | [custom-instructions.md](custom-instructions.md) | board 7049 GET, save, reload/reopen, unsaved edit, restore |
