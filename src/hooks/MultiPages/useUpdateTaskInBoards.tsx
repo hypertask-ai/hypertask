@@ -22,7 +22,7 @@ import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySec
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { focusCardNextTo, keepBoardFocus, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
 import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/appendCreatedSection";
-import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
+import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId, taskInColumn } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { useFlag } from "@/hooks/useFlag";
@@ -335,10 +335,10 @@ const UpdateKanban = () => {
     console.timeEnd("cacheUpdate-start");
   };
 
-  const updateCache = async (newSections: ISection[]) => {
+  const updateCache = async (newSections: ISection[], tasks?: ITask[]) => {
     const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
     if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return console.log("returned from guard");
-    mutationHandler(projectToUpdateIndex, newSections, allData)
+    mutationHandler(projectToUpdateIndex, newSections, allData, tasks)
   }
   const updateActiveItemAndItemInView = (taskId: number | null, projectId: number, sectionId: number | null) => {
 
@@ -656,9 +656,12 @@ const UpdateKanban = () => {
           undefined,
           destinationSection.items.length > 0 ? destinationSection.items[0].ranking : undefined
         );
-    const newItem: ITask = {
-      ...taskToMove,
+    const destinationColumn = {
       sectionId: destinationSectionId,
+      section_title: destinationSection.section_title,
+    };
+    const newItem: ITask = {
+      ...taskInColumn(taskToMove, destinationColumn),
       ranking,
     };
     const destinationItems = options.insertAtEnd
@@ -698,7 +701,10 @@ const UpdateKanban = () => {
     const srcFilteredIdx = filteredSrc.findIndex((s) => s.sectionId === sourceSectionId || s.id === sourceSectionId)
     const dispItemIndex = filteredSrc[srcFilteredIdx]?.items.findIndex((i) => i.id === itemId) ?? -1
     reAdjustFocusFromCurrContext({ sections: filteredSrc, sectionIndex: srcFilteredIdx, sectionId: sourceSectionId, itemIndex: dispItemIndex, projectId: _currentProject.id })
-    updateCache(newSections)
+    const tasksForCount = projectToUpdate.tasks?.map((task) =>
+      task.id === itemId ? { ...taskInColumn(task, destinationColumn), ranking } : task,
+    );
+    updateCache(newSections, tasksForCount)
 
 
   }

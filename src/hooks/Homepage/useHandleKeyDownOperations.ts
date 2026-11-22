@@ -30,7 +30,7 @@ import { useUniversalMovement } from '../useUniversalMovement'
 import { CommandMode } from '@/models/enums'
 import { MobileViewContext } from '@/lib/contexts/mobileContext'
 import { toggleTaskTimer } from '@/hooks/Task Detail/useTimeTracking'
-import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builtinViews'
+import { buildBuiltinViewContext, isBuiltinViewId, taskInColumn } from '@/lib/constants/builtinViews'
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
@@ -461,8 +461,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     }
 
     const newItem = {
-      ...item,
-      sectionId: newSecId,
+      ...taskInColumn(item, { sectionId: newSecId, section_title: displayDestination.section_title }),
       ranking,
       updatedAt: updatedAt.toString(),
     };

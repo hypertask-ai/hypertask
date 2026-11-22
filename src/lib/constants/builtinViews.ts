@@ -63,6 +63,15 @@ const inFinishedColumn = (task: ITask, context: BuiltinViewContext) =>
   context.leaveFinishedOut === true &&
   isDoneColumn(task.section, context.doneSectionTitles);
 
+export const taskInColumn = <T extends { sectionId?: number | null; section?: string | null }>(
+  task: T,
+  column: { sectionId?: number | null; section_title?: string | null },
+): T => ({
+  ...task,
+  sectionId: column.sectionId ?? task.sectionId,
+  section: column.section_title ?? task.section,
+});
+
 export const BLOCKED_VIEW_RULE =
   "Waiting on a person, or blocked by another ticket. Done columns stay out.";
 

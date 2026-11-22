@@ -83,6 +83,53 @@ test("board rows and tab counts drop the Done-column ticket together", () => {
   assert.equal(tabCount(project, true), 3);
 });
 
+test("a move into a Done column writes the title Blocked and Blocked by me read", () => {
+  for (const file of [
+    "src/hooks/MultiPages/useUpdateTaskInBoards.tsx",
+    "src/hooks/Homepage/useHandleKeyDownOperations.ts",
+    "src/hooks/Homepage/useMoveTasks.ts",
+  ]) {
+    assert.match(fs.readFileSync(path.join(root, file), "utf8"), /taskInColumn\(/);
+  }
+
+  const { project, sections } = fixture();
+  const inbox = sections.find((section) => section.section_title === "Inbox");
+  const done = sections.find((section) => section.section_title === "Done");
+  const task = inbox.items.find((item) => item.id === "a");
+  const stale = { ...task, sectionId: done.sectionId };
+  const placed = builtin.taskInColumn(task, { sectionId: done.sectionId, section_title: done.section_title });
+  const on = buildBuiltinViewContext(project, 6, NOW, "Valentin", true);
+
+  assert.equal(stale.section, "Inbox");
+  assert.equal(blockedPredicate(stale, on), true);
+  assert.equal(blockedByMePredicate(stale, on), true);
+  assert.equal(placed.section, "Done");
+  assert.equal(placed.sectionId, done.sectionId);
+  assert.equal(blockedPredicate(placed, on), false);
+  assert.equal(blockedByMePredicate(placed, on), false);
+
+  const movedSections = sections.map((section) => {
+    if (section.sectionId === inbox.sectionId) {
+      return { ...section, items: section.items.filter((item) => item.id !== task.id) };
+    }
+    if (section.sectionId === done.sectionId) return { ...section, items: [...section.items, placed] };
+    return section;
+  });
+  const movedProject = {
+    ...project,
+    tasks: project.tasks.map((item) => (item.id === task.id ? placed : item)),
+  };
+  assert.equal(
+    sectionIds(filters.getFilteredSections(movedSections, movedProject, "builtin:blocked", on)).includes("a"),
+    false,
+  );
+  assert.equal(movedProject.tasks.filter((item) => blockedPredicate(item, on)).some((item) => item.id === "a"), false);
+  assert.equal(
+    sectionIds(filters.getFilteredSections(movedSections, movedProject, "builtin:blocked-by-me", on)).includes("a"),
+    false,
+  );
+});
+
 test("Blocked states its rule and a cycle view keeps its own line", () => {
   assert.equal(blockedViewRule("builtin:blocked"), BLOCKED_VIEW_RULE);
   assert.equal(blockedViewRule("builtin:blocked-by-me"), BLOCKED_BY_ME_VIEW_RULE);
