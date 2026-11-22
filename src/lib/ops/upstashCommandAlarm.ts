@@ -29,13 +29,15 @@ export function nextCommandSample(previous: CommandSample | null, total: number,
   if (!previous || total < previous.total || now < previous.at) {
     return { commands: null, alert: false, next: { total, at: now }, replace: true };
   }
-  if (now - previous.at < DAY_MS) {
+  if (upstashAlarmDay(now) === upstashAlarmDay(previous.at)) {
     return { commands: null, alert: false, next: previous, replace: false };
   }
+  const elapsed = now - previous.at;
   const commands = total - previous.total;
+  const perDay = elapsed > DAY_MS + 5 * 60 * 1000 ? commands * DAY_MS / elapsed : commands;
   return {
-    commands,
-    alert: commands > UPSTASH_DAILY_COMMAND_LIMIT,
+    commands: Math.round(perDay),
+    alert: perDay > UPSTASH_DAILY_COMMAND_LIMIT,
     next: { total, at: now },
     replace: true,
   };

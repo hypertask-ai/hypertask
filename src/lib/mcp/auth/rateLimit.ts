@@ -15,7 +15,6 @@ const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
 const agentCounts = new Map<string, number>()
 let localWindowStart: number | undefined
-let agentWindowStart: number | undefined
 
 export function rateLimitSkipsUpstash(token: string): boolean {
   if (token.startsWith('htk_')) return true
@@ -72,14 +71,19 @@ export async function checkMcpRateLimit(
 
     if (localWindowStart !== windowStartSeconds) {
       localCounts.clear()
+      agentCounts.clear()
       localWindowStart = windowStartSeconds
     }
     if (rateLimitSkipsUpstash(token)) {
-      if (agentWindowStart !== windowStartSeconds) {
-        agentCounts.clear()
-        agentWindowStart = windowStartSeconds
+      const seen = agentCounts.get(key)
+      if (seen === undefined && agentCounts.size >= MAX_LOCAL_COUNTS) {
+        const decision = decideMcpRateLimit(MCP_AGENT_RATE_LIMIT_PER_MINUTE + 1, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
+        return NextResponse.json(
+          { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+          { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
+        )
       }
-      const count = (agentCounts.get(key) ?? 0) + 1
+      const count = (seen ?? 0) + 1
       agentCounts.set(key, count)
       const decision = decideMcpRateLimit(count, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
       if (!decision.limited) return null

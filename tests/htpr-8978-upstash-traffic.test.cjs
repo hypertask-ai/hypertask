@@ -59,6 +59,22 @@ test("a day at or under 300,000 commands does not file, and one request over doe
   const restarted = nextCommandSample(first.next, 3, start + DAY_MS);
   assert.equal(restarted.alert, false);
   assert.deepEqual(restarted.next, { total: 3, at: start + DAY_MS });
+  const opened = Date.parse("2026-11-22T05:51:30.000Z");
+  const nextMorning = Date.parse("2026-11-23T05:51:00.000Z");
+  const skewed = nextCommandSample({ total: 10, at: opened }, 10 + UPSTASH_DAILY_COMMAND_LIMIT + 1, nextMorning);
+  assert.equal(skewed.alert, true);
+  assert.equal(skewed.replace, true);
+  assert.equal(skewed.next.at, nextMorning);
+  const skewedLine = nextCommandSample({ total: 10, at: opened }, 10 + UPSTASH_DAILY_COMMAND_LIMIT, nextMorning);
+  assert.equal(skewedLine.alert, false);
+  assert.equal(skewedLine.replace, true);
+  const twoDays = nextCommandSample({ total: 10, at: opened }, 10 + 400_000, opened + 2 * DAY_MS);
+  assert.equal(twoDays.commands, 200_000);
+  assert.equal(twoDays.alert, false);
+  assert.equal(twoDays.replace, true);
+  const twoDaysOver = nextCommandSample({ total: 10, at: opened }, 10 + 600_001, opened + 2 * DAY_MS);
+  assert.equal(twoDaysOver.alert, true);
+  assert.equal(twoDaysOver.replace, true);
 });
 
 test("the daily alarm files one Urgent ticket and the cron refuses the wrong caller", async () => {
@@ -156,4 +172,26 @@ test("agent and command-line calls are limited without Upstash, and a human call
   assert.equal(redisCalls, 0, "agent and command-line calls send no Upstash commands");
   assert.equal(await call("human-session"), null);
   assert.equal(redisCalls, 1, "a human call still uses Upstash");
+});
+
+test("distinct unauthenticated command-line tokens cannot grow the in-memory limit without a cap", async () => {
+  let redisCalls = 0;
+  const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
+    "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => 1, expire: async () => 1 }; } },
+    "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count" },
+    "@/lib/flags": { featureFlagCandidateUserIds: async () => null },
+    "./session": {
+      extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
+      validateMcpAuth: async () => null,
+    },
+    "../operationContext": { getMcpOperationContext: () => undefined },
+  });
+  const call = (bearer) => checkMcpRateLimit(new NextRequest("https://app.hypertask.ai/api/mcp/tasks", {
+    headers: { authorization: `Bearer ${bearer}` },
+  }));
+  assert.equal(await call("htk_known"), null);
+  for (let i = 0; i < 999; i += 1) assert.equal(await call(`htk_${i}`), null);
+  assert.equal(await call("htk_known"), null);
+  assert.equal((await call("htk_overflow")).status, 429);
+  assert.equal(redisCalls, 0);
 });
