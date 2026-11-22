@@ -9,7 +9,7 @@
 
 - Settings, Connect, CLI: `https://app.hypertask.ai/settings/cli` (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`).
 - Command menu "Install CLI" opens `CliInstallModal` (`#cliInstallModal`).
-- Onboarding "connect your agent" step email and the guest demo board's CLI task (`completeOnboardingStep.ts`, `guestSeedTasks.ts`) print the same install command, but the onboarding text still tells the reader bare `hypertask login` does not sign in and prescribes `hypertask login --token <agent token>`. The Settings page and the modal both say `hypertask login` opens the browser to authorize; that is the shipped path today.
+- Onboarding's seeded task (`completeOnboardingStep.ts`) and the guest demo board's CLI task (`guestSeedTasks.ts`) print the same install command and the same sign-in step as Settings: `hypertask login`, which opens the browser. With `htpr-9530-cli-browser-signin` off, that seeded task returns to the token sentence.
 - `https://app.hypertask.ai/llms.txt` for AI agents: `curl -fsSL https://hypertask.ai/install | sh`, then `hypertask login`, plus the PowerShell line.
 - After install the CLI signs in with `hypertask login` (browser authorize) or `hypertask login --token <agent token>` for agents; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).
 - Settings, Connect, Management keys: `https://app.hypertask.ai/settings/management-keys` (`src/components/Modals/Settings/ManagementKeysSection.tsx`). Create and list use `GET /api/mcp/admin/keys` and `POST /api/mcp/admin/keys`; revoke uses `DELETE /api/mcp/admin/keys`.
@@ -38,7 +38,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 - Hello errors or timeouts turn a successful token save into a failed or hanging login.
 - Test fixtures in `tests/fixtures/cli-install/legacy.json` holding the old command.
 - A team-limited key (`httk_`), or an agent token that carries a team id, is refused while `htpr-6542-team-scoped-management-keys` is off.
-- The Settings page, the Ctrl+K modal and `llms.txt` all print bare `hypertask login`, while the onboarding agent step (HTPR-7549 flag) says bare login does not sign in and prescribes `--token`. Treat the Settings/modal text as shipped and the onboarding sentence as a product copy gap.
+- Settings, the Ctrl+K modal, `llms.txt`, the guest CLI task, and the seeded onboarding task (with `htpr-9530-cli-browser-signin` on) all print bare `hypertask login` and say it opens the browser. Off restores the onboarding token sentence.
 
 ### What proof to collect
 

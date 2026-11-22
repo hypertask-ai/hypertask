@@ -8,8 +8,9 @@ const legacy = require("./fixtures/cli-install/legacy.json");
 const key = "htpr-7549-first-task-pointer";
 const cliKey = "htpr-7033-cli-install-command";
 const commands = load("src/lib/onboarding/installCommands.ts");
+const browserKey = load("src/lib/flags/definitions/htpr-9530-cli-browser-signin.ts").HTPR_9530_CLI_BROWSER_SIGNIN_FLAG;
 
-async function seed(enabled, cliEnabled) {
+async function seed(enabled, cliEnabled, browserSignIn = false) {
   const tasks = [];
   const markers = [];
   const assignments = [];
@@ -41,8 +42,10 @@ async function seed(enabled, cliEnabled) {
       isFeatureEnabled: async (flag, userId) => {
         assert.equal(userId, 2343);
         reads.push(flag);
-        assert.ok([key, cliKey].includes(flag));
-        return flag === key ? enabled : cliEnabled;
+        assert.ok([key, cliKey, browserKey].includes(flag));
+        if (flag === key) return enabled;
+        if (flag === browserKey) return browserSignIn;
+        return cliEnabled;
       },
     },
   });
@@ -56,8 +59,8 @@ async function seed(enabled, cliEnabled) {
 }
 
 for (const cliEnabled of [false, true]) {
-  test(`new copy wins with CLI flag ${cliEnabled} and stores immutable task/column IDs`, async () => {
-    const { task, markers, reads } = await seed(true, cliEnabled);
+  test(`browser sign-in replaces the token step with CLI flag ${cliEnabled}`, async () => {
+    const { task, markers, reads } = await seed(true, cliEnabled, true);
     assert.equal(task.title, "Connect your AI to Hypertask");
     const dom = new JSDOM(task.description);
     const text = dom.window.document.body.textContent;
@@ -67,13 +70,26 @@ for (const cliEnabled of [false, true]) {
     assert.equal(code.find((value) => value === "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp"), "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp");
     assert.equal(code.find((value) => value === "curl -fsSL https://hypertask.ai/install | sh"), "curl -fsSL https://hypertask.ai/install | sh");
     assert.equal(code.find((value) => value === "irm https://hypertask.ai/install.ps1 | iex"), "irm https://hypertask.ai/install.ps1 | iex");
-    assert.ok(code.includes("hypertask login --token <your-agent-token>"));
+    assert.deepEqual(code.filter((value) => value.startsWith("hypertask login")), ["hypertask login"]);
+    assert.match(text, /It opens your browser to authorize the CLI for your account/);
     assert.match(text, /Approve and connect/);
     assert.match(text, /Never post the token in a task or chat/);
-    assert.match(text, /Bare hypertask login does not sign in today/);
-    assert.doesNotMatch(task.description, /npm|login --code/);
-    assert.deepEqual(reads, [key]);
+    assert.doesNotMatch(text, /does not sign in/);
+    assert.doesNotMatch(task.description, /login --token|npm|login --code/);
+    assert.deepEqual(reads, [key, browserKey]);
     assert.deepEqual(markers, [{ firstTaskPointerTaskId: 71, firstTaskPointerSectionId: 10 }]);
+    dom.window.close();
+  });
+
+  test(`flag off keeps the token sign-in step with CLI flag ${cliEnabled}`, async () => {
+    const { task, reads } = await seed(true, cliEnabled, false);
+    const dom = new JSDOM(task.description);
+    const text = dom.window.document.body.textContent;
+    const code = [...dom.window.document.querySelectorAll("code")].map((node) => node.textContent);
+    assert.ok(code.includes("hypertask login --token <your-agent-token>"));
+    assert.match(text, /Bare hypertask login does not sign in today/);
+    assert.doesNotMatch(text, /opens your browser/);
+    assert.deepEqual(reads, [key, browserKey]);
     dom.window.close();
   });
 
@@ -87,6 +103,15 @@ for (const cliEnabled of [false, true]) {
     assert.deepEqual(markers, []);
   });
 }
+
+test("cli browser sign-in flag ships to everyone as a small bugfix", () => {
+  const mod = load("src/lib/flags/definitions/htpr-9530-cli-browser-signin.ts");
+  assert.equal(mod.HTPR_9530_CLI_BROWSER_SIGNIN_FLAG, "htpr-9530-cli-browser-signin");
+  assert.equal(mod.default.key, browserKey);
+  assert.equal(mod.default.kind, "bugfix");
+  assert.equal(mod.default.defaultMode, "EVERYONE");
+  assert.equal(mod.default.releaseRisk.risk, "small");
+});
 
 test("legacy factory remains byte-identical to the production baseline", () => {
   const { createHash } = require("node:crypto");
