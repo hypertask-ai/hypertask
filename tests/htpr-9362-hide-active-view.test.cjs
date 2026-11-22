@@ -79,6 +79,23 @@ test("hiding a view that is not open does not move the board", () => {
   assert.equal(builtin.getViewToActivateWhenHidden(project(), {}, [home, builtin.getBuiltinView(blockedId)], blockedId), undefined);
 });
 
+test("a view already hidden while open is left for the home view when the board loads", () => {
+  const saved = { id: "saved", title: "Sprint" };
+  const board = {
+    ...project(),
+    project_view: {
+      default_view_id: "home",
+      allViews: [home, saved],
+      user_project_views: [{ appliedView: saved }],
+    },
+  };
+  const views = [home, saved, builtin.getBuiltinView(blockedId)];
+  assert.equal(builtin.getHiddenOpenViewToLeave(board, {}, views, { saved: true }).id, "home");
+  assert.equal(builtin.getHiddenOpenViewToLeave(board, {}, views, {}), undefined);
+  assert.equal(builtin.getHiddenOpenViewToLeave(board, { 15: blockedId }, views, hiddenBlocked).id, "home");
+  assert.equal(builtin.getHiddenOpenViewToLeave(project(), {}, views, { home: true }), undefined);
+});
+
 test("a hidden Blocked view is still hidden when the board display is read back", () => {
   const key = builtin.viewTabPreferenceKey(15, blockedId);
   assert.equal(key, "15:builtin:blocked");

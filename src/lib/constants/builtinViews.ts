@@ -257,3 +257,22 @@ export const getViewToActivateWhenHidden = (
   if (!defaultViewId || defaultViewId === hiddenViewId) return undefined;
   return views.find((view) => view.id === defaultViewId);
 };
+
+export const getHiddenOpenViewToLeave = (
+  project: IProject | null | undefined,
+  activeBuiltinViews: Record<number, string>,
+  views: readonly BoardView[],
+  hiddenViewTabIds: Record<string, boolean | undefined>,
+): BoardView | undefined => {
+  const activeViewId = getActiveBoardViewId(project, activeBuiltinViews);
+  if (!project || !activeViewId) return undefined;
+  const shown = viewTabIsShown(activeViewId, {
+    projectId: project.id,
+    defaultViewId: project.project_view?.default_view_id,
+    activeViewId,
+    hiddenViewTabIds,
+    keepOpenViewVisible: false,
+  });
+  if (shown) return undefined;
+  return getViewToActivateWhenHidden(project, activeBuiltinViews, views, activeViewId);
+};

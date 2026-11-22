@@ -1,21 +1,43 @@
-import { useContext, useEffect } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 import { useRecoilValue } from '@/lib/state'
 import { IProject } from '@/models/model'
-import { activeBuiltinViewsAtom, appShellRailAtom, showBoardManagerAtom, showCommandsAtom } from '@/store'
+import { activeBuiltinViewsAtom, appShellRailAtom, hiddenViewTabIdsAtom, showBoardManagerAtom, showCommandsAtom } from '@/store'
 import { returnIfModalOrInputActive } from '@/utils/helperFunctions/helperFunctions'
 import useKanbanViews from './useKanbanViews'
 import useRenderedViews from './useRenderedViews'
 import { MobileViewContext } from '@/lib/contexts/mobileContext'
-import { getActiveBoardViewId } from '@/lib/constants/builtinViews'
+import { getActiveBoardViewId, getHiddenOpenViewToLeave } from '@/lib/constants/builtinViews'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_9362_HIDE_ACTIVE_VIEW_FLAG } from '@/lib/flags/definitions/htpr-9362-hide-active-view'
 
 const useViewCyclingShortcuts = (project: IProject | null) => {
-  const { renderedViews: views } = useRenderedViews(project)
+  const hideOpenView = useFlag(HTPR_9362_HIDE_ACTIVE_VIEW_FLAG)
+  const { renderedViews: views, orderedViews } = useRenderedViews(project)
   const { switchViewHandler } = useKanbanViews(project)
   const showBoardManager = useRecoilValue(showBoardManagerAtom)
   const showCommands = useRecoilValue(showCommandsAtom)
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom)
+  const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
   const isMbl = useContext(MobileViewContext)
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl
+  const leavingHiddenView = useRef<string | null>(null)
+  const viewToLeaveTo = hideOpenView
+    ? getHiddenOpenViewToLeave(project, activeBuiltinViews, orderedViews, hiddenViewTabIds)
+    : undefined
+
+  useEffect(hideOpenView ? () => {
+    if (!project || !viewToLeaveTo) {
+      leavingHiddenView.current = null
+      return
+    }
+    const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
+    const leaveKey = activeViewId ? `${project.id}:${activeViewId}` : null
+    if (!leaveKey || leavingHiddenView.current === leaveKey) return
+    leavingHiddenView.current = leaveKey
+    void Promise.resolve(switchViewHandler(viewToLeaveTo)).catch(() => {
+      if (leavingHiddenView.current === leaveKey) leavingHiddenView.current = null
+    })
+  } : () => {}, [activeBuiltinViews, hideOpenView, project, switchViewHandler, viewToLeaveTo])
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
