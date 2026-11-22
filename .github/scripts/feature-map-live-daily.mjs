@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { api, findOpenWeeklyTicket } from './feature-map-live-weekly-file.mjs'
@@ -142,10 +143,9 @@ export function scrubFileTokens(text) {
 
 export function ticketDescription({ graded, problems = [], suiteErrors = [], runUrl = '' }) {
   const failures = graded.filter((feature) => feature.verdict === 'fail')
-  const areaNames = failures.map((feature) => feature.area)
   const list = (entries) => `<ul>${entries.map((entry) => `<li>${entry}</li>`).join('')}</ul>`
   const body = [
-    `<p><strong>What's wrong or wanted:</strong> ${failures.length} mapped feature area${failures.length === 1 ? '' : 's'} failed the daily live pass${areaNames.length ? `: ${areaNames.join(', ')}` : ''}.</p>`,
+    `<p><strong>What's wrong or wanted:</strong> ${failures.length} mapped areas failed today's daily live pass.</p>`,
     '<p><strong>Who it affects:</strong> internal verification only; customers use the same flows on the live app.</p>',
     '<p><strong>Recommended course and why:</strong> triage each failed area as map drift, harness gap, or product regression, then fix or re-map; why: the daily job must stay green without filing noise tickets.</p>',
     '<p><strong>What Valentin must decide:</strong> nothing.</p>',
@@ -221,6 +221,16 @@ function runInvocation(invocation, dir) {
   return runDrive(invocation.script, dir)
 }
 
+function ensureQaFlagsState() {
+  const stateFile = path.join(process.env.HOME ?? os.homedir(), '.config/hypertask-videos/storageState-qa.json')
+  if (existsSync(stateFile)) return
+  const login = path.join(root, '.claude/skills/verify-qa/scripts/qa-login')
+  const child = spawnSync(login, ['flags', '--state'], { cwd: root, encoding: 'utf8', timeout: 3 * 60 * 1000, env: process.env })
+  if (child.status !== 0) {
+    throw new Error(`qa-login flags failed before feature-map drives (exit ${child.status})`)
+  }
+}
+
 async function main() {
   if (process.env.GITHUB_ACTIONS !== 'true' || process.env.RUNNER_ENVIRONMENT !== 'github-hosted') {
     throw new Error('feature-map-live-daily runs only on a GitHub-hosted runner, never the VPS')
@@ -248,6 +258,7 @@ async function main() {
     const key = driveInvocationKey(invocation)
     return [key, invocation]
   }))).values()]
+  if (invocations.some((invocation) => invocation.script === 'feature-map-drive.mjs')) ensureQaFlagsState()
   for (const invocation of invocations) scriptStatus[driveInvocationKey(invocation)] = runInvocation(invocation, dir)
 
   const graded = gradeFeatures(plan, tagStatus, scriptStatus)

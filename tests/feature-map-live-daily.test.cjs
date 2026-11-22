@@ -84,7 +84,7 @@ test('a failure files one board 15 ticket, a repeat updates it, a clean run arch
   const body = createdCalls.find((call) => call.url.endsWith('/api/mcp/tasks/create')).body
   assert.equal(created.url, `https://app.hypertask.ai/detail/project-${BOARD.projectId}/7`)
   assert.equal(body.title, TICKET_TITLE)
-  assert.match(body.description, /1 mapped feature area/)
+  assert.match(body.description, /1 mapped areas failed/)
   assert.match(body.description, /What Valentin must decide/)
   assert.doesNotMatch(body.description, /\.mjs|\.md\b/)
   const updatedCalls = []
