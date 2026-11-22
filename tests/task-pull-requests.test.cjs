@@ -639,7 +639,12 @@ test("webhook does not fall back to an unrelated ticket when the pull request is
       actorUserId: 6,
     });
 
-    assert.deepEqual(result, { linked: 0, updated: 0, taskIds: [] });
+    assert.deepEqual(result, {
+      linked: 0,
+      updated: 0,
+      taskIds: [],
+      suppressed: false,
+    });
     assert.equal(taskFallbackLookups, 0);
   } finally {
     if (previousPrisma) require.cache[prismaPath] = previousPrisma;
@@ -707,7 +712,12 @@ test("webhook does not return a fallback task after a concurrent global link win
       actorUserId: 6,
     });
 
-    assert.deepEqual(result, { linked: 0, updated: 0, taskIds: [] });
+    assert.deepEqual(result, {
+      linked: 0,
+      updated: 0,
+      taskIds: [],
+      suppressed: false,
+    });
     assert.equal(taskFallbackLookups, 1);
   } finally {
     if (previousPrisma) require.cache[prismaPath] = previousPrisma;
@@ -773,7 +783,98 @@ test("webhook does not recreate a pull request the task owner unlinked", async (
       actorUserId: 6,
     });
 
-    assert.deepEqual(result, { linked: 0, updated: 0, taskIds: [] });
+    assert.deepEqual(result, {
+      linked: 0,
+      updated: 0,
+      taskIds: [],
+      suppressed: true,
+    });
+    assert.equal(creates, 0);
+  } finally {
+    if (previousPrisma) require.cache[prismaPath] = previousPrisma;
+    else delete require.cache[prismaPath];
+    if (previousSync) require.cache[syncPath] = previousSync;
+    else delete require.cache[syncPath];
+  }
+});
+
+test("webhook rechecks a removed link after the task lock and does not recreate it", async () => {
+  const prismaPath = path.join(root, "src/lib/prisma.ts");
+  const syncPath = path.join(
+    root,
+    "src/lib/pullRequests/syncTaskPullRequests.ts",
+  );
+  const previousPrisma = require.cache[prismaPath];
+  const previousSync = require.cache[syncPath];
+  let creates = 0;
+  let locks = 0;
+  const prisma = {
+    $transaction: async (callback) =>
+      callback({
+        taskPullRequest: {
+          findMany: async () => [{ taskId: 36202 }],
+          findUnique: async () => {
+            throw new Error("suppressed link was read again");
+          },
+          createMany: async () => {
+            creates += 1;
+            return { count: 1 };
+          },
+        },
+        taskPullRequestUnlink: {
+          findUnique: async () => ({ id: "suppressed" }),
+        },
+        user: {
+          findUnique: async () => ({
+            id: 6,
+            displayName: "Valentin Yeo",
+            photoURL: null,
+            email: "owner@example.test",
+          }),
+        },
+        $executeRaw: async () => {
+          locks += 1;
+          return 0;
+        },
+        $queryRaw: async () => [],
+      }),
+  };
+  delete require.cache[prismaPath];
+  delete require.cache[syncPath];
+  require.cache[prismaPath] = {
+    id: prismaPath,
+    filename: prismaPath,
+    loaded: true,
+    exports: { default: prisma },
+  };
+
+  try {
+    const syncPullRequestFromWebhook = jiti(syncPath, { cache: false })
+      .syncPullRequestFromWebhook;
+    const result = await syncPullRequestFromWebhook({
+      boardId: 15,
+      ticketNumber: "HTPR-5899",
+      repositoryOwner: "hypertask-ai",
+      repositoryName: "hypertask",
+      repositoryId: "1",
+      pullRequestId: "110",
+      number: 110,
+      url: canonicalPullRequestUrl,
+      title: "HTPR-5899 linked PR property",
+      lifecycle: "open",
+      headSha: "abc123",
+      sourceUpdatedAt: new Date("2026-09-01T12:00:00Z"),
+      action: "synchronize",
+      actorUserId: 6,
+    });
+
+    assert.deepEqual(result, {
+      linked: 0,
+      updated: 0,
+      taskIds: [],
+      suppressed: true,
+    });
+    assert.equal(locks, 1);
     assert.equal(creates, 0);
   } finally {
     if (previousPrisma) require.cache[prismaPath] = previousPrisma;

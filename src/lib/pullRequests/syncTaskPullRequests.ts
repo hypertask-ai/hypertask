@@ -84,8 +84,26 @@ async function writePullRequestActivity(
 
 export async function syncPullRequestFromWebhook(
   input: PullRequestWebhookUpdate,
-): Promise<{ linked: number; updated: number; taskIds: number[] }> {
+): Promise<{
+  linked: number;
+  updated: number;
+  taskIds: number[];
+  suppressed: boolean;
+}> {
   return prisma.$transaction(async (transaction) => {
+    const removedLink = (taskId: number) =>
+      transaction.taskPullRequestUnlink.findUnique({
+        where: {
+          taskId_repositoryOwner_repositoryName_number: {
+            taskId,
+            repositoryOwner: input.repositoryOwner,
+            repositoryName: input.repositoryName,
+            number: input.number,
+          },
+        },
+        select: { id: true },
+      });
+
     const existingLinks = await transaction.taskPullRequest.findMany({
       where: {
         repositoryOwner: input.repositoryOwner,
@@ -112,7 +130,9 @@ export async function syncPullRequestFromWebhook(
         },
         select: { id: true },
       });
-      if (globallyLinked) return { linked: 0, updated: 0, taskIds: [] };
+      if (globallyLinked) {
+        return { linked: 0, updated: 0, taskIds: [], suppressed: false };
+      }
     }
     if (taskIds.length === 0 && input.ticketNumber) {
       const task = await transaction.task.findFirst({
@@ -124,21 +144,15 @@ export async function syncPullRequestFromWebhook(
         select: { id: true },
       });
       if (task) {
-        const suppressed = await transaction.taskPullRequestUnlink.findUnique({
-          where: {
-            taskId_repositoryOwner_repositoryName_number: {
-              taskId: task.id,
-              repositoryOwner: input.repositoryOwner,
-              repositoryName: input.repositoryName,
-              number: input.number,
-            },
-          },
-          select: { id: true },
-        });
-        if (!suppressed) taskIds = [task.id];
+        if (await removedLink(task.id)) {
+          return { linked: 0, updated: 0, taskIds: [], suppressed: true };
+        }
+        taskIds = [task.id];
       }
     }
-    if (taskIds.length === 0) return { linked: 0, updated: 0, taskIds: [] };
+    if (taskIds.length === 0) {
+      return { linked: 0, updated: 0, taskIds: [], suppressed: false };
+    }
 
     const actor = await transaction.user.findUnique({
       where: { id: input.actorUserId },
@@ -146,9 +160,14 @@ export async function syncPullRequestFromWebhook(
     });
     let linked = 0;
     let updated = 0;
+    let suppressed = false;
 
     for (const taskId of taskIds) {
       await lockAgentMutationFence(transaction, taskId);
+      if (await removedLink(taskId)) {
+        suppressed = true;
+        continue;
+      }
       const identity = {
         taskId_repositoryOwner_repositoryName_number: {
           taskId,
@@ -262,7 +281,12 @@ export async function syncPullRequestFromWebhook(
       else updated += 1;
     }
 
-    return { linked, updated, taskIds: [...new Set(affectedTaskIds)] };
+    return {
+      linked,
+      updated,
+      taskIds: [...new Set(affectedTaskIds)],
+      suppressed: suppressed && affectedTaskIds.length === 0,
+    };
   });
 }
 

@@ -425,6 +425,93 @@ test("merged pull requests move linked tickets to QA in both webhook paths", asy
       assert.equal(deferred.body.commented, true);
       assert.equal(deferred.body.moved, false);
     });
+
+    await t.test("a removed pull request link does not fall through to the legacy move", async () => {
+      let ticketLookups = 0;
+      let comments = 0;
+      const prisma = {
+        project: {
+          findUnique: async () => ({ uniqueIdentifier: "HTPR" }),
+        },
+        section: {
+          findFirst: async () => {
+            throw new Error("legacy section lookup");
+          },
+        },
+        task: {
+          findMany: async () => {
+            throw new Error("linked task lookup");
+          },
+          findFirst: async ({ where }) => {
+            if (where.ticketNumber) ticketLookups += 1;
+            return {
+              id: 36637,
+              projectId: 15,
+              userId: 6,
+              sectionId: 4309,
+              uniqueIndex: 5952,
+              ticketNumber: "HTPR-5952",
+              riskLevel: "Low",
+            };
+          },
+        },
+        comment: {
+          findFirst: async () => {
+            comments += 1;
+            return null;
+          },
+        },
+      };
+      const moves = [];
+      const result = await withStubbedGithubRoute(
+        {
+          "src/lib/prisma.ts": { default: prismaWithGithubBoardRouting(prisma) },
+          "src/lib/realtime/server.ts": {
+            broadcastBoardChange: async () => {},
+            broadcastTaskChange: async () => {},
+          },
+          "src/utils/generateRank.ts": { default: () => "rank" },
+          "src/lib/pullRequests/syncTaskPullRequests.ts": {
+            syncCheckSuiteFromWebhook: async () => ({ updated: 0, taskIds: [] }),
+            syncPullRequestFromWebhook: async () => ({
+              linked: 0,
+              updated: 0,
+              taskIds: [],
+              suppressed: true,
+            }),
+          },
+          "src/utils/controllers/comments/createCommentService.ts": {
+            createCommentService: async () => {
+              comments += 1;
+            },
+          },
+          "src/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove.ts": {
+            default: async () => {},
+          },
+          "src/utils/controllers/tasks/single.ts": {
+            updateTaskSingle: async (update) => {
+              moves.push(update);
+              return { status: 200 };
+            },
+          },
+          "src/utils/controllers/assignees/assign.ts": {
+            default: async () => ({ status: 200, json: {} }),
+          },
+        },
+        async ({ POST }) => {
+          const response = await POST(
+            signedGithubRequest(mergedPullRequestPayload(), secret),
+          );
+          return { response, body: await response.json() };
+        },
+      );
+
+      assert.equal(result.response.status, 200);
+      assert.equal(result.body.ignored, "Pull request link was removed");
+      assert.equal(ticketLookups, 0);
+      assert.equal(comments, 0);
+      assert.deepEqual(moves, []);
+    });
   } finally {
     if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
     else process.env.GITHUB_WEBHOOK_SECRET = previousSecret;
