@@ -63,6 +63,12 @@ export function scrubFeedbackNote(value: string): string {
   return note
 }
 
+export function repeatNoteAnchor(note: string): string | undefined {
+  const match = /^(.*\b(?:PR|pull request)\s+#?)\d+\b/i.exec(note)
+  const anchor = match?.[1]?.replace(/\s+/g, ' ').trim()
+  return anchor && anchor.length >= 24 ? anchor : undefined
+}
+
 export function feedbackFingerprint(input: AutomaticFeedbackInput, stored?: { kind?: string; note?: string }): string {
   const parts = [input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? '', input.category ?? 'other']
   if (input.field) parts.push(input.field)

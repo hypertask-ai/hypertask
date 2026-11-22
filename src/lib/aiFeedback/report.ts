@@ -3,13 +3,14 @@ import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
+import { HTPR_9581_FEEDBACK_PR_REPEAT_FLAG } from '@/lib/flags/definitions/htpr-9581-feedback-pr-repeat'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
-import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
+import { aiFeedbackSchema, feedbackFingerprint, repeatNoteAnchor, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
 
@@ -85,6 +86,19 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   if (membershipRefusal(input) && (input.status === undefined || [400, 401, 403, 404].includes(input.status))) return true
   if (![401, 403, 404].includes(input.status ?? 0)) return false
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
+}
+
+function repeatParts(input: AutomaticFeedbackInput, stored?: StoredNote): string[] | null {
+  const anchor = stored?.note ? repeatNoteAnchor(stored.note) : undefined
+  if (!anchor || !input.errorCode) return null
+  const parts = [
+    `<p>Error code: ${escapeHtml(input.errorCode)}</p>`,
+    `<p>Surface: ${escapeHtml(input.surface)}</p>`,
+    `<p>Note: ${escapeHtml(anchor)}`,
+  ]
+  if (input.tool) parts.push(`<p>Tool: ${escapeHtml(input.tool)}</p>`)
+  if (stored?.kind) parts.push(`<p>Kind: ${escapeHtml(stored.kind)}</p>`)
+  return parts
 }
 
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
@@ -229,6 +243,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
   const input: AutomaticFeedbackInput = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
   let plain = false
   let house = false
+  let joinPullRequestRepeat = false
   try {
     const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
     plain = userId === undefined
@@ -239,6 +254,9 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         ? await featureFlagCandidateUserIds(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG) === null
         : await isFeatureEnabled(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG, userId)
     }
+    joinPullRequestRepeat = userId === undefined
+      ? await featureFlagCandidateUserIds(HTPR_9581_FEEDBACK_PR_REPEAT_FLAG) === null
+      : await isFeatureEnabled(HTPR_9581_FEEDBACK_PR_REPEAT_FLAG, userId)
   } catch {}
   const noteAllowed = reporter.origin === 'agent' && (input.kind !== undefined || input.note !== undefined) && await agentNoteAllowed(userId)
   const stored: StoredNote | undefined = noteAllowed
@@ -282,12 +300,22 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
         const ticketSelect = { id: true, userId: true, ticketNumber: true, uniqueIndex: true }
         let existing = await tx.task.findFirst({ where, select: ticketSelect })
+        let joinedByAnchor = false
         if (!existing && tx.comment?.findFirst) {
           const logged = await tx.comment.findFirst({
             where: { agentId: null, text: { contains: marker }, task: openWhere },
             select: { task: { select: ticketSelect } },
           })
           existing = logged?.task ?? null
+        }
+        const parts = !existing && joinPullRequestRepeat ? repeatParts(input, stored) : null
+        if (parts && tx.comment?.findFirst) {
+          const logged = await tx.comment.findFirst({
+            where: { agentId: null, AND: parts.map((part) => ({ text: { contains: part } })), task: openWhere },
+            select: { task: { select: ticketSelect } },
+          })
+          existing = logged?.task ?? null
+          joinedByAnchor = Boolean(existing)
         }
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
@@ -306,10 +334,20 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }
         const actorId = existing?.userId ?? reporterId
         const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
-        const comment = existing ? await tx.comment.findFirst({
-          where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
+        const tallyWhere = existing
+          ? { taskId: existing.id, creatorId: actorId, agentId: null as null }
+          : null
+        let comment = existing && tallyWhere ? await tx.comment.findFirst({
+          where: { ...tallyWhere, text: { contains: tallyMarker } },
           orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
         }) : null
+        if (existing && tallyWhere && !comment && joinPullRequestRepeat) {
+          comment = await tx.comment.findFirst({
+            where: { ...tallyWhere, text: { contains: '<p>AI feedback tally:' } },
+            orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
+          })
+        }
+        const previousMarker = joinedByAnchor ? comment?.text.match(/<p>Fingerprint: ai-fb-[0-9a-f]{12}<\/p>/)?.[0] : undefined
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
         const keptMarker = Boolean(comment?.text.includes(marker))
         const logText = (text: string) => {
@@ -320,7 +358,8 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }
         if (existing) {
           const count = storedCount + 1
-          const text = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
+          const logged = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
+          const text = previousMarker && !logged.includes(previousMarker) ? logged + previousMarker : logged
           const previous = comment?.activity
           const hadLog = Boolean(previous && typeof previous === 'object' && !Array.isArray(previous) && previous.type === 'AiFeedbackLog')
           const activity = house || hadLog ? feedbackLogActivity(text) : undefined
