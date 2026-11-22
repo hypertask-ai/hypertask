@@ -18,6 +18,7 @@ import { selectMcpTools } from './consolidated-tools'
 import { appendAgentChatTools } from './tools/chat-inbox.tool'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
+import { upstashFlagAudience, withFeatureFlagSnapshot as withUpstashFlagAudience } from '@/lib/flags/modeCache'
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
 import { HTPR_7863_MCP_PAGE_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7863-mcp-page-alias'
 import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7895-task-number-alias'
@@ -143,45 +144,50 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const userId = Number(authInfo.clientId)
     if (Number.isFinite(userId)) telemetryUserId = userId
     const ctx = authInfo.extra?.mcpAuthContext as McpAuthContext
-    const presenceTool = await getAgentPresenceTool(ctx.user.id)
-    const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[]).map((tool) =>
-      tool.name === presenceTool.name ? presenceTool : tool,
-    )
-    const actAsAgent = await actAsAgentAvailable(ctx)
-    const availableTools = await boardAccessCatalog(resolvedTools, ctx)
-    const portableTools = observeFeedbackTools(await appendAgentChatTools(selectMcpTools(
-      availableTools,
-      true,
-      {
-        managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
-        teamScoped: authInfo.extra?.teamScoped === true,
-        agent: authInfo.extra?.agent === true,
-        ...(ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-        ...(actAsAgent ? { actAsAgent } : {}),
-      },
-      await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, ctx.user.id),
-      Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7910_RENAMED_FIELD_HINT_FLAG, ctx.user.id),
-      await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, ctx.user.id),
-    ), ctx), ctx.user.id)
-    const unknownToolHint = await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id)
-    if (isLegacySseRequest(working)) {
-      return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
-    }
+    const audience = upstashFlagAudience(bearer, ctx?.agentId)
+    const serve = async () => {
+      const presenceTool = await getAgentPresenceTool(ctx.user.id)
+      const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[]).map((tool) =>
+        tool.name === presenceTool.name ? presenceTool : tool,
+      )
+      const actAsAgent = await actAsAgentAvailable(ctx)
+      const availableTools = await boardAccessCatalog(resolvedTools, ctx)
+      const portableTools = observeFeedbackTools(await appendAgentChatTools(selectMcpTools(
+        availableTools,
+        true,
+        {
+          managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
+          teamScoped: authInfo.extra?.teamScoped === true,
+          agent: authInfo.extra?.agent === true,
+          ...(ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+          ...(actAsAgent ? { actAsAgent } : {}),
+        },
+        await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7863_MCP_PAGE_ALIAS_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7895_TASK_NUMBER_ALIAS_FLAG, ctx.user.id),
+        Boolean(ctx?.user?.id) && await isFeatureEnabled(HTPR_7893_BOARD_ALIAS_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7897_MCP_INPUT_FIELDS_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7917_MCP_INPUT_WRAPPERS_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7914_TICKET_NUMBER_HINT_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7910_RENAMED_FIELD_HINT_FLAG, ctx.user.id),
+        await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, ctx.user.id),
+      ), ctx), ctx.user.id)
+      const unknownToolHint = await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id)
+      if (isLegacySseRequest(working)) {
+        return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
+      }
 
-    return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>
-      handleMcpHttp(working, {
-        authenticate: async () => authInfo,
-        tools: portableTools,
-        unknownToolHint,
-      }),
-    )
+      return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>
+        handleMcpHttp(working, {
+          authenticate: async () => authInfo,
+          tools: portableTools,
+          unknownToolHint,
+        }),
+      )
+    }
+    if (!audience) return await serve()
+    return await withUpstashFlagAudience(() => serve(), audience)
   } finally {
     recordLegacyMcpRequest(request, telemetryUserId, timestamp)
   }

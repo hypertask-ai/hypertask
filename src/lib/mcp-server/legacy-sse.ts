@@ -7,7 +7,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import type { ServerResponse } from 'node:http'
 import { PassThrough, Readable } from 'node:stream'
 import crypto from 'node:crypto'
-import Redis from 'ioredis'
+import { publishLegacySse, subscribeLegacySse } from './legacySseBus'
 import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
 import { appendAgentChatTools } from './tools/chat-inbox.tool'
@@ -28,6 +28,8 @@ import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
 import { HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG } from '@/lib/flags/definitions/htpr-7220-legacy-sse-keepalive'
 import { actAsAgentAvailable } from './utils/actAsAgentCatalog'
 
+export { publishLegacySse } from './legacySseBus'
+
 export const LEGACY_SSE_LIFETIME_MS = 780 * 1000
 export const LEGACY_SSE_KEEPALIVE_MS = 60 * 1000
 
@@ -35,15 +37,6 @@ type RelayMessage = {
   replyChannel: string
   body: unknown
   authInfo: AuthInfo
-}
-
-function redisConnection(url: string) {
-  return new Redis(url, {
-    lazyConnect: true,
-    connectTimeout: 5000,
-    maxRetriesPerRequest: 1,
-    retryStrategy: () => null,
-  })
 }
 
 export function isLegacySseRequest(request: Request): boolean {
@@ -82,25 +75,16 @@ export async function handleLegacySseRequest(
       return new Response('Invalid JSON', { status: 400 })
     }
   }
-  const redisUrl = process.env.REDIS_URL ?? process.env.KV_URL
-  if (!redisUrl) return new Response('Legacy SSE requires Redis', { status: 503 })
-  const subscriber = redisConnection(redisUrl)
-  const publisher = redisConnection(redisUrl)
-  const disconnect = () => {
-    subscriber.disconnect()
-    publisher.disconnect()
-  }
   try {
-    await Promise.all([subscriber.connect(), publisher.connect()])
     if (!isStream) {
       const replyChannel = `mcp:legacy:reply:${crypto.randomUUID()}`
       let timer: ReturnType<typeof setTimeout> | undefined
       let aborted: (() => void) | undefined
+      let unsubscribe = () => {}
       try {
         let settle!: (response: Response) => void
         const response = new Promise<Response>((resolve) => { settle = resolve })
-        subscriber.on('message', (channel, message) => {
-          if (channel !== replyChannel) return
+        unsubscribe = subscribeLegacySse(replyChannel, (message) => {
           try {
             const result = JSON.parse(message) as { status: number; body: string }
             settle(new Response(result.body, { status: result.status }))
@@ -108,13 +92,12 @@ export async function handleLegacySseRequest(
             settle(new Response('Invalid relay response', { status: 502 }))
           }
         })
-        await subscriber.subscribe(replyChannel)
         timer = setTimeout(() => settle(new Response('Request timed out', { status: 408 })), 10000)
         aborted = () => settle(new Response('Request cancelled', { status: 408 }))
         request.signal.addEventListener('abort', aborted, { once: true })
         if (request.signal.aborted) aborted()
         else {
-          const listeners = await publisher.publish(`mcp:legacy:session:${sessionId}`, JSON.stringify({
+          const listeners = publishLegacySse(`mcp:legacy:session:${sessionId}`, JSON.stringify({
             replyChannel, body, authInfo,
           } satisfies RelayMessage))
           if (!listeners) settle(new Response('SSE session not found', { status: 404 }))
@@ -123,7 +106,7 @@ export async function handleLegacySseRequest(
       } finally {
         if (timer) clearTimeout(timer)
         if (aborted) request.signal.removeEventListener('abort', aborted)
-        disconnect()
+        unsubscribe()
       }
     }
 
@@ -154,24 +137,23 @@ export async function handleLegacySseRequest(
     let closed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     let keepAlive: ReturnType<typeof setInterval> | undefined
+    let unsubscribe = () => {}
     const cleanup = () => {
       if (closed) return
       closed = true
       if (timer) clearTimeout(timer)
       if (keepAlive) clearInterval(keepAlive)
       request.signal.removeEventListener('abort', cleanup)
-      disconnect()
+      unsubscribe()
       void server.close().catch(() => {})
       stream.destroy()
     }
     stream.once('close', cleanup)
     stream.once('error', cleanup)
     request.signal.addEventListener('abort', cleanup, { once: true })
-    subscriber.on('error', cleanup)
-    publisher.on('error', cleanup)
     const channel = `mcp:legacy:session:${transport.sessionId}`
-    subscriber.on('message', (receivedChannel, message) => {
-      if (receivedChannel !== channel || closed) return
+    unsubscribe = subscribeLegacySse(channel, (message) => {
+      if (closed) return
       void (async () => {
         const incoming = JSON.parse(message) as RelayMessage
         let status = 202
@@ -214,11 +196,10 @@ export async function handleLegacySseRequest(
             result = 'Invalid message'
           }
         }
-        await publisher.publish(incoming.replyChannel, JSON.stringify({ status, body: result }))
+        publishLegacySse(incoming.replyChannel, JSON.stringify({ status, body: result }))
       })().catch(() => cleanup())
     })
     try {
-      await subscriber.subscribe(channel)
       await server.connect(transport)
       timer = setTimeout(() => stream.end(), LEGACY_SSE_LIFETIME_MS)
       const keepAliveOn = await isFeatureEnabled(HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG, Number(authInfo.clientId)).catch(() => true)
@@ -226,8 +207,6 @@ export async function handleLegacySseRequest(
         keepAlive = setInterval(() => {
           if (closed || stream.writableEnded) return
           stream.write(': keepalive\n\n')
-          void subscriber.ping().catch(() => {})
-          void publisher.ping().catch(() => {})
         }, LEGACY_SSE_KEEPALIVE_MS)
       }
       if (request.signal.aborted) cleanup()
@@ -243,7 +222,6 @@ export async function handleLegacySseRequest(
       throw error
     }
   } catch {
-    disconnect()
     return new Response('Legacy SSE service unavailable', { status: 503 })
   }
 }

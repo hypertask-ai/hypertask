@@ -138,19 +138,9 @@ test('SDK streamable registration passes hints beside inputSchema and supports u
 
 test('legacy SSE registration preserves SDK annotations and resolves per-message scopes', async () => {
   const registrations = []
-  let subscriber
   let streamTransport
-  let callback
   let role = 'write'
   const sent = []
-  class Redis {
-    constructor() { if (!subscriber) subscriber = this }
-    async connect() {}
-    on(event, handler) { if (event === 'message') callback = handler }
-    async subscribe() {}
-    async publish() {}
-    disconnect() {}
-  }
   class Server {
     registerTool(name, config) { registrations.push({ name, config }); return { remove: () => { registrations.splice(registrations.findIndex((entry) => entry.name === name), 1) } } }
     async connect(transport) { streamTransport = transport }
@@ -162,13 +152,13 @@ test('legacy SSE registration preserves SDK annotations and resolves per-message
     async handleMessage(message) { sent.push({ jsonrpc: '2.0', id: message.id, result: { tools: registrations.map(({ name, config }) => ({ name, description: config.description, annotations: config.annotations })) } }) }
   }
   const auth = { clientId: '985', token: 'fixture-token', extra: { agent: true, mcpAuthContext: { user: { id: 985 }, agentId: 'fixture-agent' } } }
-  const sse = loader({
-    ioredis: Redis,
+  const legacySse = loader({
     '@modelcontextprotocol/sdk/server/mcp.js': { McpServer: Server },
     '@modelcontextprotocol/sdk/server/sse.js': { SSEServerTransport: Transport },
     '@/lib/mcp/agents/scopes': { getAgentRole: async () => role },
     '@/lib/flags': { isFeatureEnabled: async (key) => (assert.notEqual(key, 'htpr-6927-mcp-v2'), false) },
-  })('src/lib/mcp-server/legacy-sse.ts').handleLegacySseRequest
+  })('src/lib/mcp-server/legacy-sse.ts')
+  const sse = legacySse.handleLegacySseRequest
   const originalRedis = process.env.REDIS_URL
   process.env.REDIS_URL = 'redis://fixture.invalid'
   const abort = new AbortController()
@@ -178,13 +168,13 @@ test('legacy SSE registration preserves SDK annotations and resolves per-message
     assert.equal(streamTransport.sessionId, 'fixture-session')
     for (const currentRole of ['write', 'read']) {
       role = currentRole
-      callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: auth }))
+      legacySse.publishLegacySse('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: auth }))
       await new Promise((resolve) => setImmediate(resolve))
       assert.ok(sent.at(-1).result.tools.every((tool) => tool.annotations))
       assert.equal(sent.at(-1).result.tools.find((tool) => tool.name === 'hypertask_tasks').inputSchema.properties.action.enum.includes('create'), role === 'write')
     }
     const restricted = { ...auth, extra: { managementPermissions: { management: ['read'] }, mcpAuthContext: { user: { id: 985 }, agentId: null } } }
-    callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: restricted }))
+    legacySse.publishLegacySse('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: restricted }))
     await new Promise((resolve) => setImmediate(resolve))
     assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name).sort(), ['hypertask_agents', 'hypertask_report_feedback', 'hypertask_user_context'])
   } finally {

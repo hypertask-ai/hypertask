@@ -5,7 +5,21 @@ export type RawFlagMode = { key: string; mode: FeatureFlagMode };
 export const FLAG_MODE_CACHE_KEY = "flags:raw-modes:7042";
 export const FLAG_MODE_GENERATION_KEY = `${FLAG_MODE_CACHE_KEY}:generation`;
 export const FLAG_MODE_WRITERS_KEY = `${FLAG_MODE_CACHE_KEY}:writers`;
-export const flagModeScope = new AsyncLocalStorage<{ audience?: "agent"; modes?: Promise<RawFlagMode[] | null> }>();
+export type FlagCacheAudience = "agent" | "cli";
+export const flagModeScope = new AsyncLocalStorage<{ audience?: FlagCacheAudience; modes?: Promise<RawFlagMode[] | null> }>();
+
+export function upstashFlagAudience(
+  token: string | null | undefined,
+  agentId: string | null | undefined,
+): FlagCacheAudience | undefined {
+  if (typeof agentId === "string" && agentId.length > 0) return "agent";
+  if (token?.startsWith("htk_")) return "cli";
+  return undefined;
+}
+
+export function flagCacheSkipsUpstash(audience: FlagCacheAudience | "human" | undefined): boolean {
+  return audience === "agent" || audience === "cli";
+}
 
 export const FLAG_SNAPSHOT_MAX_AGE_MS = 60_000;
 const configuredCacheMs = Number(process.env.FLAG_PROCESS_CACHE_MS ?? FLAG_SNAPSHOT_MAX_AGE_MS);
@@ -56,7 +70,7 @@ export async function withFlagModeInvalidation<T>(write: () => Promise<T>): Prom
   clearProcessFlagCache();
   const scope = flagModeScope.getStore();
   if (scope) scope.modes = undefined;
-  if (process.env.REDIS_URL && scope?.audience !== "agent") {
+  if (process.env.REDIS_URL && !flagCacheSkipsUpstash(scope?.audience)) {
     try {
       await flagCacheCommand((async () => {
         const { getRedis } = await import("@/lib/redis");

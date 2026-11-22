@@ -4,7 +4,6 @@ const test = require('node:test')
 const { createJiti } = require('jiti')
 
 const root = path.resolve(__dirname, '..')
-const pings = []
 let flagOn = true
 
 function stub(filename, exports) {
@@ -14,16 +13,6 @@ function source(file, exports) {
   stub(path.join(root, file), exports)
 }
 
-class FakeRedis {
-  constructor() { this.handlers = {} }
-  on(event, handler) { this.handlers[event] = handler; return this }
-  async connect() {}
-  async subscribe() {}
-  async publish() { return 1 }
-  async ping() { pings.push(Date.now()); return 'PONG' }
-  disconnect() {}
-}
-stub(require.resolve('ioredis'), { __esModule: true, default: FakeRedis })
 source('src/lib/flags.ts', {
   HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'htpr-7203-mcp-flat-schema',
   isFeatureEnabled: async (key) => key === 'htpr-7220-legacy-sse-keepalive' && flagOn,
@@ -69,8 +58,7 @@ async function openStream(t) {
 
 const tick = () => new Promise((resolve) => setImmediate(resolve))
 
-test('a quiet legacy SSE stream sends a keep-alive and pings Redis every minute', async (t) => {
-  pings.length = 0
+test('a quiet legacy SSE stream sends a keep-alive every minute without Redis', async (t) => {
   flagOn = true
   t.mock.timers.enable({ apis: ['setInterval'] })
   const stream = await openStream(t)
@@ -81,20 +69,16 @@ test('a quiet legacy SSE stream sends a keep-alive and pings Redis every minute'
   t.mock.timers.tick(60000)
   await tick()
   assert.equal(stream.read().match(/: keepalive\n\n/g)?.length, 1)
-  assert.equal(pings.length, 2, 'both the subscriber and the publisher are pinged')
   t.mock.timers.tick(60000 * 4)
   await tick()
   assert.equal(stream.read().match(/: keepalive\n\n/g)?.length, 5)
-  assert.equal(pings.length, 10)
 })
 
 test('with the flag off the stream stays as before', async (t) => {
-  pings.length = 0
   flagOn = false
   t.mock.timers.enable({ apis: ['setInterval'] })
   const stream = await openStream(t)
   t.mock.timers.tick(60000 * 6)
   await tick()
   assert.doesNotMatch(stream.read(), /keepalive/)
-  assert.equal(pings.length, 0)
 })

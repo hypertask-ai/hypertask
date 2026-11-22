@@ -280,6 +280,20 @@ test("HTPR-8978 an agent flag write skips Redis and reaches other servers within
   now = 60_000;
   assert.equal(await human.snapshot(), false);
 });
+test("HTPR-8978 command-line flag requests stay off Redis on cold and expired reads", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const h = flagHarness();
+  h.failRedis = true;
+  const read = (userId = 7) => h.modeCache.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(target, userId), "cli");
+  assert.equal(await read(), true);
+  now = 59_999;
+  assert.equal(await read(), true);
+  now = 60_000;
+  h.rows.get(target).mode = "OFF";
+  assert.equal(await read(), false);
+  assert.equal(h.redisAcquisitions, 0);
+  assert.ok(h.tables >= 1);
+});
 test("HTPR-8978 an agent cannot join a human lookup that is using Redis", async () => {
   const h = flagHarness();
   let release, entered;

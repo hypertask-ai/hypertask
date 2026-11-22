@@ -13,7 +13,21 @@ const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_
 const MAX_LOCAL_COUNTS = 1_000
 const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
+const agentCounts = new Map<string, number>()
 let localWindowStart: number | undefined
+let agentWindowStart: number | undefined
+
+export function rateLimitSkipsUpstash(token: string): boolean {
+  if (token.startsWith('htk_')) return true
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { agentId?: unknown }
+    return typeof payload.agentId === 'string' && payload.agentId.length > 0
+  } catch {
+    return false
+  }
+}
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagLookup: Promise<boolean> | undefined
 
@@ -59,6 +73,20 @@ export async function checkMcpRateLimit(
     if (localWindowStart !== windowStartSeconds) {
       localCounts.clear()
       localWindowStart = windowStartSeconds
+    }
+    if (rateLimitSkipsUpstash(token)) {
+      if (agentWindowStart !== windowStartSeconds) {
+        agentCounts.clear()
+        agentWindowStart = windowStartSeconds
+      }
+      const count = (agentCounts.get(key) ?? 0) + 1
+      agentCounts.set(key, count)
+      const decision = decideMcpRateLimit(count, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
+      if (!decision.limited) return null
+      return NextResponse.json(
+        { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
+      )
     }
     const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
