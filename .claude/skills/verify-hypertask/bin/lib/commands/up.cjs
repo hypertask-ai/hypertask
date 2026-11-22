@@ -131,14 +131,22 @@ function buildReusable(buildId, builtBaseUrl, baseUrl, builtStamp, stamp) {
   return buildId && builtBaseUrl === baseUrl && builtStamp === stamp;
 }
 
-function reuseServer({ previous, port, pidAlive, answered }) {
-  const reused = previous.mode === "production" && previous.port === port && pidAlive && answered;
-  return { reused, conflict: !reused && answered };
+function reuseServer({ owned, answered, built }) {
+  const reused = owned && answered && !built;
+  return { reused, stop: owned && answered && !reused, conflict: !owned && answered };
+}
+
+async function stopServer(pid) {
+  for (const target of [-pid, pid]) {
+    try { process.kill(target, "SIGTERM"); } catch {}
+  }
+  try { unlinkSync(path.join(runDir(), "dev.pid")); } catch {}
+  await poll(async () => !serverAlive(pid), Date.now() + 10_000, 250);
 }
 
 function ensureProductionBuild(env, baseUrl, previous, stamp) {
   const current = buildReusable(existsSync(path.join(repoRoot, ".next", "BUILD_ID")), previous.builtBaseUrl, baseUrl, previous.buildStamp, stamp);
-  if (current) return;
+  if (current) return false;
   const result = run("npx", ["next", "build"], { env, timeout: 900_000 });
   if (result.status !== 0) {
     fail(
@@ -147,6 +155,7 @@ function ensureProductionBuild(env, baseUrl, previous, stamp) {
       "failed",
     );
   }
+  return true;
 }
 
 function verifyPusherEnv(baseUrl) {
@@ -242,17 +251,17 @@ module.exports = {
     prisma(env, ["prisma", "generate"]);
     prisma(env, ["prisma", "migrate", "deploy"]);
     const stamp = sourceStamp();
-    ensureProductionBuild(env, baseUrl, previous, stamp);
+    const built = ensureProductionBuild(env, baseUrl, previous, stamp);
     const pidFile = readJson(path.join(runDir(), "dev.pid"), {});
-    const { reused, conflict } = reuseServer({
-      previous,
-      port,
-      pidAlive: serverAlive(pidFile.pid ?? 0),
+    const { reused, stop, conflict } = reuseServer({
+      owned: previous.mode === "production" && previous.port === port && serverAlive(pidFile.pid ?? 0),
       answered: (await httpStatus(`${baseUrl}/login`)) === 200,
+      built,
     });
     if (conflict) {
       fail(`port ${port} answers /login but this run does not own that server`, `Run ht-verify down, then ht-verify up --port ${port} to serve this checkout's build.`, "refused");
     }
+    if (stop) await stopServer(pidFile.pid);
     const pid = reused ? pidFile.pid ?? null : startServer(env, port);
     writeJson(path.join(runDir(), "env.json"), {
       baseUrl,

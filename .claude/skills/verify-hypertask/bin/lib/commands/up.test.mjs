@@ -35,11 +35,10 @@ test("up reuses a build only from this port and this source stamp", () => {
   assert.equal(up.buildReusable(true, "http://127.0.0.1:3000", "http://127.0.0.1:3000", undefined, stamp), false);
 });
 
-test("up reuses only its own production server and refuses a port it does not own", () => {
-  const served = { mode: "production", port: 3000 };
-  assert.deepEqual(up.reuseServer({ previous: served, port: 3000, pidAlive: true, answered: true }), { reused: true, conflict: false });
-  assert.deepEqual(up.reuseServer({ previous: served, port: 3000, pidAlive: false, answered: true }), { reused: false, conflict: true });
-  assert.deepEqual(up.reuseServer({ previous: { mode: "dev", port: 3000 }, port: 3000, pidAlive: true, answered: true }), { reused: false, conflict: true });
-  assert.deepEqual(up.reuseServer({ previous: served, port: 3999, pidAlive: true, answered: true }), { reused: false, conflict: true });
-  assert.deepEqual(up.reuseServer({ previous: {}, port: 3000, pidAlive: false, answered: false }), { reused: false, conflict: false });
+test("up reuses only its own production server, restarts it after a rebuild and refuses a port it does not own", () => {
+  assert.deepEqual(up.reuseServer({ owned: true, answered: true, built: false }), { reused: true, stop: false, conflict: false });
+  assert.deepEqual(up.reuseServer({ owned: true, answered: true, built: true }), { reused: false, stop: true, conflict: false });
+  assert.deepEqual(up.reuseServer({ owned: true, answered: false, built: false }), { reused: false, stop: false, conflict: false });
+  assert.deepEqual(up.reuseServer({ owned: false, answered: true, built: false }), { reused: false, stop: false, conflict: true });
+  assert.deepEqual(up.reuseServer({ owned: false, answered: false, built: true }), { reused: false, stop: false, conflict: false });
 });
