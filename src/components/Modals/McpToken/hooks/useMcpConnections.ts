@@ -86,13 +86,7 @@ export function useMcpConnections() {
     }
   }
 
-  const handleRevokeAll = async (onSuccess?: () => void) => {
-    if (
-      !confirm(
-        "Are you sure you want to disconnect all clients? This will revoke your bearer token and disconnect all MCP clients (Claude Desktop, Cursor, etc.). You will need to generate a new token to reconnect."
-      )
-    )
-      return
+  const revokePageMcpToken = async (onSuccess?: () => void) => {
     try {
       setIsRevokingAll(true)
       const response = await fetch("/api/connections/revoke-all", {
@@ -101,19 +95,31 @@ export function useMcpConnections() {
       const data = await response.json()
       if (data.success) {
         toast.success(
-          "All clients disconnected successfully. Your bearer token has been revoked."
+          "Bearer token revoked. Generate a new one to reconnect MCP clients."
         )
         onSuccess?.()
-        fetchConnections()
-      } else {
-        toast.error(data.error || "Failed to revoke connections")
+        await fetchConnections()
+        return true
       }
+      toast.error(data.error || "Failed to revoke token")
+      return false
     } catch (error) {
-      console.error("Error revoking all connections:", error)
-      toast.error("Failed to revoke connections")
+      console.error("Error revoking MCP bearer token:", error)
+      toast.error("Failed to revoke token")
+      return false
     } finally {
       setIsRevokingAll(false)
     }
+  }
+
+  const handleRevokeAll = async (onSuccess?: () => void) => {
+    if (
+      !confirm(
+        "Are you sure you want to disconnect all clients? This will revoke your bearer token and disconnect all MCP clients (Claude Desktop, Cursor, etc.). You will need to generate a new token to reconnect."
+      )
+    )
+      return
+    await revokePageMcpToken(onSuccess)
   }
 
   return {
@@ -125,6 +131,7 @@ export function useMcpConnections() {
     handleRevoke,
     handleRemove,
     handleRevokeAll,
+    revokePageMcpToken,
     fetchConnections,
   }
 }

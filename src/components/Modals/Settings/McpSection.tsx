@@ -23,6 +23,7 @@ const McpSection = () => {
     useState<IntegrationId>("claude-code");
   const [useBearer, setUseBearer] = useState(false);
   const [clientToRemove, setClientToRemove] = useState<Connection | null>(null);
+  const [confirmRevokeToken, setConfirmRevokeToken] = useState(false);
   const tokenState = useSettingsMcpToken();
   const integration = MCP_INTEGRATIONS.find(
     (candidate) => candidate.id === selectedIntegration
@@ -38,6 +39,11 @@ const McpSection = () => {
     if (removed) setClientToRemove(null);
   };
 
+  const confirmMcpTokenRevoke = async () => {
+    const revoked = await tokenState.revokeToken();
+    if (revoked) setConfirmRevokeToken(false);
+  };
+
   return (
     <SettingsSectionShell title="MCP">
       <ConnectYourAiSection />
@@ -51,8 +57,9 @@ const McpSection = () => {
           expiresAt={tokenState.expiresAt}
           isGenerating={tokenState.isGenerating}
           isLoading={tokenState.isLoading}
+          isRevoking={tokenState.isRevokingAll}
           onGenerate={tokenState.generateToken}
-          onRevoke={tokenState.revokeToken}
+          onRevoke={() => setConfirmRevokeToken(true)}
           token={tokenState.token}
         />
       </SettingsCard>
@@ -198,6 +205,19 @@ const McpSection = () => {
           message={`Remove ${clientToRemove.client_name || "this client"}? It disconnects now and must register again before it can reconnect.`}
           onCancel={() => setClientToRemove(null)}
           onConfirm={() => void removeClient()}
+        />
+      )}
+
+      {confirmRevokeToken && (
+        <ConfirmDialog
+          confirmLabel="Revoke token"
+          footerVerb="revoke"
+          id="confirm-revoke-mcp-token"
+          loading={tokenState.isRevokingAll}
+          loadingLabel="Revoking token"
+          message="Revoke this bearer token? MCP clients using it stop working until you generate a new one."
+          onCancel={() => setConfirmRevokeToken(false)}
+          onConfirm={() => void confirmMcpTokenRevoke()}
         />
       )}
     </SettingsSectionShell>

@@ -97,6 +97,8 @@ export function useMcpToken(autoGenerate = true) {
   const clearToken = () => {
     setToken(null)
     setExpiresAt(null)
+    document.cookie =
+      "mcp_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
   }
 
   return {

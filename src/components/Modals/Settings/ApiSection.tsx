@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import McpTokenControls, { useSettingsMcpToken } from "./McpTokenControls";
 import SettingsCard from "./SettingsCard";
 import SettingsCodeRow from "./SettingsCodeRow";
@@ -10,7 +12,13 @@ const CURL_EXAMPLE = `curl "${API_BASE_URL}/projects" \\
   -H "Authorization: Bearer $HYPERTASK_TOKEN"`;
 
 const ApiSection = () => {
+  const [confirmRevokeToken, setConfirmRevokeToken] = useState(false);
   const tokenState = useSettingsMcpToken();
+
+  const confirmMcpTokenRevoke = async () => {
+    const revoked = await tokenState.revokeToken();
+    if (revoked) setConfirmRevokeToken(false);
+  };
 
   return (
     <SettingsSectionShell title="REST API">
@@ -23,8 +31,9 @@ const ApiSection = () => {
           expiresAt={tokenState.expiresAt}
           isGenerating={tokenState.isGenerating}
           isLoading={tokenState.isLoading}
+          isRevoking={tokenState.isRevokingAll}
           onGenerate={tokenState.generateToken}
-          onRevoke={tokenState.revokeToken}
+          onRevoke={() => setConfirmRevokeToken(true)}
           token={tokenState.token}
         />
       </SettingsCard>
@@ -53,6 +62,19 @@ const ApiSection = () => {
           Read the API docs
         </a>
       </SettingsCard>
+
+      {confirmRevokeToken && (
+        <ConfirmDialog
+          confirmLabel="Revoke token"
+          footerVerb="revoke"
+          id="confirm-revoke-api-mcp-token"
+          loading={tokenState.isRevokingAll}
+          loadingLabel="Revoking token"
+          message="Revoke this bearer token? API and MCP clients using it stop working until you generate a new one."
+          onCancel={() => setConfirmRevokeToken(false)}
+          onConfirm={() => void confirmMcpTokenRevoke()}
+        />
+      )}
     </SettingsSectionShell>
   );
 };

@@ -10,9 +10,8 @@ export const useSettingsMcpToken = () => {
   const tokenState = useMcpToken();
   const connectionState = useMcpConnections();
 
-  const revokeToken = () => {
-    connectionState.handleRevokeAll(tokenState.clearToken);
-  };
+  const revokeToken = () =>
+    connectionState.revokePageMcpToken(tokenState.clearToken);
 
   return { ...tokenState, ...connectionState, revokeToken };
 };
@@ -21,6 +20,7 @@ const McpTokenControls = ({
   expiresAt,
   isGenerating,
   isLoading,
+  isRevoking,
   onGenerate,
   onRevoke,
   token,
@@ -28,6 +28,7 @@ const McpTokenControls = ({
   expiresAt: string | null;
   isGenerating: boolean;
   isLoading: boolean;
+  isRevoking: boolean;
   onGenerate: () => void;
   onRevoke: () => void;
   token: string | null;
@@ -72,7 +73,9 @@ const McpTokenControls = ({
           {isActive && (
             <>
               <TokenAction onClick={copyToken}>Copy</TokenAction>
-              <TokenAction onClick={onRevoke}>Revoke</TokenAction>
+              <TokenAction disabled={isRevoking} onClick={onRevoke}>
+                {isRevoking ? "Revoking" : "Revoke"}
+              </TokenAction>
             </>
           )}
           <TokenAction
