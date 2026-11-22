@@ -1,6 +1,4 @@
 import { TeamStartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import { Carousel, CarouselItem, ModalHeader } from "reactstrap";
@@ -9,48 +7,20 @@ import React, { useContext, useEffect, useMemo, useState } from "react";
 import { ModalBody, ModalFooter } from "reactstrap";
 import { testimonials } from "@/lib/constants/constants";
 import Image from "next/image";
-import { ITeam, IUser, type IPricingSearchParams } from "@/models/model";
+import { ITeam, IUser } from "@/models/model";
 import { currentProjectAtom } from "@/store";
 import { useRecoilState } from "@/lib/state";
-import { CHECKOUT_SESSION_API_ENDPOINT } from "@/lib/constants/APIRouteConstants";
 import axios from "axios";
-import { useRouter } from "next/navigation";
-import {
-  ISubscriptionPlan,
-  storeSubscriptionPlans,
-} from "@/lib/subscriptionPlans";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { LogOut, Star } from "lucide-react";
 import { useSignout } from "@/hooks/MultiPages/HTC/useSignout";
-import commandImageDark from "@/assets/rightSidebarHTCLogoDarkMode.svg";
-import logo from "@/assets/RightSidebarLogo.webp";
 import Tooltip from "@/components/Common/Tooltip";
-import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
-import { buildPricingCheckoutCancelUrl } from "@/lib/pricingCheckoutUrls";
-
 interface ITrialModal {
   currentUser: IUser | null;
   callback: () => void;
 }
 
-type TPlan = "Month" | "Year";
-type TTier = "BYOK" | "Pro";
-
-const proPlanDef = storeSubscriptionPlans.find((p) => p.id === "Pro")!;
-const byokPlanDef = storeSubscriptionPlans.find((p) => p.id === "BYOK")!;
-
-function teamToPricingParams(team: ITeam): IPricingSearchParams {
-  return {
-    teamTitle: team.title,
-    teamId: team.id,
-    totalSeats: team.totalSeats,
-    stripe_customer_id: team.stripe_customer_id,
-    googleAccountId: team.googleAccountId,
-  };
-}
-
 const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
-  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const isMbl = useContext(MobileViewContext);
   const [currentProject, _] = useRecoilState(currentProjectAtom);
   const [currTeam, setCurrTeam] = useState<ITeam | undefined>(undefined);
@@ -113,9 +83,7 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
       <div className="max-h-[90vh] scrollbar-thin overflow-y-auto flex flex-col">
         <div className="">
           <ModalBody className="w-full flex items-center justify-center border-b-0 border-transparent pt-0">
-            <TrialBody team={currTeam} callback={callback} startPlanCheckout={startPlanEnabled
-              ? <TeamStartPlanButton teamId={currTeam?.id} />
-              : undefined} />
+            <TeamStartPlanButton teamId={currTeam?.id} />
           </ModalBody>
           <ModalFooter className="w-full items-center justify-center border-t-0 py-0 px-2">
             <TrialFooter />
@@ -123,192 +91,6 @@ const TrialModal: React.FC<ITrialModal> = ({ currentUser, callback }) => {
         </div>
       </div>
     </ModalContainerCustom>
-  );
-};
-
-const TrialBody = ({
-  team,
-  callback,
-  startPlanCheckout,
-}: {
-  team: ITeam | undefined;
-  callback: () => void;
-  startPlanCheckout?: React.ReactElement | null;
-}) => {
-  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-  const [selectedPlan, setSelectedPlan] = useState<TPlan>("Year");
-  const [selectedTier, setSelectedTier] = useState<TTier>("Pro");
-  const router = useRouter();
-  const { effectiveTheme } = useDarkMode();
-
-  const offerPlan: ISubscriptionPlan =
-    selectedTier === "Pro" ? proPlanDef : byokPlanDef;
-  const monthType = offerPlan.types[0];
-  const yearType = offerPlan.types[1];
-
-  const createCheckout = async () => {
-    if (!team?.id) return;
-    const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
-    const success = `${baseURL}/trial-plan-confirmation?success=1&session_id={CHECKOUT_SESSION_ID}`;
-    const cancel = team.stripe_customer_id
-      ? buildPricingCheckoutCancelUrl(teamToPricingParams(team))
-      : window.location.href;
-    const typeIdx = selectedPlan === "Month" ? 0 : 1;
-    const priceId = offerPlan.types[typeIdx]?.stripePriceId;
-    if (!priceId) return;
-    const body = {
-      teamTitle: team.title,
-      googleAccountId: team.googleAccountId,
-      quantity: team.totalSeats,
-      stripe_customer_id: team.stripe_customer_id,
-      teamId: team.id,
-      priceId,
-      mode: "Trial" as const,
-      returnUrl: success,
-      cancelUrl: cancel,
-    };
-    const url = await axios.post(CHECKOUT_SESSION_API_ENDPOINT, body);
-    router.push(url.data.url);
-    callback();
-  };
-
-  if (!flagReady) return null;
-  if (startPlanCheckout !== undefined) return startPlanCheckout;
-
-  const onSelected = (selected: TPlan) => {
-    setSelectedPlan(selected);
-  };
-
-  return (
-    <div className="flex flex-col justify-center items-center text-center gap-4">
-      <div>
-        <Image
-          src={effectiveTheme !== "dark" ? commandImageDark : logo}
-          alt="hypertask logo trial"
-          className="mx-auto pb-3"
-        />
-        <h1 className="text-subheading sm:text-display font-medium pb-2">
-          Start your 14 day FREE trial now!
-        </h1>
-        <h1 className="font-normal">Choose your plan</h1>
-      </div>
-
-      <div
-        className="flex rounded-full border border-icon-hover-gray p-0.5 gap-1"
-        role="group"
-        aria-label="Plan tier"
-      >
-        {(["BYOK", "Pro"] as const).map((tier) => (
-          <button
-            key={tier}
-            type="button"
-            onClick={() => setSelectedTier(tier)}
-            className={`rounded-full px-4 py-1.5 text-content font-semibold transition-colors ${
-              selectedTier === tier
-                ? "bg-gradient-to-r from-[#A855F7] to-[#3B82F6] text-white"
-                : "text-text-light-gray hover:text-white"
-            }`}
-          >
-            {tier === "BYOK" ? "BYOK" : "Pro"}
-          </button>
-        ))}
-      </div>
-
-      <p className="text-content text-text-light-gray max-w-md">
-        {offerPlan.name}: {monthType.price} monthly or {yearType.price} yearly (
-        {yearType.description})
-      </p>
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <TrialCard
-          plan={"Month"}
-          priceDisplay={monthType.price}
-          periodLabel={monthType.description}
-          selected={selectedPlan}
-          onClickCallBack={onSelected}
-        />
-        <TrialCard
-          plan={"Year"}
-          priceDisplay={yearType.price}
-          periodLabel={yearType.description}
-          selected={selectedPlan}
-          onClickCallBack={onSelected}
-          save={true}
-        />
-      </div>
-      <button
-        className="px-8 py-1 sm:px-8 sm:py-1 w-[180px] h-[40px]  text-white  font-medium rounded-md bg-gradient-to-r from-[#A855F7] to-[#3B82F6] hover:opacity-90 transition-opacity"
-        onClick={createCheckout}
-      >
-        Get Started
-      </button>
-    </div>
-  );
-};
-
-const TrialCard = ({
-  plan,
-  priceDisplay,
-  periodLabel,
-  selected,
-  onClickCallBack,
-  save = false,
-}: {
-  plan: TPlan;
-  priceDisplay: string;
-  periodLabel: string;
-  selected: TPlan;
-  onClickCallBack: (selected: TPlan) => void;
-  save?: boolean;
-}) => {
-  return (
-    <div
-      className="w-[280px]  mx-auto cursor-pointer transition-colors duration-75"
-      onClick={() => onClickCallBack(plan)}
-    >
-      <div
-        className={`relative rounded  border-2  ${selected === plan ? "border-[#8B5CF6]" : "border-icon-hover-gray"
-          } p-7 sm:p-4`}
-      >
-        {save && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2">
-            <div
-              className={`px-4 py-1 rounded-md whitespace-nowrap text-meta w-[143px]  font-semibold ${true
-                  ? "bg-gradient-to-r from-[#E9D5FF] to-[#93C5FD] text-[#6D28D9]"
-                  : "text-text-light-gray"
-                }`}
-            >
-              SAVE VS MONTHLY
-            </div>
-          </div>
-        )}
-
-        <div className="pt-4 text-center space-y-2">
-          <h2
-            className={`text-heading sm:text-subheading font-normal ${selected === plan
-                ? "bg-gradient-to-r from-[#A855F7] to-[#3B82F6] inline-block text-transparent bg-clip-text"
-                : "text-text-light-gray"
-              }`}
-          >
-            {plan}ly Plan
-          </h2>
-
-          <div
-            className={`flex items-start justify-center ${selected === plan ? "text-white-black" : "text-text-light-gray"
-              }`}
-          >
-            <span className="text-5xl sm:text-7xl font-bold">{priceDisplay}</span>
-          </div>
-
-          <p
-            className={`text-gray-600  font-normal ${selected === plan ? "text-white-black" : "text-text-light-gray"
-              }`}
-          >
-            {periodLabel}
-          </p>
-        </div>
-      </div>
-    </div>
   );
 };
 

@@ -63,7 +63,7 @@ Open `/trial` while signed in and onboarded. The app allows it only when the tri
 
 ### Trial checkout return
 
-Open `/trial-plan-confirmation` while signed in. The page tries to create a Stripe customer when the team has none, then looks up the team from the query or from the signed-in user's own team. With a portal link, a Stripe customer on the user, and no checkout `session_id` or `success` flag, the heading is "Choose Trial Plan". The card stays empty until `htpr-7551-start-plan-checkout` is known. It then shows that flag's start-plan control, or the bring-your-own-key plan when the flag is off. After checkout, a session whose Stripe customer matches the signed-in user shows "Your Pro Plan trial is now active!" The line under it is "Checking plan access…" until the start-plan flag is known, then "Check your board for your current plan details" when that flag is on, otherwise "You have 14 days to test all Hypertask Pro Features". Let's Go opens the board already open in the app, the previous board, or the onboarding screen. Any other result shows "Something Went Wrong".
+Open `/trial-plan-confirmation` while signed in. The page tries to create a Stripe customer when the team has none, then looks up the team from the query or from the signed-in user's own team. With a portal link, a Stripe customer on the user, and no checkout `session_id` or `success` flag, the heading is "Choose Trial Plan". The card shows the start-plan control for that team. After checkout, a session whose Stripe customer matches the signed-in user shows "Your Pro Plan trial is now active!" The line under it is "Check your board for your current plan details". Let's Go opens the board already open in the app, the previous board, or the onboarding screen. Any other result shows "Something Went Wrong".
 
 ### Plan AI caps
 
@@ -161,9 +161,7 @@ Never enter card details, submit a payment, cancel a subscription, change a plan
 
 ### Start plan trial duration
 
-The existing `htpr-7551-start-plan-checkout` eligibility flag must permit the QA identity before testing Start plan. Its default is Owner only; do not widen it or borrow owner credentials. Record an unavailable preview as UNREACHABLE with the actual refusal.
-
-When eligible, open a Free owned board and check Start a Hypertask plan. The preview response's positive `trialDays` must match both the displayed “after N days” offer and Stripe's trial period. `htpr-7938-fourteen-day-trial` selects fourteen days for new offers, default Owner + QA; prior saved offers keep their original duration. A used trial must show no free-trial promise. Compare desktop and phone in all themes without submitting payment.
+Open a Free owned board and check Start a Hypertask plan. The preview response's positive `trialDays` must match both the displayed “after N days” offer and Stripe's trial period. `htpr-7938-fourteen-day-trial` selects fourteen days for new offers, default Owner + QA; prior saved offers keep their original duration. A used trial must show no free-trial promise. Compare desktop and phone in all themes without submitting payment.
 
 Switching the duration flag off must keep historical checkout reconciliation intact. Never fully revert the historical `start-plan` marker readers: completed checkouts still awaiting subscription visibility must block another checkout, including when their Redis reservation is gone. Use a duration-only rollback.
 

@@ -1,7 +1,5 @@
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { ModalContainerCustom } from '@/components/Common/CommonModalComponents';
-import React, { ReactNode, useEffect, useState } from 'react'
+import React, { ReactNode, useState } from 'react'
 import styles from '@/styles/linksModal.module.scss'
 import { useRecoilState } from '@/lib/state';
 import { currentProjectAtom } from '@/store';
@@ -17,8 +15,6 @@ interface IProps {
     closeCallback:()=>void
 }
 const TrialModal: React.FC<IProps> = ({closeCallback}) => {
-    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG)
-    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG)
     const [shouldShow, setShouldShow] = useState(true)
     const [_currentProject, _] = useRecoilState(currentProjectAtom)
     const asyncPush = useAsyncRoutePush()
@@ -48,7 +44,7 @@ const TrialModal: React.FC<IProps> = ({closeCallback}) => {
                 <div className='lg:mt-4 gap-3 max-w-[340px] flex flex-col '>
                     <TrialsButton teamId={_currentProject.teamId!} />
                     <SeeAllPlans onClick={onClickSeeAllPlans}/>
-                    <p className="mt-2 text-text-light-gray font-normal text-content">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Stripe shows your plan terms before you confirm." : "No payment is due today. If you change your mind, you can switch to the free plan any time."}</p>
+                    <p className="mt-2 text-text-light-gray font-normal text-content">Stripe shows your plan terms before you confirm.</p>
                 </div>
             </PlansWrapper>
             <BackButton closeHandler={toggle}/>
