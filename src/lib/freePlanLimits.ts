@@ -1,14 +1,12 @@
 export const FREE_PLAN_MAX_BOARDS = 2;
 export const FREE_PLAN_MAX_TICKETS = 250;
-export const FREE_PLAN_MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const FREE_PLAN_MAX_FILE_BYTES_RAISED = 25 * 1024 * 1024;
+export const FREE_PLAN_MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const FREE_BOARD_LIMIT = 3;
 
 export type FreePlanLimitFlags = {
   planLimits: boolean;
   unlimitedTickets: boolean;
   unlimitedBoards?: boolean;
-  raisedFileLimit?: boolean;
   storageCap?: boolean;
 };
 
@@ -17,12 +15,8 @@ export type FreePlanLimitLine = {
   amount: string;
 };
 
-export function freeFileByteLimit(raised: boolean): number {
-  return raised ? FREE_PLAN_MAX_FILE_BYTES_RAISED : FREE_PLAN_MAX_FILE_BYTES;
-}
-
-export function freePlanFileMegabytes(raised = false): number {
-  return freeFileByteLimit(raised) / (1024 * 1024);
+export function freePlanFileMegabytes(): number {
+  return FREE_PLAN_MAX_FILE_BYTES / (1024 * 1024);
 }
 
 export function ticketCapEnforced(flags: FreePlanLimitFlags): boolean {
@@ -48,7 +42,7 @@ export function freePlanLimitLines(flags: FreePlanLimitFlags): FreePlanLimitLine
   if (!flags.planLimits) return lines;
   lines.push({
     title: "Files",
-    amount: `Up to ${freePlanFileMegabytes(flags.raisedFileLimit === true)} MB each on tickets and comments`,
+    amount: `Up to ${freePlanFileMegabytes()} MB each on tickets and comments`,
   });
   lines.push({
     title: "Teams already over a limit",

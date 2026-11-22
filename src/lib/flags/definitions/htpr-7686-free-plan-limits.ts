@@ -7,7 +7,7 @@ export default {
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-24",
-  description: "Limit Free scopes to two Normal boards, 250 Normal tickets on Normal boards and 10 MB task attachments, without restricting existing work.",
+  description: "Limit Free scopes to two Normal boards, 250 Normal tickets on Normal boards and 25 MB task attachments, without restricting existing work.",
   releaseRisk: {
     risk: "new",
     highRisk: "money",

@@ -11,7 +11,6 @@ const generousOn = {
   planLimits: true,
   unlimitedTickets: true,
   unlimitedBoards: true,
-  raisedFileLimit: true,
   storageCap: true,
 };
 

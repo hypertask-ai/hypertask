@@ -90,8 +90,8 @@ test("unlimited boards preserve ticket and attachment refusals", async () => {
   const h = fixture();
   const scope = { kind: "team", teamId: "free-team" };
   await assert.rejects(h.policy.assertTicketRoom(h.db, scope, 1, actor), { code: "PLAN_LIMIT_REACHED", limit: "tickets", max: 250 });
-  await assert.rejects(h.policy.assertFileSizeForProject(1, 11 * 1024 * 1024, actor), { code: "PLAN_LIMIT_REACHED", limit: "file_size", max: 10 * 1024 * 1024 });
-  await assert.doesNotReject(h.policy.assertFileSizeForProject(1, 10 * 1024 * 1024, actor));
+  await assert.rejects(h.policy.assertFileSizeForProject(1, 26 * 1024 * 1024, actor), { code: "PLAN_LIMIT_REACHED", limit: "file_size", max: 25 * 1024 * 1024 });
+  await assert.doesNotReject(h.policy.assertFileSizeForProject(1, 25 * 1024 * 1024, actor));
 });
 
 test("unlimited switch alone leaves the legacy three-board boundary active", async () => {
@@ -110,7 +110,7 @@ test("Free plan copy matches admission without changing other limits or paid pla
   const copy = load("src/lib/freePlanLimits.ts", {});
   const plans = load("src/lib/subscriptionPlans.ts", {});
   const flags = { planLimits: true, unlimitedTickets: false, unlimitedBoards: true };
-  assert.deepEqual(copy.freePlanLimitCopy(flags).slice(0, 3), ["Unlimited boards", "Up to 250 open tickets", "Up to 10 MB each on tickets and comments"]);
+  assert.deepEqual(copy.freePlanLimitCopy(flags).slice(0, 3), ["Unlimited boards", "Up to 250 open tickets", "Up to 25 MB each on tickets and comments"]);
   assert.equal(copy.freePlanLimitCopy({ ...flags, unlimitedBoards: false })[0], "Up to 2 boards (archived don't count)");
   assert.equal(copy.freePlanLimitCopy({ ...flags, planLimits: false })[0], "Up to 3 boards (archived don't count)");
   const on = plans.subscriptionPlansFor(flags);

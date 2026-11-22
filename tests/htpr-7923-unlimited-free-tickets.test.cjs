@@ -49,10 +49,10 @@ test("unlimited tickets do not remove board or file limits", async () => {
   await assert.rejects(h.policy.assertBoardRoom(h.db, scope, 1, actor), {
     code: "PLAN_LIMIT_REACHED", limit: "boards", max: 2,
   });
-  await assert.rejects(h.policy.assertFileSizeForProject(15, 11 * 1024 * 1024, actor), {
-    code: "PLAN_LIMIT_REACHED", limit: "file_size", max: 10 * 1024 * 1024,
+  await assert.rejects(h.policy.assertFileSizeForProject(15, 26 * 1024 * 1024, actor), {
+    code: "PLAN_LIMIT_REACHED", limit: "file_size", max: 25 * 1024 * 1024,
   });
-  await assert.doesNotReject(h.policy.assertFileSizeForProject(15, 10 * 1024 * 1024, actor));
+  await assert.doesNotReject(h.policy.assertFileSizeForProject(15, 25 * 1024 * 1024, actor));
 });
 
 for (const channel of ["web", "api", "mcp", "agent"]) {

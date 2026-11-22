@@ -2,7 +2,6 @@ import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG } from "@/lib/flags/definitions/htpr-7922-unlimited-free-boards";
 import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
-import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
 import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-storage-2gb";
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
 import { getTeamById } from "@/lib/serverActions";
@@ -146,12 +145,10 @@ export const PlansTable = ()=>{
     const planLimits = useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG);
     const unlimitedBoards = useFlag(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG);
     const unlimitedTickets = useFlag(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG);
-    const raisedFileLimit = useFlag(HTPR_7924_FREE_FILE_25MB_FLAG);
     const storageCap = useFlag(HTPR_7924_FREE_STORAGE_2GB_FLAG);
     const entitlementFlags = {
         planLimits,
         unlimitedTickets,
-        raisedFileLimit,
         unlimitedBoards: unlimitedBoards ? true : undefined,
         storageCap: planLimits && storageCap ? true : undefined,
     };

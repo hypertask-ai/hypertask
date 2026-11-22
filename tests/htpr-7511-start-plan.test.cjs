@@ -48,7 +48,6 @@ async function withButton(fn, backend) {
       || name === "htpr-7686-free-plan-limits"
       || name === "htpr-7922-unlimited-free-boards"
       || name === "htpr-7923-unlimited-free-tickets"
-      || name === "htpr-7924-free-file-25mb"
       || name === "htpr-7924-free-storage-2gb"
     ) return false;
     if (name === key) return state.enabled;

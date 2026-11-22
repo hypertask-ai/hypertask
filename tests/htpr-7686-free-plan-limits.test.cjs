@@ -32,7 +32,6 @@ const sourceModules = [
   "src/lib/teamComp.ts",
   "src/lib/internalCompTeams.ts",
   "src/lib/flags/definitions/htpr-7686-free-plan-limits.ts",
-  "src/lib/flags/definitions/htpr-7924-free-file-25mb.ts",
   "src/lib/flags/definitions/htpr-7924-free-storage-2gb.ts",
   "src/utils/controllers/projects/boardQuota.ts",
   "src/utils/controllers/projects/createProjectWithStableName.ts",
@@ -190,7 +189,6 @@ function fixture(options = {}) {
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       calls.push(["flag", key, userId]);
-      if (key === "htpr-7924-free-file-25mb") return options.raisedFile !== false;
       if (key === "htpr-7924-free-storage-2gb") return options.storageCap === true;
       return key === "htpr-7982-cancelled-free"
         ? options.cancelledFree === true
@@ -260,8 +258,7 @@ test("named limits and rollout flag match the approved Free plan", () => {
   const h = fixture();
   assert.equal(h.policy.FREE_PLAN_MAX_BOARDS, 2);
   assert.equal(h.policy.FREE_PLAN_MAX_TICKETS, 250);
-  assert.equal(h.policy.FREE_PLAN_MAX_FILE_BYTES, 10 * MiB);
-  assert.equal(h.policy.FREE_PLAN_MAX_FILE_BYTES_RAISED, 25 * MiB);
+  assert.equal(h.policy.FREE_PLAN_MAX_FILE_BYTES, 25 * MiB);
   const definition = h.load("src/lib/flags/definitions/htpr-7686-free-plan-limits.ts");
   assert.equal(definition.HTPR_7686_FREE_PLAN_LIMITS_FLAG, flag);
   assert.equal(definition.default.defaultMode, "OWNER_AND_QA");
@@ -355,18 +352,12 @@ test("flag Off adds no scope, plan, count or locking queries on any shared guard
   assertNoQuotaQueries(h);
 });
 
-test("file flag Off keeps the 10 MiB Free limit and its message; flag On refuses only above 25 MiB", async () => {
-  const off = fixture({ raisedFile: false });
-  await off.policy.assertFileSizeForProject(15, 10 * MiB, actor);
-  await assert.rejects(off.policy.assertFileSizeForProject(15, 11 * MiB, actor), (error) => {
-    assert.equal(error.limit, "file_size");
-    assert.equal(error.max, 10 * MiB);
-    assert.equal(error.message, "Files on the Free plan can be up to 10 MB. Upgrade to upload bigger files.");
-    return true;
-  });
-  const on = fixture();
-  await on.policy.assertFileSizeForProject(15, 25 * MiB, actor);
-  await refused(on, on.policy.assertFileSizeForProject(15, 26 * MiB, actor), "file_size", teamScope, { bytes: 26 * MiB });
+test("the Free file ceiling is 25 MiB with no flag read; 26 MiB is refused", async () => {
+  const h = fixture();
+  await h.policy.assertFileSizeForProject(15, 11 * MiB, actor);
+  await h.policy.assertFileSizeForProject(15, 25 * MiB, actor);
+  assert.deepEqual(h.calls.filter(([kind]) => kind === "flag").map((call) => call.slice(1)), []);
+  await refused(h, h.policy.assertFileSizeForProject(15, 26 * MiB, actor), "file_size", teamScope, { bytes: 26 * MiB });
 });
 
 test("storage cap refuses an upload that would pass 2 GiB and allows one that lands exactly on it", async () => {

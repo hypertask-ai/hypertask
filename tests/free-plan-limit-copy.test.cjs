@@ -72,42 +72,39 @@ test("free plan copy with the limits flag on uses the enforced board, ticket and
   ]);
   assert.equal(lines[0], "Up to 2 boards (archived don't count)");
   assert.equal(lines[1], "Up to 250 open tickets");
-  assert.equal(lines[2], "Up to 10 MB each on tickets and comments");
+  assert.equal(lines[2], "Up to 25 MB each on tickets and comments");
   assert.equal(lines.includes("Unlimited tickets"), false);
   const shown = text(capped);
   assert.equal(shown.includes("Up to 2 boards (archived don't count)"), true);
   assert.equal(shown.includes("Up to 250 open tickets"), true);
-  assert.equal(shown.includes("Up to 10 MB each on tickets and comments"), true);
+  assert.equal(shown.includes("Up to 25 MB each on tickets and comments"), true);
   assert.equal(shown.includes("Unlimited tickets"), false);
   assert.deepEqual(freeAmounts(capped), lines);
 });
 
-test("the file line uses freeFileByteLimit: 10 MB, or 25 MB when that flag is on, and only while plan limits are on", () => {
-  assert.equal(limits.freeFileByteLimit(false), limits.FREE_PLAN_MAX_FILE_BYTES);
-  assert.equal(limits.freeFileByteLimit(true), limits.FREE_PLAN_MAX_FILE_BYTES_RAISED);
-  const ten = `Up to ${limits.freeFileByteLimit(false) / (1024 * 1024)} MB each on tickets and comments`;
-  const twentyFive = `Up to ${limits.freeFileByteLimit(true) / (1024 * 1024)} MB each on tickets and comments`;
-  assert.equal(ten, "Up to 10 MB each on tickets and comments");
+test("the file line is always 25 MB while plan limits are on", () => {
+  assert.equal(limits.FREE_PLAN_MAX_FILE_BYTES, 25 * 1024 * 1024);
+  const twentyFive = `Up to ${limits.freePlanFileMegabytes()} MB each on tickets and comments`;
   assert.equal(twentyFive, "Up to 25 MB each on tickets and comments");
-  assert.equal(limits.freePlanLimitCopy(capped).includes(ten), true);
-  assert.equal(limits.freePlanLimitCopy({ ...capped, raisedFileLimit: true }).includes(twentyFive), true);
-  assert.equal(limits.freePlanLimitCopy({ ...boardsAndFilesOnly, raisedFileLimit: true }).includes(twentyFive), true);
-  const limitsOff = { planLimits: false, unlimitedTickets: false, raisedFileLimit: true };
+  assert.equal(limits.freePlanLimitCopy(capped).includes(twentyFive), true);
+  assert.equal(limits.freePlanLimitCopy(boardsAndFilesOnly).includes(twentyFive), true);
+  assert.equal(limits.freePlanLimitCopy(capped).includes("Up to 10 MB each on tickets and comments"), false);
+  const limitsOff = { planLimits: false, unlimitedTickets: false };
   assert.equal(limits.freePlanLimitCopy(limitsOff).some((line) => line.includes("MB")), false);
   assert.equal(text(limitsOff).includes("MB"), false);
-  assert.equal(text({ ...capped, raisedFileLimit: true }).includes(twentyFive), true);
-  assert.deepEqual(freeAmounts({ ...capped, raisedFileLimit: true }).includes(twentyFive), true);
+  assert.equal(text(capped).includes(twentyFive), true);
+  assert.deepEqual(freeAmounts(capped).includes(twentyFive), true);
 });
 
 test("an enabled ticket-cap bypass keeps board and file limits and says tickets are unlimited", () => {
   const lines = limits.freePlanLimitCopy(boardsAndFilesOnly);
   assert.equal(lines[0], "Up to 2 boards (archived don't count)");
   assert.equal(lines[1], "Unlimited tickets");
-  assert.equal(lines[2], "Up to 10 MB each on tickets and comments");
+  assert.equal(lines[2], "Up to 25 MB each on tickets and comments");
   assert.equal(lines.some((line) => line.includes("250")), false);
   const shown = text(boardsAndFilesOnly);
   assert.equal(shown.includes("Unlimited tickets"), true);
-  assert.equal(shown.includes("Up to 10 MB each"), true);
+  assert.equal(shown.includes("Up to 25 MB each"), true);
   assert.equal(shown.includes("250"), false);
   assert.deepEqual(freeAmounts(boardsAndFilesOnly), lines);
 });
