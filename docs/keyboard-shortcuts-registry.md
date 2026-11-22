@@ -77,6 +77,7 @@ G-chords (`G` then second key): `I` inbox, `B` task board, `C` calendar, `A` all
 | `Shift+R` | Suggest reply with AI — opens the comment composer and inserts an AI-drafted reply (private draft; never auto-posts; refuses to overwrite an existing draft). Bare `R` stays reactions-only. | `TaskDetailComp.tsx` keydown → `AI_SUGGEST_REPLY_EVENT` |
 | `ENTER` | Activate description/comment or reply | TaskDetailComp |
 | `F2` | Edit title | TaskDetailComp |
+| `G then G` | Jump to the top of the ticket when `htpr-8998-ticket-jump-to-top` is on. Off keeps the previous move to the description. `Shift+G then G` still focuses the new comment. | `useTaskDetailNavigationActions.tsx` `gPressHandler`; also the bottom-right button |
 | `Mod+M` / `Ctrl+M` | Add comment | TaskDetailComp |
 | `Ctrl+D` | Edit description | TaskDetailComp |
 | `Mod+J` | Write with AI | TaskDetailComp |
@@ -148,6 +149,7 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 - `L` fast-like (task detail, `useCommentAndDescriptions.ts`)
 - `W` / `B` timer + log time (`TaskTime.tsx`)
 - `G` chord starter (archived/reminders pages have their own `g` handlers)
+- `G then G` jump to top on a ticket (`useTaskDetailNavigationActions.tsx`), behind `htpr-8998-ticket-jump-to-top`. The `?` cheatsheet and Settings → Shortcuts list it only while that flag is on. It is not a command-palette action.
 - `E` archive on archived-inbox/reminders pages
 - `V` calendar save-view (`calendar.tsx`)
 - `C` / `W` in TableView (`TableView.tsx`)

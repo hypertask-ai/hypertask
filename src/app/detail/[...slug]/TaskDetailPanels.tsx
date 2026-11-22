@@ -5,6 +5,8 @@ import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8994_CLEAR_WAITING_AGENT_FLAG } from "@/lib/flags/definitions/htpr-8994-clear-waiting-agent";
+import { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG } from "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top";
+import { scrollTicketToTop, ticketShowsJumpToTop } from "@/lib/taskDetailJumpToTop";
 import { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-8804-visible-links-first";
 import { applyWaitingOnWrite } from "@/lib/waitingOn";
 import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
@@ -12,8 +14,8 @@ import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/Comm
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
-import { Suspense } from "react";
-import { ArrowLeft } from "lucide-react";
+import { Suspense, useEffect, useState } from "react";
+import { ArrowLeft, ChevronUp } from "lucide-react";
 
 import { useRecoilState } from "@/lib/state";
 import { tasksPlayListAtom } from "@/store";
@@ -77,6 +79,7 @@ import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/Ap
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function TaskDetailPanels(context: TaskDetailContext) {
   const { embedded, _slugs, currentTask, setCurrentTask, showCommands, callback, commandContextOptions, showShortucts, scrollElementRef, _mbl, currentItemInTasksPlaylist, navigateToNextTask, searchParams, navigateToPreviousTask, dynamicElementRef, toggleDueDate, showAssignModal, toggleModal, _parsedTask, estimate_, priority_, labelsFromTQ, removeRelationHandler, toggleEstimateModal, toggleLabelModal, toggleMoveModal, toggleMoveToBoardModal, togglePriorityModal, dynamicTopValue, sectionsForProjectTQ, moveTaskToNextColumn, followers, onGoback, appShellRailOn, showTaskDeleteModal, deleteTask, carousalItems, setCarousalItems, showLinksModal, idToDelete, currentId, linksModalToggle, showMoveModal, moveTaskModalCallback, taskUpdateCommentsInCache, showCommentDeleteModal, setShowCommentDeleteModal, comments, setComments, showPriorityModal, showEstimateModal, showMoveTaskToBoard, setShowMoveTaskToBoard, showCreateLabelModal, setShowCreateLabelModal, setShowCommands, showDueDateModal, setDueDateCallback, showSubtaskLinkingModal, toggleSubtaskLinkingModal, callBackHandlerSubtaskLinking, showRemoveSubtaskModal, toggleRemoveSubtaskModal, callBackHandlerRemoveSubtask, showRemindMeModal, toggleRemindMeModal, currentUser } = context;
+  const jumpToTop = useFlag(HTPR_8998_TICKET_JUMP_TO_TOP_FLAG);
   const visibleLinksFirst = useFlag(HTPR_8804_VISIBLE_LINKS_FIRST_FLAG);
   const clearWaitingAgent = useFlag(HTPR_8994_CLEAR_WAITING_AGENT_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
@@ -237,6 +240,9 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               />
             )
           }
+          {jumpToTop && !_mbl && (
+            <TicketJumpToTop key={currentTask.id} scrollElementRef={scrollElementRef} />
+          )}
         </DescriptionAndCommentsProvider>
       </>
 
@@ -380,6 +386,41 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   ) : content;
 }
 
+
+function TicketJumpToTop({
+  scrollElementRef,
+}: {
+  scrollElementRef?: { current: HTMLElement | null };
+}) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const sync = () => {
+      const element = scrollElementRef?.current;
+      const offset = element ? element.scrollTop : window.scrollY;
+      setVisible(ticketShowsJumpToTop(offset));
+    };
+    sync();
+    const target = scrollElementRef?.current ?? window;
+    target.addEventListener("scroll", sync, { passive: true });
+    return () => target.removeEventListener("scroll", sync);
+  }, [scrollElementRef]);
+  if (!visible) return null;
+  return (
+    <button
+      type="button"
+      aria-label="Jump to top"
+      aria-keyshortcuts="g g"
+      onClick={() => scrollTicketToTop(scrollElementRef?.current ?? window)}
+      style={{ right: "calc(var(--ht-ai-sidebar-width, 0px) + 16px)" }}
+      className="group fixed bottom-4 z-floating flex h-8 w-8 cursor-pointer items-center justify-center rounded-[4px] border border-border bg-back-button text-button-arrow shadow-md hover:bg-hover-active"
+    >
+      <ChevronUp size={18} strokeWidth={1.75} aria-hidden />
+      <Suspense fallback={null}>
+        <Tooltip left={0} bottom={40} text="Jump to top" keyCombination={["G G"]} />
+      </Suspense>
+    </button>
+  );
+}
 
 const DesktopNavigation = ({
   onGoback,
