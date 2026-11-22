@@ -509,6 +509,21 @@ body {
   min-height: 0 !important;
 }
 
+#createTaskModal[data-phone-new-task-sheet][data-phone-sheet-editor-card] [data-phone-new-task-card] #create-task-tiptap-description {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+#createTaskModal[data-phone-new-task-sheet][data-phone-sheet-editor-card] [data-phone-new-task-card] .ProseMirror {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 @layer utilities {
   #createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {
     padding-bottom: 0 !important;
