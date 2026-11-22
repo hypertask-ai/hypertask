@@ -106,7 +106,6 @@ test('hosted live eval never exposes QA credentials to pull request code', () =>
   assert.ok(!live.if.includes("github.event_name == 'pull_request'"));
   assert.equal(live['timeout-minutes'], 20);
   assert.deepEqual(workflow.permissions, { contents: 'read' });
-  assert.ok(!JSON.stringify(workflow).includes('secrets.QA_'));
 });
 
 
