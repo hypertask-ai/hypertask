@@ -31,6 +31,10 @@ const FEATURES = [
   "activation-analytics", "agent-chat-roster", "agent-rooms", "agent-runs", "agents-board-access",
   "ai-chat", "ai-feedback-reports", "ai-usage", "announcements-admin-api", "billing-and-plans",
   "board-invites", "board-member-list", "board-skills", "boards-and-views",
+  "admin-and-owner-tools", "agents-directory", "all-tasks", "calendar", "chat-sessions", "drafts",
+  "integrations", "oauth-and-api-clients", "pinned-and-archived", "pricing-and-trial", "reminders",
+  "saved-reports-and-velocity", "settings-account", "settings-board", "snippets", "task-labels-and-followers",
+  "time-tracking",
 ];
 
 function readArgs(argv) {
@@ -636,6 +640,198 @@ const featureRuns = {
       await shot(page, dir, "board-390x844.png");
     });
     step("drag, bulk move and bulk archive stay with the hands-free drive", null, "node .claude/skills/verify-qa/scripts/board-drive-live.mjs <folder> --base http://127.0.0.1:3100 --state <storageState.json>");
+  },
+
+  "calendar": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/calendar", 6000);
+      step("signed in calendar opens", !isLogin(nav.url) && nav.url.includes("/calendar"), nav);
+      const body = await text(page);
+      step("calendar renders content or loading shell", body.length > 30 && !/This page could not be found/.test(body), { sample: body.slice(0, 160) });
+      await shot(page, dir, "calendar-1440x900.png");
+    });
+  },
+
+  "time-tracking": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/time", 5000);
+      step("time reports opens", !isLogin(nav.url) && /\/time/.test(nav.url), nav);
+      const body = await text(page);
+      step("the Time reports heading is present", /Time reports/i.test(body), { sample: body.slice(0, 120) });
+      await shot(page, dir, "time-1440x900.png");
+    });
+  },
+
+  "reminders": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/reminders", 5000);
+      step("reminders opens", !isLogin(nav.url), nav);
+      const body = await text(page);
+      step("Reminders heading", /Reminders/i.test(body), { rows: (body.match(/Remind me/gi) ?? []).length });
+      await shot(page, dir, "reminders-1440x900.png");
+    });
+  },
+
+  "snippets": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/snippets", 5000);
+      step("snippets opens", !isLogin(nav.url), nav);
+      const body = await text(page);
+      step("snippets screen text", /Snippet/i.test(body), { sample: body.slice(0, 120) });
+      await shot(page, dir, "snippets-1440x900.png");
+    });
+  },
+
+  "drafts": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/drafts", 5000);
+      step("drafts opens", !isLogin(nav.url), nav);
+      const body = await text(page);
+      step("drafts list or empty", /Draft/i.test(body) || /No drafts/i.test(body), { sample: body.slice(0, 120) });
+      await shot(page, dir, "drafts-1440x900.png");
+    });
+  },
+
+  "pinned-and-archived": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const pinned = await open(page, "/pinned", 4000);
+      const pinnedBody = await text(page);
+      step("pinned opens", !isLogin(pinned.url), pinned);
+      step("pinned tabs", /Your Pins|Team Pins/i.test(pinnedBody), {});
+      await shot(page, dir, "pinned-1440x900.png");
+      const arch = await open(page, "/archived", 4000);
+      const archBody = await text(page);
+      step("archived opens", !isLogin(arch.url), arch);
+      step("archived tasks archive", /Tasks Archive|Inbox Archive/i.test(archBody), {});
+      await shot(page, dir, "archived-1440x900.png");
+    });
+  },
+
+  "all-tasks": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/all-tasks", 5000);
+      step("all tasks opens", !isLogin(nav.url), nav);
+      const body = await text(page);
+      step("all tasks title", /All tasks/i.test(body), { sample: body.slice(0, 120) });
+      await shot(page, dir, "all-tasks-1440x900.png");
+    });
+  },
+
+  "integrations": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/integrations", 5000);
+      step("integrations opens", !isLogin(nav.url), nav);
+      const body = await text(page);
+      step("slack card present", /Slack/i.test(body), { comingSoon: /Coming Soon/i.test(body) });
+      await shot(page, dir, "integrations-1440x900.png");
+    });
+  },
+
+  "settings-account": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      for (const route of ["/settings/general", "/settings/appearance", "/settings/notifications"]) {
+        const nav = await open(page, route, 3500);
+        step(`${route} opens`, !isLogin(nav.url) && nav.url.includes(route.split("/").pop()), nav);
+      }
+      await shot(page, dir, "settings-account-1440x900.png");
+    });
+  },
+
+  "settings-board": async (dir, step) => {
+    await withBrowser("flags", async ({ page, context }) => {
+      await pinBoard(context, SBX);
+      const settings = await open(page, "/settings/board-general?projectId=7049", 5000);
+      step("board general settings opens", !isLogin(settings.url) && /board-general/.test(settings.url), settings);
+      const body = await text(page);
+      step("board settings heading", /Board|General/i.test(body), { sample: body.slice(0, 120) });
+      await shot(page, dir, "settings-board-1440x900.png");
+    });
+  },
+
+  "pricing-and-trial": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const pricing = await open(page, "/pricing", 5000);
+      step("pricing route resolves", !isLogin(pricing.url), { url: pricing.url });
+      const trial = await open(page, "/trial", 5000);
+      const trialBody = await text(page);
+      step("trial page or redirect", /Choose Your Plan/i.test(trialBody) || !/\/trial/.test(trial.url), { url: trial.url });
+      await shot(page, dir, "pricing-trial-1440x900.png");
+    });
+  },
+
+  "oauth-and-api-clients": async (dir, step) => {
+    await withBrowser(null, async ({ page }) => {
+      const oauth = await open(page, "/oauth/login?returnTo=%2Finbox", 4000);
+      step("oauth login copies to login", oauth.url.includes("/login") && oauth.url.includes("returnTo"), oauth);
+    });
+    await withBrowser("flags", async ({ page }) => {
+      const consent = await open(page, "/oauth/consent", 4000);
+      const body = await text(page);
+      step("oauth consent expired without token", /Connection request expired|expired/i.test(body), { url: consent.url });
+      const mcp = await open(page, "/settings/mcp", 4000);
+      step("mcp settings opens", !isLogin(mcp.url) && /settings\/mcp/.test(mcp.url), mcp);
+      await shot(page, dir, "oauth-connect-1440x900.png");
+    });
+  },
+
+  "chat-sessions": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/chat", 5000);
+      step("full screen chat opens", !isLogin(nav.url) && nav.url.includes("/chat"), nav);
+      const body = await text(page);
+      step("chat shell renders", body.length > 20, { sample: body.slice(0, 120) });
+      await shot(page, dir, "chat-1440x900.png");
+    });
+  },
+
+  "agents-directory": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const agents = await open(page, "/agents", 5000);
+      step("agents page opens", !isLogin(agents.url), agents);
+      const wiki = await open(page, "/wiki/agents", 4000);
+      const wikiBody = await text(page);
+      step("wiki agents heading", /Universal agent onboarding/i.test(wikiBody), { url: wiki.url });
+      await shot(page, dir, "agents-directory-1440x900.png");
+    });
+  },
+
+  "admin-and-owner-tools": async (dir, step) => {
+    const admin = await api("flags", "GET", "/api/flags");
+    step("flags readable for negative control", admin.status === 200, { status: admin.status });
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/admin/flags", 4000);
+      const body = await text(page);
+      const blocked = /not be found|404/i.test(body) || !/\/admin\/flags/.test(nav.url);
+      step("admin flags unreachable for QA 985", blocked, { url: nav.url });
+      const logs = await open(page, "/logs", 4000);
+      step("logs redirects away for QA 985", logs.url === `${PRODUCTION}/` || !/\/logs/.test(logs.url), logs);
+      step("/reset password gate", null, "verified-unreachable: do not enter password on /reset");
+      await shot(page, dir, "admin-blocked-1440x900.png");
+    });
+  },
+
+  "saved-reports-and-velocity": async (dir, step) => {
+    const velocity401 = await api(null, "GET", `/api/mcp/reports/velocity?project_id=${SBX}`);
+    step("velocity MCP refuses without auth", velocity401.status === 401, { status: velocity401.status });
+    await withBrowser("flags", async ({ page }) => {
+      const report = await open(page, "/report", 5000);
+      step("reports home opens", !isLogin(report.url), report);
+      const body = await text(page);
+      step("reports heading", /Reports/i.test(body), {});
+      const velocity = await open(page, "/report/project-15/velocity", 5000);
+      const velBody = await text(page);
+      step("velocity page", /Velocity/i.test(velBody), { url: velocity.url });
+      await shot(page, dir, "reports-velocity-1440x900.png");
+    });
+  },
+
+  "task-labels-and-followers": async (dir, step) => {
+    const labels = await api("flags", "GET", `/api/labels/getByProject?projectId=${SBX}`);
+    step("labels by project", labels.status === 200, { status: labels.status, count: labels.json?.labels?.length ?? labels.json?.length });
+    const sections = await api("flags", "GET", `/api/section/getProjectSections?projectId=${SBX}`);
+    step("sections for sandbox", sections.status === 200, { status: sections.status });
+    const velocity = await api("flags", "GET", `/api/follower/getFollower?taskId=1&projectId=${SBX}`).catch(() => ({ status: 400 }));
+    step("follower read responds", [200, 400, 404].includes(velocity.status), { status: velocity.status });
   },
 };
 

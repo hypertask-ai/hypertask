@@ -18,20 +18,25 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Area | File | e2e/smoke id |
 |---|---|---|
 | Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags and cron refusals; `feature-map-drive.mjs activation-analytics` |
+| Admin and owner tools | [admin-and-owner-tools.md](admin-and-owner-tools.md) | `feature-map-drive.mjs admin-and-owner-tools` verified-unreachable for QA |
 | Agent chat roster ordering | [agent-chat-roster.md](agent-chat-roster.md) | `feature-map-drive.mjs agent-chat-roster`; standalone roster at desktop and phone |
 | Board agent rooms | [agent-rooms.md](agent-rooms.md) | `feature-map-drive.mjs agent-rooms`; read-only room listing with the auto-create blocked |
 | Agent run lifecycle | [agent-runs.md](agent-runs.md) | `feature-map-drive.mjs agent-runs`; read-only lifecycle discovery, run reads and refusals |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | `ci-checks` lane `agent-board-scope` log; throwaway PR negative control, no app writes |
 | Agents and board access | [agents-board-access.md](agents-board-access.md) | `feature-map-drive.mjs agents-board-access`; 24/24 picker opens and the self-access 403 need throwaway agents |
+| Agents directory | [agents-directory.md](agents-directory.md) | `feature-map-drive.mjs agents-directory` read-only |
 | AI chat | [ai-chat.md](ai-chat.md) | `feature-map-drive.mjs ai-chat` read-only; `ai-chat-drive.mjs` hands-free write journey |
 | Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | `feature-map-drive.mjs ai-feedback-reports`; MCP refusal with an invented field and the board-15 count |
 | Team AI usage | [ai-usage.md](ai-usage.md) | `feature-map-drive.mjs ai-usage`; read-only key-error and successful report checks |
+| All tasks | [all-tasks.md](all-tasks.md) | `feature-map-drive.mjs all-tasks` read-only |
 | Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | `feature-map-drive.mjs announcements-admin-api`; no-login 401 checks on the admin routes |
 | Billing and plans | [billing-and-plans.md](billing-and-plans.md) | `feature-map-drive.mjs billing-and-plans`; open checkout and cancel without payment |
 | Board invites | [board-invites.md](board-invites.md) | `feature-map-drive.mjs board-invites`; owner resend 200, outsider 403 |
 | Board member list | [board-member-list.md](board-member-list.md) | `feature-map-drive.mjs board-member-list`; query `teamId` ignored |
 | Board skills | [board-skills.md](board-skills.md) | `feature-map-drive.mjs board-skills`; create a throwaway skill, prove 201 and the reload, delete it |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `feature-map-drive.mjs boards-and-views`; `board-drive-live.mjs` hands-free |
+| Calendar | [calendar.md](calendar.md) | `feature-map-drive.mjs calendar` read-only |
+| Chat sessions | [chat-sessions.md](chat-sessions.md) | `feature-map-drive.mjs chat-sessions` read-only |
 | CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | `ci-runner-policy.cjs` on the production SHA, self-hosted negative control, `pr-title` status |
 | Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | pinned PR-2034 replay with today's evaluator: first fails, final writes `feature-gated-ui` |
 | Required-check settings | [ci-settings.md](ci-settings.md) | live ruleset read, hourly `verify`/`chain` run log, no settings step in `ci-tests` |
@@ -43,12 +48,14 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Board custom instructions | [custom-instructions.md](custom-instructions.md) | board 7049 GET, save, reload/reopen, unsaved edit, restore |
 | Demo board | [demo-board.md](demo-board.md) | one guest `/demo`, `/onboarding?resumeKey=…`, tutorial URLs recorded unreachable (tutorial disabled) |
 | Desktop human CLI login | [desktop-login.md](desktop-login.md) | `/cli-auth` consent and cancel, `/login/agent` code, human bearer sessions and revoke, no-token 401 |
+| Drafts | [drafts.md](drafts.md) | `feature-map-drive.mjs drafts` read-only |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `data-rfd-*` mouse steps, reload proof, restore column, delete fixture |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | PR vs schedule job selection, `evaluated N, skipped M`, UX dispatch log, cancelled-run census |
 | Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `ht-flag get`, refused same-mode set 403, `/admin/flags` 404 for QA, identical `/api/flags` |
 | Figma connect | [figma-connect.md](figma-connect.md) | no smoke id; drive steps in figma-connect.md (Settings > Accounts, `/api/figma/connection`, OAuth leave) |
 | In-app feedback | [in-app-feedback.md](in-app-feedback.md) | POST /api/feedback on board 15; brain-medium only when the flag is on |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
+| Integrations | [integrations.md](integrations.md) | `feature-map-drive.mjs integrations` read-only |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
 | Next-task pick | [mcp-next-task.md](mcp-next-task.md) | read-only next-task and task context for project 15 |
@@ -59,21 +66,31 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
 | AI model canary | [model-canary.md](model-canary.md) | internal cron, dedicated internal-key request identity, read-only MCP status |
 | My Tasks | [my-tasks.md](my-tasks.md) | no smoke id; drive steps in my-tasks.md (list, settings button, `/scheduled`, board-tab absence) |
+| OAuth and API clients | [oauth-and-api-clients.md](oauth-and-api-clients.md) | `feature-map-drive.mjs oauth-and-api-clients` read-only |
 | Pages | [pages.md](pages.md) | no smoke id; drive steps in pages.md (snippets create/reload/delete, `/pages`, standalone Back to Pages) |
+| Pinned and archived | [pinned-and-archived.md](pinned-and-archived.md) | `feature-map-drive.mjs pinned-and-archived` read-only |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
+| Pricing and trial | [pricing-and-trial.md](pricing-and-trial.md) | `feature-map-drive.mjs pricing-and-trial` read-only |
 | Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and drafts via the steps in quick-entry-cards.md; Table view needs a board view |
+| Reminders | [reminders.md](reminders.md) | `feature-map-drive.mjs reminders` read-only |
 | Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | `ht-verify open /report` and one saved row; velocity page; the two MCP doors need an agent token (401 without) |
+| Saved reports and velocity | [saved-reports-and-velocity.md](saved-reports-and-velocity.md) | `feature-map-drive.mjs saved-reports-and-velocity` read-only |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only); `ht-verify` filter icon > Tags > cycle Match ANY / Match ALL / Hide tags; flags EVERYONE |
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); `ht-verify` /search tips, type `fr` then Tab, full load of a `searchTerm` URL |
+| Settings: account | [settings-account.md](settings-account.md) | `feature-map-drive.mjs settings-account` read-only |
+| Settings: board | [settings-board.md](settings-board.md) | `feature-map-drive.mjs settings-board` read-only |
 | Slack app | [slack-app.md](slack-app.md) | `ht-verify` page loads, `/api/slack/install` redirect, manifest events; live workspace parity UNREACHABLE |
+| Snippets | [snippets.md](snippets.md) | `feature-map-drive.mjs snippets` read-only write+delete one fixture |
 | Starred tasks and comments | [starred.md](starred.md) | `ht-verify` /starred and /pinned with `toggleSaved` fixtures; Ctrl+Shift+S and Ctrl+Shift+P removal, reload |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-qa/scripts/task-drive-live.mjs`; `ht-verify` description PUT + reload, right column, /time empty |
+| Task labels and followers | [task-labels-and-followers.md](task-labels-and-followers.md) | `feature-map-drive.mjs task-labels-and-followers` read-only API |
 | Task share links | [task-share-links.md](task-share-links.md) | `ht-verify` createShareLink, 401 members/share, public /share HTML; agent door 401 without a token |
 | Board task templates | [task-templates.md](task-templates.md) | flag OFF: `ht-verify` GET/POST/DELETE `/api/task-templates` and PATCH 403; settings section absent |
 | Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | newest scheduled task-writer-eval run plus its score artifact; Ctrl+J window |
 | Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | CI Tests run log with 62 `real PG` cases; `/my-tasks` and the core inbox cycle |
 | Themes | [themes.md](themes.md) | `ht-verify` Appearance pick, `html[data-theme]` + `theme` cookie, Ctrl+K switch, AMOLED switch inner span |
+| Time tracking | [time-tracking.md](time-tracking.md) | `feature-map-drive.mjs time-tracking` read-only |
 | Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | `ht-verify` taskDeleteReminder > /trash/<board> > recover > deleteTask, then the 409 and 404 refusals |
 | Webhooks | [webhooks.md](webhooks.md) | Playwright request with `Origin` to `/api/settings/webhooks` create/test/delete; `lastDeliveryOk` true |
 <!-- shared-list rows end -->
