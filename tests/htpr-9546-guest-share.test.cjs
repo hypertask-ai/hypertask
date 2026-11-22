@@ -21,17 +21,13 @@ function load(relativePath, mocks) {
   return exports;
 }
 
-const { shareFollowerPeople } = load("src/components/PageComponents/TaskDetail/SharedTask/MainPage/shareFollowers.ts", {
-  "@/models/model": {},
-});
-
 const MobileViewContext = React.createContext(false);
-const { GuestInviteBar } = load("src/components/PageComponents/TaskDetail/SharedTask/Footer/Footer.tsx", {
+const SharedTaskPageFooter = load("src/components/PageComponents/TaskDetail/SharedTask/Footer/Footer.tsx", {
   "@/models/model": {},
   "@prisma/client": {},
   "next/navigation": { useRouter: () => ({ push() {} }) },
   "@/lib/contexts/mobileContext": { MobileViewContext },
-});
+}).default;
 
 let authenticatedUserId = 0;
 let metaReads = 0;
@@ -50,19 +46,41 @@ const { useTaskDetailMetaField } = load("src/lib/useTaskDetailMetaField.ts", {
 
 function inviteHtml(mobile) {
   return renderToStaticMarkup(
-    React.createElement(MobileViewContext.Provider, { value: mobile }, React.createElement(GuestInviteBar, { onAction() {} })),
+    React.createElement(
+      MobileViewContext.Provider,
+      { value: mobile },
+      React.createElement(SharedTaskPageFooter, { shareId: "share-9546" }, React.createElement("main", null, "HOME-9")),
+    ),
   );
 }
 
 function inviteText(html) {
   const dom = new JSDOM(html);
-  const paragraph = dom.window.document.querySelector("p");
+  const sentence = [...dom.window.document.querySelectorAll("p, div, span")].find((node) => {
+    const own = [...node.childNodes]
+      .filter((child) => child.nodeType === 3)
+      .map((child) => child.textContent)
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    return own === message;
+  });
   const action = [...dom.window.document.querySelectorAll("div")].find((node) => node.textContent === "Sign up or Login");
   return {
-    sentence: paragraph ? paragraph.textContent : "",
+    sentence: sentence ? sentence.textContent.replace(/\s+/g, " ").trim() : "",
+    actionInsideSentence: sentence ? sentence.textContent.includes("Sign up or Login") : true,
     action: action ? action.textContent : "",
-    stacked: paragraph ? paragraph.parentElement.className.includes("flex-col") : false,
+    stacked: Boolean(sentence && sentence.parentElement.className.includes("flex-col")),
+    ticket: dom.window.document.querySelector("main")?.textContent ?? "",
   };
+}
+
+function followerNames(rows) {
+  const relativePath = "src/components/PageComponents/TaskDetail/SharedTask/MainPage/shareFollowers.ts";
+  if (!fs.existsSync(path.join(root, relativePath))) return null;
+  const { shareFollowerPeople } = load(relativePath, { "@/models/model": {} });
+  const people = shareFollowerPeople(rows);
+  return people.map((person) => person.displayName);
 }
 
 function Labels() {
@@ -111,22 +129,25 @@ async function renderedLabels(userId) {
 test("a phone guest sees the invite sentence and the sign-in action on separate lines", () => {
   const phone = inviteText(inviteHtml(true));
   const desktop = inviteText(inviteHtml(false));
+  assert.equal(phone.ticket, "HOME-9");
   assert.equal(phone.sentence, message);
   assert.equal(phone.action, "Sign up or Login");
+  assert.equal(phone.actionInsideSentence, false);
   assert.equal(phone.stacked, true);
   assert.equal(desktop.sentence, message);
   assert.equal(desktop.action, "Sign up or Login");
+  assert.equal(desktop.actionInsideSentence, false);
   assert.equal(desktop.stacked, false);
 });
 
 test("a shared follower list keeps named people and drops a missing account", () => {
-  assert.deepEqual(shareFollowerPeople(undefined), []);
+  assert.deepEqual(followerNames(undefined), []);
   assert.deepEqual(
-    shareFollowerPeople([
+    followerNames([
       { user: null },
       { user: { id: 1, displayName: "Franziska Mayer", photoURL: null } },
       { agent: { id: "agent-1", displayName: "Private agent", photoURL: null } },
-    ]).map((person) => person.displayName),
+    ]),
     ["Franziska Mayer", "Private agent"],
   );
 });
