@@ -439,7 +439,18 @@ test("create route cannot spoof an enabled user's identity to bypass the flag", 
 test("move numbering after permanent deletion uses MAX plus one, not count", async () => {
   const next = load("src/utils/controllers/tasks/getNextUniqueTaskIndex.ts", { "@/lib/prisma": {} }).getNextUniqueTaskIndex;
   const surviving = [1, 3, 4];
-  const db = { task: { aggregate: async () => ({ _max: { uniqueIndex: Math.max(...surviving) } }) } };
+  let issued = 0;
+  const db = {
+    task: { aggregate: async () => ({ _max: { uniqueIndex: Math.max(...surviving) } }) },
+    taskNumberAlias: { aggregate: async () => ({ _max: { uniqueIndex: null } }) },
+    project: {
+      findUnique: async () => ({ issuedUniqueIndex: issued }),
+      updateMany: async ({ data }) => {
+        issued = data.issuedUniqueIndex;
+        return { count: 1 };
+      },
+    },
+  };
   assert.equal(await next(15, db), 5);
   assert.ok(surviving.includes(surviving.length + 1), "positive control: count plus one collides");
   const source = read("src/utils/controllers/tasks/moveToDifferentBoard.ts");

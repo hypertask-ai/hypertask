@@ -381,10 +381,18 @@ async function createManifestBoardAtomically(
         link: { url: buildMcpTaskUrl(projectId, index + 1), format: 'detail', example: buildMcpTaskUrl(projectId, index + 1) },
       })
     }
-    if (creation.firstTaskPointerIndex != null) {
-      const pointer = tasks[creation.firstTaskPointerIndex]
-      if (!pointer) throw new Error('First task pointer is missing from manifest')
-      await tx.project.update({ where: { id: projectId }, data: { firstTaskPointerTaskId: pointer.id, firstTaskPointerSectionId: pointer.sectionId } })
+    const pointer = creation.firstTaskPointerIndex == null ? null : tasks[creation.firstTaskPointerIndex]
+    if (creation.firstTaskPointerIndex != null && !pointer) {
+      throw new Error('First task pointer is missing from manifest')
+    }
+    if (tasks.length > 0 || pointer) {
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          ...(tasks.length > 0 ? { issuedUniqueIndex: tasks.length } : {}),
+          ...(pointer ? { firstTaskPointerTaskId: pointer.id, firstTaskPointerSectionId: pointer.sectionId } : {}),
+        },
+      })
     }
     await createProjectViewAndCreateDefault({ projectId, userId }, tx)
     analyticsKeys.push(await enqueueBoardCreated(tx, projectId, creation.method, actor, project.createdAt))

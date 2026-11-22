@@ -178,7 +178,9 @@ test('board creation atomically creates an Accepted membership before manifest t
   const f = fixture();
   let membership;
   const board = { id: 900, title: 'Created', name: 'project-900', uniqueIdentifier: 'NEW', teamId: 'team', owner: f.user, team: { title: 'Team' } };
+  let savedBoard;
   f.prisma.project.findUniqueOrThrow = async () => board;
+  f.prisma.project.update = async ({ data }) => { savedBoard = data; return { ...board, ...data }; };
   f.prisma.section.findMany = async () => [{ id: 1, section_title: 'Todo', ranking: 'a' }];
   f.prisma.label = { create: async () => ({}) };
   const create = f.load('src/lib/mcp/boards/createBoardFromManifest.ts', {
@@ -190,6 +192,7 @@ test('board creation atomically creates an Accepted membership before manifest t
   }).createBoardFromManifest;
   const result = await create({ teamId: 'team', googleAccountId: 'account', userId: 6, userEmail: f.user.email, creation: { method: 'agent', channel: 'api', agentId: f.agent.id }, manifest: { title: 'Created', sections: [{ title: 'Todo' }], labels: [], tasks: [{ title: 'New', sectionIndex: 0, labelNames: [] }] } });
   assert.equal(result.board.id, 900);
+  assert.deepEqual(savedBoard, { issuedUniqueIndex: 1 });
   assert.deepEqual(membership, { userId: 6, agentId: f.agent.id, status: 'Accepted' });
   const project = { ...board, members: [{ ...membership, agent: f.agent }] };
   assert.ok(matches(project, f.access.projectContentAccessWhere(6, f.agent.id)));

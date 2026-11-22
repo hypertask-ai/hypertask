@@ -34,10 +34,11 @@ function load(relativePath, stubs) {
   return mod.exports;
 }
 
-function harness() {
-  const rows = [{ id: 1, projectId: 15, uniqueIndex: 41 }];
+function harness({ uniqueIndexes = [41], issuedUniqueIndex = 0 } = {}) {
+  const rows = uniqueIndexes.map((uniqueIndex, index) => ({ id: index + 1, projectId: 15, uniqueIndex }));
   const deliveries = [];
   const events = [];
+  let issued = issuedUniqueIndex;
   let lockTail = Promise.resolve();
   const aggregate = async ({ where }) => ({
     _max: {
@@ -46,9 +47,15 @@ function harness() {
   });
   const prisma = {
     project: {
-      updateMany: async () => ({ count: 0 }),
+      updateMany: async ({ where, data } = {}) => {
+        if (where?.issuedUniqueIndex?.lt != null && issued < where.issuedUniqueIndex.lt) {
+          issued = data.issuedUniqueIndex;
+          return { count: 1 };
+        }
+        return { count: 0 };
+      },
       findFirst: async () => ({ id: 15 }),
-      findUnique: async () => ({ id: 15, uniqueIdentifier: "TEST" }),
+      findUnique: async () => ({ id: 15, uniqueIdentifier: "TEST", issuedUniqueIndex: issued, firstTaskPointerTaskId: null }),
     },
     section: { findFirst: async () => ({ id: 9, section_title: "Backlog" }) },
     task: { aggregate, count: async () => 1 },
@@ -90,6 +97,9 @@ function harness() {
             events.push("create");
             return row;
           },
+        },
+        taskNumberAlias: {
+          aggregate: async () => ({ _max: { uniqueIndex: null } }),
         },
         webhookSubscription: { findMany: async () => [] },
         boardWebhookDelivery: { create: async () => undefined },
@@ -163,3 +173,21 @@ for (const index of [undefined, 0]) {
     assert.deepEqual(events, Array.from({ length: 4 }, () => ["lock", "allocate", "create", "commit"]).flat());
   });
 }
+
+test("a create after deleting the highest task number gets the next number", async () => {
+  const { create, rows } = harness({ uniqueIndexes: [6285], issuedUniqueIndex: 6286 });
+  const result = await create({
+    title: "After delete",
+    description: "",
+    section: "Backlog",
+    userId: 7,
+    ranking: "rank-after-delete",
+    projectId: 15,
+    sectionId: 9,
+    currentUser: { id: 7 },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(rows.at(-1).uniqueIndex, 6287);
+  assert.equal(rows.at(-1).ticketNumber, "TEST-6287");
+});
