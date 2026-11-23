@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
 
@@ -414,6 +415,13 @@ test("the flag off leaves the block page without checking other accounts", async
   }
 });
 
+test("the flag provider asks only while that flag is on", () => {
+  const key = load("src/lib/flags/definitions/htpr-9621-auto-switch-account.ts").HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG;
+  const provider = fs.readFileSync("src/hooks/useFlag.tsx", "utf8");
+  assert.equal(provider.includes(`values["${key}"] === true`), true);
+  assert.equal(provider.includes('import("@/lib/auth/ticketAccountSwitchProbe")'), true);
+});
+
 test("ticket links outside a numeric detail url do not ask who can open them", async () => {
   const { ticketDetailLocator, ticketDetailFields, ticketAccountSwitchPath } = load("src/lib/auth/ticketDetailLocator.ts");
   assert.deepEqual(ticketDetailLocator("/detail/project-15/9621"), {
@@ -432,10 +440,15 @@ test("ticket links outside a numeric detail url do not ask who can open them", a
   assert.equal(ticketAccountSwitchPath("/inbox"), null);
 });
 
-test("choosing an account reloads that ticket, and any other return path still opens the inbox", async () => {
-  const previous = global.window;
+test("choosing an account reloads that ticket, and any other return path still opens the inbox", () => {
+  const previousWindow = global.window;
+  const previousDocument = global.document;
   const events = [];
+  const forms = [];
+  const opened = [];
   const storage = new Map();
+  let cookie = "";
+  const inputs = [];
   global.window = {
     location: {
       pathname: "/detail/project-15/9621/",
@@ -448,38 +461,82 @@ test("choosing an account reloads that ticket, and any other return path still o
       removeItem: (key) => storage.delete(key),
     },
   };
+  global.document = {
+    get cookie() { return cookie; },
+    set cookie(value) { cookie = value; },
+    getElementById: (id) => (id === "unauthorized-title" ? { id } : null),
+    createElement: (tag) => {
+      const element = {
+        tag,
+        type: "",
+        name: "",
+        value: "",
+        method: "",
+        action: "",
+        children: [],
+        append(child) { this.children.push(child); },
+        submit() { forms.push(this); },
+      };
+      if (tag === "input") inputs.push(element);
+      return element;
+    },
+    body: { append() {} },
+  };
   try {
-    const accounts = load("src/lib/auth/accounts.ts", {
-      nookies: { default: { set() {}, destroy() {} }, parseCookies: () => ({}) },
-      "@/lib/configs/auth.config": { default: { cookies: { user: "nookies_user", options: { path: "/" } } } },
-      "@/lib/auth/betterAuthClient": {
-        authClient: { multiSession: { setActive: async () => ({ data: {} }) } },
-      },
-    });
     const locator = load("src/lib/auth/ticketDetailLocator.ts");
-    locator.rememberTicketAccountSwitch("/detail/project-15/9621");
-    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    assert.equal(locator.ticketAccountSwitchStays(), true);
+    locator.openSwitchedTicketAccount();
     assert.deepEqual(events, [["reload"]]);
     assert.equal(storage.size, 0);
 
     events.length = 0;
     locator.rememberTicketAccountSwitch("https://evil.test/detail/project-15/9621");
-    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    locator.openSwitchedTicketAccount();
     assert.deepEqual(events, [["assign", "/inbox"]]);
 
     events.length = 0;
-    locator.rememberTicketAccountSwitch("/detail/project-15/9621");
+    assert.equal(locator.ticketAccountSwitchStays(), true);
     locator.forgetTicketAccountSwitch();
-    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    locator.openSwitchedTicketAccount();
     assert.deepEqual(events, [["assign", "/inbox"]]);
 
     events.length = 0;
     global.window.location.pathname = "/inbox";
-    locator.rememberTicketAccountSwitch("/detail/project-15/9621");
-    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    assert.equal(locator.ticketAccountSwitchStays(), false);
+    locator.openSwitchedTicketAccount();
     assert.deepEqual(events, [["assign", "/inbox"]]);
     assert.equal(storage.size, 0);
+
+    forms.length = 0;
+    global.window.location.pathname = "/detail/project-15/9621";
+    global.document.getElementById = () => null;
+    assert.equal(locator.ticketAccountSwitchStays(), false);
+    locator.submitTicketAccountSwitch("/detail/project-15/9621", () => opened.push("switcher"));
+    assert.equal(forms.length, 0);
+
+    global.document.getElementById = (id) => (id === "unauthorized-title" ? { id } : null);
+    global.window.location.pathname = "/detail/project-15/9621";
+    locator.submitTicketAccountSwitch("/detail/project-15/9621", () => opened.push("switcher"));
+    assert.equal(forms.length, 1);
+    assert.equal(forms[0].method, "POST");
+    assert.equal(forms[0].action, "/api/auth/ticket-account-switch");
+    assert.deepEqual(inputs.map((input) => [input.name, input.value]), [
+      ["projectSlug", "project-15"],
+      ["uniqueIndex", "9621"],
+    ]);
+    locator.submitTicketAccountSwitch("/detail/project-15/9621", () => opened.push("switcher"));
+    assert.equal(forms.length, 1);
+    assert.deepEqual(opened, []);
+
+    cookie = "ticket-account-switch=choose";
+    global.window.location.pathname = "/detail/project-15/1000";
+    locator.submitTicketAccountSwitch("/detail/project-15/1000", () => opened.push("switcher"));
+    assert.equal(forms.length, 1);
+    assert.deepEqual(opened, ["switcher"]);
+    assert.equal(cookie.includes("Max-Age=0"), true);
+    assert.equal(storage.get("ticket-account-switch-return"), "/detail/project-15/1000");
   } finally {
-    global.window = previous;
+    global.window = previousWindow;
+    global.document = previousDocument;
   }
 });

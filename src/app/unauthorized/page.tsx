@@ -1,14 +1,12 @@
 "use client"
 import { currentUserAtom, showAccountSwitcherAtom, showBoardManagerAtom } from '@/store';
 import { useFlag } from '@/hooks/useFlag';
-import { rememberTicketAccountSwitch, TICKET_ACCOUNT_SWITCH_CHOOSE, ticketDetailLocator } from '@/lib/auth/ticketDetailLocator';
 import { HTPR_7799_PROJECT_ENTRY_FLAG } from '@/lib/flags/keys';
-import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from '@/lib/flags/definitions/htpr-9621-auto-switch-account';
 import { getFirstProject } from '@/utils/api/Homepage';
 import { returnToFirstBoard } from '@/lib/firstScreen/returnToFirstBoard';
 import { useSignout } from '@/hooks/MultiPages/HTC/useSignout';
 import Head from 'next/head'
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { CircleAlert } from 'lucide-react';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from '@/lib/state';
 import { useEffect } from 'react';
@@ -19,37 +17,9 @@ const Unauthorized = () => {
     const currentUser = useRecoilValue(currentUserAtom);
     const setShowAccountSwitcher = useSetRecoilState(showAccountSwitcherAtom);
     const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
-    const autoSwitchAccount = useFlag(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG);
-    const pathname = usePathname() ?? "";
     useEffect(() => {
         setShowBoardManager(false)
     }, [setShowBoardManager])
-    useEffect(autoSwitchAccount ? () => {
-        const locator = ticketDetailLocator(pathname);
-        if (!locator) return;
-        const choose = document.cookie.split("; ").includes(`${TICKET_ACCOUNT_SWITCH_CHOOSE}=choose`);
-        if (choose) {
-            document.cookie = `${TICKET_ACCOUNT_SWITCH_CHOOSE}=; Max-Age=0; Path=/`;
-            rememberTicketAccountSwitch(pathname);
-            setShowAccountSwitcher(true);
-            return;
-        }
-        const attemptKey = `ticket-account-switch:${pathname}`;
-        if (window.sessionStorage.getItem(attemptKey)) return;
-        window.sessionStorage.setItem(attemptKey, "1");
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = "/api/auth/ticket-account-switch";
-        for (const [name, value] of [["projectSlug", locator.projectSlug], ["uniqueIndex", locator.uniqueIndex]] as const) {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = name;
-            input.value = value;
-            form.append(input);
-        }
-        document.body.append(form);
-        form.submit();
-    } : () => {}, [autoSwitchAccount, pathname, setShowAccountSwitcher]);
     const router = useRouter()
     const { handleHardReset } = useSignout()
     const goBacktoPrevious = () => returnToFirstBoard({
@@ -96,10 +66,7 @@ const Unauthorized = () => {
                             </p>
                             <button
                                 type="button"
-                                onClick={() => {
-                                    if (autoSwitchAccount) rememberTicketAccountSwitch(pathname);
-                                    setShowAccountSwitcher(true);
-                                }}
+                                onClick={() => setShowAccountSwitcher(true)}
                                 className="mt-2 inline-flex min-h-11 items-center justify-center rounded-[4px] px-4 py-2 text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selected-item-border"
                             >
                                 Switch account

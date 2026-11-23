@@ -3,10 +3,6 @@
 import nookies, { parseCookies } from "nookies";
 import authConfig from "@/lib/configs/auth.config";
 import { authClient } from "@/lib/auth/betterAuthClient";
-import {
-  takeTicketAccountSwitchLanding,
-  ticketAccountSwitchPath,
-} from "@/lib/auth/ticketDetailLocator";
 import type { ForceSignOutResult } from "@/lib/auth/session";
 
 export interface SwitchAccount {
@@ -103,13 +99,6 @@ export const switchAccount = async (
 ): Promise<boolean> => {
   const activated = await activateAccount(sessionToken);
   if (!activated) return false;
-
-  const landing = takeTicketAccountSwitchLanding();
-  const here = ticketAccountSwitchPath(window.location.pathname);
-  if (landing && here && landing === here) {
-    window.location.reload();
-    return true;
-  }
 
   window.location.assign("/inbox");
   return true;

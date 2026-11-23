@@ -21,7 +21,8 @@ import {
   addAccount,
   SwitchAccount,
 } from "@/lib/auth/accounts";
-import { forgetTicketAccountSwitch } from "@/lib/auth/ticketDetailLocator";
+import { authClient } from "@/lib/auth/betterAuthClient";
+import { forgetTicketAccountSwitch, openSwitchedTicketAccount, ticketAccountSwitchStays } from "@/lib/auth/ticketDetailLocator";
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
 
 interface ISwitchAccountModal {
@@ -77,8 +78,23 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       setError(null);
       setSwitchingToken(account.sessionToken);
       switchingRef.current = true;
-      const switched = await switchAccount(account.sessionToken);
-      if (switched) return;
+      const stay = keepTicket && ticketAccountSwitchStays();
+      let switched = false;
+      if (stay) {
+        try {
+          const response = await authClient.multiSession.setActive({ sessionToken: account.sessionToken });
+          switched = !response?.error;
+        } catch {
+          switched = false;
+        }
+        if (!switched) forgetTicketAccountSwitch();
+      } else {
+        switched = await switchAccount(account.sessionToken);
+      }
+      if (switched) {
+        if (stay) openSwitchedTicketAccount();
+        return;
+      }
       switchingRef.current = false;
 
       setError(
@@ -87,7 +103,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       await refreshAccounts();
       setSwitchingToken(null);
     },
-    [activeId, dismiss, refreshAccounts],
+    [activeId, dismiss, keepTicket, refreshAccounts],
   );
 
   useEffect(() => {

@@ -54,3 +54,49 @@ export function takeTicketAccountSwitchLanding(): string | null {
 export function forgetTicketAccountSwitch() {
   ticketSwitchStorage()?.removeItem(TICKET_ACCOUNT_SWITCH_RETURN);
 }
+
+export function ticketAccountSwitchStays(): boolean {
+  if (typeof document === "undefined" || !document.getElementById("unauthorized-title")) return false;
+  const here = ticketAccountSwitchPath(window.location.pathname);
+  if (!here) return false;
+  rememberTicketAccountSwitch(here);
+  return true;
+}
+
+export function openSwitchedTicketAccount() {
+  const here = ticketAccountSwitchPath(window.location.pathname);
+  if (here && takeTicketAccountSwitchLanding() === here) {
+    window.location.reload();
+    return;
+  }
+  window.location.assign("/inbox");
+}
+
+export function submitTicketAccountSwitch(pathname: string, openSwitcher: () => void) {
+  if (typeof document === "undefined" || !document.getElementById("unauthorized-title")) return;
+  const locator = ticketDetailLocator(pathname);
+  if (!locator) return;
+  const choose = document.cookie.split("; ").includes(`${TICKET_ACCOUNT_SWITCH_CHOOSE}=choose`);
+  if (choose) {
+    document.cookie = `${TICKET_ACCOUNT_SWITCH_CHOOSE}=; Max-Age=0; Path=/`;
+    rememberTicketAccountSwitch(pathname);
+    openSwitcher();
+    return;
+  }
+  const attemptKey = `ticket-account-switch:${pathname}`;
+  const storage = ticketSwitchStorage();
+  if (!storage || storage.getItem(attemptKey)) return;
+  storage.setItem(attemptKey, "1");
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/api/auth/ticket-account-switch";
+  for (const [name, value] of [["projectSlug", locator.projectSlug], ["uniqueIndex", locator.uniqueIndex]] as const) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.append(input);
+  }
+  document.body.append(form);
+  form.submit();
+}
