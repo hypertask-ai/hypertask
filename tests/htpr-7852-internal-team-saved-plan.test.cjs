@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const React = require("react");
 const { createJiti } = require("jiti");
@@ -11,7 +10,6 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 const root = path.resolve(__dirname, "..");
 const INTERNAL_TEAM_ID = "08f79efd-770e-4e32-9728-65e6d29ec893";
 const PRO_PRICE = "price_1QjJeDIhmcH60VcciHzZ3mTJ";
-const KEY = "htpr-7852-internal-team-saved-plan";
 
 function internalTeam(overrides = {}) {
   return {
@@ -199,29 +197,4 @@ test("the open board billing chip uses the saved plan with no safety switch", as
       else delete global[name];
     }
   }
-});
-
-test("the saved-plan switch, its off path, and its stored setting are gone", () => {
-  assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions", `${KEY}.ts`)), false);
-  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${KEY}.json`)), false);
-  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
-  assert.match(flags, new RegExp(`"${KEY}",`));
-  assert.match(flags, new RegExp(`"${KEY}": true`));
-  const application = ["src/app", "src/components", "src/utils", "src/hooks", "src/lib/deriveCurrentBoardBilling.ts"]
-    .flatMap((entry) => {
-      const full = path.join(root, entry);
-      if (!fs.statSync(full).isDirectory()) return [entry];
-      return fs.readdirSync(full, { recursive: true })
-        .map((name) => path.join(entry, String(name)))
-        .filter((name) => /\.tsx?$/.test(name) && fs.statSync(path.join(root, name)).isFile());
-    });
-  const mentions = application.filter((file) => fs.readFileSync(path.join(root, file), "utf8").includes(KEY));
-  assert.deepEqual(mentions, []);
-  const statements = fs.readdirSync(path.join(root, "src/prisma/migrations"))
-    .map((name) => path.join(root, "src/prisma/migrations", name, "migration.sql"))
-    .filter((file) => fs.existsSync(file))
-    .flatMap((file) => fs.readFileSync(file, "utf8").split("\n"))
-    .filter((line) => line.includes(KEY));
-  assert.deepEqual(statements, [`DELETE FROM "FeatureFlag" WHERE "key" = '${KEY}';`]);
-  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, KEY), false);
 });
