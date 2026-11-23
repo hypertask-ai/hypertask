@@ -25,6 +25,10 @@ Paths in reference commands are repository-relative.
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
 
+| PR author rule | Enforced by |
+| --- | --- |
+| Resolve the author family from the PR body or consistent commit trailers; reject unknown or conflicting families. | `scripts/pstack-verifier.mjs`, `tests/pstack-verifier.test.cjs` |
+
 ## Read X when Y
 
 Read linked sections on demand, not every reference.

@@ -288,12 +288,34 @@ export function cookiesFromHeader(header, base) {
     return [{ name, value, domain: host, path: "/", httpOnly: name !== "nookies_user", secure: false, sameSite: "Lax" }];
   });
 }
-export function authorFamily(body) {
-  const family = (/^Author-Model:\s*(\S+)\s*$/m.exec(String(body ?? ""))?.[1] ?? "").toLowerCase();
-  return FAMILIES.has(family) ? family : "";
+export function authorFamily(body, commits = []) {
+  const lines = [...String(body ?? "").matchAll(/^Author-Model:([^\r\n]*)/gm)];
+  const families = new Set();
+  for (const [, value] of lines) {
+    const family = value.trim().split(/\s+/)[0].toLowerCase();
+    if (!FAMILIES.has(family)) return "";
+    families.add(family);
+  }
+  if (lines.length) return families.size === 1 ? [...families][0] : "";
+  for (const commit of commits) {
+    const paragraphs = String(commit?.commit?.message ?? "").trimEnd().split(/\r?\n[ \t]*\r?\n/);
+    if (paragraphs.length < 2) continue;
+    const trailers = paragraphs.at(-1);
+    if (!trailers.split(/\r?\n/).every((line) => /^[A-Za-z0-9-]+:[ \t]*[^\r\n]*$/.test(line))) continue;
+    for (const [, key, value] of trailers.matchAll(/^(Author-Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)) {
+      if (key.toLowerCase() === "author-model") {
+        const family = value.trim().split(/\s+/)[0].toLowerCase();
+        if (!FAMILIES.has(family)) return "";
+        families.add(family);
+      } else {
+        for (const [family, pattern] of FAMILY_PATTERNS) if (pattern.test(value)) families.add(family);
+      }
+    }
+  }
+  return families.size === 1 ? [...families][0] : "";
 }
-export function authorGate(body) {
-  const author = authorFamily(body);
+export function authorGate(body, commits = []) {
+  const author = authorFamily(body, commits);
   return author ? { stop: false, author } : { stop: true, verdict: "FAIL", notes: "author model unknown" };
 }
 const FAMILY_PATTERNS = [
@@ -1272,16 +1294,20 @@ export async function resolveCommand(io = {}) {
   if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
-  if (BOT_LOGINS.has(item.user?.login)) {
-    const commits = JSON.parse(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/commits`]));
-    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
+  let commitsKnown = [];
+  if (BOT_LOGINS.has(item.user?.login) || !/^Author-Model:/m.test(String(item.body ?? ""))) {
+    const commits = JSON.parse(call(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${item.number}/commits`]));
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
-    const commitsKnown = Array.isArray(commits) ? commits : [];
+    commitsKnown = Array.isArray(commits) ? commits.flat() : [];
     const lastSha = commitsKnown.at(-1)?.sha;
     if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
+    if (item.commits != null && commitsKnown.length !== item.commits) commitsKnown = [];
+  }
+  if (BOT_LOGINS.has(item.user?.login)) {
+    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
-      const gate = authorGate(item.body);
+      const gate = authorGate(item.body, commitsKnown);
       if (gate.stop) {
         output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
         return;
@@ -1294,7 +1320,7 @@ export async function resolveCommand(io = {}) {
       botLogin = item.user.login;
     }
   }
-  const gate = authorGate(item.body);
+  const gate = authorGate(item.body, commitsKnown);
   if (!botLogin && gate.stop) {
     output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
