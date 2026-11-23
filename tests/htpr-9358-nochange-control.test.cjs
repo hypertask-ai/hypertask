@@ -102,6 +102,10 @@ test("a search that found the error in the README on the previous build passes",
   assert.match(run.stdout, /nochange ok/);
 });
 
+test("a control whose search did not find the fault fails", () => {
+  refused([opener + "<p>Control: the search did not run; an observer found the fault on the previous build.</p>"]);
+});
+
 test("a control that says the fault was not found fails", () => {
   refused([opener + "<p>Control: the search has not found the fault on the previous build.</p>"]);
   refused([opener + "<p>Control: the search never found the fault on the previous build.</p>"]);
