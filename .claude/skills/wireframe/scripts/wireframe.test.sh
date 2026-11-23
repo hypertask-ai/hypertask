@@ -142,6 +142,10 @@ def png_for(width, height):
             + chunk(b"IDAT", zlib.compress((b"\0" + b"\xff" * (width * 3)) * height)) + chunk(b"IEND", b""))
 
 def add_today(folder):
+    screen = folder / "screen.json"
+    if not screen.exists():
+        screen.write_text(json.dumps({"sourceUrl": TURL}))
+    source = json.loads(screen.read_text())["sourceUrl"]
     shots = folder / "today"
     shots.mkdir(exist_ok=True)
     manifest = []
@@ -149,7 +153,7 @@ def add_today(folder):
         for name, viewport in (("mobile", "390x844"), ("desktop", "1440x900")):
             shot = f"today/{name}-{theme}.png"
             (folder / shot).write_bytes(png_for(*map(int, viewport.split("x"))))
-            manifest.append({"file": shot, "viewport": viewport, "theme": theme, "sourceUrl": TURL, "capturedAt": "2026-11-23T10:00:00Z"})
+            manifest.append({"file": shot, "viewport": viewport, "theme": theme, "sourceUrl": source, "capturedAt": "2026-11-23T10:00:00Z"})
     (folder / "today.json").write_text(json.dumps(manifest))
     figures = "".join(f'<figure><img alt="{e["theme"]} {e["viewport"]}" src="data:image/png;base64,{base64.b64encode((folder / e["file"]).read_bytes()).decode()}" data-capture="{e["file"]}"><figcaption>{e["theme"]} {e["viewport"]}</figcaption></figure>' for e in manifest)
     section = f'<section data-wireframe-today id="today"><h2>Today</h2>{figures}</section>'
@@ -271,6 +275,7 @@ for content in [None, '', '{', '{}', '[]', 'null', '[null]', json.dumps([{**styl
 ok("missing, invalid, empty or incomplete live styles fail before upload or board writes")
 
 record.write_text(json.dumps(styles))
+add_today(page.parent)
 manifest_path = page.with_name("today.json")
 manifest = json.loads(manifest_path.read_text())
 today_variants = [None, '', '{}', '[]', json.dumps(manifest[:-1]),
@@ -279,6 +284,8 @@ today_variants = [None, '', '{}', '[]', json.dumps(manifest[:-1]),
                   json.dumps([{**manifest[0], "theme": "midnight"}] + manifest[1:]),
                   json.dumps([{**manifest[0], "viewport": "1024x768"}] + manifest[1:]),
                   json.dumps([{**manifest[0], "sourceUrl": "https://example.test/detail/project-15/255"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "sourceUrl": "https://app.hypertask.ai/project?id=7049"}] + manifest[1:]),
+                  json.dumps([{**entry, "sourceUrl": "https://app.hypertask.ai/project?id=7049"} for entry in manifest]),
                   json.dumps([{**manifest[0], "capturedAt": "yesterday"}] + manifest[1:]),
                   json.dumps([{**manifest[0], "file": "today/missing.png"}] + manifest[1:])]
 for content in today_variants:
@@ -297,7 +304,14 @@ page.write_text(text[:start] + text[end:])
 p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.strip() == TODAY and not events(log, "http")
 ok("a Today section missing from the page fails publish")
-ok("missing, partial or invalid live capture manifests fail before upload or board writes")
+ok("missing, partial, mixed-screen or wrong-screen capture manifests fail before upload or board writes")
+add_today(page.parent)
+shot = page.parent / manifest[0]["file"]
+shot.write_bytes(PNG)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+ok("a 1x1 image cannot substitute for a declared mobile or desktop capture")
 
 for fixture in ("rejected-ai-chat.html", "rejected-task-entry.html"):
     rejected = (fixtures / fixture).read_text()
@@ -338,6 +352,17 @@ p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and "gradient" in p.stderr and not events(log, "http")
 ok("an off-token gradient is refused")
 
+for property in ("box-shadow", "text-shadow"):
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{property}:0 0 8px #ff0000">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and property in p.stderr and not events(log, "http")
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{property}:0 0 8px #ececec">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment")
+    assert len(uploaded(log, "waiting")) == 1
+ok("box and text shadows reject off-token colours and accept app token colours")
+
 for viewport, media in (("390x844", "max-width:600px"), ("1440x900", "min-width:1000px")):
     page.write_text(valid_page.replace("</style>", "@media (" + media + "){body{background-color:#ff0000}}</style>"))
     add_today(page.parent)
@@ -359,6 +384,27 @@ ok("copied live CSS radii pass because the token check skips what the base alrea
 p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and "radius 5px" in p.stderr and not events(log, "http")
 ok("new elements cannot borrow a copied live element's off-token exemption")
+
+frame_kit = D / "frame-kit.html"
+inner = kit.read_text().replace('</body>', '<div style="border-radius:8px">Copied live radius</div></body>')
+frame_kit.write_text(kit.read_text().replace('</body>', '<iframe title="Live app" srcdoc="' + html.escape(inner, quote=True) + '"></iframe></body>'))
+invoke("base", str(frame_kit))
+invoke("new", "HTPR-404")
+framed = home / "HTPR-404/index.html"
+framed.write_text(re.sub(r'(<body[^>]*>)', lambda match: match.group(1) + link, framed.read_text(), count=1))
+framed.with_name("live-styles.json").write_text(json.dumps(styles))
+add_today(framed.parent)
+p, log = invoke("publish", "HTPR-404", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-404")) == 1
+framed_page = framed.read_text()
+original_doc = re.search(r'srcdoc="([^"]*)"', framed_page).group(1)
+for markup in ('<div style="color:#ff0000;border-radius:19px">Added off-token</div>', '<style>@media(max-width:600px){body{color:#ff0000}}</style>'):
+    modified_doc = html.escape(html.unescape(original_doc).replace('</body>', markup + '</body>'), quote=True)
+    framed.write_text(framed_page.replace(original_doc, modified_doc, 1))
+    p, log = invoke("publish", "HTPR-404", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and "390x844" in p.stderr and not events(log, "http")
+ok("inline app frames preserve copied radii but reject added and responsive off-token styles")
+invoke("base", str(kit))
 
 redo = {"sourceTicket": "https://app.hypertask.ai/detail/project-15/6894", "viewport": {"width": 1440, "height": 900},
         "themes": {"porcelain": {"htmlClass": "light porcelain", "destructive": "0 72.22% 50.59%",
@@ -438,7 +484,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(302)
             self.send_header("Location", "/login")
             self.end_headers()
-        elif self.path == "/screen.html":
+        elif self.path.split("?")[0] == "/screen.html":
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
@@ -479,7 +525,7 @@ assert f'href="{TURL}"' in body and "HTPR-401" in body
 assert "Live task entry" in body
 (cloned.parent / "live-styles.json").write_text(json.dumps(styles))
 add_today(cloned.parent)
-p, log = invoke("publish", "HTPR-401", "--no-comment")
+p, log = invoke("publish", "HTPR-401", "--no-comment", **qa_env)
 assert len(uploaded(log, "waiting", "HTPR-401")) == 1
 assert "Phone layout" in body and "Desktop layout" not in body
 assert 'font-family:"IBM Plex Sans"' in body or 'font-family: "IBM Plex Sans"' in body
@@ -494,10 +540,10 @@ for bad_state, message in ((D / "missing-state.json", "QA storage state is missi
         p, log = invoke(*args, fail=True, **{**qa_env, "WIREFRAME_QA_STATE": str(bad_state)})
         assert message in p.stderr and not events(log, "http")
         assert not (home / "HTPR-403/index.html").exists()
-for route in ("/redirect", "/error"):
+for route in ("/redirect", "/error", "/screen.html?id=7049"):
     for args in (("new", "HTPR-403", "--mobile", route), ("capture", "HTPR-400", route)):
         p, log = invoke(*args, fail=True, **qa_env)
-        assert "QA screen did not load" in p.stderr and not events(log, "http")
+        assert ("QA screen did not load" in p.stderr or "capture source does not match" in p.stderr) and not events(log, "http")
         assert not (home / "HTPR-403/index.html").exists()
 ok("capture and phone cloning refuse missing, expired, wrong-user, redirected and error sessions")
 

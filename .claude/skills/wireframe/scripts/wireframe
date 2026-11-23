@@ -146,10 +146,20 @@ def design_tokens():
 
 
 def playwright_dir():
+    candidates = [repo_root() / "node_modules/playwright"]
     playwright = shutil.which("playwright")
-    if not playwright:
-        raise SystemExit("publish refused: install Playwright and Chromium locally to check the wireframe")
-    return str(Path(playwright).resolve().parent)
+    if playwright:
+        candidates.append(Path(playwright).resolve().parent)
+    for candidate in candidates:
+        if (candidate / "package.json").is_file():
+            return str(candidate)
+    npm = shutil.which("npm")
+    if npm:
+        result = subprocess.run([npm, "root", "-g"], capture_output=True, text=True, timeout=15)
+        candidate = Path(result.stdout.strip()) / "playwright"
+        if result.returncode == 0 and (candidate / "package.json").is_file():
+            return str(candidate)
+    raise SystemExit("publish refused: install the Node Playwright package and Chromium locally to check the wireframe")
 
 
 def node(script, *args):
@@ -160,10 +170,10 @@ def node(script, *args):
 
 
 COLLECT_JS = r"""
-function collect() {
+function collect(doc = document, prefix = '') {
     const out = [];
     const solid = (value) => value && value !== 'none' && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)';
-    for (const el of document.body ? [document.body, ...document.body.querySelectorAll('*')] : []) {
+    for (const el of doc.body ? [doc.documentElement, doc.body, ...doc.body.querySelectorAll('*')] : []) {
         if (el.closest('[data-wireframe-today]')) continue;
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) continue;
@@ -178,13 +188,19 @@ function collect() {
         if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(['outline', style.outlineColor]);
         if (solid(style.fill)) colors.push(['fill', style.fill]);
         if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
-        for (const color of style.backgroundImage.match(/rgba?\([^)]*\)/g) || []) colors.push(['gradient', color]);
+        for (const [kind, value] of [['gradient', style.backgroundImage], ['box-shadow', style.boxShadow], ['text-shadow', style.textShadow]]) {
+            for (const color of value.match(/rgba?\([^)]*\)/g) || []) colors.push([kind, color]);
+        }
         out.push({
-            key: el.getAttribute('data-wireframe-base'),
+            key: el.hasAttribute('data-wireframe-base') ? prefix + el.getAttribute('data-wireframe-base') : null,
+            externalFrame: el.tagName === 'IFRAME' && !el.hasAttribute('srcdoc'),
             tag: el.tagName.toLowerCase(), font: style.fontFamily, size: style.fontSize,
             colors: colors.filter(([, color]) => solid(color)),
             radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
         });
+        if (el.tagName === 'IFRAME' && el.hasAttribute('srcdoc') && el.contentDocument) {
+            out.push(...collect(el.contentDocument, prefix + (el.getAttribute('data-wireframe-base') ?? 'added-frame') + '/'));
+        }
     }
     return out;
 }
@@ -208,6 +224,7 @@ const px = (value) => value.endsWith('px') ? parseFloat(value) : NaN;
 const check = (row) => {
     const family = row.font.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
     const problems = [];
+    if (row.externalFrame) problems.push('external iframe; use the base kit inline srcdoc');
     if (!fonts.has(family)) problems.push('font ' + family);
     if (!sizes.some((allowed) => Math.abs(allowed - px(row.size)) < 0.5)) problems.push('size ' + row.size);
     for (const [kind, color] of row.colors) {
@@ -224,7 +241,7 @@ const check = (row) => {
         const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, javaScriptEnabled: false, serviceWorkers: 'block', offline: true });
         await page.route('**/*', (route) => route.abort());
         const load = async (file) => {
-            await page.setContent(fs.readFileSync(file, 'utf8'), { waitUntil: 'domcontentloaded' });
+            await page.setContent(fs.readFileSync(file, 'utf8'), { waitUntil: 'load' });
             return page.evaluate(collect);
         };
         const problems = [];
@@ -277,7 +294,8 @@ def read_manifest(file):
     manifest = file.with_name("today.json")
     try:
         data = json.loads(manifest.read_text())
-    except (OSError, ValueError):
+        expected_source = json.loads(file.with_name("screen.json").read_text())["sourceUrl"]
+    except (OSError, ValueError, KeyError, TypeError):
         raise SystemExit(TODAY_MESSAGE)
     if not isinstance(data, list) or len(data) != len(THEMES) * len(VIEWPORTS):
         raise SystemExit(TODAY_MESSAGE)
@@ -286,7 +304,7 @@ def read_manifest(file):
         if not isinstance(entry, dict):
             raise SystemExit(TODAY_MESSAGE)
         theme, viewport, shot, source = entry.get("theme"), entry.get("viewport"), entry.get("file"), entry.get("sourceUrl")
-        if theme not in THEMES or viewport not in ("390x844", "1440x900") or not isinstance(shot, str) or not isinstance(source, str):
+        if theme not in THEMES or viewport not in ("390x844", "1440x900") or not isinstance(shot, str) or not isinstance(source, str) or source != expected_source:
             raise SystemExit(TODAY_MESSAGE)
         if (theme, viewport) in seen:
             raise SystemExit(TODAY_MESSAGE)
@@ -412,9 +430,13 @@ def publish_guard(file, turl):
 
 
 STAMP_JS = r"""
-function stamp() {
-    for (const [index, el] of [document.body, ...document.body.querySelectorAll('*')].entries()) {
+function stamp(doc = document) {
+    for (const [index, el] of [doc.documentElement, doc.body, ...doc.body.querySelectorAll('*')].entries()) {
         el.setAttribute('data-wireframe-base', String(index));
+        if (el.tagName === 'IFRAME' && el.hasAttribute('srcdoc') && el.contentDocument?.body) {
+            stamp(el.contentDocument);
+            el.srcdoc = '<!doctype html>' + el.contentDocument.documentElement.outerHTML;
+        }
     }
 }
 """
@@ -454,7 +476,8 @@ async function qaPage(context, url, theme) {
     const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
     const expected = new URL(url);
     const actual = new URL(page.url());
-    if (!response?.ok() || actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search !== expected.search) {
+    const queryMatches = [...expected.searchParams].every(([key, value]) => actual.searchParams.getAll(key).includes(value));
+    if (!response?.ok() || actual.origin !== expected.origin || actual.pathname !== expected.pathname || !queryMatches) {
         throw new Error('QA screen did not load at the requested route; refresh QA user 985 with qa-login and check the app URL path');
     }
     if (theme) {
@@ -541,6 +564,14 @@ def capture(ticket, route):
         raise SystemExit(f"local file missing: {folder}; run: wireframe new {ticket}")
     if not route.startswith("/") or route.startswith("//"):
         raise SystemExit(f"usage: wireframe capture {ticket} <app URL path>  (for example /detail/project-15/9632)")
+    screen = folder.with_name("screen.json")
+    if screen.exists():
+        try:
+            expected_source = json.loads(screen.read_text())["sourceUrl"]
+        except (OSError, ValueError, KeyError, TypeError):
+            raise SystemExit(f"capture refused: invalid {screen}; start from wireframe new {ticket}")
+        if expected_source != APP + route:
+            raise SystemExit(f"capture source does not match the cloned screen in {screen}; run wireframe capture {ticket} with that app URL path")
     shots = folder.parent / "today"
     shots.mkdir(exist_ok=True)
     state = qa_state()
@@ -553,6 +584,7 @@ def capture(ticket, route):
         image = folder.parent / entry["file"]
         if not image.is_file() or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
             raise SystemExit(f"capture failed: no PNG at {image}")
+    screen.write_text(json.dumps({"sourceUrl": APP + route}) + "\n")
     (folder.parent / "today.json").write_text(json.dumps(manifest, indent=2) + "\n")
     figures = []
     for entry in manifest:
@@ -587,6 +619,7 @@ def mobile_base(ticket, route):
     cloned = re.sub(r"(<body[^>]*>)", lambda match: match.group(1) + link, cloned, count=1)
     dst.write_text(cloned)
     shutil.copy(dst, dst.with_name("base.html"))
+    dst.with_name("screen.json").write_text(json.dumps({"sourceUrl": APP + route}) + "\n")
     print(dst)
 
 

@@ -12,6 +12,6 @@ header{padding:8px;border-bottom:1px solid #262a30}
 <body>
 <header><span>HTPR-9628</span></header>
 <main class="card">Live task entry</main>
-<script>document.body.dataset.ready = "1"; document.querySelector("main").textContent += innerWidth < 768 ? " Phone layout" : " Desktop layout";</script>
+<script>document.body.dataset.ready = "1"; document.querySelector("main").textContent += innerWidth < 768 ? " Phone layout" : " Desktop layout"; history.replaceState(null, "", location.pathname + "?view=default");</script>
 </body>
 </html>
