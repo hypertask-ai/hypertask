@@ -1,3 +1,4 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { crossTeamRequestFence } from "@/lib/auth/crossTeamContext"
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from '@/lib/auth/agentScope'
 import type { McpAuthContext } from '@/lib/mcp/auth'
@@ -69,11 +70,11 @@ export async function getAgentBoardScope(
   return new Set(rows.map((row) => row.projectId))
 }
 
-export class AgentBoardInviteScopeError extends Error {
+export class AgentBoardInviteScopeError extends RefusalError {
   readonly status = 403
 
   constructor() {
-    super('This agent is not a member of this board. Ask the board owner to add it.')
+    super({ status: 403, reason: 'forbidden', message: 'This agent is not a member of this board. Ask the board owner to add it.' })
     this.name = 'AgentBoardInviteScopeError'
   }
 }

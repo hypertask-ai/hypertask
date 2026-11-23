@@ -1,12 +1,13 @@
+import { RefusalError } from '@/lib/api/refusal'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import type { AgentScopes } from '@/lib/mcp/agents/scopes'
 
-export class ActAsAgentError extends Error {
+export class ActAsAgentError extends RefusalError {
   readonly status = 403
   readonly code = 'act_as_agent_refused'
 
   constructor(message: string) {
-    super(message)
+    super({ status: 403, reason: 'forbidden', message })
     this.name = 'ActAsAgentError'
   }
 }

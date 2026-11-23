@@ -1,3 +1,4 @@
+import { RefusalError } from '@/lib/api/refusal'
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
@@ -65,22 +66,22 @@ export const materializedTicketNumberCandidates = (ticketNumber: string): Promis
         `,
       );
 
-export class TaskIdentifierAmbiguityError extends Error {
+export class TaskIdentifierAmbiguityError extends RefusalError {
   readonly status = 400;
   readonly code = 'ambiguous_ticket_number';
 
   constructor(ticketNumber: string) {
-    super(`Ticket number ${ticketNumber} is ambiguous across accessible projects; provide project_id.`);
+    super({ status: 400, reason: 'invalid_field', field: 'ticket_number', message: `Ticket number ${ticketNumber} is ambiguous across accessible projects; provide project_id.` });
     this.name = 'TaskIdentifierAmbiguityError';
   }
 }
 
-export class TaskIdentifierOutOfRangeError extends Error {
+export class TaskIdentifierOutOfRangeError extends RefusalError {
   readonly status = 400;
   readonly code = 'invalid_field';
 
   constructor(readonly field: string) {
-    super(idOutOfRangeMessage(field));
+    super({ status: 400, reason: 'invalid_field', field, message: idOutOfRangeMessage(field) });
     this.name = 'TaskIdentifierOutOfRangeError';
   }
 }

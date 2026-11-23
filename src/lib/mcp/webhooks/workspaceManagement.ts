@@ -1,3 +1,4 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { sealWebhookSigningKey, webhookSigningKeyHint } from '@/lib/webhooks/signingKeyStore'
 import { isFeatureEnabled } from '@/lib/flags'
 import { SEALED_WEBHOOK_KEYS_FLAG } from '@/lib/flags/definitions/htpr-7624-sealed-webhook-keys'
@@ -16,13 +17,19 @@ import {
 
 const MAX_ENDPOINTS_PER_TEAM = 20
 
-export class WorkspaceWebhookError extends Error {
+export class WorkspaceWebhookError extends RefusalError {
   constructor(
     message: string,
-    readonly status = 400,
+    readonly status: 400 | 401 | 403 | 404 = 400,
     readonly field?: string,
   ) {
-    super(message)
+    super(status === 400
+      ? { status, reason: 'invalid_field', field: field ?? 'body', message }
+      : status === 401
+        ? { status, reason: 'unauthorized', field, message }
+        : status === 403
+          ? { status, reason: 'forbidden', field, message }
+          : { status, reason: 'not_found', field, message })
   }
 }
 

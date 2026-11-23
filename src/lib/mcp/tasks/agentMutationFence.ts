@@ -1,3 +1,4 @@
+import { RefusalError } from '@/lib/api/refusal'
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { randomUUID } from 'node:crypto'
@@ -19,15 +20,15 @@ type ActiveTaskLeaseRow = {
   adoptionCount: number
 }
 
-export class AgentMutationLeaseConflictError extends Error {
+export class AgentMutationLeaseConflictError extends RefusalError {
   readonly status = 409
   readonly code: string = 'agent_mutation_lease_conflict'
 
-  constructor(message?: string) {
-    super(
-      message ??
-        'Task has an active agent mutation lease. Retry after the current action finishes.'
-    )
+  constructor(message?: string, reason = 'agent_mutation_lease_conflict') {
+    super({
+      status: 409, reason,
+      message: message ?? 'Task has an active agent mutation lease. Retry after the current action finishes.',
+    })
     this.name = 'AgentMutationLeaseConflictError'
   }
 }
@@ -37,18 +38,19 @@ export class AgentMutationLeaseMissingError extends AgentMutationLeaseConflictEr
 
   constructor() {
     super(
-      'Caller holds no agent mutation lease for this task. Claim one with POST /mcp/tasks/lease/claim before this write.'
+      'Caller holds no agent mutation lease for this task. Claim one with POST /mcp/tasks/lease/claim before this write.',
+      'agent_mutation_lease_missing',
     )
     this.name = 'AgentMutationLeaseMissingError'
   }
 }
 
-export class TaskTeamScopeError extends Error {
+export class TaskTeamScopeError extends RefusalError {
   readonly status = 404
   readonly code = 'task_not_found'
 
   constructor() {
-    super('Task not found or access denied')
+    super({ status: 404, reason: 'not_found', message: 'Task not found or access denied' })
     this.name = 'TaskTeamScopeError'
   }
 }

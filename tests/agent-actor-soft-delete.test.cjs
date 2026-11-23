@@ -66,6 +66,7 @@ const { signSession, verifySession, SESSION_COOKIE } = loadTs(
 );
 const { resolveActingAgent } = loadTs("src/lib/auth/resolveActingAgent.ts");
 const agentDoneLifecycle = loadTs("src/lib/mcp/tasks/agentDoneLifecycle.ts", {
+  "@/lib/api/refusal": require("./helpers/loadModule.cjs").loadModule("src/lib/api/refusal.ts", { "@/lib/planLimits": { isPlanLimitReachedError: () => false } }),
   "@/lib/mcp/boards/columnRole": loadTs("src/lib/mcp/boards/columnRole.ts"),
 });
 

@@ -155,6 +155,9 @@ export function mapHttpErrorToMcpError(
     case 404:
       return new NotFoundError(message || 'Resource not found', correlationId);
     case 400:
+    case 405:
+    case 409:
+    case 413:
       return new ValidationError(message || 'Invalid request', refusalDetails(responseBody), correlationId);
     case 429:
       return new ApiError(message || 'Rate limit exceeded', status, responseBody, correlationId);

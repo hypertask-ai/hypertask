@@ -3,7 +3,7 @@ const { load } = require('../task-route-loader.cjs')
 
 function loadRouteWrapper(mocks) {
   return load('src/lib/mcp/routeWrapper.ts', withStubs({
-    './operationCrashReport': { reportUnexplainedMcpServerError: () => {} },
+    './operationCrashReport': { reportMcpOperationCrash: () => {}, reportUnexplainedMcpServerError: () => {} },
   }, mocks))
 }
 

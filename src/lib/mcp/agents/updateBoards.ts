@@ -1,3 +1,4 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma } from '@prisma/client'
 import { getAgentBoardScope, selfBoardAccessRefusal } from '@/lib/mcp/agents/delegatedAccess'
@@ -9,13 +10,17 @@ import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
 const MAX_PROJECT_UPDATES = 100
 const MAX_TRANSACTION_ATTEMPTS = 3
 
-export class AgentBoardUpdateError extends Error {
+export class AgentBoardUpdateError extends RefusalError {
   constructor(
     message: string,
-    readonly status: number,
+    readonly status: 400 | 403 | 404,
     readonly field?: string
   ) {
-    super(message)
+    super(status === 400
+      ? { status, reason: 'invalid_field', field: field ?? 'body', message }
+      : status === 403
+        ? { status, reason: 'forbidden', field, message }
+        : { status, reason: 'not_found', field, message })
     this.name = 'AgentBoardUpdateError'
   }
 }
