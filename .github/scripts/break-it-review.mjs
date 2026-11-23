@@ -144,7 +144,7 @@ export async function main(io = {}) {
     }
     const deps = io.deps ?? process.env.BREAK_IT_DEPS;
     if (deps && deps !== "success") throw new Error("dependencies did not install, so this fix is unproven");
-    const author = authorFamily(item.body, pullCommits(call, repo, pr), item.user?.login);
+    const author = authorFamily(item.body, pullCommits(call, repo, pr, item.commits), item.user?.login);
     if (!author) throw new Error("the pull request has no Author-Model line and no matching commit trailer");
     const model = modelFor(author, process.env.PSTACK_VERIFIER_ALT_MODEL);
     const run = io.git ?? ((args) => shell("git", args, tree));

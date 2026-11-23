@@ -95,6 +95,8 @@ test("an unreadable commit list is unknown evidence, not an empty one", async ()
   assert.equal(pullCommits(() => { throw new Error("HTTP 500"); }, "acme/app", 7), null);
   assert.equal(pullCommits(() => "{}", "acme/app", 7), null);
   assert.deepEqual(pullCommits(() => JSON.stringify([[{ sha: "a" }, { sha: "b" }]]), "acme/app", 7).length, 2);
+  assert.equal(pullCommits(() => JSON.stringify([[{ sha: "a" }]]), "acme/app", 7, 2), null);
+  assert.equal(pullCommits(() => JSON.stringify([[]]), "acme/app", 7, 0).length, 0);
   assert.equal(authorFamily("Author-Model: codex", null, RUNNER), "");
 });
 

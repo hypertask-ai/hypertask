@@ -225,6 +225,9 @@ test("a bugfix with no body line takes its author family from its own commits", 
   assert.equal(posts.find((entry) => String(entry.url).endsWith(`/statuses/${head}`)).body.state, "success");
   const foreign = await run({ commitLogin: "octocat", prLogin: "valentinyeo" });
   assert.deepEqual([foreign[0].body.state, /no Author-Model/.test(foreign[0].body.description)], ["failure", true]);
+  const short = pull(body, { title: "HTPR-9408 [BUGFIX] keep the empty title from saving", user: { login: "hypertask-runners[bot]" }, commits: 2 });
+  const partial = await runMain({ reply: good, item: short, io: { gh: (args) => (args.join(" ").includes("/pulls/7/commits") ? commit("codex") : JSON.stringify(short)) } });
+  assert.deepEqual([partial[0].body.state, /no Author-Model/.test(partial[0].body.description)], ["failure", true]);
 });
 
 test("a generated test cannot see the key, the network, or the host", async () => {

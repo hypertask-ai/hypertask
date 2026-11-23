@@ -288,13 +288,16 @@ export function cookiesFromHeader(header, base) {
     return [{ name, value, domain: host, path: "/", httpOnly: name !== "nookies_user", secure: false, sameSite: "Lax" }];
   });
 }
-export function pullCommits(call, repo, number) {
+export function pullCommits(call, repo, number, expected) {
+  let found;
   try {
     const pages = JSON.parse(call(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${number}/commits`]));
-    return Array.isArray(pages) ? pages.flat() : null;
+    found = Array.isArray(pages) ? pages.flat() : null;
   } catch {
     return null;
   }
+  if (found === null || (expected != null && found.length !== expected)) return null;
+  return found;
 }
 function commitOwnedBy(commit, authorLogin) {
   const login = String(authorLogin ?? "").toLowerCase();
@@ -1317,10 +1320,8 @@ export async function resolveCommand(io = {}) {
   if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
-  const fetched = pullCommits(call, repo, item.number);
-  const complete = Array.isArray(fetched) && (item.commits == null || fetched.length === item.commits);
-  const commitsKnown = complete ? fetched : [];
-  const owned = complete ? fetched : null;
+  const owned = pullCommits(call, repo, item.number, item.commits);
+  const commitsKnown = owned ?? [];
   if (BOT_LOGINS.has(item.user?.login)) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const lastSha = commitsKnown.at(-1)?.sha;
