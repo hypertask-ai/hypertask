@@ -62,10 +62,9 @@ export default defineConfig({
       testMatch: /journeys\.spec\.ts/,
       dependencies: ['journeys-setup'],
       grep: /@mobile/,
-      timeout: 60_000,
-      use: { ...devices['iPhone 14'], viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, browserName: 'chromium' },
+      timeout: 45_000,
+      use: { ...devices['iPhone 14'], browserName: 'chromium' },
     },
-    { name: 'mobile-design', testMatch: /mobile-design\.spec\.ts/, timeout: 300_000, use: { ...devices['iPhone 14'], viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, browserName: 'chromium' } },
 
     // Guest demo access , no account, self-skips unless HT_QA_RUN_DEMO=1
     // (the runner sets that at most once per deploy; see e2e/smoke/demo.spec.ts).

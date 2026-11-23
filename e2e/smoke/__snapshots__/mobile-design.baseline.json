@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-23T22:12:34.661Z",
+  "generatedAt": "2026-11-23T22:49:30.315Z",
   "viewport": {
     "width": 390,
     "height": 844
@@ -14,546 +14,1143 @@
   "screens": {
     "my-tasks": {
       "porcelain": {
-        "tap-target": 28,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:2",
+          "li[row]>span:3"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 28,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:2",
+          "li[row]>span:3"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 28,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:2",
+          "li[row]>span:3"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 28,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:2",
+          "li[row]>span:3"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "board-kanban": {
       "porcelain": {
-        "tap-target": 9,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 14,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #",
+          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:0>a:0>div:1"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 14,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #",
+          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:0>a:0>div:1"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 15,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #",
+          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:0>a:0>div:1"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "board-table": {
       "porcelain": {
-        "tap-target": 67,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:1",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 80,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:1",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 80,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:1",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 80,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:1",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "calendar": {
       "porcelain": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "task-detail": {
       "porcelain": {
-        "tap-target": 16,
-        "input-font": 0,
-        "radius": 4,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div[testid=ticket-description]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
       },
       "graphite": {
-        "tap-target": 16,
-        "input-font": 0,
-        "radius": 4,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div[testid=ticket-description]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
       },
       "amoled": {
-        "tap-target": 15,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 2
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div[testid=ticket-description]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
       },
       "dia": {
-        "tap-target": 14,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div[testid=ticket-description]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
       }
     },
     "inbox": {
       "porcelain": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "ai-chat-sheet": {
       "porcelain": {
-        "tap-target": 7,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 7,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 7,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 7,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "ai-chat-full": {
       "porcelain": {
-        "tap-target": 21,
-        "input-font": 1,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "li[row]>a:0",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 21,
-        "input-font": 1,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "li[row]>a:0",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 21,
-        "input-font": 1,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "li[row]>a:0",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 17,
-        "input-font": 1,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "commands-search": {
       "porcelain": {
-        "tap-target": 4,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
       },
       "graphite": {
-        "tap-target": 4,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
       },
       "amoled": {
-        "tap-target": 12,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
       },
       "dia": {
-        "tap-target": 15,
-        "input-font": 0,
-        "radius": 2,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
       }
     },
     "commands-new-task": {
       "porcelain": {
-        "tap-target": 3,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]->Start dictation"
+        ]
       },
       "graphite": {
-        "tap-target": 3,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]->Start dictation"
+        ]
       },
       "amoled": {
-        "tap-target": 3,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]->Start dictation"
+        ]
       },
       "dia": {
-        "tap-target": 3,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]->Start dictation"
+        ]
       }
     },
     "new-task-modal": {
       "porcelain": {
-        "tap-target": 2,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 2,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 2,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 2,
-        "input-font": 1,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "board-switcher": {
       "porcelain": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.flex"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
       },
       "graphite": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.flex"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
       },
       "amoled": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.flex"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
       },
       "dia": {
-        "tap-target": 2,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.flex"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
       }
     },
     "view-switcher": {
       "porcelain": {
-        "tap-target": 0,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "graphite": {
-        "tap-target": 0,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "amoled": {
-        "tap-target": 0,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       },
       "dia": {
-        "tap-target": 0,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 0
+        "tap-target": [],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
       }
     },
     "search": {
       "porcelain": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
       },
       "graphite": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
       },
       "amoled": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
       },
       "dia": {
-        "tap-target": 1,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
       }
     },
     "settings-menu": {
       "porcelain": {
-        "tap-target": 10,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
       },
       "graphite": {
-        "tap-target": 10,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
       },
       "amoled": {
-        "tap-target": 10,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
       },
       "dia": {
-        "tap-target": 10,
-        "input-font": 0,
-        "radius": 1,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
       }
     },
     "settings-general": {
       "porcelain": {
-        "tap-target": 5,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
       },
       "graphite": {
-        "tap-target": 5,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
       },
       "amoled": {
-        "tap-target": 5,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
       },
       "dia": {
-        "tap-target": 5,
-        "input-font": 0,
-        "radius": 0,
-        "overflow-x": 0,
-        "purple-non-ai": 0,
-        "mic-action": 1
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
       }
     }
   }

@@ -3,7 +3,6 @@ const root = path.resolve(__dirname, '..'), mod = require('./helpers/loadModule.
 const baseline = JSON.parse(readFileSync(path.join(root, 'e2e/smoke/__snapshots__/mobile-design.baseline.json'), 'utf8'))
 const el = (o = {}) => ({ key: 'div:0>button:0', tag: 'button', role: 'button', label: 'Action', cls: '', w: 48, h: 48, x: 16, y: 16, disabled: false, textField: false, contenteditable: false, fontSize: null, radius: '4px', radiusBad: false, visibleSurface: true, roundMarker: false, outsideX: false, inHScroller: false, clippedByAncestor: false, textClipped: false, ellipsis: false, scrollW: 48, clientW: 48, ...o })
 const m = (o = {}) => ({ coarsePointer: true, docOverflowX: 0, elements: [], textFields: [], purple: [], ...o })
-
 test('every mobile design rule fails on a real defect naming screen, element, and rule', () => {
   const cases = [
     ['tap-target', 'ai-chat-full', m({ elements: [el({ label: 'Copy message', w: 14, h: 14 })] }), 'Copy message'],
@@ -14,20 +13,26 @@ test('every mobile design rule fails on a real defect naming screen, element, an
     ['mic-action', 'commands-new-task', m({ textFields: [{ key: 'textarea:0', label: 'Describe the task', kind: 'multiline', disabled: false, x: 16, y: 80, w: 300, h: 80, micFound: true, micLabel: 'Start dictation', micW: 18, micH: 32, micBgAlpha: 0, micRightBound: true, micIsPrimaryRight: false }] }), 'Start dictation'],
     ['mic-action', 'search', m({ textFields: [{ key: 'input:0', label: 'Search tasks', kind: 'search', disabled: false, x: 16, y: 80, w: 300, h: 40, micFound: false, micLabel: '', micW: 0, micH: 0, micBgAlpha: 0, micRightBound: false, micIsPrimaryRight: false }] }), 'Search tasks'],
   ]
-  for (const [rule, screen, metrics, expected] of cases) {
-    const res = mod.evaluateMobileDesign(screen, 'porcelain', metrics, null, true)
-    assert.ok(res.failures.some((f) => f.includes(screen) && f.includes(`rule=${rule}`) && f.includes(expected)), `${rule}: ${res.failures.join('\n')}`)
-  }
+  for (const [rule, screen, metrics, expected] of cases) { const res = mod.evaluateMobileDesign(screen, 'porcelain', metrics, null, true); assert.ok(res.failures.some((f) => f.includes(screen) && f.includes(`rule=${rule}`) && f.includes(expected)), `${rule}: ${res.failures.join('\n')}`) }
 })
-test('mobile design ratchet passes when baseline holds and fails on regression', () => {
+test('mobile design ratchet compares stable violation identities and catches substitutions', () => {
   assert.equal(baseline.touchEmulation, true); assert.deepEqual(baseline.viewport, { width: 390, height: 844 }); assert.deepEqual(baseline.themes, ['porcelain', 'graphite', 'amoled', 'dia'])
-  const allowed = baseline.screens['board-kanban'].porcelain['tap-target'], atBase = m({ elements: Array.from({ length: allowed }, (_, i) => el({ key: `b:${i}`, label: `Btn ${i}`, w: 32, h: 32 })) })
+  const allowedIds = baseline.screens['board-kanban'].porcelain['tap-target']; assert.ok(Array.isArray(allowedIds) && allowedIds.length > 0)
+  const atBase = m({ elements: allowedIds.map((stableId, i) => el({ key: `b:${i}`, stableId, label: `Btn ${i}`, w: 32, h: 32 })) })
   assert.deepEqual(mod.evaluateMobileDesign('board-kanban', 'porcelain', atBase, baseline).failures, [])
-  const regressed = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [...atBase.elements, el({ key: 'b:new', label: 'New tiny icon', w: 20, h: 20 })] }), baseline)
-  assert.equal(regressed.failures.length, 1); assert.match(regressed.failures[0], /board-kanban.*rule=tap-target/)
+  const res = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [...atBase.elements.slice(1), el({ key: 'b:new', stableId: 'button[aria=New tiny icon]', label: 'New tiny icon', w: 20, h: 20 })] }), baseline)
+  assert.equal(res.failures.length, 1); assert.match(res.failures[0], /board-kanban.*rule=tap-target.*New tiny icon/)
+  for (const [tag, attrs, exp] of [['select', {}, false], ['button', { role: 'combobox' }, false], ['input', { type: 'checkbox' }, false], ['input', { type: 'text' }, true], ['input', { type: 'search' }, true], ['textarea', {}, true], ['div', { contenteditable: 'true' }, true], ['div', { role: 'textbox' }, true]]) assert.equal(mod.classifyTextField(tag, attrs).is, exp, tag)
 })
-test('mobile-verify workflow follows CI contract', () => {
-  const wf = yaml.load(readFileSync(path.join(root, '.github/workflows/mobile-verify.yml'), 'utf8'))
+test('mobile-verify workflow follows CI contract and gates on prod-health-gate', async () => {
+  const wf = yaml.load(readFileSync(path.join(root, '.github/workflows/mobile-verify.yml'), 'utf8')), steps = wf.jobs['mobile-verify'].steps, gateStep = steps.find((s) => s.id === 'gate'), pwStep = steps.find((s) => /playwright test/.test(s.run || ''))
   assert.equal(wf.concurrency.group, 'mobile-verify'); assert.equal(wf.concurrency['cancel-in-progress'], true); assert.equal(wf.jobs['mobile-verify']['runs-on'], 'ubuntu-latest')
-  const run = wf.jobs['mobile-verify'].steps.map((s) => s.run || '').join('\n'); assert.match(run, /--project=mobile-design/); assert.match(run, /--project=mobile-journeys/)
+  assert.match(gateStep.run, /wait-prod-health-gate\.mjs/); assert.equal(pwStep.if, "steps.gate.outputs.ok == 'true'"); assert.match(pwStep.run, /--project=mobile-design/); assert.match(pwStep.run, /--project=mobile-journeys/)
+  const { waitForProdHealthGate } = await import(path.join(root, '.github/scripts/wait-prod-health-gate.mjs')), mkFetch = (runs, statuses) => async (u) => ({ ok: true, json: async () => (u.includes('/runs?') ? { workflow_runs: runs } : statuses) })
+  assert.equal((await waitForProdHealthGate({ eventName: 'workflow_dispatch', repo: 'o/r', sha: 'abc', token: 't' })).ok, true)
+  assert.equal((await waitForProdHealthGate({ eventName: 'push', repo: 'o/r', sha: 's1', token: 't', maxPolls: 2, pollMs: 0, sleep: async () => {}, fetchImpl: mkFetch([{ id: 77, status: 'in_progress', created_at: '2026-11-23T10:00:00Z' }], [{ context: 'prod-health-gate', state: 'success', target_url: 'https://github.com/o/r/actions/runs/77', created_at: '2026-11-23T10:02:00Z' }]) })).ok, true)
+  const stale = await waitForProdHealthGate({ eventName: 'push', repo: 'o/r', sha: 's1', token: 't', maxPolls: 2, pollMs: 0, sleep: async () => {}, fetchImpl: mkFetch([{ id: 88, status: 'completed', conclusion: 'success', created_at: '2026-11-23T11:00:00Z' }], [{ context: 'prod-health-gate', state: 'success', target_url: 'https://github.com/o/r/actions/runs/77', created_at: '2026-11-23T10:02:00Z' }]) })
+  assert.equal(stale.ok, false); assert.equal(stale.unreadable, false)
+  const unreadable = await waitForProdHealthGate({ eventName: 'push', repo: 'o/r', sha: 's1', token: 't', maxPolls: 1, pollMs: 0, sleep: async () => {}, fetchImpl: async () => ({ ok: false }) })
+  assert.equal(unreadable.ok, false); assert.equal(unreadable.unreadable, true)
 })

@@ -42,6 +42,7 @@ export const FEATURE_MAP_CATALOG = [
   { page: 'search-and-filters.md', journey: null, prefixes: ['src/pages/api/search/'] },
   { page: 'billing-and-plans.md', journey: ['plan-check'], prefixes: ['src/components/Modals/Settings/BillingSection.tsx', 'src/app/settings/billing/'] },
   { page: 'my-tasks.md', journey: null, prefixes: ['src/app/my-tasks/'] },
+  { page: 'mobile.md', journey: ['open-board', 'open-task', 'create-task', 'reply-inbox', 'ai-chat', 'switch-boards', 'switch-column'], prefixes: ['e2e/smoke/mobile-design.spec.ts', 'e2e/smoke/lib/mobile-design.ts'] },
 ]
 
 function prefixHits(file, prefix) {
