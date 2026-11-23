@@ -53,6 +53,9 @@ function loadAccountsModule(authClient, options = {}) {
     if (request === "@/lib/auth/betterAuthClient") {
       return { authClient };
     }
+    if (request === "@/lib/auth/ticketDetailLocator") {
+      return require("./task-route-loader.cjs").load("src/lib/auth/ticketDetailLocator.ts");
+    }
     throw new Error(`Unexpected import: ${request}`);
   };
 

@@ -5,6 +5,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import UserAvatar from "@/components/Common/UserAvatar";
@@ -19,6 +20,7 @@ import {
   addAccount,
   SwitchAccount,
 } from "@/lib/auth/accounts";
+import { forgetTicketAccountSwitch } from "@/lib/auth/ticketDetailLocator";
 
 interface ISwitchAccountModal {
   closeHandler: () => void;
@@ -56,17 +58,25 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
     [accounts],
   );
 
+  const switchingRef = useRef(false);
+  const dismiss = useCallback(() => {
+    if (!switchingRef.current) forgetTicketAccountSwitch();
+    closeHandler();
+  }, [closeHandler]);
+
   const handleSwitch = useCallback(
     async (account: SwitchAccount) => {
       if (account.id === activeId || !account.sessionToken) {
-        closeHandler();
+        dismiss();
         return;
       }
 
       setError(null);
       setSwitchingToken(account.sessionToken);
+      switchingRef.current = true;
       const switched = await switchAccount(account.sessionToken);
       if (switched) return;
+      switchingRef.current = false;
 
       setError(
         "Couldn’t switch accounts. That session may have expired. The account list has been refreshed.",
@@ -74,7 +84,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       await refreshAccounts();
       setSwitchingToken(null);
     },
-    [activeId, closeHandler, refreshAccounts],
+    [activeId, dismiss, refreshAccounts],
   );
 
   useEffect(() => {
@@ -109,7 +119,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       show={true}
       isOpen={true}
       id="switch-account-modal"
-      toggle={closeHandler}
+      toggle={dismiss}
       shouldCloseOnClickOutside={true}
       contentClassName="h-full"
       fullScreen={isMbl}
@@ -119,7 +129,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
         <div className="flex justify-between items-center w-full">
           <span>Switch account</span>
           <IoIosClose
-            onClick={closeHandler}
+            onClick={dismiss}
             className="cursor-pointer"
             size={25}
           />

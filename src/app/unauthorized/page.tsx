@@ -1,7 +1,7 @@
 "use client"
 import { currentUserAtom, showAccountSwitcherAtom, showBoardManagerAtom } from '@/store';
 import { useFlag } from '@/hooks/useFlag';
-import { ticketDetailLocator } from '@/lib/auth/ticketDetailLocator';
+import { rememberTicketAccountSwitch, ticketDetailLocator } from '@/lib/auth/ticketDetailLocator';
 import { HTPR_7799_PROJECT_ENTRY_FLAG } from '@/lib/flags/keys';
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from '@/lib/flags/definitions/htpr-9621-auto-switch-account';
 import { getFirstProject } from '@/utils/api/Homepage';
@@ -43,6 +43,7 @@ const Unauthorized = () => {
                 if (cancelled || !result || typeof result !== "object") return;
                 if (result.action === "choose") {
                     window.sessionStorage.setItem(attemptKey, "1");
+                    rememberTicketAccountSwitch(pathname);
                     setShowAccountSwitcher(true);
                     return;
                 }
@@ -104,7 +105,10 @@ const Unauthorized = () => {
                             </p>
                             <button
                                 type="button"
-                                onClick={() => setShowAccountSwitcher(true)}
+                                onClick={() => {
+                                    if (autoSwitchAccount) rememberTicketAccountSwitch(pathname);
+                                    setShowAccountSwitcher(true);
+                                }}
                                 className="mt-2 inline-flex min-h-11 items-center justify-center rounded-[4px] px-4 py-2 text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selected-item-border"
                             >
                                 Switch account

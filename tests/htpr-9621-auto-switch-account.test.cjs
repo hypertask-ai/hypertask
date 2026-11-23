@@ -286,7 +286,7 @@ test("the flag off leaves the block page without checking other accounts", async
 });
 
 test("ticket links outside a numeric detail url do not ask who can open them", async () => {
-  const { ticketDetailLocator, ticketDetailFields } = load("src/lib/auth/ticketDetailLocator.ts");
+  const { ticketDetailLocator, ticketDetailFields, ticketAccountSwitchPath } = load("src/lib/auth/ticketDetailLocator.ts");
   assert.deepEqual(ticketDetailLocator("/detail/project-15/9621"), {
     projectSlug: "project-15",
     uniqueIndex: "9621",
@@ -296,4 +296,61 @@ test("ticket links outside a numeric detail url do not ask who can open them", a
   assert.equal(ticketDetailFields("project-15", "9621")?.uniqueIndex, "9621");
   assert.equal(ticketDetailFields("board-15", "9621"), null);
   assert.equal(ticketDetailFields("project-15", "HT-9621"), null);
+  assert.equal(ticketAccountSwitchPath("/detail/project-15/9621/"), "/detail/project-15/9621");
+  assert.equal(ticketAccountSwitchPath("/detail/project-15/9621?next=https://evil.test"), "/detail/project-15/9621");
+  assert.equal(ticketAccountSwitchPath("//evil.test/detail/project-15/9621"), null);
+  assert.equal(ticketAccountSwitchPath("https://evil.test/detail/project-15/9621"), null);
+  assert.equal(ticketAccountSwitchPath("/inbox"), null);
+});
+
+test("choosing an account reloads that ticket, and any other return path still opens the inbox", async () => {
+  const previous = global.window;
+  const events = [];
+  const storage = new Map();
+  global.window = {
+    location: {
+      pathname: "/detail/project-15/9621/",
+      assign: (url) => events.push(["assign", url]),
+      reload: () => events.push(["reload"]),
+    },
+    sessionStorage: {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
+  };
+  try {
+    const accounts = load("src/lib/auth/accounts.ts", {
+      nookies: { default: { set() {}, destroy() {} }, parseCookies: () => ({}) },
+      "@/lib/configs/auth.config": { default: { cookies: { user: "nookies_user", options: { path: "/" } } } },
+      "@/lib/auth/betterAuthClient": {
+        authClient: { multiSession: { setActive: async () => ({ data: {} }) } },
+      },
+    });
+    const locator = load("src/lib/auth/ticketDetailLocator.ts");
+    locator.rememberTicketAccountSwitch("/detail/project-15/9621");
+    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    assert.deepEqual(events, [["reload"]]);
+    assert.equal(storage.size, 0);
+
+    events.length = 0;
+    locator.rememberTicketAccountSwitch("https://evil.test/detail/project-15/9621");
+    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    assert.deepEqual(events, [["assign", "/inbox"]]);
+
+    events.length = 0;
+    locator.rememberTicketAccountSwitch("/detail/project-15/9621");
+    locator.forgetTicketAccountSwitch();
+    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    assert.deepEqual(events, [["assign", "/inbox"]]);
+
+    events.length = 0;
+    global.window.location.pathname = "/inbox";
+    locator.rememberTicketAccountSwitch("/detail/project-15/9621");
+    assert.equal(await accounts.switchAccount(MEMBER_TOKEN), true);
+    assert.deepEqual(events, [["assign", "/inbox"]]);
+    assert.equal(storage.size, 0);
+  } finally {
+    global.window = previous;
+  }
 });
