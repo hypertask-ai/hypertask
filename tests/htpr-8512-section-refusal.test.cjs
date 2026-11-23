@@ -3,6 +3,7 @@ const test = require('node:test');
 const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const types = load('src/lib/mcp/tasks/fields/types.ts');
+const refusal = load('src/lib/api/refusal.ts', { '@/lib/planLimits': { isPlanLimitReachedError: () => false } });
 const errorMessage = load('src/lib/api/errorMessage.ts');
 const sectionLookup = load('src/lib/mcp/boards/sectionLookup.ts', {
   '@/lib/prisma': {
@@ -19,6 +20,7 @@ const sectionLookup = load('src/lib/mcp/boards/sectionLookup.ts', {
 });
 const { updateTaskSection } = load('src/lib/mcp/tasks/fields/section.ts', {
   '@/lib/api/errorMessage': errorMessage,
+  '@/lib/api/refusal': refusal,
   '@/lib/flags': { isFeatureEnabled: async () => true },
   '@/lib/flags/definitions/htpr-7990-task-move-refusal': { HTPR_7990_TASK_MOVE_REFUSAL_FLAG: 'htpr-7990-task-move-refusal' },
   '@/lib/mcp/boards/sectionLookup': sectionLookup,
@@ -44,9 +46,9 @@ test('a section id from another board is a 400 the caller can fix, not a 500', a
   await assert.rejects(
     () => updateTaskSection(sectionContext({ projectId: 11514, section_title: 'Backlog' }), task),
     (error) => {
-      assert.equal(error.status, 400);
-      assert.equal(error.code, 'invalid_value');
-      assert.equal(error.field, 'sectionId');
+      assert.equal(error.refusal.status, 400);
+      assert.equal(error.refusal.reason, 'invalid_field');
+      assert.equal(error.refusal.field, 'sectionId');
       assert.match(error.message, /hypertask_move_task_between_boards/);
       return true;
     },
@@ -57,9 +59,9 @@ test('a section id that matches no column is a 400, not a silent success', async
   await assert.rejects(
     () => updateTaskSection(sectionContext(undefined), task),
     (error) => {
-      assert.equal(error.status, 400);
-      assert.equal(error.code, 'not_found');
-      assert.equal(error.field, 'sectionId');
+      assert.equal(error.refusal.status, 400);
+      assert.equal(error.refusal.reason, 'invalid_field');
+      assert.equal(error.refusal.field, 'sectionId');
       assert.match(error.message, /Columns on this board: In Progress \(id 4309\), QA \(id 4310\)/);
       return true;
     },
@@ -95,6 +97,7 @@ function loadPersist(section) {
     '@/lib/mcp/tasks/broadcastTaskUpdates': { broadcastTaskUpdates: async () => {} },
     '@/lib/mcp/tasks/agentMutationFence': {},
     '@/lib/api/errorMessage': errorMessage,
+    '@/lib/api/refusal': refusal,
     '@/lib/agents/activityAttribution': {},
     '@/lib/pullRequests/taskPullRequests': { PullRequestLinkError: class extends Error {} },
     './types': types,
@@ -106,7 +109,7 @@ function loadPersist(section) {
 test('the update route answers the section refusal with 400 and its field', async () => {
   const { persistTaskUpdates } = loadPersist({
     updateTaskSection: async () => {
-      throw Object.assign(new Error('sectionId must be a column on the task own board.'), { status: 400, code: 'invalid_value', field: 'sectionId' });
+      throw new refusal.RefusalError({ status: 400, reason: 'invalid_field', field: 'sectionId', message: 'sectionId must be a column on the task own board.' });
     },
   });
   const warn = console.warn;
@@ -116,7 +119,7 @@ test('the update route answers the section refusal with 400 and its field', asyn
   try {
     await assert.rejects(() => persistTaskUpdates(context, [task]), refused => {
       assert.equal(refused.status, 400);
-      assert.equal(refused.response.code, 'invalid_value');
+      assert.equal(refused.response.code, 'invalid_field');
       assert.equal(refused.response.field, 'sectionId');
       return true;
     });

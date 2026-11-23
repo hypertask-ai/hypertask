@@ -1,5 +1,6 @@
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
 import { isPlanLimitReachedError } from '@/lib/planLimits';
+import { RefusalError } from '@/lib/api/refusal';
 import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
@@ -149,7 +150,7 @@ export async function storeAttachmentBatchWithTargetLock(
       )
     );
   } catch (error) {
-    if (isPlanLimitReachedError(error) || error instanceof AttachmentBatchError) throw error;
+    if (isPlanLimitReachedError(error) || error instanceof RefusalError || error instanceof AttachmentBatchError) throw error;
     throw new AttachmentBatchError('Attachment storage is temporarily unavailable', 503, true);
   }
 }

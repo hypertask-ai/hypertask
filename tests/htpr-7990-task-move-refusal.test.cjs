@@ -4,9 +4,11 @@ const { loadModule: load } = require('./helpers/loadModule.cjs');
 
 const types = load('src/lib/mcp/tasks/fields/types.ts');
 const errorMessage = load('src/lib/api/errorMessage.ts');
+const refusal = load('src/lib/api/refusal.ts', { '@/lib/planLimits': { isPlanLimitReachedError: () => false } });
 let enabled = true;
 const { updateTaskSection } = load('src/lib/mcp/tasks/fields/section.ts', {
   '@/lib/api/errorMessage': errorMessage,
+  '@/lib/api/refusal': refusal,
   '@/lib/flags': { isFeatureEnabled: async () => enabled },
   '@/lib/flags/definitions/htpr-7990-task-move-refusal': { HTPR_7990_TASK_MOVE_REFUSAL_FLAG: 'htpr-7990-task-move-refusal' },
 });
@@ -31,6 +33,7 @@ const { persistTaskUpdates } = load('src/lib/mcp/tasks/fields/persist.ts', {
   '@/lib/mcp/tasks/broadcastTaskUpdates': { broadcastTaskUpdates: async () => {} },
   '@/lib/mcp/tasks/agentMutationFence': {},
   '@/lib/api/errorMessage': errorMessage,
+  '@/lib/api/refusal': refusal,
   '@/lib/agents/activityAttribution': {},
   '@/lib/pullRequests/taskPullRequests': { PullRequestLinkError: class extends Error {} },
   './types': types,

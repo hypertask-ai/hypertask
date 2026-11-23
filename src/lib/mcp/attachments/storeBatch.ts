@@ -1,4 +1,6 @@
 import { isPlanLimitReachedError } from '@/lib/planLimits';
+import { RefusalError } from '@/lib/api/refusal';
+import { REFUSAL_REASON } from '@/lib/api/refusalReason';
 import { createHash } from 'node:crypto';
 import {
   buildTaskAttachmentStorageKey,
@@ -46,6 +48,16 @@ export class AttachmentBatchError extends Error {
   ) {
     super(message);
     this.name = 'AttachmentBatchError';
+  }
+}
+
+export class AttachmentInputRefusalError extends RefusalError {
+  constructor(
+    message: string,
+    readonly failedFiles: FailedAttachmentFile[]
+  ) {
+    super({ status: 400, reason: REFUSAL_REASON.invalidField, field: 'files', message });
+    this.name = 'AttachmentInputRefusalError';
   }
 }
 
@@ -228,11 +240,16 @@ export async function storeAttachmentBatch(
       const effectiveError = batchSignal.aborted
         ? new AttachmentBatchTimeoutError()
         : error;
-      const isInputFailure = effectiveError instanceof McpAttachmentFetchError;
+      if (effectiveError instanceof McpAttachmentFetchError) {
+        throw new AttachmentInputRefusalError(
+          effectiveError.message,
+          preparationFailures(files, prepared.length, effectiveError.message)
+        );
+      }
       const isTimeout = effectiveError instanceof AttachmentBatchTimeoutError;
       throw new AttachmentBatchError(
-        isInputFailure || isTimeout ? effectiveError.message : 'Failed to store attachment(s)',
-        isInputFailure ? 400 : isTimeout ? 504 : 500,
+        isTimeout ? effectiveError.message : 'Failed to store attachment(s)',
+        isTimeout ? 504 : 500,
         true,
         [],
         preparationFailures(

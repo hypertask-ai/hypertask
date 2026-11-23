@@ -95,9 +95,9 @@ test('the column list comes from the board that was asked about, never a fixed l
 test('the task update refusal names the task board columns', async () => {
   const { updateTaskSection } = loadUpdate(loadLookup(boardColumns), true);
   await assert.rejects(() => updateTaskSection(updateContext(), task), (error) => {
-    assert.equal(error.status, 400);
-    assert.equal(error.code, 'not_found');
-    assert.equal(error.field, 'sectionId');
+    assert.equal(error.refusal.status, 400);
+    assert.equal(error.refusal.reason, 'invalid_field');
+    assert.equal(error.refusal.field, 'sectionId');
     assert.match(error.message, /Columns on this board: Triage \(id 41\), In Progress \(id 42\), In Review \(id 43\), Done \(id 44\)$/);
     return true;
   });

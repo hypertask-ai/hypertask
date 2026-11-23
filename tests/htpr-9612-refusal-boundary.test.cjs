@@ -89,12 +89,12 @@ for (const transport of ['http', 'direct']) {
       const response = await h.http();
       assert.equal(response.status, 400);
       const body = await response.json();
-      assert.equal(body.code, 'invalid_value');
+      assert.equal(body.code, 'invalid_field');
       assert.equal(body.field, 'sectionId');
     } else {
       await assert.rejects(h.direct, error => {
         assert.equal(error.code, -32602);
-        assert.deepEqual(error.details, { code: 'invalid_value', field: 'sectionId' });
+        assert.deepEqual(error.details, { code: 'invalid_field', field: 'sectionId' });
         return true;
       });
     }
