@@ -116,6 +116,27 @@ function noteRepeats(text: string, shape: { prefix: string; suffix: string }): b
   return new RegExp(`<p>Note: ${quoted(shape.prefix)}\\d+${quoted(shape.suffix)}</p>`).test(text)
 }
 
+const REPEAT_PAGE = 50
+
+async function pageRepeat<T extends { text: string }>(
+  load: (skip: number) => Promise<T[]>,
+  shape: { prefix: string; suffix: string },
+): Promise<T | undefined> {
+  let skip = 0
+  for (;;) {
+    const page = await load(skip)
+    const hit = page.find((row) => noteRepeats(row.text, shape))
+    if (hit || page.length < REPEAT_PAGE) return hit
+    skip += page.length
+  }
+}
+
+function descriptionClause(clause: { text?: { contains: string }; NOT?: { text: { contains: string } } }) {
+  const missing = clause.NOT?.text?.contains
+  if (missing) return { NOT: { description_: { is: { content: { contains: missing } } } } }
+  return { description_: { is: { content: { contains: clause.text?.contains ?? '' } } } }
+}
+
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
   return input.category === 'call_failed' && input.tool !== undefined && input.status === undefined && !input.errorCode && !input.field
 }
@@ -330,14 +351,35 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }
         const lookup = !existing && joinPullRequestRepeat ? repeatLookup(input, stored) : null
         if (lookup && tx.comment?.findMany) {
-          const logged = await tx.comment.findMany({
-            where: { agentId: null, AND: lookup.clauses, task: openWhere },
-            select: { text: true, task: { select: ticketSelect } },
-            take: 20,
-          })
-          existing = logged.find((row) => noteRepeats(row.text, lookup.shape))?.task ?? null
-          joinedByAnchor = Boolean(existing)
+          const logged = await pageRepeat(
+            (skip) => tx.comment.findMany({
+              where: { agentId: null, AND: lookup.clauses, task: openWhere },
+              orderBy: { id: 'asc' },
+              skip,
+              take: REPEAT_PAGE,
+              select: { text: true, task: { select: ticketSelect } },
+            }),
+            lookup.shape,
+          )
+          existing = logged?.task ?? null
         }
+        if (lookup && !existing && tx.task?.findMany) {
+          const logged = await pageRepeat(
+            async (skip) => {
+              const rows = await tx.task.findMany({
+                where: { AND: [openWhere, ...lookup.clauses.map(descriptionClause)] },
+                orderBy: { id: 'asc' },
+                skip,
+                take: REPEAT_PAGE,
+                select: { ...ticketSelect, description_: { select: { content: true } } },
+              })
+              return rows.map((row) => ({ text: row.description_?.content ?? '', task: row }))
+            },
+            lookup.shape,
+          )
+          existing = logged?.task ?? null
+        }
+        if (lookup) joinedByAnchor = Boolean(existing)
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }

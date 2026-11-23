@@ -23,34 +23,57 @@ function clauseHolds(comment, clause) {
   return false
 }
 
+function descriptionMatches(row, where) {
+  return (where?.AND ?? []).every((clause) => {
+    const present = clause.description_?.is?.content?.contains
+    const missing = clause.NOT?.description_?.is?.content?.contains
+    if (present) return row.description.includes(present)
+    if (missing) return !row.description.includes(missing)
+    return true
+  })
+}
+
 function commentMatches(comment, where) {
   if (where?.text?.contains) return comment.text.includes(where.text.contains)
   const clauses = where?.AND ?? []
   return clauses.length > 0 && clauses.every((clause) => clauseHolds(comment, clause))
 }
 
-function setup({ repeatJoin = true } = {}) {
+function setup({ repeatJoin = true, house = true } = {}) {
   const created = []
   const comments = []
   const rows = []
   const locks = []
-  const on = async (key) => key !== flag || repeatJoin
+  const on = async (key) => {
+    if (!house && (key === 'htpr-8797-feedback-house-parts' || key === 'htpr-7536-plain-ai-feedback')) return false
+    return key !== flag || repeatJoin
+  }
   const db = {
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
     project: { findFirst: async () => ({ uniqueIdentifier: 'HTPR', section: [{ id: 1, section_title: 'Bugs' }] }) },
     user: { findUnique: async () => internal },
     label: { findFirst: async () => ({ id: 'ai-feedback' }) },
-    task: { findFirst: async ({ where }) => {
-      const marker = where.description_?.is?.content?.contains
-      if (!marker) return null
-      return rows.find((row) => row.section !== 'Done' && row.description.includes(marker)) ?? null
-    } },
+    task: {
+      findFirst: async ({ where }) => {
+        const marker = where.description_?.is?.content?.contains
+        if (!marker) return null
+        return rows.find((row) => row.section !== 'Done' && row.description.includes(marker)) ?? null
+      },
+      findMany: async ({ where, skip = 0, take }) => rows
+        .filter((row) => row.section !== 'Done' && descriptionMatches(row, where))
+        .sort((a, b) => a.id - b.id)
+        .slice(skip, take ? skip + take : undefined)
+        .map((row) => ({ id: row.id, userId: row.userId, ticketNumber: row.ticketNumber, uniqueIndex: row.uniqueIndex, description_: { content: row.description } })),
+    },
     comment: {
-      findMany: async ({ where }) => comments.flatMap((comment) => {
-        if (!commentMatches(comment, where)) return []
-        const task = rows.find((row) => row.id === comment.taskId && row.section !== 'Done')
-        return task ? [{ text: comment.text, task: { id: task.id, userId: task.userId, ticketNumber: task.ticketNumber, uniqueIndex: task.uniqueIndex, createdAt: task.createdAt } }] : []
-      }),
+      findMany: async ({ where, skip = 0, take }) => comments
+        .filter((comment) => commentMatches(comment, where))
+        .sort((a, b) => a.id - b.id)
+        .slice(skip, take ? skip + take : undefined)
+        .flatMap((comment) => {
+          const task = rows.find((row) => row.id === comment.taskId && row.section !== 'Done')
+          return task ? [{ text: comment.text, task: { id: task.id, userId: task.userId, ticketNumber: task.ticketNumber, uniqueIndex: task.uniqueIndex, createdAt: task.createdAt } }] : []
+        }),
       findFirst: async ({ where }) => {
         const matches = (comment) => commentMatches(comment, where)
         if (where.task) {
@@ -184,6 +207,32 @@ test('text after the pull request number has to match', async () => {
   assert.equal(same.deduped, true)
   assert.equal(f.created.length, 2)
   assert.equal(f.locks[1], f.locks[5])
+})
+
+test('with the house log off, a repeat still joins the ticket description', async () => {
+  const f = setup({ house: false })
+  await f.fileAiFeedback(report, 6, { origin: 'agent' })
+  const second = await f.fileAiFeedback({ ...report, note: note.replace('1188', '1200') }, 6, { origin: 'agent' })
+  assert.equal(second.deduped, true)
+  assert.equal(f.created.length, 1)
+  assert.doesNotMatch(f.comments[0].text, /Error code:/)
+  assert.match(f.created[0].description, /<p>Note: .*PR 1188\./)
+})
+
+test('a matching note past the first page still joins', async () => {
+  const f = setup()
+  await f.fileAiFeedback(report, 6, { origin: 'agent' })
+  const real = f.comments[0]
+  const decoys = Array.from({ length: 50 }, (_, index) => ({
+    ...real,
+    id: index + 1,
+    text: real.text.replace('PR 1188.', 'PR 1 extra ending.'),
+  }))
+  real.id = decoys.length + 1
+  f.comments.splice(0, f.comments.length, ...decoys, real)
+  const second = await f.fileAiFeedback({ ...report, note: note.replace('1188', '1200') }, 6, { origin: 'agent' })
+  assert.equal(second.deduped, true)
+  assert.equal(f.created.length, 1)
 })
 
 test('a short note that only shares the pull request words still opens its own ticket', async () => {
