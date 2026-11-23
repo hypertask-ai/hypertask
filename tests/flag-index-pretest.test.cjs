@@ -48,6 +48,19 @@ test("a checkout without the flag list builds it before the keys resolve", (t) =
   assert.equal(generated.FLAG_DEFINITIONS[0].key, "htpr-1-first");
 });
 
+test("the TypeScript test loader builds a missing flag list before the keys resolve", (t) => {
+  const dir = fixture(t);
+  const entry = path.join(dir, "src/lib/flags/entry.ts");
+  fs.writeFileSync(entry, `import ${JSON.stringify(helper)};\nexport * from "./definitions/index.generated";\nimport { FIRST_FLAG } from "./definitions/index.generated";\nconsole.log(FIRST_FLAG);\n`);
+  const result = withFlagRoot(dir, undefined, () => spawnSync(process.execPath, [path.join(root, "node_modules/tsx/dist/cli.mjs"), entry], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+  }));
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), "htpr-1-first");
+});
+
 test("production startup leaves a missing flag list untouched", (t) => {
   const dir = fixture(t);
   const result = withFlagRoot(dir, "production", () => spawnSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", helper], {
