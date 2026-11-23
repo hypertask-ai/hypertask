@@ -84,7 +84,100 @@ test("a tool call on another server reaches the open connection", async () => {
     assert.deepEqual(publisher.published, [["mcp:legacy:session:missing", "x"]]);
   } finally {
     delete globalThis.__hypertaskLegacySseRelay;
+    delete globalThis.__hypertaskLegacySseRelayLive;
     delete globalThis.__hypertaskLegacySsePublisher;
+    delete globalThis.__hypertaskLegacySsePublisherLive;
+    delete globalThis.__hypertaskLegacySseRelayDown;
+    delete globalThis.__hypertaskLegacySseBus;
+    if (previous === undefined) delete process.env.REDIS_URL;
+    else process.env.REDIS_URL = previous;
+  }
+});
+
+function clearRelay() {
+  delete globalThis.__hypertaskLegacySseRelay;
+  delete globalThis.__hypertaskLegacySseRelayLive;
+  delete globalThis.__hypertaskLegacySsePublisher;
+  delete globalThis.__hypertaskLegacySsePublisherLive;
+  delete globalThis.__hypertaskLegacySseRelayDown;
+  delete globalThis.__hypertaskLegacySseBus;
+}
+
+test("a dropped relay is replaced, and an aborted stream releases the late subscription", async () => {
+  const clients = [];
+  class FakeRedis {
+    constructor() {
+      clients.push(this);
+      this.subs = new Set();
+      this.handlers = {};
+      this.published = [];
+      this.status = "ready";
+    }
+    on(event, fn) { this.handlers[event] = fn; return this; }
+    async connect() {}
+    async subscribe(channel) { this.subs.add(channel); }
+    async unsubscribe(channel) { this.subs.delete(channel); }
+    async publish(channel, message) {
+      this.published.push([channel, message]);
+      return this.subs.has(channel) ? 1 : 0;
+    }
+    disconnect() { this.status = "end"; this.subs.clear(); }
+  }
+  const previous = process.env.REDIS_URL;
+  process.env.REDIS_URL = "redis://relay.example";
+  clearRelay();
+  const bus = loadModule("src/lib/mcp-server/legacySseBus.ts", { ioredis: { default: FakeRedis } });
+  const channel = `htpr-8978:replace:${Date.now()}`;
+  try {
+    const seen = [];
+    let down = 0;
+    let stop = () => {};
+    stop = await bus.subscribeLegacySseAcrossProcesses(channel, (message) => { seen.push(message); }, () => {
+      down += 1;
+      stop();
+    });
+    assert.equal(clients.length, 1);
+    clients[0].handlers.end();
+    assert.equal(down, 1);
+    assert.equal(clients[0].status, "end");
+    const revived = [];
+    const stopRevived = await bus.subscribeLegacySseAcrossProcesses(channel, (message) => { revived.push(message); });
+    assert.equal(clients.length, 2);
+    assert.equal(clients[1].subs.has(channel), true);
+    clients[1].handlers.message(channel, "again");
+    assert.deepEqual(revived, ["again"]);
+    stopRevived();
+    await bus.publishLegacySseAcrossProcesses("mcp:legacy:session:missing", "x");
+    const publisher = clients.find((client) => client.published.length === 1);
+    publisher.status = "end";
+    publisher.handlers.end();
+    assert.equal(await bus.publishLegacySseAcrossProcesses("mcp:legacy:session:missing", "y"), 0);
+    const replacements = clients.filter((client) => client.published.some((entry) => entry[1] === "y"));
+    assert.equal(replacements.length, 1);
+    assert.notEqual(replacements[0], publisher);
+
+    let releaseConnect;
+    class SlowRedis extends FakeRedis {
+      connect() { return new Promise((resolve) => { releaseConnect = resolve; }); }
+    }
+    clearRelay();
+    const route = loadModule("src/lib/mcp-server/legacy-sse.ts", { ioredis: { default: SlowRedis } });
+    const abort = new AbortController();
+    const pending = route.handleLegacySseRequest(
+      new Request("https://app.hypertask.ai/sse", { headers: { accept: "text/event-stream" }, signal: abort.signal }),
+      { clientId: "1", token: "t", scopes: [] },
+      [],
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    abort.abort();
+    releaseConnect();
+    assert.equal((await pending).status, 204);
+    await new Promise((resolve) => setImmediate(resolve));
+    const subscriber = clients.find((client) => client instanceof SlowRedis);
+    assert.equal(subscriber.subs.size, 0);
+    assert.equal(subscriber.disconnected || subscriber.status === "end", true);
+  } finally {
+    clearRelay();
     if (previous === undefined) delete process.env.REDIS_URL;
     else process.env.REDIS_URL = previous;
   }

@@ -8,6 +8,7 @@ type RelayClient = {
   on: (event: string, listener: (...args: string[]) => void) => void
   quit?: () => Promise<unknown>
   disconnect: () => void
+  status?: string
 }
 
 type Relay = {
@@ -22,6 +23,7 @@ const globalBus = globalThis as typeof globalThis & {
   __hypertaskLegacySseRelayLive?: Relay | null
   __hypertaskLegacySsePublisher?: Promise<RelayClient | null>
   __hypertaskLegacySsePublisherLive?: RelayClient | null
+  __hypertaskLegacySseRelayDown?: Set<() => void>
 }
 
 function listeners(): Map<string, Set<Listener>> {
@@ -69,6 +71,32 @@ function dropClient(client: RelayClient | null | undefined) {
   client.disconnect()
 }
 
+function relayDowns(): Set<() => void> {
+  return globalBus.__hypertaskLegacySseRelayDown ??= new Set()
+}
+
+function clientEnded(client: RelayClient): boolean {
+  return client.status === "end" || client.status === "close"
+}
+
+function forgetRelay(client: RelayClient) {
+  const live = globalBus.__hypertaskLegacySseRelayLive
+  if (!live || live.client !== client) return
+  globalBus.__hypertaskLegacySseRelay = undefined
+  globalBus.__hypertaskLegacySseRelayLive = undefined
+  const notify = [...relayDowns()]
+  relayDowns().clear()
+  dropClient(client)
+  for (const close of notify) close()
+}
+
+function forgetPublisher(client: RelayClient) {
+  if (globalBus.__hypertaskLegacySsePublisherLive !== client) return
+  globalBus.__hypertaskLegacySsePublisher = undefined
+  globalBus.__hypertaskLegacySsePublisherLive = undefined
+  dropClient(client)
+}
+
 function releaseRelay() {
   if (listenerCount() > 0) return
   const relay = globalBus.__hypertaskLegacySseRelayLive
@@ -91,6 +119,7 @@ function releaseRelay() {
 
 async function openClient(url: string, onMessage?: (channel: string, message: string) => void): Promise<RelayClient | null> {
   let client: RelayClient | undefined
+  let established = false
   try {
     const { default: Redis } = await import("ioredis")
     client = new Redis(url, {
@@ -98,7 +127,10 @@ async function openClient(url: string, onMessage?: (channel: string, message: st
       connectTimeout: 250,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
-      retryStrategy: () => null,
+      retryStrategy: (times: number) => {
+        if (!established || times > 4) return null
+        return 50
+      },
     })
     client.on("error", () => {})
     if (onMessage) client.on("message", onMessage)
@@ -113,6 +145,7 @@ async function openClient(url: string, onMessage?: (channel: string, message: st
       client.disconnect()
       return null
     }
+    established = true
     return client
   } catch {
     client?.disconnect()
@@ -130,6 +163,7 @@ async function relay(): Promise<Relay | null> {
       return null
     }
     const current = { client, counts: new Map(), tails: new Map() }
+    client.on("end", () => forgetRelay(client))
     globalBus.__hypertaskLegacySseRelayLive = current
     return current
   })
@@ -145,6 +179,7 @@ async function commandClient(): Promise<RelayClient | null> {
       if (globalBus.__hypertaskLegacySsePublisher === pending) globalBus.__hypertaskLegacySsePublisher = undefined
       return null
     }
+    client.on("end", () => forgetPublisher(client))
     globalBus.__hypertaskLegacySsePublisherLive = client
     return client
   })
@@ -175,6 +210,7 @@ async function subscribeRemote(channel: string): Promise<() => void> {
     }
   }).catch(() => {
     release = async () => {}
+    if (clientEnded(current.client)) forgetRelay(current.client)
   })
   current.tails.set(channel, next.then(() => undefined, () => undefined))
   await next
@@ -183,10 +219,19 @@ async function subscribeRemote(channel: string): Promise<() => void> {
   }
 }
 
-export async function subscribeLegacySseAcrossProcesses(channel: string, listener: Listener): Promise<() => void> {
+export async function subscribeLegacySseAcrossProcesses(
+  channel: string,
+  listener: Listener,
+  onRelayDown?: () => void,
+): Promise<() => void> {
   const unsubscribeLocal = subscribeLegacySse(channel, listener)
+  if (onRelayDown) relayDowns().add(onRelayDown)
   const unsubscribeRemote = await subscribeRemote(channel)
+  let stopped = false
   return () => {
+    if (stopped) return
+    stopped = true
+    if (onRelayDown) relayDowns().delete(onRelayDown)
     unsubscribeLocal()
     void unsubscribeRemote()
     releaseRelay()
@@ -196,11 +241,13 @@ export async function subscribeLegacySseAcrossProcesses(channel: string, listene
 export async function publishLegacySseAcrossProcesses(channel: string, message: string): Promise<number> {
   const local = deliverLocal(channel, message)
   if (local > 0) return local
+  let client: RelayClient | null = null
   try {
-    const client = await commandClient()
+    client = await commandClient()
     if (!client) return 0
     return await client.publish(channel, message)
   } catch {
+    if (client && clientEnded(client)) forgetPublisher(client)
     return 0
   }
 }

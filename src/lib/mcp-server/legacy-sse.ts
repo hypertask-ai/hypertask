@@ -198,7 +198,11 @@ export async function handleLegacySseRequest(
         }
         await publishLegacySseAcrossProcesses(incoming.replyChannel, JSON.stringify({ status, body: result }))
       })().catch(() => cleanup())
-    })
+    }, () => cleanup())
+    if (closed) {
+      unsubscribe()
+      return new Response(null, { status: 204 })
+    }
     try {
       await server.connect(transport)
       timer = setTimeout(() => stream.end(), LEGACY_SSE_LIFETIME_MS)
