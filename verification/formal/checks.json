@@ -23,6 +23,51 @@
         {"name": "PostsWithinCap", "expect": "violated", "witness": ["PostOk", "Record", "PostOk"]},
         {"name": "SuccessNotReportedFailed", "expect": "violated", "witness": ["PostOk", "Sweep", "PostFail"]}
       ]
+    },
+    "chat-send-queue": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/ChatSendQueue.cfg",
+      "properties": [
+        {"name": "NoQueuedMessageLost", "expect": "holds"},
+        {"name": "FailedSendKeepsQueued", "expect": "holds"},
+        {"name": "ChatSwitchKeepsQueue", "expect": "holds"},
+        {"name": "QueueOrderKept", "expect": "holds"},
+        {"name": "StoppedReleasesSend", "expect": "holds"},
+        {"name": "StoppedStreamCloses", "expect": "holds"},
+        {"name": "ReplyEndReleasesSend", "expect": "holds"},
+        {"name": "AcquisitionBounded", "expect": "holds"},
+        {"name": "AcquisitionNotReplayed", "expect": "holds"}
+      ]
+    },
+    "chat-send-queue-7785": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug7785.cfg",
+      "properties": [
+        {"name": "FailedSendKeepsQueued", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "Refuse"]},
+        {"name": "QueueOrderKept", "expect": "violated", "witness": ["Compose", "Enqueue", "Compose", "Enqueue", "SendQueued", "Refuse", "SendQueued", "Accept"]}
+      ]
+    },
+    "chat-send-queue-7767": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug7767.cfg",
+      "properties": [
+        {"name": "ChatSwitchKeepsQueue", "expect": "violated", "witness": ["Compose", "Enqueue", "Switch"]}
+      ]
+    },
+    "chat-send-queue-7794": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug7794.cfg",
+      "properties": [
+        {"name": "StoppedReleasesSend", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "Accept", "Stop"]},
+        {"name": "StoppedStreamCloses", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "Accept", "Stop"]}
+      ]
+    },
+    "chat-send-queue-9111": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug9111.cfg",
+      "properties": [
+        {"name": "AcquisitionBounded", "expect": "violated", "witness": ["PollStart", "PollWait"]}
+      ]
     }
   }
 }
