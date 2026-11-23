@@ -96,6 +96,12 @@ test("a control search that found the README on the previous build fails", () =>
   refused([opener + "<p>Control: the search found the README on the previous build.</p>"]);
 });
 
+test("a descriptive search name that found the error on the previous build passes", () => {
+  const run = nochange([opener + "<p>Control: the search of the production logs found the error on the previous build.</p>"]);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /nochange ok/);
+});
+
 test("a search that found the error in the README on the previous build passes", () => {
   const run = nochange([opener + "<p>Control: the search found the error in the README on the previous build.</p>"]);
   assert.equal(run.status, 0, run.stdout + run.stderr);

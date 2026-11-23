@@ -1489,6 +1489,8 @@ echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:
 N nochange YPER4-901 >/dev/null && bad "nochange accepted a control whose search did not find the fault" || ok "nochange refuses a control whose search did not find the fault"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found the fault on the current good build; the previous build passed.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted a bad build named in another clause" || ok "nochange refuses a bad build named in another clause"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search of the production logs found the error on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a descriptive search name" || bad "nochange rejected a descriptive search name"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"},{"text":"<p>Control: the search found the fault on the previous build.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange borrowed a Control line from another comment" || ok "nochange needs the Control line in the opener comment"
 jq -n --arg c "$CTRL" '{success:true,comments:[{text:("<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>" + $c)}]}' > "$NC/comments"
