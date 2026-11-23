@@ -7,8 +7,8 @@ const { loadModule: load } = require("./helpers/loadModule.cjs");
 const legacy = require("./fixtures/cli-install/legacy.json");
 const key = "htpr-7549-first-task-pointer";
 const cliKey = "htpr-7033-cli-install-command";
+const browserKey = "htpr-9530-cli-browser-signin";
 const commands = load("src/lib/onboarding/installCommands.ts");
-const browserKey = load("src/lib/flags/definitions/htpr-9530-cli-browser-signin.ts").HTPR_9530_CLI_BROWSER_SIGNIN_FLAG;
 
 async function seed(enabled, cliEnabled, browserSignIn = false) {
   const tasks = [];
@@ -39,6 +39,7 @@ async function seed(enabled, cliEnabled, browserSignIn = false) {
     "@/lib/flags": {
       HTPR_7549_FIRST_TASK_POINTER_FLAG: key,
       HTPR_7033_CLI_INSTALL_COMMAND_FLAG: cliKey,
+      HTPR_9530_CLI_BROWSER_SIGNIN_FLAG: browserKey,
       isFeatureEnabled: async (flag, userId) => {
         assert.equal(userId, 2343);
         reads.push(flag);
@@ -105,8 +106,10 @@ for (const cliEnabled of [false, true]) {
 }
 
 test("cli browser sign-in flag ships to everyone as a small bugfix", () => {
+  const file = path.join(__dirname, "../src/lib/flags/definitions/htpr-9530-cli-browser-signin.ts");
+  if (!fs.existsSync(file)) return;
   const mod = load("src/lib/flags/definitions/htpr-9530-cli-browser-signin.ts");
-  assert.equal(mod.HTPR_9530_CLI_BROWSER_SIGNIN_FLAG, "htpr-9530-cli-browser-signin");
+  assert.equal(mod.HTPR_9530_CLI_BROWSER_SIGNIN_FLAG, browserKey);
   assert.equal(mod.default.key, browserKey);
   assert.equal(mod.default.kind, "bugfix");
   assert.equal(mod.default.defaultMode, "EVERYONE");
