@@ -17,6 +17,7 @@ import {
   getSectionForTask,
 } from "@/lib/mcp/tasks/services";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { getAccessibleAgentBoard } from "@/utils/controllers/agents/boardMembers";
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
 import { buildFieldError } from '@/lib/mcp/fieldError';
@@ -234,7 +235,11 @@ export async function POST(request: NextRequest) {
             select: { id: true },
           });
       if (targetBoard) {
-        const boardAccessGuidance = await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id);
+        const requestableBoard = await getAccessibleAgentBoard(target_project_id, user.id, null, ctx.teamScope);
+        const canRequestAccess = Boolean(
+          requestableBoard?.teamId && (!ctx.teamScope || ctx.teamScope.teamId === requestableBoard.teamId),
+        );
+        const boardAccessGuidance = canRequestAccess && await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id);
         return NextResponse.json(
           {
             ...buildFieldError("forbidden", "target_project_id", "Permission error"),

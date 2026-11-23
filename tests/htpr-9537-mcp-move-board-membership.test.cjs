@@ -22,8 +22,11 @@ function loadMove({
   projectExists = true,
   projectStatus = "Normal",
   accessError = null,
+  ownerCanRequest = true,
+  boardTeamId = "team-a",
+  teamScope = null,
 } = {}) {
-  const calls = { moved: [], flags: [], access: 0 };
+  const calls = { moved: [], flags: [], access: 0, boardAccess: [] };
   const membership = onBoard
     ? { projectId: FOREIGN_BOARD, agentId: "agent-a", status: membershipStatus, revokedAt: null }
     : null;
@@ -38,7 +41,7 @@ function loadMove({
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (fn) => fn,
-      validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId }),
+      validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId, teamScope }),
       checkMcpRouteRateLimit: async () => null,
       mcpRouteUnauthorizedResponse: async () => Response.json({ success: false }, { status: 401 }),
       withMcpRouteMutationLease: async (_db, _actor, run) => run(),
@@ -98,6 +101,14 @@ function loadMove({
       getSectionForTask: async () => ({ section: { id: 5 }, error: null }),
     },
     "@/lib/realtime/server": { broadcastBoardChange: () => {} },
+    "@/utils/controllers/agents/boardMembers": {
+      getAccessibleAgentBoard: async (projectId, userId, actingAgentId, scope) => {
+        calls.boardAccess.push({ projectId, userId, actingAgentId, teamScope: scope ?? null });
+        if (!ownerCanRequest || projectStatus !== "Normal") return null;
+        if (scope && scope.teamId !== boardTeamId) return null;
+        return { id: projectId, name: "Foreign", ownerId: userId, teamId: boardTeamId, title: "Foreign" };
+      },
+    },
     "@/lib/flags": {
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push({ key, userId });
@@ -130,13 +141,34 @@ test("an agent that is not a member of the target board is refused before the ta
   assert.deepEqual(calls.flags, [{ key: "htpr-8471-board-refusal-next-step", userId: 6 }]);
 });
 
-test("the refusal names the board access request when that guidance is on", async () => {
-  const { status, body, calls } = await move({ guidance: true });
+test("the refusal names the board access request when the owner can request that board", async () => {
+  const teamScope = { teamId: "team-a", accessBinding: "bind" };
+  const { status, body, calls } = await move({ guidance: true, teamScope });
   assert.equal(status, 403);
   assert.equal(
     body.message,
     "This agent is not a member of this board. Request access with the hypertask_request_board_access tool (project_id 15); your owner approves it in Inbox → Decisions.",
   );
+  assert.deepEqual(calls.boardAccess, [{ projectId: 15, userId: 6, actingAgentId: null, teamScope }]);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("an inaccessible board is still refused, without the access-request tool", async () => {
+  const { status, body, calls } = await move({ guidance: true, ownerCanRequest: false });
+  assert.equal(status, 403);
+  assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
+  assert.deepEqual(calls.boardAccess, [{ projectId: 15, userId: 6, actingAgentId: null, teamScope: null }]);
+  assert.deepEqual(calls.flags, []);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("a board outside the agent team is still refused, without the access-request tool", async () => {
+  const teamScope = { teamId: "team-a", accessBinding: "bind" };
+  const { status, body, calls } = await move({ guidance: true, teamScope, boardTeamId: "team-b" });
+  assert.equal(status, 403);
+  assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
+  assert.deepEqual(calls.boardAccess, [{ projectId: 15, userId: 6, actingAgentId: null, teamScope }]);
+  assert.deepEqual(calls.flags, []);
   assert.deepEqual(calls.moved, []);
 });
 
