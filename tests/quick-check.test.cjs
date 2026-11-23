@@ -155,7 +155,8 @@ for (const broken of [false, true]) {
     const compiler = path.resolve(__dirname, "../node_modules/.bin/tsc");
     writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${compiler}" "$@"\n`);
     const full = spawnSync(process.execPath, [compiler, "--noEmit", "-p", path.join(repository, "tsconfig.json")], { encoding: "utf8", timeout: 600_000 });
-    assert.equal(full.status, broken ? 2 : 0, full.stdout + full.stderr);
+    assert.equal(full.status === 0, !broken, full.stdout + full.stderr);
+    if (broken) assert.match(full.stdout, /TS2322/);
 
     const result = run(repository, stubs);
 
@@ -164,26 +165,31 @@ for (const broken of [false, true]) {
     if (broken) {
       assert.match(result.stdout, /TS2322/);
       assert.match(result.stderr, /the type check failed; the push was stopped/);
+    } else {
+      assert.doesNotMatch(result.stdout, /confirming partial type errors/);
     }
   });
 }
 
-for (const broken of [false, true]) {
-  test(`partial checks use project globals: broken=${broken}`, () => {
-    const repository = makeRepository({
-      "src/one.ts": "export const one = 1;\n",
-      "src/globals.d.ts": "declare const existing: number;\n",
-      "tsconfig.json": JSON.stringify({ compilerOptions: { skipLibCheck: true, types: [] }, include: ["src/**/*.ts"] }),
-    });
-    commit(repository, "src/one.ts", `export const one${broken ? ": string" : ""} = existing;\n`);
-    const stubs = makeStubs();
-    const compiler = path.resolve(__dirname, "../node_modules/.bin/tsc");
-    writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${compiler}" "$@"\n`);
-    const result = run(repository, stubs);
+for (const extension of [".d.ts", ".ts"]) {
+  for (const broken of [false, true]) {
+    test(`partial checks use project globals from ${extension}: broken=${broken}`, () => {
+      const repository = makeRepository({
+        "src/one.ts": "export const one = 1;\n",
+        [`src/globals${extension}`]: "declare const existing: number;\n",
+        "tsconfig.json": JSON.stringify({ compilerOptions: { skipLibCheck: true, types: [] }, include: ["src/**/*.ts"] }),
+      });
+      commit(repository, "src/one.ts", `export const one${broken ? ": string" : ""} = existing;\n`);
+      const stubs = makeStubs();
+      const compiler = path.resolve(__dirname, "../node_modules/.bin/tsc");
+      writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${compiler}" "$@"\n`);
+      const result = run(repository, stubs);
 
-    assert.equal(result.status, broken ? 1 : 0, result.stdout + result.stderr);
-    if (broken) assert.match(result.stdout, /TS2322/);
-  });
+      assert.equal(result.status, broken ? 1 : 0, result.stdout + result.stderr);
+      if (broken) assert.match(result.stdout, /TS2322/);
+      if (extension === ".ts") assert.match(result.stdout, /confirming partial type errors with the full project/);
+    });
+  }
 }
 
 test("formatting fixes stop the push until they are committed", () => {

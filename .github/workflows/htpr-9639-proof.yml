@@ -4,6 +4,9 @@ on:
     branches: [mp/htpr-9639-quick-check]
 permissions:
   contents: read
+defaults:
+  run:
+    shell: bash
 jobs:
   proof:
     runs-on: ubuntu-latest
