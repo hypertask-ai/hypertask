@@ -1,12 +1,14 @@
 "use client"
 import { currentUserAtom, showAccountSwitcherAtom, showBoardManagerAtom } from '@/store';
 import { useFlag } from '@/hooks/useFlag';
+import { ticketDetailLocator } from '@/lib/auth/ticketDetailLocator';
 import { HTPR_7799_PROJECT_ENTRY_FLAG } from '@/lib/flags/keys';
+import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from '@/lib/flags/definitions/htpr-9621-auto-switch-account';
 import { getFirstProject } from '@/utils/api/Homepage';
 import { returnToFirstBoard } from '@/lib/firstScreen/returnToFirstBoard';
 import { useSignout } from '@/hooks/MultiPages/HTC/useSignout';
 import Head from 'next/head'
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { CircleAlert } from 'lucide-react';
 import { useRecoilState, useRecoilValue, useSetRecoilState } from '@/lib/state';
 import { useEffect } from 'react';
@@ -17,9 +19,45 @@ const Unauthorized = () => {
     const currentUser = useRecoilValue(currentUserAtom);
     const setShowAccountSwitcher = useSetRecoilState(showAccountSwitcherAtom);
     const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
+    const autoSwitchAccount = useFlag(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG);
+    const pathname = usePathname() ?? "";
     useEffect(() => {
         setShowBoardManager(false)
     }, [setShowBoardManager])
+    useEffect(autoSwitchAccount ? () => {
+        const locator = ticketDetailLocator(pathname);
+        if (!locator) return;
+        const attemptKey = `ticket-account-switch:${pathname}`;
+        if (window.sessionStorage.getItem(attemptKey)) return;
+        let cancelled = false;
+        void (async () => {
+            try {
+                const response = await fetch("/api/auth/ticket-account-switch", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify(locator),
+                });
+                if (!response.ok || cancelled) return;
+                const result = await response.json();
+                if (cancelled || !result || typeof result !== "object") return;
+                if (result.action === "choose") {
+                    window.sessionStorage.setItem(attemptKey, "1");
+                    setShowAccountSwitcher(true);
+                    return;
+                }
+                if (result.action === "switch") {
+                    window.sessionStorage.setItem(attemptKey, "1");
+                    window.location.reload();
+                }
+            } catch {
+                return;
+            }
+        })();
+        return () => {
+            cancelled = true;
+        };
+    } : () => {}, [autoSwitchAccount, pathname, setShowAccountSwitcher]);
     const router = useRouter()
     const { handleHardReset } = useSignout()
     const goBacktoPrevious = () => returnToFirstBoard({
