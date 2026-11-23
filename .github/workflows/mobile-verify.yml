@@ -1,9 +1,7 @@
 name: Mobile Verification
 on:
   push: { branches: [production] }
-  workflow_dispatch:
-    inputs:
-      update_baseline: { description: 'Refresh the mobile design baseline and upload it as an artifact', type: boolean, default: false }
+  workflow_dispatch: { inputs: { update_baseline: { description: 'Refresh the mobile design baseline and upload it as an artifact', type: boolean, default: false } } }
 permissions: { contents: read, actions: read, statuses: read }
 concurrency: { group: mobile-verify, cancel-in-progress: true }
 jobs:

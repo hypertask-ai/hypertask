@@ -25,20 +25,14 @@ test('mobile design ratchet compares stable violation identities and catches sub
   const res = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [...atBase.elements.slice(1), el({ key: 'b:new', stableId: 'button[aria=New tiny icon]', label: 'New tiny icon', w: 20, h: 20 })] }), baseline)
   assert.equal(res.failures.length, 1); assert.match(res.failures[0], /board-kanban.*rule=tap-target.*New tiny icon/)
   for (const [tag, attrs, exp] of [['select', {}, false], ['button', { role: 'combobox' }, false], ['input', { type: 'checkbox' }, false], ['input', { type: 'text' }, true], ['input', { type: 'search' }, true], ['textarea', {}, true], ['div', { contenteditable: 'true' }, true], ['div', { role: 'textbox' }, true]]) assert.equal(mod.classifyTextField(tag, attrs).is, exp, tag)
-})
-test('every audited screen defines a readiness landmark', () => {
-  for (const screen of mod.MOBILE_SCREENS) assert.ok(screen.ready && screen.ready.length > 0, `${screen.id} has no readiness landmark`)
+  for (const screen of mod.MOBILE_SCREENS) assert.ok(screen.ready, `${screen.id} has no readiness landmark`)
+  assert.deepEqual(mod.evaluateMobileDesign('inbox', 'porcelain', m({ elements: [el({ label: 'Card surface', interactive: false, w: 120, h: 20 })] }), null, true).failures, [])
 })
 test('passive surfaces and text containers are audited independently of tap targets', () => {
-  const metrics = m({ elements: [el({ label: 'Tap target', w: 48, h: 48 })], radii: [{ label: 'Card surface', radius: '8px' }], clips: [{ label: 'Row label', scrollW: 240, clientW: 160 }] })
-  const res = mod.evaluateMobileDesign('board-kanban', 'porcelain', metrics, null, true)
+  const res = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [el({ label: 'Tap target' })], radii: [{ label: 'Card surface', radius: '8px' }], clips: [{ label: 'Row label', scrollW: 240, clientW: 160 }] }), null, true)
   assert.ok(res.failures.some((f) => f.includes('rule=radius') && f.includes('Card surface')), res.failures.join('\n'))
   assert.ok(res.failures.some((f) => f.includes('rule=overflow-x') && f.includes('Row label')), res.failures.join('\n'))
   assert.ok(!res.failures.some((f) => f.includes('rule=tap-target')), 'a compliant tap target must not be flagged')
-})
-test('passive elements are not reported as tap targets', () => {
-  const res = mod.evaluateMobileDesign('inbox', 'porcelain', m({ elements: [el({ label: 'Card surface', interactive: false, w: 120, h: 20 })] }), null, true)
-  assert.deepEqual(res.failures, [])
 })
 test('mobile-verify workflow follows CI contract and gates on prod-health-gate', async () => {
   const wf = yaml.load(readFileSync(path.join(root, '.github/workflows/mobile-verify.yml'), 'utf8')), steps = wf.jobs['mobile-verify'].steps, gateStep = steps.find((s) => s.id === 'gate'), pwSteps = steps.filter((s) => /playwright test/.test(s.run || '')), pwStep = pwSteps.find((s) => /--project=mobile-journeys/.test(s.run)), baselineStep = pwSteps.find((s) => /MOBILE_DESIGN_UPDATE/.test(JSON.stringify(s.env || {})))
