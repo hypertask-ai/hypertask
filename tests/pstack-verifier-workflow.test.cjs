@@ -417,3 +417,18 @@ test("the judge reads the nightly live pass and no base evidence", () => {
   assert.equal(judgeStep.env.PSTACK_BASE_EVIDENCE, undefined);
   assert.equal(strings(judge).some((value) => value.includes("base-evidence") || value.includes("PSTACK_BASE_CACHE")), false);
 });
+
+test("drive conditionally re-drives failed side journeys against the production base", () => {
+  const steps = trusted.jobs.drive.steps;
+  const headDrive = steps.findIndex((step) => String(step.run ?? "").includes("candidate\""));
+  const basePlan = steps.findIndex((step) => step.id === "base-plan" && String(step.run ?? "").includes("pstack-verifier.mjs base-plan"));
+  const baseCheckout = steps.findIndex((step) => step.with?.path === "candidate-base");
+  const baseDrive = steps.findIndex((step) => String(step.run ?? "").includes("candidate-base"));
+  assert.equal(headDrive >= 0 && basePlan > headDrive && baseCheckout > basePlan && baseDrive > baseCheckout, true);
+  assert.equal(steps[baseCheckout].if, "steps.base-plan.outputs.needed == 'true'");
+  assert.equal(steps[baseCheckout].with.ref, "${{ needs.resolve.outputs.base }}");
+  assert.equal(steps[baseDrive].if, "steps.base-plan.outputs.needed == 'true'");
+  assert.equal(steps[baseDrive]["continue-on-error"], true);
+  assert.equal(steps[baseDrive].env.PSTACK_PLAN_FILE, "${{ runner.temp }}/pstack-verifier/plan/base-plan.json");
+  assert.match(String(steps[baseDrive].run), /base-evidence\.json/);
+});
