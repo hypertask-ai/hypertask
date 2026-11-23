@@ -40,6 +40,7 @@ function harness() {
     liveSlug: null,
     taskExists: true,
     flagChecks: [],
+    rateLimitThrows: false,
     identifierLookups: [],
     taskWhere: null,
     projectContentAccessWhere: null,
@@ -138,6 +139,10 @@ function harness() {
       },
     },
   };
+  const rateLimit = load("src/lib/auth/ticketAccountSwitchRateLimit.ts", {
+    "@/lib/redis": { getRedis: async () => { throw new Error("redis down"); } },
+    "@/lib/auth/qaLoginRateLimit": { getQaLoginClientIp: () => "203.0.113.4" },
+  });
   const mocks = {
     "next/server": {
       NextResponse: {
@@ -178,6 +183,13 @@ function harness() {
     "@/lib/auth/agentScope": { agentScopeEnforced: () => true },
     "@/lib/tasks/sameBoardRelations": { stripForeignTaskRelations: (task) => task },
     "@vercel/functions": { waitUntil: () => {}, ipAddress: () => "203.0.113.4" },
+    "@/lib/auth/ticketAccountSwitchRateLimit": {
+      getTicketAccountSwitchClientIp: rateLimit.getTicketAccountSwitchClientIp,
+      claimTicketAccountSwitchAttempt: async (userId, clientIp) => {
+        if (state.rateLimitThrows) throw new Error("redis down");
+        return rateLimit.claimTicketAccountSwitchAttempt(userId, clientIp);
+      },
+    },
     "@/lib/realtime/server": { broadcastTaskChange: async () => {} },
     "@/lib/mcp/tasks/resolveTask": {
       findTaskByIdentifier: async (user, options, _agentId, projectAccess) => {
@@ -784,6 +796,28 @@ test("repeated probes stop before another ticket lookup", async () => {
     assert.equal(app.state.lookups.length, lookups);
     assert.equal(app.state.listed, listed);
     assert.equal(app.state.activated.length, limit);
+  } finally {
+    app.restore();
+  }
+});
+
+test("a rate limit outage returns the browser to the ticket", async () => {
+  const app = harness();
+  try {
+    app.state.rateLimitThrows = true;
+    app.state.sessions = [
+      { user: { id: OWNER }, session: { token: OWNER_TOKEN } },
+    ];
+    trust(app);
+    const page = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }));
+    assert.equal(page.status, 303);
+    assert.equal(locationPath(page), "/detail/project-15/9621");
+    const body = await app.route(request(ticketBody));
+    assert.equal(body.status, 200);
+    assert.deepEqual(await body.json(), { action: "stay" });
+    assert.equal(app.state.lookups.length, 0);
+    assert.equal(app.state.listed, 0);
+    assert.deepEqual(app.state.activated, []);
   } finally {
     app.restore();
   }

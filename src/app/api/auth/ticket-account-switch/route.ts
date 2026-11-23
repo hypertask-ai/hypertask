@@ -98,7 +98,12 @@ export async function POST(request: Request) {
 
   const clientIp = getTicketAccountSwitchClientIp(request);
   if (!clientIp) return finish(request, page, "stay", locator);
-  const attempt = await claimTicketAccountSwitchAttempt(user.id, clientIp);
+  let attempt;
+  try {
+    attempt = await claimTicketAccountSwitchAttempt(user.id, clientIp);
+  } catch {
+    return finish(request, page, "stay", locator);
+  }
   if (!attempt.allowed) return finish(request, page, "stay", locator);
 
   let accounts: DeviceAccount[] = [];
