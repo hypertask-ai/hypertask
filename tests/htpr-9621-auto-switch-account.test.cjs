@@ -40,16 +40,28 @@ function harness() {
     activated: [],
     lookups: [],
     listed: 0,
+    alias: null,
+    liveSlug: null,
   };
   const prisma = {
     task: {
       findFirst: async ({ where, select }) => {
         state.lookups.push({ where, select, userId: userIdFromWhere(where) });
-        if (!select || Object.keys(select).join() !== "id" || select.id !== true) {
-          return { id: TASK.id, title: TASK.title };
+        const keys = select ? Object.keys(select).sort().join() : "";
+        if (keys === "id" && select.id === true) {
+          if (!where?.project && state.liveSlug && where?.uniqueIndex === state.liveSlug.uniqueIndex && where?.projectId === state.liveSlug.projectId) {
+            return { id: state.liveSlug.id };
+          }
+          return allows(where) ? { id: TASK.id } : null;
         }
-        return allows(where) ? { id: TASK.id } : null;
+        if (keys === "projectId,uniqueIndex" && select.projectId === true && select.uniqueIndex === true) {
+          return allows(where) ? { projectId: TASK.projectId, uniqueIndex: TASK.uniqueIndex } : null;
+        }
+        return { id: TASK.id, title: TASK.title };
       },
+    },
+    taskNumberAlias: {
+      findUnique: async () => state.alias,
     },
   };
   const auth = {
@@ -264,6 +276,43 @@ test("a forged account id cannot open a ticket that device sessions cannot see",
     assert.deepEqual(app.state.activated, []);
     assert.equal(app.state.lookups.some((lookup) => lookup.userId === OWNER), false);
     assert.equal(await app.openTicketForAccount(STRANGER, "project-15", "9621"), null);
+  } finally {
+    app.restore();
+  }
+});
+
+test("an old ticket number still opens for the account that can see where it moved", async () => {
+  const app = harness();
+  try {
+    const oldSlug = app.parseDetailSlug(["project-15", "1000"]);
+    const currentSlug = app.parseDetailSlug(["project-15", "9621"]);
+    app.state.alias = { task: { id: TASK.id, projectId: TASK.projectId, uniqueIndex: TASK.uniqueIndex } };
+    assert.equal(await app.openTicketForAccount(WRONG, "project-15", "1000"), null);
+    assert.deepEqual(await app.openTicketForAccount(OWNER, "project-15", "1000"), { id: TASK.id });
+    const ownerLookup = app.state.lookups.find((lookup) => lookup.userId === OWNER && lookup.where?.uniqueIndex === TASK.uniqueIndex && lookup.select?.id === true);
+    assert.deepEqual(ownerLookup.where, app.taskWhere(currentSlug, OWNER));
+
+    app.state.sessions = [
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+    ];
+    const response = await app.route(request({ projectSlug: "project-15", uniqueIndex: "1000", title: TASK.title }));
+    const body = await response.json();
+    assert.deepEqual(body, { action: "switch" });
+    assert.equal(JSON.stringify(body).includes("9621"), false);
+    assert.equal(JSON.stringify(body).includes(TASK.title), false);
+    assert.deepEqual(app.state.activated, [OWNER_TOKEN]);
+
+    const form = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "1000" }));
+    assert.equal(locationPath(form), "/detail/project-15/1000");
+    assert.equal(form.headers.get("location").includes("9621"), false);
+
+    app.state.liveSlug = { id: 99, projectId: 15, uniqueIndex: 1000 };
+    app.state.activated.length = 0;
+    assert.equal(await app.openTicketForAccount(OWNER, "project-15", "1000"), null);
+    const occupied = await app.route(request({ projectSlug: "project-15", uniqueIndex: "1000" }));
+    assert.deepEqual(await occupied.json(), { action: "stay" });
+    assert.deepEqual(app.state.activated, []);
+    assert.deepEqual(oldSlug, { projectId: 15, uniqueIndex: 1000 });
   } finally {
     app.restore();
   }

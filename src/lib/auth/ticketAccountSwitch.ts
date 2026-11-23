@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { parseDetailSlug, taskWhere } from "@/utils/controllers/taskDetail/load";
+import { findTaskNumberAlias, parseDetailSlug, taskWhere } from "@/utils/controllers/taskDetail/load";
 
 export type DeviceAccount = {
   userId: number;
@@ -23,7 +23,14 @@ export async function openTicketForAccount(
     where: taskWhere(slug, userId),
     select: { id: true },
   });
-  return task ? { id: task.id } : null;
+  if (task) return { id: task.id };
+  const alias = await findTaskNumberAlias(slug, userId);
+  if (!alias) return null;
+  const current = await prisma.task.findFirst({
+    where: taskWhere(alias, userId),
+    select: { id: true },
+  });
+  return current ? { id: current.id } : null;
 }
 
 export function decideTicketAccountSwitch(
