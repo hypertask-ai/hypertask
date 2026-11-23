@@ -235,6 +235,26 @@ test("a relay subscribe failure is retried once and then refused", async () => {
     assert.equal(clients.at(-1).attempts, 2);
     assert.equal(clients.at(-1).subs.size, 0);
     assert.equal(refused.publishLegacySse(channel, "local"), 0);
+    assert.equal(globalThis.__hypertaskLegacySseRelayLive, undefined);
+    clearRelay();
+    const held = loadModule("src/lib/mcp-server/legacySseBus.ts", {
+      ioredis: { default: class extends FlakyRedis {
+        subscribe(name) {
+          this.attempts += 1;
+          if (String(name).includes(":reply:")) return Promise.reject(new Error("acl"));
+          this.subs.add(name);
+          return Promise.resolve();
+        }
+      } },
+    });
+    const keep = await held.subscribeLegacySseAcrossProcesses(channel, () => {});
+    for (let i = 0; i < 20; i += 1) {
+      await assert.rejects(() => held.subscribeLegacySseAcrossProcesses(`${channel}:reply:${i}`, () => {}));
+    }
+    assert.equal(globalThis.__hypertaskLegacySseRelayLive.tails.size, 1);
+    assert.equal(clients.at(-1).subs.size, 1);
+    keep();
+    assert.equal(globalThis.__hypertaskLegacySseRelayLive, undefined);
   } finally {
     clearRelay();
     if (previous === undefined) delete process.env.REDIS_URL;
