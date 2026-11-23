@@ -233,6 +233,14 @@ export async function createBoardFromManifest(
       })
     }
 
+    const issued = tasksOut.reduce((max, task) => Math.max(max, task.uniqueIndex ?? 0), 0)
+    if (issued > 0) {
+      await prisma.project.updateMany({
+        where: { id: projectId, issuedUniqueIndex: { lt: issued } },
+        data: { issuedUniqueIndex: issued },
+      })
+    }
+
     const sectionsWithCounts: CreateBoardSectionResult[] = await Promise.all(
       sectionRows.map(async (sec) => ({
         id: sec.id,

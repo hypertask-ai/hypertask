@@ -180,7 +180,11 @@ test('board creation atomically creates an Accepted membership before manifest t
   const board = { id: 900, title: 'Created', name: 'project-900', uniqueIdentifier: 'NEW', teamId: 'team', owner: f.user, team: { title: 'Team' } };
   let savedBoard;
   f.prisma.project.findUniqueOrThrow = async () => board;
-  f.prisma.project.update = async ({ data }) => { savedBoard = data; return { ...board, ...data }; };
+  const updateMany = f.prisma.project.updateMany;
+  f.prisma.project.updateMany = async (args) => {
+    if (args.data?.issuedUniqueIndex != null) savedBoard = { issuedUniqueIndex: args.data.issuedUniqueIndex };
+    return updateMany(args);
+  };
   f.prisma.section.findMany = async () => [{ id: 1, section_title: 'Todo', ranking: 'a' }];
   f.prisma.label = { create: async () => ({}) };
   const create = f.load('src/lib/mcp/boards/createBoardFromManifest.ts', {
