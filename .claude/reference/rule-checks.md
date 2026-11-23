@@ -19,3 +19,4 @@ or when a row names a check file that is not in the repository.
 | Verify the successful production deployment and live behavior before Done. | `.github/workflows/prod-health.yml` |
 | Clean only your own finished worktree and branch. | nothing yet |
 | No explanatory code comments. Express intent in code. | `eslint-local-rules/no-comments.mjs` |
+| Hypertask board: 15 (https://app.hypertask.ai/project?id=15). | `tests/board-sync-stop-hook.test.cjs` |
