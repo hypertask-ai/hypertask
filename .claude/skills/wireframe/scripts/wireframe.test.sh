@@ -312,6 +312,16 @@ p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.strip() == TODAY and not events(log, "http")
 add_today(page.parent)
 ok("a 1x1 image cannot substitute for a declared mobile or desktop capture")
+shared = [{**entry, "file": "today/mobile-porcelain.png" if entry["viewport"] == "390x844" else "today/desktop-porcelain.png"} for entry in manifest]
+body = page.read_text()
+for original, replacement in zip(manifest, shared):
+    body = body.replace(original["file"], replacement["file"])
+page.write_text(body)
+manifest_path.write_text(json.dumps(shared))
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+ok("theme entries cannot share just one image per viewport even with a matching Today section")
 
 for fixture in ("rejected-ai-chat.html", "rejected-task-entry.html"):
     rejected = (fixtures / fixture).read_text()
@@ -363,6 +373,18 @@ for property in ("box-shadow", "text-shadow"):
     assert len(uploaded(log, "waiting")) == 1
 ok("box and text shadows reject off-token colours and accept app token colours")
 
+for pseudo in ("::before", "::after"):
+    for content, color, radius, fail in (("'Badge'", "#ff0000", 19, True), ("'Badge'", "#ececec", 4, False), ("none", "#ff0000", 19, False)):
+        css = f'body{pseudo}{{content:{content};color:{color};border-radius:{radius}px}}'
+        page.write_text(valid_page.replace("</style>", css + "</style>"))
+        add_today(page.parent)
+        p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+        if fail:
+            assert p.stderr.startswith(TOKENS) and pseudo in p.stderr and not events(log, "http")
+        else:
+            assert len(uploaded(log, "waiting")) == 1
+ok("visible pseudo-elements obey tokens while token-coloured and non-painted pseudo-elements pass")
+
 for viewport, media in (("390x844", "max-width:600px"), ("1440x900", "min-width:1000px")):
     page.write_text(valid_page.replace("</style>", "@media (" + media + "){body{background-color:#ff0000}}</style>"))
     add_today(page.parent)
@@ -386,7 +408,7 @@ assert p.stderr.startswith(TOKENS) and "radius 5px" in p.stderr and not events(l
 ok("new elements cannot borrow a copied live element's off-token exemption")
 
 frame_kit = D / "frame-kit.html"
-inner = kit.read_text().replace('</body>', '<div style="border-radius:8px">Copied live radius</div></body>')
+inner = kit.read_text().replace('</body>', '<div style="border-radius:8px">Copied live radius</div></body>').replace('</style>', 'body::before{content:"Copied live pseudo";border-radius:8px}</style>')
 frame_kit.write_text(kit.read_text().replace('</body>', '<iframe title="Live app" srcdoc="' + html.escape(inner, quote=True) + '"></iframe></body>'))
 invoke("base", str(frame_kit))
 invoke("new", "HTPR-404")

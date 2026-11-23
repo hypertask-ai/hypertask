@@ -178,26 +178,29 @@ function collect(doc = document, prefix = '') {
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) continue;
         if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
-        const style = getComputedStyle(el);
-        const colors = [['color', style.color], ['background', style.backgroundColor]];
-        const sides = [['top', style.borderTopWidth, style.borderTopColor], ['right', style.borderRightWidth, style.borderRightColor],
-                       ['bottom', style.borderBottomWidth, style.borderBottomColor], ['left', style.borderLeftWidth, style.borderLeftColor]];
-        for (const [side, width, color] of sides) {
-            if (parseFloat(width) > 0) colors.push(['border-' + side, color]);
+        for (const pseudo of ['', '::before', '::after']) {
+            const style = getComputedStyle(el, pseudo || null);
+            if (pseudo && (['none', 'normal'].includes(style.content) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)) continue;
+            const colors = [['color', style.color], ['background', style.backgroundColor]];
+            const sides = [['top', style.borderTopWidth, style.borderTopColor], ['right', style.borderRightWidth, style.borderRightColor],
+                           ['bottom', style.borderBottomWidth, style.borderBottomColor], ['left', style.borderLeftWidth, style.borderLeftColor]];
+            for (const [side, width, color] of sides) {
+                if (parseFloat(width) > 0) colors.push(['border-' + side, color]);
+            }
+            if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(['outline', style.outlineColor]);
+            if (solid(style.fill)) colors.push(['fill', style.fill]);
+            if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
+            for (const [kind, value] of [['gradient', style.backgroundImage], ['box-shadow', style.boxShadow], ['text-shadow', style.textShadow]]) {
+                for (const color of value.match(/rgba?\([^)]*\)/g) || []) colors.push([kind, color]);
+            }
+            out.push({
+                key: el.hasAttribute('data-wireframe-base') ? prefix + el.getAttribute('data-wireframe-base') + pseudo : null,
+                externalFrame: !pseudo && el.tagName === 'IFRAME' && !el.hasAttribute('srcdoc'),
+                tag: el.tagName.toLowerCase() + pseudo, font: style.fontFamily, size: style.fontSize,
+                colors: colors.filter(([, color]) => solid(color)),
+                radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
+            });
         }
-        if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(['outline', style.outlineColor]);
-        if (solid(style.fill)) colors.push(['fill', style.fill]);
-        if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
-        for (const [kind, value] of [['gradient', style.backgroundImage], ['box-shadow', style.boxShadow], ['text-shadow', style.textShadow]]) {
-            for (const color of value.match(/rgba?\([^)]*\)/g) || []) colors.push([kind, color]);
-        }
-        out.push({
-            key: el.hasAttribute('data-wireframe-base') ? prefix + el.getAttribute('data-wireframe-base') : null,
-            externalFrame: el.tagName === 'IFRAME' && !el.hasAttribute('srcdoc'),
-            tag: el.tagName.toLowerCase(), font: style.fontFamily, size: style.fontSize,
-            colors: colors.filter(([, color]) => solid(color)),
-            radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
-        });
         if (el.tagName === 'IFRAME' && el.hasAttribute('srcdoc') && el.contentDocument) {
             out.push(...collect(el.contentDocument, prefix + (el.getAttribute('data-wireframe-base') ?? 'added-frame') + '/'));
         }
@@ -306,7 +309,8 @@ def read_manifest(file):
         theme, viewport, shot, source = entry.get("theme"), entry.get("viewport"), entry.get("file"), entry.get("sourceUrl")
         if theme not in THEMES or viewport not in ("390x844", "1440x900") or not isinstance(shot, str) or not isinstance(source, str) or source != expected_source:
             raise SystemExit(TODAY_MESSAGE)
-        if (theme, viewport) in seen:
+        name = "mobile" if viewport == "390x844" else "desktop"
+        if (theme, viewport) in seen or shot != f"today/{name}-{theme}.png":
             raise SystemExit(TODAY_MESSAGE)
         seen.add((theme, viewport))
         source_url = urlparse(source)
