@@ -15,7 +15,8 @@ export const MOBILE_SCREENS: readonly MobileScreenSpec[] = [
 export type MeasuredElement = { key: string; stableId?: string; tag: string; role: string; label: string; cls: string; w: number; h: number; x: number; y: number; disabled: boolean; interactive: boolean; textField: boolean; contenteditable: boolean; fontSize: number | null; radius: string; radiusBad: boolean; visibleSurface: boolean; roundMarker: boolean; outsideX: boolean; inHScroller: boolean; clippedByAncestor: boolean; textClipped: boolean; ellipsis: boolean; scrollW: number; clientW: number }
 export type MeasuredTextField = { key: string; stableId?: string; label: string; kind: string; disabled: boolean; x: number; y: number; w: number; h: number; micFound: boolean; micLabel: string; micW: number; micH: number; micBgAlpha: number; micRightBound: boolean; micIsPrimaryRight: boolean }
 export type MeasuredPurple = { key: string; stableId?: string; label: string; hits: string[]; ai: boolean }
-export type MeasuredRadius = { stableId?: string; label: string; radius: string }, MeasuredClip = { stableId?: string; label: string; scrollW: number; clientW: number }
+export type MeasuredRadius = { stableId?: string; label: string; radius: string }
+export type MeasuredClip = { stableId?: string; label: string; scrollW: number; clientW: number }
 export type MobileScreenMetrics = { coarsePointer: boolean; docOverflowX: number; elements: MeasuredElement[]; textFields: MeasuredTextField[]; purple: MeasuredPurple[]; radii: MeasuredRadius[]; clips: MeasuredClip[] }
 export type MobileViolation = { id: string; screen: string; theme: string; rule: MobileRule; element: string; measured: string }
 export type MobileDesignBaseline = { generatedAt: string; viewport: { width: number; height: number }; touchEmulation: true; themes: readonly string[]; screens: Record<string, Record<string, Record<MobileRule, string[]>>> }

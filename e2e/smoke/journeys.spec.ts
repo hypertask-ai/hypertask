@@ -8,7 +8,6 @@ import { tieredId, readExpectedPlanLabel, readTier } from './lib/tier'
 
 const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768
 
-
 const LOGIN_PATH = '/login'
 const createdTaskIds: number[] = []
 
