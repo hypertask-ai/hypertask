@@ -1247,6 +1247,8 @@ test("planner replay 45173881467 authenticates agent-only refusals before dispat
   const paths = ["/api/mcp/tasks/lease/claim", "/api/mcp/chat/activity", "/api/mcp/chat/sessions/{task}/messages", "/api/mcp/agents/runs/{task}/activities"];
   const parsed = parsePlan(JSON.stringify({ ...primary, actions: primary.actions.filter((action) => paths.includes(action.path)), expect: [] }));
   assert.deepEqual(parsed.actions.map((action) => action.auth), paths.map(() => "agent"));
+  const whole = parsePlan(JSON.stringify(primary));
+  assert.equal(whole.actions.filter((action) => action.op === "api").find((action) => action.path === "/api/mcp/agents/runs/{task}/stop").auth, "agent");
   const sent = [];
   const result = await runPlan({
     page: { request: { async fetch(url, options) {
@@ -1283,12 +1285,51 @@ test("no route refusing a non-agent caller is missing from the agent-only set", 
   const { agentOnlyRoutes } = await load();
   const fs = require("node:fs");
   const path = require("node:path");
-  const root = path.join(__dirname, "../src/app/api");
+  const root = path.join(__dirname, "../src/app/api/mcp");
   const refusals = [/requires? an agent token/i, /agent token is required/i];
   const derived = agentOnlyRoutes();
   const files = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && refusals.some((pattern) => pattern.test(fs.readFileSync(path.join(root, file), "utf8"))));
-  assert.equal(files.length, derived.length);
-  for (const file of files) assert.equal(derived.includes(`/api/${file.slice(0, -"/route.ts".length)}`), true, file);
+  assert.equal(files.length > 0, true);
+  for (const file of files) assert.equal(derived.includes(`/api/mcp/${file.slice(0, -"/route.ts".length)}`), true, file);
+});
+
+test("agent-only derivation follows a route's imports to the helper that refuses non-agent callers", async () => {
+  const { agentOnlyRoutes } = await load();
+  const derived = agentOnlyRoutes();
+  for (const route of [
+    "/api/mcp/flags",
+    "/api/mcp/flags/reviews",
+    "/api/mcp/manager-leases",
+    "/api/mcp/agents/board-access-requests",
+    "/api/mcp/agents/board-access-requests/[requestId]",
+    "/api/mcp/agents/[agentId]",
+    "/api/mcp/agents/runs/[id]",
+    "/api/mcp/agents/runs/[id]/stop",
+    "/api/mcp/agents/runtime-heartbeat",
+  ]) assert.equal(derived.includes(route), true, route);
+  assert.equal(derived.every((route) => route.startsWith("/api/mcp/")), true);
+});
+
+test("a route calling an agent credential guard is in the derived set", async () => {
+  const { agentOnlyRoutes } = await load();
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const guards = [{ spec: "@/lib/flags/agentAuthorization", name: "authorize" }, { spec: "@/lib/agentRuns/service", name: "authenticateAgentRunRequest" }];
+  const root = path.join(__dirname, "../src/app/api/mcp");
+  const derived = agentOnlyRoutes();
+  const files = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts"));
+  const callers = files.filter((file) => {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    return guards.some(({ spec, name }) => new RegExp(`import[^;]*\\b${name}\\b[^;]*from\\s*["']${spec}["']`).test(source));
+  });
+  assert.equal(callers.length >= 5, true, callers.join(","));
+  for (const file of callers) assert.equal(derived.includes(`/api/mcp/${file.slice(0, -"/route.ts".length)}`), true, file);
+});
+
+test("a role guard or a human-only route is not agent-only", async () => {
+  const { agentOnlyRoutes } = await load();
+  const derived = agentOnlyRoutes();
+  for (const route of ["/api/mcp/tasks/evidence", "/api/mcp/time/delete", "/api/mcp/webhooks", "/api/mcp/assignees/assign"]) assert.equal(derived.includes(route), false, route);
 });
 
 for (const { expected, actual, ok } of [
