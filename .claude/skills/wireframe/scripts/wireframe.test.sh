@@ -97,7 +97,7 @@ chmod +x "$D/bin/stub"
 for cmd in hypertask vcc npx; do ln -s stub "$D/bin/$cmd"; done
 export PATH="$D/bin:$PATH"
 python3 - <<'PY'
-import base64, html, json, os, struct, subprocess
+import base64, html, json, os, struct, subprocess, zlib
 from datetime import date
 from pathlib import Path
 
@@ -136,6 +136,10 @@ def uploaded(log, status, ticket="HTPR-255", project=15):
     assert (D / "uploaded").read_bytes() == f.read_bytes()
     return calls
 
+def png_for(width, height):
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + ihdr + struct.pack(">I", zlib.crc32(b"IHDR" + ihdr))
+
 def add_today(folder):
     shots = folder / "today"
     shots.mkdir(exist_ok=True)
@@ -143,7 +147,7 @@ def add_today(folder):
     for theme in ("porcelain", "graphite", "amoled", "dia"):
         for name, viewport in (("mobile", "390x844"), ("desktop", "1440x900")):
             shot = f"today/{name}-{theme}.png"
-            (folder / shot).write_bytes(PNG)
+            (folder / shot).write_bytes(png_for(*map(int, viewport.split("x"))))
             manifest.append({"file": shot, "viewport": viewport, "theme": theme, "sourceUrl": TURL, "capturedAt": "2026-11-23T10:00:00Z"})
     (folder / "today.json").write_text(json.dumps(manifest))
     figures = "".join(f'<figure><img alt="{e["theme"]} {e["viewport"]}" src="data:image/png;base64,{base64.b64encode((folder / e["file"]).read_bytes()).decode()}" data-capture="{e["file"]}"><figcaption>{e["theme"]} {e["viewport"]}</figcaption></figure>' for e in manifest)
@@ -319,6 +323,18 @@ add_today(page.parent)
 p, log = invoke("publish", "HTPR-255", "--no-comment")
 assert len(uploaded(log, "waiting")) == 1
 ok("a Tailwind design token colour from tailwind.config.ts passes")
+
+page.write_text(valid_page.replace("<body>", '<body style="background-color:#ff0000">'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "background" in p.stderr and not events(log, "http")
+ok("an off-token body background is refused")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;background-image:linear-gradient(#ff0000,#00ff00)">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "gradient" in p.stderr and not events(log, "http")
+ok("an off-token gradient is refused")
 
 live = home / "HTPR-402"
 invoke("new", "HTPR-402")

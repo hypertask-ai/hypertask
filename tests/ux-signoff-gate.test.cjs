@@ -1323,6 +1323,10 @@ test('approvals recorded on legacy explorations and artifacts still count', asyn
   assert.equal((await decision({ comments: [explorations, yes({ createdAt: '2026-10-10T12:05:00Z' })] })).state, 'success');
   const artifact = wireframe({ text: '<p>https://claude.ai/artifact/LegacyDesign1</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
   assert.equal((await decision({ comments: [artifact, yes({ createdAt: '2026-10-10T12:05:00Z' })] })).state, 'success');
+  const lateYes = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
+  assert.equal((await decision({ comments: [lateYes, yes({ createdAt: '2026-11-23T10:05:00Z' })] })).state, 'failure');
+  const lateReaction = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z', reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-11-23T10:05:00Z' }] });
+  assert.equal((await decision({ comments: [lateReaction] })).state, 'failure');
 });
 
 test('copied components need names; renamed components, CSS and app files need no names and no wireframe', async () => {

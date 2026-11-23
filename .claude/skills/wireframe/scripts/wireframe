@@ -21,7 +21,7 @@
 Home: $WIREFRAME_HOME or ~/.local/share/hypertask-wireframes.
 Screenshots: ~/.local/state/vcc-evidence/<TICKET>/wireframe/ at 1440x900.
 """
-import argparse, base64, html, importlib.machinery, importlib.util, json, os, re, shutil, subprocess, sys, tempfile
+import argparse, base64, html, importlib.machinery, importlib.util, json, os, re, shutil, struct, subprocess, sys, tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -163,7 +163,7 @@ COLLECT_JS = r"""
 function collect() {
     const out = [];
     const solid = (value) => value && value !== 'none' && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)';
-    for (const el of document.body ? document.body.querySelectorAll('*') : []) {
+    for (const el of document.body ? [document.body, ...document.body.querySelectorAll('*')] : []) {
         if (el.closest('[data-wireframe-today]')) continue;
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) continue;
@@ -178,6 +178,7 @@ function collect() {
         if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(['outline', style.outlineColor]);
         if (solid(style.fill)) colors.push(['fill', style.fill]);
         if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
+        for (const color of style.backgroundImage.match(/rgba?\([^)]*\)/g) || []) colors.push(['gradient', color]);
         out.push({
             tag: el.tagName.toLowerCase(), font: style.fontFamily, size: style.fontSize,
             colors: colors.filter(([, color]) => solid(color)),
@@ -293,7 +294,14 @@ def read_manifest(file):
         except ValueError:
             raise SystemExit(TODAY_MESSAGE)
         image = file.parent / shot
-        if image.suffix.lower() != ".png" or not image.is_file() or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
+        try:
+            raw = image.read_bytes()
+        except OSError:
+            raise SystemExit(TODAY_MESSAGE)
+        if image.suffix.lower() != ".png" or raw[:8] != b"\x89PNG\r\n\x1a\n" or len(raw) < 24:
+            raise SystemExit(TODAY_MESSAGE)
+        expected = tuple(int(part) for part in viewport.split("x"))
+        if struct.unpack(">II", raw[16:24]) != expected:
             raise SystemExit(TODAY_MESSAGE)
     if seen != {(t, v) for t in THEMES for v in ("390x844", "1440x900")}:
         raise SystemExit(TODAY_MESSAGE)
@@ -452,7 +460,7 @@ const viewports = { mobile: [390, 844], desktop: [1440, 900] };
     try {
         for (const theme of themes) {
             for (const [name, [width, height]] of Object.entries(viewports)) {
-                const options = { viewport: { width, height }, deviceScaleFactor: 2 };
+                const options = { viewport: { width, height } };
                 if (state && fs.existsSync(state)) options.storageState = state;
                 const context = await browser.newContext(options);
                 const host = new URL(base).hostname;
