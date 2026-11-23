@@ -33,7 +33,7 @@
         {"name": "FailedSendKeepsQueued", "expect": "holds"},
         {"name": "ChatSwitchKeepsQueue", "expect": "holds"},
         {"name": "QueueOrderKept", "expect": "holds"},
-        {"name": "QueuedStoredBeforeReply", "expect": "holds"},
+        {"name": "QueuedStoredBeforeReply", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "LookupReply", "ReplyStored", "Accept"]},
         {"name": "StoppedReleasesSend", "expect": "holds"},
         {"name": "StoppedStreamCloses", "expect": "holds"},
         {"name": "ReplyEndReleasesSend", "expect": "holds"},

@@ -199,14 +199,29 @@ async function queuedMessageSortsBeforeItsReply() {
   };
 }
 
+async function replyStoredBetweenLookupAndInsert() {
+  let reply = null;
+  const createdAt = await resolveQueuedMessageCreatedAt("human", "assistant-1", async () => reply);
+  reply = { createdAt: new Date("2026-11-20T10:00:00.500Z") };
+  const storedCreatedAt = createdAt ?? new Date(reply.createdAt.getTime() + 1);
+  return {
+    lookupMissed: createdAt === undefined,
+    replyCreatedAt: reply.createdAt.toISOString(),
+    queuedCreatedAt: storedCreatedAt.toISOString(),
+    before: storedCreatedAt.getTime() < reply.createdAt.getTime(),
+  };
+}
+
 (async () => {
   const first = await failedSendKeepsTheOlderMessage();
   const second = await switchKeepsTheQueue();
   const third = await queuedMessageSortsBeforeItsReply();
+  const fourth = await replyStoredBetweenLookupAndInsert();
   const result = {
     failedSend: first,
     switchChat: second,
     orderInHistory: third,
+    lookupInsertRace: fourth,
   };
   console.log(JSON.stringify(result, null, 2));
   const clean = first.afterFailure.join(",") === "one,two"
@@ -217,6 +232,8 @@ async function queuedMessageSortsBeforeItsReply() {
     && second.inB.length === 0
     && second.queueAfter.length === 0
     && third.before
-    && !third.preFixBefore;
+    && !third.preFixBefore
+    && fourth.lookupMissed
+    && !fourth.before;
   process.exitCode = clean ? 0 : 1;
 })();

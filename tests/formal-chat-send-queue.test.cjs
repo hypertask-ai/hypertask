@@ -34,14 +34,20 @@ test("the chat send queue model covers the files its record names", () => {
 
 test("every recorded bug variant still expects the property it broke to fail", () => {
   const manifest = require(path.join(root, "verification/formal/checks.json"));
-  assert.ok(manifest.checks["chat-send-queue"].properties.every((property) => property.expect === "holds"));
+  const properties = manifest.checks["chat-send-queue"].properties;
+  assert.deepEqual(properties.filter((property) => property.expect === "violated"), [{
+    name: "QueuedStoredBeforeReply",
+    expect: "violated",
+    witness: ["Compose", "Enqueue", "SendQueued", "LookupReply", "ReplyStored", "Accept"],
+  }]);
+  assert.ok(properties.filter((property) => property.name !== "QueuedStoredBeforeReply").every((property) => property.expect === "holds"));
   for (const variant of variants) {
     const properties = manifest.checks[`chat-send-queue-${variant}`].properties;
     assert.ok(properties.some((property) => property.expect === "violated"), `chat-send-queue-${variant} lost its violation`);
   }
 });
 
-test("the current queue model holds and every past bug variant breaks it", () => {
+test("the current queue model raises only its recorded finding and every past bug variant breaks it", () => {
   const checked = spawnSync(
     process.execPath,
     ["scripts/formal-verification/run.mjs", "chat-send-queue", ...variants.map((variant) => `chat-send-queue-${variant}`)],
@@ -50,7 +56,7 @@ test("the current queue model holds and every past bug variant breaks it", () =>
   assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
   assert.match(
     checked.stdout,
-    /formal-verification: ok chat-send-queue matches its record .*MessageConserved holds, DoneNotQueued holds, FailedSendKeepsQueued holds, ChatSwitchKeepsQueue holds, QueueOrderKept holds, QueuedStoredBeforeReply holds, StoppedReleasesSend holds, StoppedStreamCloses holds, ReplyEndReleasesSend holds, AcquisitionWindowKept holds, AcquisitionRetried holds, AcquisitionAttemptsBounded holds, AcquisitionNotReplayed holds/,
+    /formal-verification: ok chat-send-queue matches its record .*MessageConserved holds, DoneNotQueued holds, FailedSendKeepsQueued holds, ChatSwitchKeepsQueue holds, QueueOrderKept holds, QueuedStoredBeforeReply violated \(recorded finding\), StoppedReleasesSend holds, StoppedStreamCloses holds, ReplyEndReleasesSend holds, AcquisitionWindowKept holds, AcquisitionRetried holds, AcquisitionAttemptsBounded holds, AcquisitionNotReplayed holds/,
   );
   assert.match(
     checked.stdout,
@@ -79,4 +85,8 @@ test("the repro drives the real queue through the recorded traces", () => {
   assert.equal(repro.status, 0, `${repro.stdout}\n${repro.stderr}`);
   assert.match(repro.stdout, /"afterFailure": \[\s*"one",\s*"two"\s*\]/);
   assert.match(repro.stdout, /"preFixBefore": false/);
+  const race = JSON.parse(repro.stdout).lookupInsertRace;
+  assert.equal(race.lookupMissed, true);
+  assert.equal(race.before, false);
+  assert.ok(new Date(race.queuedCreatedAt) > new Date(race.replyCreatedAt));
 });

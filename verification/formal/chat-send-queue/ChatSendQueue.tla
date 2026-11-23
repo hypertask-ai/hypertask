@@ -20,11 +20,11 @@ ASSUME /\ Messages # {}
 
 VARIABLES composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
           acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-          poll, holder, waited, attempts, callbacks, lastError
+          poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp
 
 vars == <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
           acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-          poll, holder, waited, attempts, callbacks, lastError>>
+          poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 InQueue(m) == \E s \in Sessions : \E i \in 1..Len(queue[s]) : queue[s][i] = m
 
@@ -59,6 +59,8 @@ Init == /\ composer = 0
         /\ attempts = 0
         /\ callbacks = 0
         /\ lastError = "none"
+        /\ lookedUp = FALSE
+        /\ lookupStamp = 0
 
 Compose(m) == /\ active = MessageSession
               /\ composer = 0
@@ -66,7 +68,7 @@ Compose(m) == /\ active = MessageSession
               /\ composer' = m
               /\ UNCHANGED <<entered, queue, ord, nextOrd, active, inflight, inflightSession,
                              acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                             poll, holder, waited, attempts, callbacks, lastError>>
+                             poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 Enqueue(m) == /\ composer = m
               /\ ~entered[m]
@@ -76,12 +78,14 @@ Enqueue(m) == /\ composer = m
               /\ nextOrd' = nextOrd + 1
               /\ composer' = 0
               /\ UNCHANGED <<active, inflight, inflightSession, acked, settled, retry, stream, stopped,
-                             stamp, replyStamp, clock, poll, holder, waited, attempts, callbacks, lastError>>
+                             stamp, replyStamp, clock, poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 SendQueued == /\ inflight = 0
               /\ queue[MessageSession] # <<>>
               /\ UNCHANGED <<composer, entered, ord, nextOrd, active, acked, settled, stamp, replyStamp, clock,
                              poll, holder, waited, attempts, callbacks, lastError>>
+              /\ lookedUp' = FALSE
+              /\ lookupStamp' = 0
               /\ LET m == Head(queue[MessageSession]) IN
                  /\ inflight' = m
                  /\ inflightSession' = MessageSession
@@ -96,21 +100,31 @@ ReplyStored(m) == /\ inflight = m
                   /\ clock' = clock + 1
                   /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                                  acked, settled, retry, stream, stopped, stamp,
-                                 poll, holder, waited, attempts, callbacks, lastError>>
+                                 poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
+
+LookupReply == /\ inflight # 0
+               /\ ~acked[inflight]
+               /\ ~lookedUp
+               /\ lookedUp' = TRUE
+               /\ lookupStamp' = replyStamp[inflight]
+               /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                              acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                              poll, holder, waited, attempts, callbacks, lastError>>
 
 Accept == /\ inflight # 0
+          /\ lookedUp
           /\ ~acked[inflight]
           /\ LET m == inflight IN
              /\ stamp' = [stamp EXCEPT ![m] =
-                  IF BackdateQueued /\ replyStamp[m] # 0
-                  THEN replyStamp[m] - 1
+                  IF BackdateQueued /\ lookupStamp # 0
+                  THEN lookupStamp - 1
                   ELSE clock + 1]
              /\ clock' = clock + 1
              /\ acked' = [acked EXCEPT ![m] = TRUE]
              /\ retry' = [retry EXCEPT ![m] = FALSE]
           /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                          settled, stream, stopped, replyStamp,
-                         poll, holder, waited, attempts, callbacks, lastError>>
+                         poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 Refuse == /\ inflight # 0
           /\ ~acked[inflight]
@@ -120,7 +134,7 @@ Refuse == /\ inflight # 0
              /\ retry' = [retry EXCEPT ![m] = TRUE]
           /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflightSession,
                          acked, settled, stopped, stamp, replyStamp, clock,
-                         poll, holder, waited, attempts, callbacks, lastError>>
+                         poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 ReplyEnd == /\ inflight # 0
             /\ acked[inflight]
@@ -131,7 +145,7 @@ ReplyEnd == /\ inflight # 0
                /\ stream' = "closed"
             /\ UNCHANGED <<composer, entered, ord, nextOrd, active, inflightSession,
                            acked, retry, stopped, stamp, replyStamp, clock,
-                           poll, holder, waited, attempts, callbacks, lastError>>
+                           poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 Stop == /\ inflight # 0
         /\ acked[inflight]
@@ -145,7 +159,7 @@ Stop == /\ inflight # 0
                 /\ stream' = "closed"
         /\ UNCHANGED <<composer, entered, ord, nextOrd, active, inflightSession,
                        acked, retry, stamp, replyStamp, clock,
-                       poll, holder, waited, attempts, callbacks, lastError>>
+                       poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 Switch(s) == /\ s \in Sessions
              /\ active # s
@@ -155,7 +169,7 @@ Switch(s) == /\ s \in Sessions
                 ELSE queue' = queue
              /\ UNCHANGED <<composer, entered, ord, nextOrd, inflight, inflightSession,
                             acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                            poll, holder, waited, attempts, callbacks, lastError>>
+                            poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 PollStart == /\ poll = "idle"
              /\ poll' = "waiting"
@@ -164,7 +178,7 @@ PollStart == /\ poll = "idle"
              /\ lastError' = "none"
              /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                             acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                            holder, callbacks>>
+                            holder, callbacks, lookedUp, lookupStamp>>
 
 PollWait == /\ poll = "waiting"
             /\ holder = "other"
@@ -172,13 +186,13 @@ PollWait == /\ poll = "waiting"
             /\ waited' = waited + 1
             /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                            acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                           poll, holder, attempts, callbacks, lastError>>
+                           poll, holder, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 OtherReleases == /\ holder = "other"
                  /\ holder' = "none"
                  /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                                 acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                                poll, waited, attempts, callbacks, lastError>>
+                                poll, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 PollAcquire == /\ poll = "waiting"
                /\ holder = "none"
@@ -187,14 +201,14 @@ PollAcquire == /\ poll = "waiting"
                /\ callbacks' = callbacks + 1
                /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                               acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                              waited, attempts, lastError>>
+                              waited, attempts, lastError, lookedUp, lookupStamp>>
 
 PollCommit == /\ poll = "reading"
               /\ poll' = "done"
               /\ holder' = "none"
               /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                              acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                             waited, attempts, callbacks, lastError>>
+                             waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
 CallbackFail == /\ poll = "reading"
                 /\ holder' = "none"
@@ -207,7 +221,7 @@ CallbackFail == /\ poll = "reading"
                         /\ UNCHANGED <<waited, attempts>>
                 /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                                acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                               callbacks>>
+                               callbacks, lookedUp, lookupStamp>>
 
 AcquisitionFail == /\ poll = "waiting"
                    /\ holder = "other"
@@ -221,12 +235,13 @@ AcquisitionFail == /\ poll = "waiting"
                            /\ UNCHANGED <<waited, attempts>>
                    /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
                                   acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
-                                  holder, callbacks>>
+                                  holder, callbacks, lookedUp, lookupStamp>>
 
 Next == \/ \E m \in Messages : Compose(m)
         \/ \E m \in Messages : Enqueue(m)
         \/ SendQueued
         \/ \E m \in Messages : ReplyStored(m)
+        \/ LookupReply
         \/ Accept
         \/ Refuse
         \/ ReplyEnd
