@@ -92,6 +92,16 @@ test("a page that names a test keeps working when the source beside it changes",
   assert.deepEqual(pagesForFiles({ files: ["src/pages/api/queues/inboxReminder.ts"], pages: tested }).map((item) => item.page), ["inbox"]);
 });
 
+test("a change to script paths matches no area", () => {
+  const tooling = [
+    { name: "activation-analytics", text: "Drive the area with `bash scripts/heavy-job.sh node scripts/pstack-verifier.mjs` and `scripts/lib/pstack-journeys.cjs`.\n" },
+    { name: "agent-rooms", text: "Fixtures live in `tests/fixtures/rooms` and `tests/agent-rooms.test.cjs`.\n" },
+  ];
+  assert.deepEqual(pagesForFiles({ files: ["scripts/generate-radius-baseline.mjs", "scripts/prove-radius-rule.mjs"], pages: tooling }), []);
+  assert.deepEqual(pagesForFiles({ files: ["scripts/generate-radius-baseline.mjs", "tests/style-guide-eslint-rules.test.cjs"], pages: tooling }), []);
+  assert.deepEqual(pagesForFiles({ files: ["src/lib/api/task-writes/create-global.ts"], diff: "+  if (flags.htpr-9106-save-limit) return;\n", pages: tooling }), []);
+});
+
 test("a flag-looking test filename is not a flag key, a changed flag line still is", () => {
   const flags = [{ name: "save-limits", text: "With `htpr-9106-save-limit` on, a save stops at the agent deadline.\n" }];
   const header = "diff --git a/tests/htpr-9106-save-limit.test.cjs b/tests/htpr-9106-save-limit.test.cjs\n--- a/tests/htpr-9106-save-limit.test.cjs\n+++ b/tests/htpr-9106-save-limit.test.cjs\n@@ -1 +1 @@\n-const budget = 30;\n+const budget = 60;\n";

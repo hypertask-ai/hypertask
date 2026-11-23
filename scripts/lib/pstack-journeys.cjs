@@ -11,6 +11,8 @@ const SHARED_DIRS = [
   "src/pages/api/",
   "src/styles/",
   "src/app/",
+  "scripts/",
+  "tests/",
 ];
 const GENERIC_BASENAMES = new Set([
   "page.tsx",
