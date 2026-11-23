@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { MOBILE_SCREENS, MOBILE_THEMES, MOBILE_VIEWPORT, collectMobileMetrics, evaluateMobileDesign, type MobileDesignBaseline, type MobileRule } from './lib/mobile-design'
-const BASELINE_PATH = path.join(__dirname, '__snapshots__', 'mobile-design.baseline.json'), UPDATE = process.env.MOBILE_DESIGN_UPDATE === '1', STRICT = process.env.MOBILE_DESIGN_STRICT === '1'
+const BASELINE_PATH = process.env.MOBILE_DESIGN_BASELINE || path.join(__dirname, '__snapshots__', 'mobile-design.baseline.json'), UPDATE = process.env.MOBILE_DESIGN_UPDATE === '1', STRICT = process.env.MOBILE_DESIGN_STRICT === '1'
 const list = (v?: string) => v?.split(',').map((s: string) => s.trim()).filter(Boolean), SCREEN_FILTER = list(process.env.MOBILE_DESIGN_SCREENS), THEME_FILTER = list(process.env.MOBILE_DESIGN_THEMES)
 if (UPDATE) test.describe.configure({ mode: 'serial' })
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
