@@ -71,6 +71,16 @@ function harness() {
     "next/server": {
       NextResponse: {
         json: (body, init) => Response.json(body, { headers: init?.headers }),
+        redirect: (url, status = 307) => {
+          const headers = new Headers({ location: String(url) });
+          const response = new Response(null, { status });
+          return new Proxy(response, {
+            get(target, prop, receiver) {
+              if (prop === "headers") return headers;
+              return Reflect.get(target, prop, receiver);
+            },
+          });
+        },
       },
     },
     "@/lib/auth/serverUser": {
@@ -145,6 +155,18 @@ function request(body) {
     headers: { "content-type": "application/json", cookie: "better-auth.session_token=active" },
     body: JSON.stringify(body),
   });
+}
+
+function formRequest(fields) {
+  return new Request("https://app.hypertask.ai/api/auth/ticket-account-switch", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie: "better-auth.session_token=active" },
+    body: new URLSearchParams(fields),
+  });
+}
+
+function locationPath(response) {
+  return new URL(response.headers.get("location")).pathname;
 }
 
 const ticketBody = {
@@ -242,6 +264,64 @@ test("a forged account id cannot open a ticket that device sessions cannot see",
     assert.deepEqual(app.state.activated, []);
     assert.equal(app.state.lookups.some((lookup) => lookup.userId === OWNER), false);
     assert.equal(await app.openTicketForAccount(STRANGER, "project-15", "9621"), null);
+  } finally {
+    app.restore();
+  }
+});
+
+test("a form post returns to that ticket and carries only the account that can open it", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: STRANGER, email: "stranger@example.com" }, session: { token: STRANGER_TOKEN } },
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+    ];
+    const response = await app.route(formRequest({
+      projectSlug: "project-15",
+      uniqueIndex: "9621",
+      userId: String(OWNER),
+      sessionToken: FORGED_TOKEN,
+      title: TASK.title,
+    }));
+    assert.equal(response.status, 303);
+    assert.equal(locationPath(response), "/detail/project-15/9621");
+    assert.equal(new URL(response.headers.get("location")).origin, "https://app.hypertask.ai");
+    const cookies = response.headers.get("set-cookie") ?? "";
+    assert.equal(cookies.includes(OWNER_TOKEN), true);
+    assert.equal(cookies.includes(TASK.title), false);
+    assert.equal(cookies.includes("owner@example.com"), false);
+    assert.deepEqual(app.state.activated, [OWNER_TOKEN]);
+    assert.equal(await response.text(), "");
+
+    const evil = await app.route(formRequest({ projectSlug: "https://evil.test", uniqueIndex: "9621" }));
+    assert.equal(locationPath(evil), "/inbox");
+    assert.equal(evil.headers.get("location").includes("evil"), false);
+    const nested = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621/../admin" }));
+    assert.equal(locationPath(nested), "/inbox");
+    assert.equal(nested.headers.get("location").includes("admin"), false);
+  } finally {
+    app.restore();
+  }
+});
+
+test("several accounts send the browser back with a choose mark and name none of them", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+      { user: { id: MEMBER, email: "member@example.com" }, session: { token: MEMBER_TOKEN } },
+    ];
+    const response = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }));
+    assert.equal(response.status, 303);
+    assert.equal(locationPath(response), "/detail/project-15/9621");
+    const cookies = response.headers.get("set-cookie") ?? "";
+    assert.equal(cookies.includes("ticket-account-switch=choose"), true);
+    assert.equal(cookies.includes(OWNER_TOKEN), false);
+    assert.equal(cookies.includes(MEMBER_TOKEN), false);
+    assert.equal(cookies.includes("owner@example.com"), false);
+    assert.deepEqual(app.state.activated, []);
+    assert.deepEqual(await app.openTicketForAccount(OWNER, "project-15", "9621"), { id: TASK.id });
+    assert.deepEqual(await app.openTicketForAccount(MEMBER, "project-15", "9621"), { id: TASK.id });
   } finally {
     app.restore();
   }

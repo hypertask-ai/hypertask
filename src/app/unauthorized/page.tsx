@@ -1,7 +1,7 @@
 "use client"
 import { currentUserAtom, showAccountSwitcherAtom, showBoardManagerAtom } from '@/store';
 import { useFlag } from '@/hooks/useFlag';
-import { rememberTicketAccountSwitch, ticketDetailLocator } from '@/lib/auth/ticketDetailLocator';
+import { rememberTicketAccountSwitch, TICKET_ACCOUNT_SWITCH_CHOOSE, ticketDetailLocator } from '@/lib/auth/ticketDetailLocator';
 import { HTPR_7799_PROJECT_ENTRY_FLAG } from '@/lib/flags/keys';
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from '@/lib/flags/definitions/htpr-9621-auto-switch-account';
 import { getFirstProject } from '@/utils/api/Homepage';
@@ -27,37 +27,28 @@ const Unauthorized = () => {
     useEffect(autoSwitchAccount ? () => {
         const locator = ticketDetailLocator(pathname);
         if (!locator) return;
+        const choose = document.cookie.split("; ").includes(`${TICKET_ACCOUNT_SWITCH_CHOOSE}=choose`);
+        if (choose) {
+            document.cookie = `${TICKET_ACCOUNT_SWITCH_CHOOSE}=; Max-Age=0; Path=/`;
+            rememberTicketAccountSwitch(pathname);
+            setShowAccountSwitcher(true);
+            return;
+        }
         const attemptKey = `ticket-account-switch:${pathname}`;
         if (window.sessionStorage.getItem(attemptKey)) return;
-        let cancelled = false;
-        void (async () => {
-            try {
-                const response = await fetch("/api/auth/ticket-account-switch", {
-                    method: "POST",
-                    credentials: "include",
-                    headers: { "content-type": "application/json" },
-                    body: JSON.stringify(locator),
-                });
-                if (!response.ok || cancelled) return;
-                const result = await response.json();
-                if (cancelled || !result || typeof result !== "object") return;
-                if (result.action === "choose") {
-                    window.sessionStorage.setItem(attemptKey, "1");
-                    rememberTicketAccountSwitch(pathname);
-                    setShowAccountSwitcher(true);
-                    return;
-                }
-                if (result.action === "switch") {
-                    window.sessionStorage.setItem(attemptKey, "1");
-                    window.location.reload();
-                }
-            } catch {
-                return;
-            }
-        })();
-        return () => {
-            cancelled = true;
-        };
+        window.sessionStorage.setItem(attemptKey, "1");
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = "/api/auth/ticket-account-switch";
+        for (const [name, value] of [["projectSlug", locator.projectSlug], ["uniqueIndex", locator.uniqueIndex]] as const) {
+            const input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            input.value = value;
+            form.append(input);
+        }
+        document.body.append(form);
+        form.submit();
     } : () => {}, [autoSwitchAccount, pathname, setShowAccountSwitcher]);
     const router = useRouter()
     const { handleHardReset } = useSignout()

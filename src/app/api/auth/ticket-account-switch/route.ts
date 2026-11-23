@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
-import { ticketDetailFields } from "@/lib/auth/ticketDetailLocator";
+import {
+  TICKET_ACCOUNT_SWITCH_CHOOSE,
+  ticketDetailFields,
+  type TicketDetailLocator,
+} from "@/lib/auth/ticketDetailLocator";
 import {
   resolveTicketAccountSwitch,
   type DeviceAccount,
@@ -20,6 +24,16 @@ function jsonAction(action: "stay" | "choose" | "switch") {
   );
 }
 
+function ticketPath(locator: TicketDetailLocator | null) {
+  return locator ? `/detail/${locator.projectSlug}/${locator.uniqueIndex}` : "/inbox";
+}
+
+function pageReturn(request: Request, path: string) {
+  const response = NextResponse.redirect(new URL(path, request.url), 303);
+  response.headers.set("cache-control", "private, no-store");
+  return response;
+}
+
 async function deviceAccounts(request: Request): Promise<DeviceAccount[]> {
   if (process.env.BETTER_AUTH_ENABLED !== "1") return [];
   const sessions = await auth.api.listDeviceSessions({ headers: request.headers });
@@ -35,27 +49,49 @@ async function deviceAccounts(request: Request): Promise<DeviceAccount[]> {
   return accounts;
 }
 
-export async function POST(request: Request) {
-  const user = await getServerCookieUser();
-  if (!user) return jsonAction("stay");
-  const enabled = await isFeatureEnabled(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG, user.id);
-  if (!enabled) return jsonAction("stay");
-
-  let locator: ReturnType<typeof ticketDetailFields> = null;
-  try {
-    const body: unknown = await request.json();
-    const record = body && typeof body === "object" ? body as { projectSlug?: unknown; uniqueIndex?: unknown } : {};
-    locator = ticketDetailFields(record.projectSlug, record.uniqueIndex);
-  } catch {
-    locator = null;
+async function readRequest(request: Request): Promise<{ locator: TicketDetailLocator | null; page: boolean }> {
+  const type = request.headers.get("content-type") ?? "";
+  if (type.includes("application/json")) {
+    try {
+      const body: unknown = await request.json();
+      const record = body && typeof body === "object" ? body as { projectSlug?: unknown; uniqueIndex?: unknown } : {};
+      return { locator: ticketDetailFields(record.projectSlug, record.uniqueIndex), page: false };
+    } catch {
+      return { locator: null, page: false };
+    }
   }
-  if (!locator) return jsonAction("stay");
+  if (type.includes("application/x-www-form-urlencoded") || type.includes("multipart/form-data")) {
+    try {
+      const form = await request.formData();
+      return { locator: ticketDetailFields(form.get("projectSlug"), form.get("uniqueIndex")), page: true };
+    } catch {
+      return { locator: null, page: true };
+    }
+  }
+  return { locator: null, page: false };
+}
+
+function finish(request: Request, page: boolean, action: "stay" | "choose" | "switch", locator: TicketDetailLocator | null, setCookies: string[] = []) {
+  const response = page ? pageReturn(request, ticketPath(locator)) : jsonAction(action);
+  if (page && action === "choose") {
+    response.headers.append("set-cookie", `${TICKET_ACCOUNT_SWITCH_CHOOSE}=choose; Path=/; Max-Age=30; SameSite=Lax`);
+  }
+  for (const cookie of setCookies) response.headers.append("set-cookie", cookie);
+  return response;
+}
+
+export async function POST(request: Request) {
+  const { locator, page } = await readRequest(request);
+  const user = await getServerCookieUser();
+  if (!user) return finish(request, page, "stay", locator);
+  const enabled = await isFeatureEnabled(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG, user.id);
+  if (!enabled || !locator) return finish(request, page, "stay", locator);
 
   let accounts: DeviceAccount[] = [];
   try {
     accounts = await deviceAccounts(request);
   } catch {
-    return jsonAction("stay");
+    return finish(request, page, "stay", locator);
   }
 
   const decision = await resolveTicketAccountSwitch({
@@ -65,7 +101,7 @@ export async function POST(request: Request) {
     uniqueIndex: locator.uniqueIndex,
     accounts,
   });
-  if (decision.action !== "switch") return jsonAction(decision.action);
+  if (decision.action !== "switch") return finish(request, page, decision.action, locator);
 
   try {
     const switched = await auth.api.setActiveSession({
@@ -73,15 +109,13 @@ export async function POST(request: Request) {
       headers: request.headers,
       asResponse: true,
     });
-    if (!switched.ok) return jsonAction("stay");
+    if (!switched.ok) return finish(request, page, "stay", locator);
     const cookies = typeof switched.headers.getSetCookie === "function"
       ? switched.headers.getSetCookie()
       : [];
-    if (cookies.length === 0) return jsonAction("stay");
-    const response = jsonAction("switch");
-    for (const cookie of cookies) response.headers.append("set-cookie", cookie);
-    return response;
+    if (cookies.length === 0) return finish(request, page, "stay", locator);
+    return finish(request, page, "switch", locator, cookies);
   } catch {
-    return jsonAction("stay");
+    return finish(request, page, "stay", locator);
   }
 }

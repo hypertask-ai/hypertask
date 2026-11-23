@@ -18,6 +18,7 @@ export function ticketDetailFields(
 }
 
 const TICKET_ACCOUNT_SWITCH_RETURN = "ticket-account-switch-return";
+export const TICKET_ACCOUNT_SWITCH_CHOOSE = "ticket-account-switch";
 
 export function ticketAccountSwitchPath(pathname: string | null | undefined): string | null {
   if (typeof pathname !== "string" || !pathname.startsWith("/") || pathname.startsWith("//")) return null;
