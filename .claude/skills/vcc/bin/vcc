@@ -405,12 +405,16 @@ export HT_TOKEN
 brain_label_check "$@"
 completion_move "$@"
 FILING_GATE=${VCC_FILING_GATE:-$HOME/.local/share/house-rules/skills/hypertask-triage/scripts/filing-gate}
+LIVE_CI_BOARD=11514
+ARCHIVED_CI_BOARD=4060
 create_project() {
   local words=() project=''
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project=${2:-}; shift ;;
       --project=*) project=${1#--project=} ;;
+      --team) shift ;;
+      --team=*|--json|--human) ;;
       -*) ;;
       *) [ "${#words[@]}" -ge 2 ] || words+=("$1") ;;
     esac
@@ -418,12 +422,47 @@ create_project() {
   done
   case "${words[*]}" in "task create"|"tasks create") printf '%s' "$project" ;; esac
 }
+retire_archived_board() {
+  [ "$(create_project "${VCC_ARGS[@]}")" = "$ARCHIVED_CI_BOARD" ] || return 0
+  local -a args=("${VCC_ARGS[@]}") final=()
+  local i=0 n=${#args[@]} arg
+  while [ "$i" -lt "$n" ]; do
+    arg=${args[$i]}
+    case "$arg" in
+      --project)
+        if [ $((i + 1)) -lt "$n" ] && [ "${args[$((i + 1))]}" = "$ARCHIVED_CI_BOARD" ]; then
+          final+=(--project "$LIVE_CI_BOARD")
+          i=$((i + 2))
+          continue
+        fi
+        final+=("$arg")
+        i=$((i + 1))
+        ;;
+      --project="$ARCHIVED_CI_BOARD")
+        final+=("--project=$LIVE_CI_BOARD")
+        i=$((i + 1))
+        ;;
+      *)
+        final+=("$arg")
+        i=$((i + 1))
+        ;;
+    esac
+  done
+  VCC_ARGS=("${final[@]}")
+  printf 'vcc: board %s is archived; filing this CI ticket on board %s\n' "$ARCHIVED_CI_BOARD" "$LIVE_CI_BOARD" >&2
+}
 filing_gate() {
-  case "$(create_project "$@")" in 11514|4060) ;; *) return 0 ;; esac
-  [ -x "$FILING_GATE" ] || { printf 'vcc: task create refused: filing-gate missing at %s; run house-rules-sync\n' "$FILING_GATE" >&2; exit 5; }
+  case "$(create_project "$@")" in "$LIVE_CI_BOARD"|"$ARCHIVED_CI_BOARD") ;; *) return 0 ;; esac
+  if [ ! -x "$FILING_GATE" ]; then
+    printf 'vcc: filing-gate missing at %s; filing without it, run house-rules-sync\n' "$FILING_GATE" >&2
+    return 0
+  fi
   "$FILING_GATE" --who "$IDENTITY" -- "$@"
 }
-if [ "${1:-}" != activity ]; then filing_gate "$@"; fi
+if [ "${1:-}" != activity ]; then
+  retire_archived_board
+  filing_gate "${VCC_ARGS[@]}"
+fi
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
