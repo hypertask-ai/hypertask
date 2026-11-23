@@ -14,8 +14,8 @@ class NextResponse {
   }
 }
 
-function loadMove({ agentId = "agent-a", onBoard = false, guidance = false } = {}) {
-  const calls = { moved: [], flags: [] };
+function loadMove({ agentId = "agent-a", onBoard = false, guidance = false, projectExists = true, accessError = null } = {}) {
+  const calls = { moved: [], flags: [], access: 0 };
   const route = load("src/lib/mcp/operations/tasks/move/operation.ts", {
     "next/server": { NextResponse, NextRequest: class {} },
     "@/lib/planLimits": {
@@ -42,6 +42,9 @@ function loadMove({ agentId = "agent-a", onBoard = false, guidance = false } = {
         user: {
           findUnique: async () => ({ id: 6, email: "owner@example.invalid", displayName: "Owner", photoURL: null }),
         },
+        project: {
+          findFirst: async () => (projectExists ? { id: FOREIGN_BOARD } : null),
+        },
       },
     },
     "@/lib/mcp/tasks/mappers": {
@@ -60,7 +63,12 @@ function loadMove({ agentId = "agent-a", onBoard = false, guidance = false } = {
     },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/lib/mcp/tasks/services": {
-      validateProjectAccess: async () => ({ project: { id: FOREIGN_BOARD }, error: null }),
+      validateProjectAccess: async () => {
+        calls.access += 1;
+        return accessError
+          ? { project: null, error: accessError }
+          : { project: { id: FOREIGN_BOARD }, error: null };
+      },
       getSectionForTask: async () => ({ section: { id: 5 }, error: null }),
     },
     "@/lib/realtime/server": { broadcastBoardChange: () => {} },
@@ -106,6 +114,33 @@ test("the refusal names the board access request when that guidance is on", asyn
     body.message,
     "This agent is not a member of this board. Request access with the hypertask_request_board_access tool (project_id 15); your owner approves it in Inbox → Decisions.",
   );
+  assert.deepEqual(calls.moved, []);
+});
+
+test("an archived board the agent is not on is refused for membership before the archived-board message", async () => {
+  const archived = { status: 400, message: 'Board "Old" is archived, so it cannot take new tickets.' };
+  const { status, body, calls } = await move({ accessError: archived });
+  assert.equal(status, 403);
+  assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
+  assert.equal(calls.access, 0);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("a target board that does not exist stays not found", async () => {
+  const missing = { status: 404, message: "Project with ID 15 not found" };
+  const { status, body, calls } = await move({ projectExists: false, accessError: missing });
+  assert.equal(status, 404);
+  assert.equal(body.error, "Project with ID 15 not found");
+  assert.equal(calls.access, 1);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("still allowed: an agent that is a member of an archived board still gets the archived refusal", async () => {
+  const archived = { status: 400, message: 'Board "Old" is archived, so it cannot take new tickets.' };
+  const { status, body, calls } = await move({ onBoard: true, accessError: archived });
+  assert.equal(status, 400);
+  assert.equal(body.error, 'Board "Old" is archived, so it cannot take new tickets.');
+  assert.equal(calls.access, 1);
   assert.deepEqual(calls.moved, []);
 });
 
