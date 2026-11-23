@@ -99,8 +99,11 @@ export function agentOnlyRoutes(root = API_ROUTE_ROOT) {
 }
 const AGENT_ONLY_API = agentOnlyRoutes().map(routePattern);
 export function agentOnlyPath(apiPath) {
-  const pathname = new URL(apiPath, "http://localhost").pathname;
-  return AGENT_ONLY_API.some((route) => route.test(pathname));
+  if (typeof apiPath !== "string" || !apiPath.startsWith("/") || apiPath.startsWith("//")) return false;
+  try {
+    const pathname = new URL(apiPath, "http://localhost").pathname;
+    return AGENT_ONLY_API.some((route) => route.test(pathname));
+  } catch { return false; }
 }
 function actionAuth(action) {
   if (action.auth != null && action.auth !== "" && action.auth !== "agent") throw new Error("auth is not allowed");

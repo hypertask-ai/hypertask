@@ -1222,9 +1222,9 @@ test("copied prompt example expectations are dropped as a whole, not word by wor
   }
   const kept = parsePlan(JSON.stringify({
     actions: [{ op: "fill", label: "Title", value: "Smoke" }, { op: "click", text: "Add field" }, { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
-    expect: [{ text: "saved" }, { text: "Title" }, { text: "Add field" }],
+    expect: [{ text: "saved" }, { text: "Title" }, { text: "Smoke" }, { text: "Add field" }],
   }));
-  assert.deepEqual(kept.expect, [{ text: "saved" }, { text: "Title" }, { text: "Add field" }]);
+  assert.deepEqual(kept.expect, [{ text: "saved" }, { text: "Title" }, { text: "Smoke" }, { text: "Add field" }]);
   assert.deepEqual(kept.actions.map((action) => action.label ?? action.text ?? action.expectText), ["Title", "Add field", "saved"]);
 });
 
