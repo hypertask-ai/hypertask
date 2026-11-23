@@ -44,9 +44,10 @@ function setup({ repeatJoin = true, house = true } = {}) {
   const comments = []
   const rows = []
   const locks = []
+  const options = { repeatJoin, house }
   const on = async (key) => {
-    if (!house && (key === 'htpr-8797-feedback-house-parts' || key === 'htpr-7536-plain-ai-feedback')) return false
-    return key !== flag || repeatJoin
+    if (!options.house && (key === 'htpr-8797-feedback-house-parts' || key === 'htpr-7536-plain-ai-feedback')) return false
+    return key !== flag || options.repeatJoin
   }
   const db = {
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
@@ -113,7 +114,7 @@ function setup({ repeatJoin = true, house = true } = {}) {
     } },
     '@/lib/realtime/server': { broadcastTaskChange: async () => {} },
   })
-  return { ...load('src/lib/aiFeedback/report.ts'), load, created, comments, rows, locks }
+  return { ...load('src/lib/aiFeedback/report.ts'), load, created, comments, rows, locks, options }
 }
 
 test('flag is a bug fix on for everyone', () => {
@@ -150,6 +151,25 @@ test('a repeat that names another pull request joins the open ticket and the des
   assert.notEqual(f.locks[0], f.locks[2])
   assert.equal(f.locks[1], f.locks[3])
   assert.equal(f.locks[1], f.locks[5])
+})
+
+test('three pull request joins keep every fingerprint, so the off switch still finds the first report', async () => {
+  const f = setup()
+  const pulls = [1188, 1200, 1300]
+  const filed = []
+  for (const pull of pulls) {
+    filed.push(await f.fileAiFeedback({ ...report, note: note.replace('1188', String(pull)) }, 6, { origin: 'agent' }))
+  }
+  assert.equal(f.created.length, 1)
+  const markers = f.comments[0].text.match(/<p>Fingerprint: ai-fb-[0-9a-f]{12}<\/p>/g) ?? []
+  assert.equal(new Set(markers).size, 3)
+  f.options.repeatJoin = false
+  for (const pull of pulls) {
+    const again = await f.fileAiFeedback({ ...report, note: note.replace('1188', String(pull)) }, 6, { origin: 'agent' })
+    assert.equal(again.deduped, true)
+    assert.equal(again.ticketNumber, filed[0].ticketNumber)
+  }
+  assert.equal(f.created.length, 1)
 })
 
 test('a report that leaves out the tool or the kind does not join a ticket that named it', async () => {

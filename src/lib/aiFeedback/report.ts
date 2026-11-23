@@ -74,6 +74,10 @@ function preservedDiagnostics(content: string): string {
   return rows.join('')
 }
 
+function fingerprintMarkers(content: string): string[] {
+  return [...new Set(content.match(/<p>Fingerprint: ai-fb-[0-9a-f]{12}<\/p>/g) ?? [])]
+}
+
 function membershipRefusal(input: AiFeedbackInput): boolean {
   const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
   return /\bnot a member\b/i.test(code) || /\bnot a member of (?:this|that|the) (?:board|project|team)\b/i.test(input.error ?? '')
@@ -341,7 +345,6 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
         const ticketSelect = { id: true, userId: true, ticketNumber: true, uniqueIndex: true }
         let existing = await tx.task.findFirst({ where, select: ticketSelect })
-        let joinedByAnchor = false
         if (!existing && tx.comment?.findFirst) {
           const logged = await tx.comment.findFirst({
             where: { agentId: null, text: { contains: marker }, task: openWhere },
@@ -379,7 +382,6 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           )
           existing = logged?.task ?? null
         }
-        if (lookup) joinedByAnchor = Boolean(existing)
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
@@ -410,7 +412,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
             orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
           })
         }
-        const previousMarker = joinedByAnchor ? comment?.text.match(/<p>Fingerprint: ai-fb-[0-9a-f]{12}<\/p>/)?.[0] : undefined
+        const priorMarkers = fingerprintMarkers(comment?.text ?? '')
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
         const keptMarker = Boolean(comment?.text.includes(marker))
         const logText = (text: string) => {
@@ -422,7 +424,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         if (existing) {
           const count = storedCount + 1
           const logged = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
-          const text = previousMarker && !logged.includes(previousMarker) ? logged + previousMarker : logged
+          const text = logged + priorMarkers.filter((item) => !logged.includes(item)).join('')
           const previous = comment?.activity
           const hadLog = Boolean(previous && typeof previous === 'object' && !Array.isArray(previous) && previous.type === 'AiFeedbackLog')
           const activity = house || hadLog ? feedbackLogActivity(text) : undefined
