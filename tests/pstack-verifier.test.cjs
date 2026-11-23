@@ -15,7 +15,7 @@ test("missing Author-Model fails", async () => {
 
 const RUNNER = "hypertask-runners[bot]";
 
-for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, author = "", commitCount = messages.length } of [
+for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, author = "", commitFailure = false, commitCount = messages.length } of [
   { name: "parenthesised author model", body: "Author-Model: codex (gpt-6.1-sol)", author: "codex" },
   { name: "lowercase body line", body: "author-model: claude (claude-opus-5)", author: "claude" },
   { name: "missing body line with codex commit trailer", messages: ["Fix verifier\n\nAuthor-Model: codex"], author: "codex" },
@@ -33,6 +33,7 @@ for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, aut
   { name: "any attributed commit counts in a bot-opened pull request", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "octocat"]], author: "codex" },
   { name: "commit authored elsewhere but committed by the pr author", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "valentinyeo"]], prAuthor: "valentinyeo", author: "codex" },
   { name: "unattributed commit cannot set the family", messages: ["Fix\n\nAuthor-Model: codex"], owners: [[null, null]], prAuthor: "valentinyeo" },
+  { name: "unreadable commit evidence fails closed beside a body line", body: "Author-Model: codex", messages: ["Fix\n\nAuthor-Model: deepseek"], commitFailure: true },
 ]) {
   test(`author resolution: ${name}`, async () => {
     const { resolveCommand } = await load();
@@ -51,6 +52,7 @@ for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, aut
         gh: (args) => {
           const url = args.join(" ");
           if (url.includes("/pulls/7/commits")) {
+            if (commitFailure) return "{}";
             const commits = messages.map((message, index) => {
               const [login, committer] = owners[index] ?? [RUNNER, RUNNER];
               return { sha: index === messages.length - 1 ? sha : "c".repeat(40), author: { login }, committer: { login: committer }, commit: { message } };
@@ -87,6 +89,14 @@ for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, aut
   });
 }
 
+test("an unreadable commit list is unknown evidence, not an empty one", async () => {
+  const { pullCommits, authorFamily } = await load();
+  assert.equal(pullCommits(() => { throw new Error("HTTP 500"); }, "acme/app", 7), null);
+  assert.equal(pullCommits(() => "{}", "acme/app", 7), null);
+  assert.deepEqual(pullCommits(() => JSON.stringify([[{ sha: "a" }, { sha: "b" }]]), "acme/app", 7).length, 2);
+  assert.equal(authorFamily("Author-Model: codex", null, RUNNER), "");
+});
+
 test("author trailers fail closed without treating prose, other authors or human coauthors as model evidence", async () => {
   const { authorGate } = await load();
   const commits = (...messages) => messages.map((message) => ({ author: { login: RUNNER }, committer: { login: RUNNER }, commit: { message } }));
@@ -95,6 +105,9 @@ test("author trailers fail closed without treating prose, other authors or human
     assert.equal(authorGate(`Author-Model: ${family.toUpperCase()} (model id)\r\n`).author, family);
   }
   assert.equal(authorGate("Author-Model: CODEX").author, "codex");
+  assert.equal(authorGate("Author-Model: codex", null, RUNNER).stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Claude Smith <claude.smith@example.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Cody Exter <cody.exter@example.com>").stop, true);
   assert.equal(gate("", "Fix\n\nAuthor-Model: codex").author, "codex");
   assert.equal(gate("Author-Model: claude", "Fix\n\nAuthor-Model: codex").stop, true);
   assert.equal(authorGate("Author-Model: codex", [{ author: { login: "octocat" }, commit: { message: "Fix\n\nAuthor-Model: deepseek" } }], "valentinyeo").author, "codex");

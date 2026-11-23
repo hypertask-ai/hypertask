@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, "..");
 const head = "b".repeat(40);
 const load = () => import(path.join(root, ".github/scripts/break-it-review.mjs"));
 const pull = (body, extra = {}) => ({ title: "HTPR-9408 [BUGFIX] keep the empty title from saving", body, base: { sha: "a".repeat(40), ref: "production" }, ...extra });
+const ghApi = (item) => (args) => (args.join(" ").includes("/pulls/7/commits") ? "[]" : JSON.stringify(item));
 const good = "const assert = require(\"node:assert/strict\");\nconst test = require(\"node:test\");\nconst { loadModule } = require(\"../helpers/loadModule.cjs\");\ntest(\"adds\", () => { assert.equal(loadModule(\"src/lib/flags/index.ts\") ? 2 : 2, 2); });\n";
 
 async function runMain({ reply, name = "blank-title", io = {}, item = pull("Author-Model: claude"), key = "sk-test-break-it-secret", token = "ghs-test" } = {}) {
@@ -21,7 +22,7 @@ async function runMain({ reply, name = "blank-title", io = {}, item = pull("Auth
   };
   Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: key, GH_TOKEN: token });
   try {
-    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(item), ...io });
+    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: ghApi(item), ...io });
   } finally {
     delete process.env.OPENROUTER_EVAL_KEY;
     delete process.env.GH_TOKEN;
@@ -38,7 +39,7 @@ async function runCli({ reply = "", item = pull("Author-Model: claude"), io = {}
   Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
   const fetchImpl = async (url) => ({ ok: true, json: async () => (String(url).includes("openrouter") ? { choices: [{ message: { content: reply } }] } : {}) });
   try {
-    const status = await cli({ fetch: fetchImpl, git: () => "- old\n+ new", gh: () => JSON.stringify(item), spawn: () => ({ status: 0, stdout: "", stderr: "" }), ...io });
+    const status = await cli({ fetch: fetchImpl, git: () => "- old\n+ new", gh: ghApi(item), spawn: () => ({ status: 0, stdout: "", stderr: "" }), ...io });
     const text = (stream) => lines.filter(([name]) => name === stream).map(([, value]) => value).join("");
     return { status, code: process.exitCode, stdout: text("stdout"), stderr: text("stderr") };
   } finally {
@@ -108,7 +109,7 @@ async function runWithAnswers(answers) {
     const status = await main({
       fetch: fetchImpl,
       git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"),
-      gh: () => JSON.stringify(pull("Author-Model: claude")),
+      gh: ghApi(pull("Author-Model: claude")),
       spawn: () => ({ status: 0, stdout: "", stderr: "" }),
       log: (line) => lines.push(line),
       warn: () => {},

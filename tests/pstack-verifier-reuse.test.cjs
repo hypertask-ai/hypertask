@@ -82,6 +82,7 @@ test("resolve stops and publishes when the same head tree was already verified",
         if (url.startsWith("run download")) return "";
         if (url.includes("/statuses")) return JSON.stringify([{ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "success", target_url: `https://github.com/${REPO}/actions/runs/${RUN}/attempts/1` }]);
         if (url.includes(`/commits/${head}`)) return JSON.stringify({ commit: { tree: { sha: TREE } } });
+        if (url.includes("/pulls/5/commits")) return "[]";
         if (url.includes("vnd.github.diff")) return diffFor();
         if (url.includes("/pulls/5")) return JSON.stringify(pull);
         throw new Error(url);
@@ -114,6 +115,7 @@ test("resolve keeps going when the earlier artifact is gone", async () => {
         if (url.includes("/issues/5/comments")) return JSON.stringify([{ user: { login: BOT }, body: markerBodies() }]);
         if (url.startsWith("run download")) throw new Error("artifact expired");
         if (url.includes(`/commits/${head}`)) return JSON.stringify({ commit: { tree: { sha: TREE } } });
+        if (url.includes("/pulls/5/commits")) return "[]";
         if (url.includes("vnd.github.diff")) return diffFor();
         if (url.includes("/pulls/5/files")) return "";
         if (url.includes("/pulls/5/commits")) return "[]";

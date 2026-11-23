@@ -291,9 +291,9 @@ export function cookiesFromHeader(header, base) {
 export function pullCommits(call, repo, number) {
   try {
     const pages = JSON.parse(call(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${number}/commits`]));
-    return Array.isArray(pages) ? pages.flat() : [];
+    return Array.isArray(pages) ? pages.flat() : null;
   } catch {
-    return [];
+    return null;
   }
 }
 function commitOwnedBy(commit, authorLogin) {
@@ -311,6 +311,7 @@ function trailerLines(commit) {
   return [...block.matchAll(/^(Author-Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)].map(([, key, value]) => ({ key: key.toLowerCase(), value: value.trim() }));
 }
 export function authorFamily(body, commits = [], authorLogin = "") {
+  if (commits === null) return "";
   const bodyFamilies = new Set();
   for (const [, value] of String(body ?? "").matchAll(/^Author-Model:([^\r\n]*)/gim)) {
     const family = value.trim().split(/\s+/)[0].toLowerCase();
@@ -327,7 +328,8 @@ export function authorFamily(body, commits = [], authorLogin = "") {
         if (!FAMILIES.has(family)) return "";
         commitFamilies.add(family);
       } else {
-        for (const [family, pattern] of FAMILY_PATTERNS) if (pattern.test(value)) commitFamilies.add(family);
+        const domain = String(/<([^<>]+)>\s*$/.exec(value)?.[1] ?? "").split("@")[1] ?? "";
+        for (const [family, , vendor] of FAMILY_PATTERNS) if (vendor.test(domain)) commitFamilies.add(family);
       }
     }
   }
@@ -340,10 +342,10 @@ export function authorGate(body, commits = [], authorLogin = "") {
   return author ? { stop: false, author } : { stop: true, verdict: "FAIL", notes: "author model unknown" };
 }
 const FAMILY_PATTERNS = [
-  ["claude", /claude|anthropic|opus|sonnet|haiku/i],
-  ["deepseek", /deepseek/i],
-  ["grok", /grok|x-ai|xai/i],
-  ["codex", /gpt|openai|codex|o[134]\b/i],
+  ["claude", /claude|anthropic|opus|sonnet|haiku/i, /^anthropic\.com$|^claude\.ai$/],
+  ["deepseek", /deepseek/i, /^deepseek\.com$/],
+  ["grok", /grok|x-ai|xai/i, /^x\.ai$|^xai\.com$/],
+  ["codex", /gpt|openai|codex|o[134]\b/i, /^openai\.com$/],
 ];
 export function modelFamily(model) {
   const id = String(model ?? "");
@@ -1316,7 +1318,8 @@ export async function resolveCommand(io = {}) {
   let botLogin = "";
   let listed = null;
   const fetched = pullCommits(call, repo, item.number);
-  const commitsKnown = item.commits != null && fetched.length !== item.commits ? [] : fetched;
+  const commitsKnown = Array.isArray(fetched) && (item.commits == null || fetched.length === item.commits) ? fetched : [];
+  const owned = fetched === null ? null : commitsKnown;
   if (BOT_LOGINS.has(item.user?.login)) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const lastSha = commitsKnown.at(-1)?.sha;
@@ -1324,7 +1327,7 @@ export async function resolveCommand(io = {}) {
     listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
-      const gate = authorGate(item.body, commitsKnown, item.user.login);
+      const gate = authorGate(item.body, owned, item.user.login);
       if (gate.stop) {
         output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
         return;
@@ -1337,7 +1340,7 @@ export async function resolveCommand(io = {}) {
       botLogin = item.user.login;
     }
   }
-  const gate = authorGate(item.body, commitsKnown, item.user?.login);
+  const gate = authorGate(item.body, owned, item.user?.login);
   if (!botLogin && gate.stop) {
     output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
