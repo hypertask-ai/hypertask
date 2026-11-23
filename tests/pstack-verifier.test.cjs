@@ -34,6 +34,7 @@ for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, aut
   { name: "commit authored elsewhere but committed by the pr author", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "valentinyeo"]], prAuthor: "valentinyeo", author: "codex" },
   { name: "unattributed commit cannot set the family", messages: ["Fix\n\nAuthor-Model: codex"], owners: [[null, null]], prAuthor: "valentinyeo" },
   { name: "unreadable commit evidence fails closed beside a body line", body: "Author-Model: codex", messages: ["Fix\n\nAuthor-Model: deepseek"], commitFailure: true },
+  { name: "incomplete commit page fails closed beside a body line", body: "Author-Model: codex", messages: ["Fix\n\nAuthor-Model: codex"], commitCount: 2 },
 ]) {
   test(`author resolution: ${name}`, async () => {
     const { resolveCommand } = await load();

@@ -1318,8 +1318,9 @@ export async function resolveCommand(io = {}) {
   let botLogin = "";
   let listed = null;
   const fetched = pullCommits(call, repo, item.number);
-  const commitsKnown = Array.isArray(fetched) && (item.commits == null || fetched.length === item.commits) ? fetched : [];
-  const owned = fetched === null ? null : commitsKnown;
+  const complete = Array.isArray(fetched) && (item.commits == null || fetched.length === item.commits);
+  const commitsKnown = complete ? fetched : [];
+  const owned = complete ? fetched : null;
   if (BOT_LOGINS.has(item.user?.login)) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const lastSha = commitsKnown.at(-1)?.sha;
