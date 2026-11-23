@@ -218,15 +218,19 @@ export async function handlePatchAgentRequest(
     }
     try {
       const input = parseAgentBoardUpdateBody({ ...body, agent_id: agentId })
-      const delegationError = await checkAgentBoardDelegation(ctx, agentId)
+      const delegationError = await checkAgentBoardDelegation(ctx, agentId, {
+        addProjectIds: input.addProjectIds,
+        removeProjectIds: input.removeProjectIds,
+      })
       if (delegationError) return delegationError
+      const selfJoin = ctx.agentId === agentId
       const result = await updateOwnedAgentBoards(
         prisma as unknown as AgentBoardUpdateDatabase,
-        (id, userId, db) => getAccessibleAgentBoard(id, userId, ctx.agentId, ctx.teamScope, db),
+        (id, userId, db) => getAccessibleAgentBoard(id, userId, selfJoin ? null : ctx.agentId, ctx.teamScope, db),
         ctx.user.id,
         input,
         ctx.teamScope?.teamId ?? ctx.management?.teamId,
-        ctx.agentId ?? undefined
+        selfJoin ? undefined : ctx.agentId ?? undefined
       )
       if (ctx.agentId) {
         console.info(

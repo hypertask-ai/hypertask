@@ -50,9 +50,10 @@ async function demo() {
       null
     )
 
-    const self = await json(await checkAgentBoardDelegation(ctx, 'ceo'))
+    const self = await json(await checkAgentBoardDelegation(ctx, 'ceo', { projectId: 15 }))
     assert.equal(self.status, 403)
-    assert.equal(self.body.error, 'An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.')
+    assert.equal(self.body.error, 'Ask a member of board 15 to run: hypertask project invite 15 --user ceo')
+    assert.match(self.body.error, /project invite/)
     assert.equal(self.body.code, 'forbidden')
 
     role = 'write'
