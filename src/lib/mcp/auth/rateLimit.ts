@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { isFeatureEnabled } from '@/lib/flags';
-import { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } from '@/lib/flags/definitions/htpr-8978-agent-upstash-skip';
 import { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
 import { getRedis } from '@/lib/redis';
@@ -28,6 +26,14 @@ export function rateLimitSkipsUpstash(token: string): boolean {
   } catch {
     return false
   }
+}
+
+async function agentRateLimitSkipsUpstash(token: string): Promise<boolean> {
+  if (!rateLimitSkipsUpstash(token)) return false
+  const { isFeatureEnabled } = await import('@/lib/flags')
+  if (typeof isFeatureEnabled !== 'function') return true
+  const { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } = await import('@/lib/flags/keys')
+  return isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, 0)
 }
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagLookup: Promise<boolean> | undefined
@@ -76,7 +82,7 @@ export async function checkMcpRateLimit(
       agentCounts.clear()
       localWindowStart = windowStartSeconds
     }
-    if (rateLimitSkipsUpstash(token) && await isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, 0)) {
+    if (await agentRateLimitSkipsUpstash(token)) {
       const seen = agentCounts.get(key)
       if (seen === undefined && agentCounts.size >= MAX_LOCAL_COUNTS) {
         const decision = decideMcpRateLimit(MCP_AGENT_RATE_LIMIT_PER_MINUTE + 1, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
