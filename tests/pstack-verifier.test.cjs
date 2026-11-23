@@ -1,6 +1,13 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+let envBefore;
+test.beforeEach(() => { envBefore = { ...process.env }; });
+test.afterEach(() => {
+  for (const key of Object.keys(process.env)) if (!Object.hasOwn(envBefore, key)) delete process.env[key];
+  Object.assign(process.env, envBefore);
+});
+
 const load = () => import("../scripts/pstack-verifier.mjs");
 const binding = { sha: "a".repeat(40), run: "9", attempt: "1" };
 const plan = (actions, extra = {}) => ({ ...binding, actions, expect: [], authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash", ...extra });
@@ -1061,12 +1068,12 @@ test("an api action passes from the preview response with no page navigation", a
   try {
   const { parsePlan, runPlan, decide, buildPrompt } = await load();
   const parsed = parsePlan(JSON.stringify({
-    actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "updated" }],
+    actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
     expect: [],
     reason: "",
   }));
-  assert.deepEqual(parsed.actions[0], { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "updated" });
-  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/project", body: {}, expectStatus: 200, expectText: "updated" }] })), /path is not on this app/);
+  assert.deepEqual(parsed.actions[0], { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" });
+  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/project", body: {}, expectStatus: 200, expectText: "saved" }] })), /path is not on this app/);
   const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
   assert.equal(prompt.includes('"op":"api"'), true);
   assert.equal(buildPrompt({ kind: "judge", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1", plan: parsed, evidence: { steps: [], expects: [], navigations: [], offOrigin: [] } }, "<<<fence>>>").includes("response text"), true);
@@ -1074,7 +1081,7 @@ test("an api action passes from the preview response with no page navigation", a
   const page = {
     async goto() { throw new Error("navigated"); },
     async screenshot() { throw new Error("screenshot"); },
-    request: { async fetch(url, options) { calls.push({ url, options }); return { status: () => 200, async text() { return '{"ok":true,"updated":true}'; } }; } },
+    request: { async fetch(url, options) { calls.push({ url, options }); return { status: () => 200, async text() { return '{"ok":true,"saved":true}'; } }; } },
   };
   const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [] };
   const body = plan(parsed.actions);
@@ -1082,7 +1089,7 @@ test("an api action passes from the preview response with no page navigation", a
   assert.deepEqual(calls, [{ url: "http://127.0.0.1:3100/api/mcp/tasks/7", options: { method: "POST", headers: { Authorization: "Bearer smoke-token" }, maxRedirects: 0, failOnStatusCode: false, data: {} } }]);
   assert.deepEqual(run.navigations, []);
   assert.equal(run.steps[0].ok, true);
-  assert.equal(run.steps[0].text.includes("updated"), true);
+  assert.equal(run.steps[0].text.includes("saved"), true);
   const seen = evidence({ steps: run.steps, expects: run.expects, navigations: [] });
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding, checksPassed: true }).verdict, "PASS");
   assert.equal(decide({ model: { verdict: "", notes: "" }, plan: body, evidence: seen, binding }).verdict, "FAIL");
@@ -1094,9 +1101,9 @@ test("an api action passes from the preview response with no page navigation", a
   });
   assert.equal(miss.steps[0].ok, false);
   assert.match(miss.steps[0].error, /response text missing/);
-  assert.equal(decide({ model: { verdict: "PASS", notes: "updated" }, plan: body, evidence: evidence({ steps: miss.steps, expects: [], navigations: [] }), binding }).verdict, "FAIL");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "saved" }, plan: body, evidence: evidence({ steps: miss.steps, expects: [], navigations: [] }), binding }).verdict, "FAIL");
   const down = await runPlan({
-    page: { ...page, request: { async fetch() { return { status: () => 500, async text() { return "updated"; } }; } } },
+    page: { ...page, request: { async fetch() { return { status: () => 500, async text() { return "saved"; } }; } } },
     plan: body,
     ...drive,
     navigations: [],
@@ -1191,39 +1198,46 @@ test("the seed mints an agent token for the seeded agent and exports it", async 
 });
 
 for (const run of ["45173881467", "45154622521"]) {
-  test(`planner replay ${run} removes copied example expectations`, async () => {
-    const { parsePlan } = await load();
+  test(`planner replay ${run} drops expectations copied from the prompt example`, async () => {
+    const { parsePlan, buildPrompt } = await load();
+    const examples = ["page", "plan"].map((kind) => JSON.stringify(JSON.parse(buildPrompt({ kind }).split("\nShape: ")[1].split("\n")[0]).expect));
     const captured = require(`./fixtures/pstack-verifier/planner-${run}.json`);
+    const copied = captured.journeys.filter((journey) => examples.includes(JSON.stringify(journey.expect)));
+    assert.equal(copied.length > 0, true, run);
     for (const journey of captured.journeys) {
       const parsed = parsePlan(JSON.stringify(journey));
-      assert.deepEqual(parsed.expect, journey.expect.filter((item) => item.text !== "Core actions smoke"), journey.journey);
-      assert.equal(parsed.actions.length, journey.actions.length);
+      assert.deepEqual(parsed.expect, copied.includes(journey) ? [] : journey.expect, journey.journey);
+      assert.equal(parsed.actions.length, journey.actions.length, journey.journey);
     }
   });
 }
 
-test("planner example literals cannot become text expectations", async () => {
+test("copied prompt example expectations are dropped as a whole, not word by word", async () => {
   const { buildPrompt, parsePlan } = await load();
-  const examples = new Set(["Core actions smoke", "saved", "Smoke"]);
-  for (const kind of ["plan", "page"]) {
-    const prompt = buildPrompt({ kind });
-    const shape = JSON.parse(prompt.split("\nShape: ")[1].split("\n")[0]);
-    for (const action of shape.actions) {
-      for (const key of ["text", "label", "value", "expectText"]) if (action[key]) examples.add(action[key]);
-    }
-    for (const item of shape.expect) if (item.text) examples.add(item.text);
+  for (const kind of ["page", "plan"]) {
+    const shape = JSON.parse(buildPrompt({ kind }).split("\nShape: ")[1].split("\n")[0]);
+    const parsed = parsePlan(JSON.stringify({ actions: [{ op: "goto", path: "/project?id={id}" }], expect: shape.expect }));
+    assert.deepEqual(parsed.expect, [], kind);
+    assert.equal(parsed.actions.length, 1, kind);
   }
-  for (const text of examples) {
-    const parsed = parsePlan(JSON.stringify({
-      actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", expectStatus: 200, expectText: ` ${text} ` }],
-      expect: [{ text }, text, { text: "Board rooms" }],
-    }));
-    assert.deepEqual(parsed.expect, [{ text: "Board rooms" }], text);
-    assert.equal(parsed.actions[0].expectText, "", text);
-    assert.equal(parsed.actions[0].expectStatus, 200);
-  }
-  const real = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: "/api/mcp/hello", expectStatus: 200, expectText: "success" }] }));
-  assert.equal(real.actions[0].expectText, "success");
+  const kept = parsePlan(JSON.stringify({
+    actions: [{ op: "fill", label: "Title", value: "Smoke" }, { op: "click", text: "Add field" }, { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
+    expect: [{ text: "saved" }, { text: "Title" }, { text: "Add field" }],
+  }));
+  assert.deepEqual(kept.expect, [{ text: "saved" }, { text: "Title" }, { text: "Add field" }]);
+  assert.deepEqual(kept.actions.map((action) => action.label ?? action.text ?? action.expectText), ["Title", "Add field", "saved"]);
+});
+
+test("a real expectText is enforced on an example-shaped action", async () => {
+  const { parsePlan, runPlan } = await load();
+  const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }] }));
+  assert.equal(parsed.actions[0].expectText, "saved");
+  const result = await runPlan({
+    page: { request: { async fetch() { return { status: () => 200, async text() { return '{"ok":true}'; } }; } } },
+    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [],
+  });
+  assert.equal(result.steps[0].ok, false);
+  assert.match(result.steps[0].error, /response text missing/);
 });
 
 test("planner replay 45173881467 authenticates agent-only refusals before dispatch", async () => {
@@ -1247,24 +1261,34 @@ test("planner replay 45173881467 authenticates agent-only refusals before dispat
   assert.equal(result.steps.every((step) => step.ok), true);
 });
 
-test("every route refusing non-agent callers gets agent auth at the plan boundary", async () => {
-  const { parsePlan } = await load();
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const root = path.join(__dirname, "../src/app/api");
-  const guarded = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && /requires? an agent token/i.test(fs.readFileSync(path.join(root, file), "utf8")));
-  assert.ok(guarded.length >= 9);
-  for (const file of guarded) {
-    const route = `/api/${file.slice(0, -"/route.ts".length).replace(/\[[^/]+\]/g, "7")}`;
-    for (const target of [route, `${route}?limit=1`]) {
+test("every agent-only route gets agent auth at the plan boundary", async () => {
+  const { parsePlan, agentOnlyRoutes, agentOnlyPath } = await load();
+  const routes = agentOnlyRoutes();
+  assert.equal(routes.includes("/api/mcp/agents/runtime-heartbeat"), true);
+  for (const route of routes) {
+    const path = route.replace(/\[[^\]]+\]/g, "7");
+    assert.equal(agentOnlyPath(`${path}?limit=1`), true, route);
+    for (const target of [path, `${path}?limit=1`]) {
       const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: target, expectStatus: 400 }] }));
-      assert.equal(parsed.actions[0].auth, "agent", file);
+      assert.equal(parsed.actions[0].auth, "agent", route);
     }
   }
-  for (const route of ["/api/mcp/tasks/{task}", "/api/mcp/tasks/lease/claim-extra", "/api/mcp/agents/runs/7/activities-extra"]) {
+  for (const route of ["/api/mcp/tasks/{task}", "/api/mcp/tasks/lease/claim-extra", "/api/mcp/agents/runs/7/activities-extra", "/api/agents/7"]) {
     const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: route, expectStatus: 200 }] }));
     assert.equal(parsed.actions[0].auth, undefined, route);
   }
+});
+
+test("no route refusing a non-agent caller is missing from the agent-only set", async () => {
+  const { agentOnlyRoutes } = await load();
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.join(__dirname, "../src/app/api");
+  const refusals = [/requires? an agent token/i, /agent token is required/i];
+  const derived = agentOnlyRoutes();
+  const files = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && refusals.some((pattern) => pattern.test(fs.readFileSync(path.join(root, file), "utf8"))));
+  assert.equal(files.length, derived.length);
+  for (const file of files) assert.equal(derived.includes(`/api/${file.slice(0, -"/route.ts".length)}`), true, file);
 });
 
 for (const { expected, actual, ok } of [
@@ -1274,11 +1298,16 @@ for (const { expected, actual, ok } of [
   { expected: "/project?id={id}", actual: "/project?view=default", ok: false },
   { expected: "/project?id={id}", actual: "/my-tasks?id=1&view=default", ok: false },
   { expected: "/project?id={id}&view=default", actual: "/project?id=1&view=other", ok: false },
-  { expected: "/agents/chat?view=rooms", actual: "/agents/chat?view=rooms&board=1", ok: true },
+  { expected: "/agents/chat?view=rooms", actual: "/agents/chat?view=rooms&board=1", ok: false },
   { expected: "/agents/chat?view=rooms", actual: "/agents/chat?view=roster&board=1", ok: false },
   { expected: "/project?id={id}&name=Board%20rooms", actual: "/project?name=Board+rooms&view=default&id=1", ok: true },
+  { expected: "/project", actual: "/project?view=default", ok: true },
+  { expected: "/project", actual: "/project?view=archived", ok: false },
+  { expected: "/project", actual: "/project?id=1", ok: false },
+  { expected: "/project?id={id}", actual: "/project?id=1&id=2&view=default", ok: false },
+  { expected: "/project?id={id}&id={id}", actual: "/project?id=1&view=default", ok: false },
 ]) {
-  test(`planner URL subset ${expected} against ${actual}`, async () => {
+  test(`planner URL match ${expected} against ${actual}`, async () => {
     const { parsePlan, runPlan } = await load();
     const parsed = parsePlan(JSON.stringify({ actions: [], expect: [{ path: expected }] }));
     const result = await runPlan({
