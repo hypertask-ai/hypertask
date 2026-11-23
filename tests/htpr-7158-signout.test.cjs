@@ -206,6 +206,7 @@ test('account-specific sign-out makes no client revocation call and a failed swi
   global.window = { location: { assign: (url) => h.events.push(`navigate:${url}`) } }
   const { signOutCurrentAccount } = load('src/lib/auth/accounts.ts', {
     nookies: {}, '@/lib/configs/auth.config': {},
+    '@/lib/auth/ticketDetailLocator': { takeTicketAccountSwitchLanding: () => null, ticketAccountSwitchPath: () => null },
     '@/lib/auth/betterAuthClient': { authClient: {
       getSession: async () => ({ data: { session: { token: 'A' } } }),
       multiSession: {

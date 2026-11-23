@@ -13,12 +13,19 @@ function setup({ enabled = true, user = { id: 985, email: "member@example.com" }
       useSetRecoilState: atom => { assert.equal(atom, "switcher"); return value => calls.switcher.push(value); },
       useRecoilState: atom => { assert.equal(atom, "manager"); return [false, setBoardManager]; },
     },
-    "@/hooks/useFlag": { useFlag: key => { assert.equal(key, "htpr-7799-project-entry"); return enabled; } },
+    "@/hooks/useFlag": { useFlag: key => {
+      if (key === "htpr-9621-auto-switch-account") return false;
+      assert.equal(key, "htpr-7799-project-entry");
+      return enabled;
+    } },
     "@/lib/flags/keys": { HTPR_7799_PROJECT_ENTRY_FLAG: "htpr-7799-project-entry" },
     "@/utils/api/Homepage": { getFirstProject: async () => { calls.lookup++; return { data: project }; } },
     "@/hooks/MultiPages/HTC/useSignout": { useSignout: () => ({ handleHardReset: async () => { calls.signOut++; } }) },
     "next/head": { default: () => null },
-    "next/navigation": { useRouter: () => ({ replace: url => calls.navigation.push(url) }) },
+    "next/navigation": {
+      usePathname: () => "/detail/project-15/9621",
+      useRouter: () => ({ replace: url => calls.navigation.push(url) }),
+    },
   });
   const Page = load("src/app/unauthorized/page.tsx").default;
   const view = mount();

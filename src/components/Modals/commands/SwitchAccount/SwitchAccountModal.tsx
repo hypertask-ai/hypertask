@@ -12,6 +12,7 @@ import UserAvatar from "@/components/Common/UserAvatar";
 import { IoIosClose } from "react-icons/io";
 import { MdAdd, MdCheckCircle } from "react-icons/md";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useFlag } from "@/hooks/useFlag";
 import {
   listAccounts,
   getActiveAccountId,
@@ -21,6 +22,7 @@ import {
   SwitchAccount,
 } from "@/lib/auth/accounts";
 import { forgetTicketAccountSwitch } from "@/lib/auth/ticketDetailLocator";
+import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
 
 interface ISwitchAccountModal {
   closeHandler: () => void;
@@ -28,6 +30,7 @@ interface ISwitchAccountModal {
 
 const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => {
   const isMbl = useContext(MobileViewContext);
+  const keepTicket = useFlag(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG);
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,9 +63,9 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
 
   const switchingRef = useRef(false);
   const dismiss = useCallback(() => {
-    if (!switchingRef.current) forgetTicketAccountSwitch();
+    if (keepTicket && !switchingRef.current) forgetTicketAccountSwitch();
     closeHandler();
-  }, [closeHandler]);
+  }, [closeHandler, keepTicket]);
 
   const handleSwitch = useCallback(
     async (account: SwitchAccount) => {
