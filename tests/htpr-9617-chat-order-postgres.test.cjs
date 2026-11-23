@@ -8,7 +8,8 @@ const { NextRequest } = require('next/server');
 const { withSchemaExtensions } = require('./helpers/schema-extensions.cjs');
 
 const root = path.resolve(__dirname, '..');
-const image = process.env.HTPR_PG_IMAGE || 'ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea';
+const mirror = require(path.join(root, '.github/ci-images.json')).find(entry => entry.image === 'postgres' && entry.tag === '16-alpine');
+const image = process.env.HTPR_PG_IMAGE || `${mirror.source}:${mirror.tag}@${mirror.digest}`;
 const container = `htpr9617-${process.pid}-${Date.now()}`;
 const run = (command, args, options = {}) => spawnSync(command, args, { encoding: 'utf8', timeout: 120_000, ...options });
 let prisma;
@@ -25,6 +26,8 @@ before(async () => {
   const port = server.address().port;
   await new Promise(resolve => server.close(resolve));
   const url = `postgresql://ht:ht@127.0.0.1:${port}/ht_test`;
+  const pull = run('docker', ['pull', image], { timeout: 300_000 });
+  assert.equal(pull.status, 0, pull.stderr);
   const start = run('docker', ['run', '-d', '--name', container, '-e', 'POSTGRES_USER=ht', '-e', 'POSTGRES_PASSWORD=ht', '-e', 'POSTGRES_DB=ht_test', '-p', `127.0.0.1:${port}:5432`, '--health-cmd', 'pg_isready -U ht -d ht_test', '--health-interval', '1s', '--health-retries', '30', image]);
   assert.equal(start.status, 0, start.stderr);
   started = true;

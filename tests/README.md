@@ -25,8 +25,10 @@ If GHCR login is unavailable locally, a previously cached pinned image still
 works. The transport test prefers an installed `redis-server`, so installing
 that binary avoids Docker entirely. PostgreSQL suites and the backfill
 verifiers honor `HTPR_PG_IMAGE` for an explicit locally available PostgreSQL 16
-image (use the matching Alpine or Bookworm variant). No automatic upstream
-registry fallback is enabled in CI.
+image (use the matching Alpine or Bookworm variant). A job with no registry
+login, such as `repro-first`, leaves `HTPR_PG_IMAGE` unset and pulls the pinned
+upstream `source` recorded in `.github/ci-images.json`, which is the image the
+GHCR copy mirrors.
 
 See [local premerge smoke](../e2e/smoke/README.md#local-docker-fixtures) for the
 three-image setup used by `scripts/premerge-local.sh`.
