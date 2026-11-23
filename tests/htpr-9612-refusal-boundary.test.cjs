@@ -157,3 +157,17 @@ test('method not allowed stays a caller error on the direct client', async t => 
   assert.deepEqual(h.reports, []);
   assert.deepEqual(h.feedback, []);
 });
+
+test('refusal serialization covers plan limits, payload caps, rate limits, and conflict details', async () => {
+  const limit = refusal.refusalOf({ code: 'PLAN_LIMIT_REACHED', limit: 'tickets', max: 100, message: 'Upgrade' });
+  const response = refusal.refusalResponse(limit);
+  assert.equal(response.status, 402);
+  assert.deepEqual(await response.json(), { success: false, error: 'Upgrade', message: 'Upgrade', code: 'PLAN_LIMIT_REACHED', limit: 'tickets', max: 100 });
+  assert.equal(refusal.refusalResponse({ status: 413, reason: 'payload_too_large', message: 'Too large' }).status, 413);
+  assert.equal(refusal.refusalResponse({ status: 429, reason: 'rate_limited', message: 'Wait', retryAfterSeconds: 30 }).headers.get('Retry-After'), '30');
+  const conflict = errors.mapHttpErrorToMcpError(409, 'Lease conflict', 'corr', { code: 'lease_conflict' });
+  assert.equal(conflict.code, -32602);
+  assert.deepEqual(conflict.details, { code: 'lease_conflict' });
+  assert.equal(refusal.refusalOf(new Error('Fault')), null);
+  assert.equal(refusal.refusalOf(Object.assign(new Error('Not typed'), { status: 400, code: 'invalid_field' })), null);
+});
