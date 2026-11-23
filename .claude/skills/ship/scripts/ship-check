@@ -25,7 +25,7 @@
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
-#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
+#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge, including a Leftovers line
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       only this session's recorded branches and worktrees are gone
 #   ship-check move <T> <section> [project] [destination]  enforce completion before a board section write
@@ -797,7 +797,7 @@ newest_successful_production_sha() {
 }
 
 check_proof() {
-  local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
+  local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0 leftovers
   dropped_ok proof "$1" && return 0
   elsewhere_ok proof "$1" && return 0
   nochange_ok proof "$1" && return 0
@@ -820,6 +820,11 @@ check_proof() {
   done < <(grep -E '^[[:space:]]*- PASS:' "$p")
   [ "$n" -gt 0 ] || fail "proof.md has no '- PASS: <case> -> <evidence file>' line"
   [ -n "$(find "$d/$run" -name '*.png' -size +0 -print -quit)" ] || fail "no screenshot (*.png) in $d/$run"
+  grep -qE '^[[:space:]]*Leftovers:' "$p" \
+    || fail "proof.md has no 'Leftovers:' line; write 'Leftovers: none', or list what the test left behind"
+  leftovers=$(sed -nE 's/^[[:space:]]*Leftovers:[[:space:]]*//p' "$p" | head -1)
+  leftovers=${leftovers%"${leftovers##*[![:space:]]}"}
+  [ -n "$leftovers" ] || fail "proof.md 'Leftovers:' line is empty; write none, or list what the test left behind"
   echo "proof ok"
 }
 
