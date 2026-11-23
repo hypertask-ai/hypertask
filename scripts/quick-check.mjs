@@ -325,16 +325,15 @@ if (rewritten.length) {
 }
 
 let typeRun = typePromise ? await typePromise : null;
-if (typeRun) process.stdout.write(typeRun.output);
 let typeOutcome = typeRun ? outcome(typeRun.result, "tsc") : "skipped";
 if (typeOutcome === "failed" && !fullTypecheck) {
   console.log("quick check: confirming partial type errors with the full project");
   typeRun = await runTool("tsc", binary(root, "tsc"), [
     "-p", join(root, "tsconfig.json"), "--noEmit", "--incremental", "--tsBuildInfoFile", fullTypeCache,
   ], fullTypeBudgetMs, fullTypeBudgetMs);
-  process.stdout.write(typeRun.output);
   typeOutcome = outcome(typeRun.result, "tsc");
 }
+if (typeRun) process.stdout.write(typeRun.output);
 if (typeOutcome === "failed") {
   blocked(`the type check failed; the push was stopped after ${elapsed(started)}s`);
 }

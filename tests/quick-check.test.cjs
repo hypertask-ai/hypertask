@@ -187,6 +187,7 @@ for (const extension of [".d.ts", ".ts"]) {
 
       assert.equal(result.status, broken ? 1 : 0, result.stdout + result.stderr);
       if (broken) assert.match(result.stdout, /TS2322/);
+      else assert.doesNotMatch(result.stdout, /error TS/);
       if (extension === ".ts") assert.match(result.stdout, /confirming partial type errors with the full project/);
     });
   }

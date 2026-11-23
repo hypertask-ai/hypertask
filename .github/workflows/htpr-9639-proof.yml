@@ -56,6 +56,9 @@ jobs:
         run: |
           cp "$RUNNER_TEMP/fixed-quick-check.mjs" scripts/quick-check.mjs
           timeout 600 node scripts/quick-check.mjs --files src/utils/helperFunctions/dateParse.ts 2>&1 | tee "$RUNNER_TEMP/proof/fixed-date.log"
+          ! grep 'error TS' "$RUNNER_TEMP/proof/fixed-date.log"
+          timeout 600 node scripts/quick-check.mjs --files src/app/api/ai-chat/add-message/route.ts 2>&1 | tee "$RUNNER_TEMP/proof/fixed-route.log"
+          ! grep 'error TS' "$RUNNER_TEMP/proof/fixed-route.log"
           timeout 600 node --test tests/quick-check.test.cjs 2>&1 | tee "$RUNNER_TEMP/proof/green.log"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
