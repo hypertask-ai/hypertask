@@ -230,7 +230,8 @@ export async function handlePatchAgentRequest(
         ctx.user.id,
         input,
         ctx.teamScope?.teamId ?? ctx.management?.teamId,
-        selfJoin ? undefined : ctx.agentId ?? undefined
+        selfJoin ? undefined : ctx.agentId ?? undefined,
+        selfJoin,
       )
       if (ctx.agentId) {
         console.info(

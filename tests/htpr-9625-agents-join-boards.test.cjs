@@ -83,6 +83,11 @@ function harness(options = {}) {
     },
     $transaction: async (run, settings) => {
       assert.deepEqual(settings, { isolationLevel: "Serializable" });
+      if (options.demoteOnTransaction) {
+        for (const row of state.members) {
+          if (row.agentId == null && row.role === "Admin") row.role = "Member";
+        }
+      }
       return run(prisma);
     },
   };
@@ -183,6 +188,20 @@ test("still allowed: own-team board where the owner is a project admin succeeds 
   const response = await h.patch({ add_project_ids: [2] });
   assert.equal(response.status, 200);
   assert.deepEqual(h.state.members.filter((row) => row.agentId === AGENT).map((row) => row.projectId), [1, 2]);
+});
+
+test("a demotion inside the transaction refuses the self-join and writes nothing", async () => {
+  const h = harness({
+    ownerId: 99,
+    demoteOnTransaction: true,
+    humanMember: { id: 11, projectId: 2, agentId: null, userId: OWNER, status: "Accepted", role: "Admin" },
+  });
+  const response = await h.patch({ add_project_ids: [2] });
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error, invite(2));
+  assert.match(body.error, /project invite/);
+  assert.deepEqual(h.state.members.filter((row) => row.agentId === AGENT).map((row) => row.projectId), [1]);
 });
 
 test("a mixed add refuses the other-team board and writes nothing", async () => {

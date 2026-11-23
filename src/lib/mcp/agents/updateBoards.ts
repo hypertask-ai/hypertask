@@ -1,6 +1,7 @@
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma } from '@prisma/client'
-import { getAgentBoardScope } from '@/lib/mcp/agents/delegatedAccess'
+import { getAgentBoardScope, selfBoardAccessRefusal } from '@/lib/mcp/agents/delegatedAccess'
+import isProjectAdmin from '@/utils/controllers/projects/isProjectAdmin'
 
 import { crossTeamAgentsEnabled, ownerTeamWhere } from '@/lib/agents/crossTeam'
 
@@ -157,7 +158,8 @@ export async function updateOwnedAgentBoards(
   userId: number,
   input: AgentBoardUpdateInput,
   teamId?: string,
-  actingAgentId?: string
+  actingAgentId?: string,
+  requireProjectAdmin = false,
 ) {
   const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
   for (let attempt = 0; ; attempt += 1) {
@@ -231,6 +233,13 @@ export async function updateOwnedAgentBoards(
                 throw new AgentBoardUpdateError(
                   'Agents require a team board',
                   400,
+                  'add_project_ids'
+                )
+              }
+              if (requireProjectAdmin && !(await isProjectAdmin(userId, id, tx))) {
+                throw new AgentBoardUpdateError(
+                  selfBoardAccessRefusal(id, input.agentId),
+                  403,
                   'add_project_ids'
                 )
               }
