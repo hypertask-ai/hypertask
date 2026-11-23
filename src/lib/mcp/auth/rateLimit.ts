@@ -14,7 +14,45 @@ const MAX_LOCAL_COUNTS = 1_000
 const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
 const agentCounts = new Map<string, number>()
+let agentOverflow = 0
 let localWindowStart: number | undefined
+
+function unverifiedUserId(token: string): number {
+  const parts = token.split('.')
+  if (parts.length !== 3) return 0
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { userId?: unknown }
+    return typeof payload.userId === 'number' && Number.isFinite(payload.userId) ? payload.userId : 0
+  } catch {
+    return 0
+  }
+}
+
+function rememberAgentCount(key: string): number {
+  const seen = agentCounts.get(key)
+  if (seen !== undefined) {
+    const count = seen + 1
+    agentCounts.delete(key)
+    agentCounts.set(key, count)
+    return count
+  }
+  if (agentCounts.size >= MAX_LOCAL_COUNTS) {
+    let disposable: string | undefined
+    for (const [candidate, count] of agentCounts) {
+      if (count === 1) {
+        disposable = candidate
+        break
+      }
+    }
+    if (disposable === undefined) {
+      agentOverflow += 1
+      return agentOverflow
+    }
+    agentCounts.delete(disposable)
+  }
+  agentCounts.set(key, 1)
+  return 1
+}
 
 export function rateLimitSkipsUpstash(token: string): boolean {
   if (token.startsWith('htk_')) return true
@@ -28,15 +66,28 @@ export function rateLimitSkipsUpstash(token: string): boolean {
   }
 }
 
-async function agentRateLimitSkipsUpstash(token: string): Promise<boolean> {
+async function agentRateLimitSkipsUpstash(
+  token: string,
+  resolveAuth?: () => Promise<McpAuthContext | null>,
+): Promise<boolean> {
   if (!rateLimitSkipsUpstash(token)) return false
   const { isFeatureEnabled } = await import('@/lib/flags')
   if (typeof isFeatureEnabled !== 'function') return true
   const { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } = await import('@/lib/flags/keys')
   const { withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
+  let userId = unverifiedUserId(token)
+  if (resolveAuth) {
+    try {
+      const ctx = await resolveAuth()
+      if (typeof ctx?.user?.id === 'number' && Number.isFinite(ctx.user.id)) userId = ctx.user.id
+      else return true
+    } catch {
+      return true
+    }
+  }
   const audience = token.startsWith('htk_') ? 'cli' : 'agent'
   return withFeatureFlagSnapshot(
-    () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, 0),
+    () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, userId),
     audience,
   )
 }
@@ -85,17 +136,11 @@ export async function checkMcpRateLimit(
     if (localWindowStart !== windowStartSeconds) {
       localCounts.clear()
       agentCounts.clear()
+      agentOverflow = 0
       localWindowStart = windowStartSeconds
     }
-    if (await agentRateLimitSkipsUpstash(token)) {
-      const seen = agentCounts.get(key)
-      if (seen !== undefined) agentCounts.delete(key)
-      else if (agentCounts.size >= MAX_LOCAL_COUNTS) {
-        const oldest = agentCounts.keys().next().value
-        if (oldest !== undefined) agentCounts.delete(oldest)
-      }
-      const count = (seen ?? 0) + 1
-      agentCounts.set(key, count)
+    if (await agentRateLimitSkipsUpstash(token, resolveAuth)) {
+      const count = rememberAgentCount(key)
       const decision = decideMcpRateLimit(count, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
       if (!decision.limited) return null
       return NextResponse.json(

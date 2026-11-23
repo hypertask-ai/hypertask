@@ -351,13 +351,48 @@ test("with the Upstash skip off, command-line calls count in Upstash again", asy
   assert.equal(redisCalls, 1);
 });
 
-test("distinct unauthenticated command-line tokens stay bounded without refusing a new caller", async () => {
+test("the skip flag follows the authenticated user and a failed login stays off Upstash", async () => {
+  let redisCalls = 0;
+  const userIds = [];
+  const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
+    "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => redisCalls, expire: async () => 1, decrby: async () => 0 }; } },
+    "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count", HTPR_8978_AGENT_UPSTASH_SKIP_FLAG: "htpr-8978-agent-upstash-skip" },
+    "@/lib/flags": {
+      featureFlagCandidateUserIds: async () => null,
+      isFeatureEnabled: async (_key, userId) => { userIds.push(userId); return userId === 6; },
+    },
+    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run) => run() },
+    "./session": {
+      extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
+      validateMcpAuth: async () => null,
+    },
+    "../operationContext": { getMcpOperationContext: () => undefined },
+  });
+  const call = (bearer, resolveAuth) => checkMcpRateLimit(new NextRequest("https://app.hypertask.ai/api/mcp/tasks", {
+    headers: { authorization: `Bearer ${bearer}` },
+  }), resolveAuth);
+  const owner = async () => ({ user: { id: 6 }, agentId: null, teamScope: null });
+  const other = async () => ({ user: { id: 9 }, agentId: null, teamScope: null });
+  assert.equal(await call("htk_owner", owner), null);
+  assert.equal(redisCalls, 0);
+  assert.deepEqual(userIds, [6]);
+  assert.equal(await call("htk_other", other), null);
+  assert.equal(redisCalls, 1);
+  assert.equal(await call("htk_fake", async () => null), null);
+  assert.equal(redisCalls, 1);
+});
+
+test("distinct unauthenticated command-line tokens stay bounded without resetting an active caller", async () => {
   let redisCalls = 0;
   const audiences = [];
+  const userIds = [];
   const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
     "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => 1, expire: async () => 1 }; } },
     "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count", HTPR_8978_AGENT_UPSTASH_SKIP_FLAG: "htpr-8978-agent-upstash-skip" },
-    "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => true },
+    "@/lib/flags": {
+      featureFlagCandidateUserIds: async () => null,
+      isFeatureEnabled: async (_key, userId) => { userIds.push(userId); return true; },
+    },
     "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run, audience) => { audiences.push(audience); return run(); } },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
@@ -365,15 +400,19 @@ test("distinct unauthenticated command-line tokens stay bounded without refusing
     },
     "../operationContext": { getMcpOperationContext: () => undefined },
   });
-  const call = (bearer) => checkMcpRateLimit(new NextRequest("https://app.hypertask.ai/api/mcp/tasks", {
+  const call = (bearer, resolveAuth) => checkMcpRateLimit(new NextRequest("https://app.hypertask.ai/api/mcp/tasks", {
     headers: { authorization: `Bearer ${bearer}` },
-  }));
-  assert.equal(await call("htk_known"), null);
-  for (let i = 0; i < 999; i += 1) assert.equal(await call(`htk_${i}`), null);
-  assert.equal(await call("htk_known"), null);
+  }), resolveAuth);
+  for (let i = 0; i < 600; i += 1) assert.equal(await call("htk_known"), null);
+  assert.equal((await call("htk_known")).status, 429);
+  for (let i = 0; i < 1000; i += 1) assert.equal(await call(`htk_${i}`), null);
+  assert.equal((await call("htk_known")).status, 429);
   assert.equal(await call("htk_overflow"), null);
-  assert.equal(await call(token({ agentId: "agent-1" })), null);
+  assert.equal(await call(token({ agentId: "agent-1", userId: 985 })), null);
+  assert.equal(await call("htk_owner", async () => ({ user: { id: 6 }, agentId: null, teamScope: null })), null);
   assert.equal(redisCalls, 0);
   assert.ok(audiences.includes("cli"));
   assert.ok(audiences.includes("agent"));
+  assert.ok(userIds.includes(985));
+  assert.ok(userIds.includes(6));
 });
