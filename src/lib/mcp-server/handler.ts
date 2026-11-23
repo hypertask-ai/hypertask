@@ -187,8 +187,12 @@ export async function mcpHandler(request: Request): Promise<Response> {
         }),
       )
     }
-    if (audience && await isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, Number.isFinite(userId) ? userId : 0)) {
-      return await withUpstashFlagAudience(() => serve(), audience)
+    if (audience) {
+      const skipUpstash = await withUpstashFlagAudience(
+        () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, Number.isFinite(userId) ? userId : 0),
+        audience,
+      )
+      if (skipUpstash) return await withUpstashFlagAudience(() => serve(), audience)
     }
     return await serve()
   } finally {

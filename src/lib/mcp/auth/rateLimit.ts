@@ -33,7 +33,12 @@ async function agentRateLimitSkipsUpstash(token: string): Promise<boolean> {
   const { isFeatureEnabled } = await import('@/lib/flags')
   if (typeof isFeatureEnabled !== 'function') return true
   const { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } = await import('@/lib/flags/keys')
-  return isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, 0)
+  const { withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
+  const audience = token.startsWith('htk_') ? 'cli' : 'agent'
+  return withFeatureFlagSnapshot(
+    () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, 0),
+    audience,
+  )
 }
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagLookup: Promise<boolean> | undefined
@@ -84,12 +89,10 @@ export async function checkMcpRateLimit(
     }
     if (await agentRateLimitSkipsUpstash(token)) {
       const seen = agentCounts.get(key)
-      if (seen === undefined && agentCounts.size >= MAX_LOCAL_COUNTS) {
-        const decision = decideMcpRateLimit(MCP_AGENT_RATE_LIMIT_PER_MINUTE + 1, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
-        return NextResponse.json(
-          { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
-          { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
-        )
+      if (seen !== undefined) agentCounts.delete(key)
+      else if (agentCounts.size >= MAX_LOCAL_COUNTS) {
+        const oldest = agentCounts.keys().next().value
+        if (oldest !== undefined) agentCounts.delete(oldest)
       }
       const count = (seen ?? 0) + 1
       agentCounts.set(key, count)

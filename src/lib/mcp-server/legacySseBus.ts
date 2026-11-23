@@ -196,16 +196,24 @@ async function subscribeRemote(channel: string): Promise<() => void> {
     if (count === 0) await current.client.subscribe(channel)
     current.counts.set(channel, count + 1)
     release = () => {
+      let settled: Promise<void> | undefined
       const done = (current.tails.get(channel) ?? Promise.resolve()).then(async () => {
-        const left = (current.counts.get(channel) ?? 1) - 1
-        if (left <= 0) {
-          current.counts.delete(channel)
-          await current.client.unsubscribe(channel)
-        } else {
-          current.counts.set(channel, left)
+        let finished = false
+        try {
+          const left = (current.counts.get(channel) ?? 1) - 1
+          if (left <= 0) {
+            current.counts.delete(channel)
+            finished = true
+            await current.client.unsubscribe(channel)
+          } else {
+            current.counts.set(channel, left)
+          }
+        } finally {
+          if (finished && settled && current.tails.get(channel) === settled) current.tails.delete(channel)
         }
       })
-      current.tails.set(channel, done.then(() => undefined, () => undefined))
+      settled = done.then(() => undefined, () => undefined)
+      current.tails.set(channel, settled)
       return done
     }
   }).catch(() => {

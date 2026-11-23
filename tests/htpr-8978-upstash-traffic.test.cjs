@@ -137,6 +137,12 @@ test("a dropped relay is replaced, and an aborted stream releases the late subsc
       stop();
     });
     assert.equal(clients.length, 1);
+    for (let i = 0; i < 20; i += 1) {
+      const reply = await bus.subscribeLegacySseAcrossProcesses(`${channel}:reply:${i}`, () => {});
+      reply();
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(globalThis.__hypertaskLegacySseRelayLive.tails.size, 1);
     clients[0].handlers.end();
     assert.equal(down, 1);
     assert.equal(clients[0].status, "end");
@@ -345,12 +351,14 @@ test("with the Upstash skip off, command-line calls count in Upstash again", asy
   assert.equal(redisCalls, 1);
 });
 
-test("distinct unauthenticated command-line tokens cannot grow the in-memory limit without a cap", async () => {
+test("distinct unauthenticated command-line tokens stay bounded without refusing a new caller", async () => {
   let redisCalls = 0;
+  const audiences = [];
   const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
     "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => 1, expire: async () => 1 }; } },
-    "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count" },
+    "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count", HTPR_8978_AGENT_UPSTASH_SKIP_FLAG: "htpr-8978-agent-upstash-skip" },
     "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => true },
+    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run, audience) => { audiences.push(audience); return run(); } },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
       validateMcpAuth: async () => null,
@@ -363,6 +371,9 @@ test("distinct unauthenticated command-line tokens cannot grow the in-memory lim
   assert.equal(await call("htk_known"), null);
   for (let i = 0; i < 999; i += 1) assert.equal(await call(`htk_${i}`), null);
   assert.equal(await call("htk_known"), null);
-  assert.equal((await call("htk_overflow")).status, 429);
+  assert.equal(await call("htk_overflow"), null);
+  assert.equal(await call(token({ agentId: "agent-1" })), null);
   assert.equal(redisCalls, 0);
+  assert.ok(audiences.includes("cli"));
+  assert.ok(audiences.includes("agent"));
 });
