@@ -180,6 +180,7 @@ function collect() {
         if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
         for (const color of style.backgroundImage.match(/rgba?\([^)]*\)/g) || []) colors.push(['gradient', color]);
         out.push({
+            key: el.getAttribute('data-wireframe-base'),
             tag: el.tagName.toLowerCase(), font: style.fontFamily, size: style.fontSize,
             colors: colors.filter(([, color]) => solid(color)),
             radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
@@ -226,13 +227,18 @@ const check = (row) => {
             await page.setContent(fs.readFileSync(file, 'utf8'), { waitUntil: 'domcontentloaded' });
             return page.evaluate(collect);
         };
-        const base = new Set((await load(process.argv[3])).map((row) => JSON.stringify(row)));
-        const page_ = await load(process.argv[2]);
         const problems = [];
-        for (const row of page_) {
-            if (base.has(JSON.stringify(row))) continue;
-            const problem = check(row);
-            if (problem && !problems.includes(problem)) problems.push(problem);
+        for (const [width, height] of [[390, 844], [1440, 900]]) {
+            await page.setViewportSize({ width, height });
+            const base = new Map((await load(process.argv[3])).filter((row) => row.key).map((row) => [row.key, JSON.stringify(row)]));
+            for (const row of await load(process.argv[2])) {
+                const unchanged = row.key && base.get(row.key) === JSON.stringify(row);
+                base.delete(row.key);
+                if (unchanged) continue;
+                const problem = check(row);
+                const detail = width + 'x' + height + ': ' + problem;
+                if (problem && !problems.includes(detail)) problems.push(detail);
+            }
         }
         console.log(JSON.stringify({ ok: problems.length === 0, problems: problems.slice(0, 8) }));
     } finally {
@@ -405,18 +411,71 @@ def publish_guard(file, turl):
     token_guard(file)
 
 
-CLONE_JS = r"""
+STAMP_JS = r"""
+function stamp() {
+    for (const [index, el] of [document.body, ...document.body.querySelectorAll('*')].entries()) {
+        el.setAttribute('data-wireframe-base', String(index));
+    }
+}
+"""
+
+
+def stamp_base(file):
+    node(STAMP_JS + r"""
+const fs = require('fs');
+const { chromium } = require(process.argv[1]);
+(async () => {
+    const browser = await chromium.launch({ headless: true });
+    try {
+        const page = await browser.newPage({ javaScriptEnabled: false, offline: true, serviceWorkers: 'block' });
+        await page.route('**/*', (route) => route.abort());
+        await page.setContent(fs.readFileSync(process.argv[2], 'utf8'));
+        await page.evaluate(stamp);
+        fs.writeFileSync(process.argv[2], await page.content());
+    } finally {
+        await browser.close();
+    }
+})().catch((error) => { console.error(error); process.exit(1); });
+""", file)
+
+
+def qa_state():
+    state = Path(os.environ.get("WIREFRAME_QA_STATE") or QA_STATE).expanduser()
+    if not state.is_file():
+        raise SystemExit("QA storage state is missing; refresh QA user 985 with qa-login before wireframe capture or wireframe new --mobile")
+    return state
+
+
+QA_JS = r"""
+async function qaPage(context, url, theme) {
+    const identity = await context.request.get(new URL('/api/users/getById', url).href, { maxRedirects: 0, timeout: 15000 });
+    if (!identity.ok() || (await identity.json()).id !== 985) throw new Error('QA session required: refresh QA user 985 with qa-login');
+    const page = await context.newPage();
+    const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+    const expected = new URL(url);
+    const actual = new URL(page.url());
+    if (!response?.ok() || actual.origin !== expected.origin || actual.pathname !== expected.pathname || actual.search !== expected.search) {
+        throw new Error('QA screen did not load at the requested route; refresh QA user 985 with qa-login and check the app URL path');
+    }
+    if (theme) {
+        await page.waitForFunction((theme) => document.documentElement.dataset.theme === theme, theme, { timeout: 10000 });
+    }
+    await page.evaluate(() => document.fonts.ready);
+    return page;
+}
+"""
+
+
+CLONE_JS = QA_JS + STAMP_JS + r"""
 const fs = require('fs');
 const { chromium } = require(process.argv[1]);
 const [url, out, width, height, state] = process.argv.slice(2);
 (async () => {
     const browser = await chromium.launch({ headless: true });
     try {
-        const options = { viewport: { width: Number(width), height: Number(height) } };
-        if (state && fs.existsSync(state)) options.storageState = state;
-        const context = await browser.newContext(options);
-        const page = await context.newPage();
-        await page.goto(url, { waitUntil: 'networkidle', timeout: 45000 });
+        const context = await browser.newContext({ viewport: { width: Number(width), height: Number(height) }, storageState: state });
+        const page = await qaPage(context, url);
+        await page.evaluate(stamp);
         const html = await page.evaluate(() => {
             const css = [...document.styleSheets].map((sheet) => {
                 try { return [...sheet.cssRules].map((rule) => rule.cssText).join('\n'); }
@@ -426,7 +485,7 @@ const [url, out, width, height, state] = process.argv.slice(2);
             for (const node of [...head.querySelectorAll('script, link[rel="stylesheet"], link[rel="preload"]')]) node.remove();
             for (const node of [...head.querySelectorAll('style')]) node.remove();
             const base = document.createElement('base');
-            base.href = 'https://app.hypertask.ai/';
+            base.href = location.origin + '/';
             head.prepend(base);
             const style = document.createElement('style');
             style.textContent = css;
@@ -448,7 +507,7 @@ const [url, out, width, height, state] = process.argv.slice(2);
 """
 
 
-CAPTURE_JS = r"""
+CAPTURE_JS = QA_JS + r"""
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require(process.argv[1]);
@@ -460,15 +519,9 @@ const viewports = { mobile: [390, 844], desktop: [1440, 900] };
     try {
         for (const theme of themes) {
             for (const [name, [width, height]] of Object.entries(viewports)) {
-                const options = { viewport: { width, height } };
-                if (state && fs.existsSync(state)) options.storageState = state;
-                const context = await browser.newContext(options);
-                const host = new URL(base).hostname;
-                if (!base.startsWith('file:')) {
-                    await context.addCookies([{ name: 'theme', value: theme, domain: host, path: '/', secure: true }]);
-                }
-                const page = await context.newPage();
-                await page.goto(base + route, { waitUntil: 'networkidle', timeout: 45000 });
+                const context = await browser.newContext({ viewport: { width, height }, storageState: state });
+                await context.addCookies([{ name: 'theme', value: theme, url: base }]);
+                const page = await qaPage(context, base + route, theme);
                 const file = path.join(dir, name + '-' + theme + '.png');
                 await page.screenshot({ path: file });
                 await context.close();
@@ -490,7 +543,7 @@ def capture(ticket, route):
         raise SystemExit(f"usage: wireframe capture {ticket} <app URL path>  (for example /detail/project-15/9632)")
     shots = folder.parent / "today"
     shots.mkdir(exist_ok=True)
-    state = str(QA_STATE) if QA_STATE.is_file() else os.environ.get("WIREFRAME_QA_STATE", "")
+    state = qa_state()
     node(CAPTURE_JS, APP, route, shots, state)
     captured = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     manifest = [{"file": f"today/{name}-{theme}.png", "viewport": f"{VIEWPORTS[name][0]}x{VIEWPORTS[name][1]}",
@@ -519,7 +572,7 @@ def capture(ticket, route):
 def mobile_base(ticket, route):
     if not route.startswith("/") or route.startswith("//"):
         raise SystemExit(f"usage: wireframe new {ticket} --mobile <app URL path>  (for example /detail/project-15/9632)")
-    state = str(QA_STATE) if QA_STATE.is_file() else os.environ.get("WIREFRAME_QA_STATE", "")
+    state = qa_state()
     dst = HOME / ticket.upper() / "index.html"
     dst.parent.mkdir(parents=True, exist_ok=True)
     handle, path = tempfile.mkstemp(suffix=".html")
@@ -621,7 +674,8 @@ def main():
             raise SystemExit(f"already exists, edit it in place: {dst}")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(kit, dst)
-        shutil.copy(kit, dst.with_name("base.html"))
+        stamp_base(dst)
+        shutil.copy(dst, dst.with_name("base.html"))
         print(dst)
     elif cmd == "capture":
         if len(a) < 3:

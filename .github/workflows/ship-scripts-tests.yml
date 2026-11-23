@@ -146,7 +146,7 @@ jobs:
 
       - name: Run the wireframe publish and capture tests
         shell: bash
-        run: bash .claude/skills/wireframe/scripts/wireframe.test.sh
+        run: timeout 900 bash .claude/skills/wireframe/scripts/wireframe.test.sh
 
   ship-scripts-tests-siblings:
     name: ship-scripts-tests-siblings

@@ -561,15 +561,12 @@ function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {
     designIds.some((id) => new RegExp(`#comment-${id}(?!\\d)`).test(comment.text));
 }
 
-function valentinReaction(comment) {
+function valentinReaction(comment, before = Infinity) {
   const edited = comment.editedAt ?? comment.updatedAt;
   return (comment.reactions ?? []).find((reaction) =>
     humanValentin(reaction, 'userId') && /^(?:👍[🏻-🏿]?|✅)️?$/u.test(reaction.emoji) &&
+    Date.parse(reaction.createdAt ?? comment.createdAt) < before &&
     (edited == null || Date.parse(reaction.createdAt) > Date.parse(edited)));
-}
-
-function valentinReacted(comment) {
-  return Boolean(valentinReaction(comment));
 }
 
 function newest(comments) {
@@ -602,10 +599,13 @@ export function evaluate({ title, author, files, comments = [], parentComments =
   const created = wireframe ? Date.parse(wireframe.createdAt) : -Infinity;
   const edited = wireframe?.editedAt ?? wireframe?.updatedAt;
   const revision = edited != null ? Date.parse(edited) : created;
+  const legacy = Boolean(wireframe) && !WIREFRAME.test(wireframe.text);
+  const approvalBefore = legacy ? LEGACY_EVIDENCE_UNTIL : Infinity;
   const verdict = newest(comments.filter((comment) =>
-    Date.parse(comment.createdAt) > created && commentVerdict(comment)));
+    Date.parse(comment.createdAt) > created && commentVerdict(comment) &&
+    (commentVerdict(comment) === 'reject' || Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < approvalBefore)));
   const approval = verdict && commentVerdict(verdict) === 'approve' && Date.parse(verdict.createdAt) > revision ? verdict : null;
-  const reaction = wireframe && valentinReaction(wireframe);
+  const reaction = wireframe && valentinReaction(wireframe, approvalBefore);
   const reacted = Boolean(reaction);
   const wireframeLink = wireframe && evidenceLink(wireframe);
   const earlierSameWireframe = !wireframe ? [] : comments.filter((comment) => comment !== wireframe &&
@@ -620,11 +620,9 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     }))];
   const question = wireframe && newest(comments.filter((comment) =>
     !humanValentin(comment, 'creatorId') && Date.parse(comment.createdAt) > revision &&
-    asksYesToShipElements(comment, wireframeLink, designIds, newElements) && valentinReacted(comment)));
+    Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < approvalBefore &&
+    asksYesToShipElements(comment, wireframeLink, designIds, newElements) && valentinReaction(comment, approvalBefore)));
   const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
-  const legacy = Boolean(wireframe) && !WIREFRAME.test(wireframe.text);
-  const approvedAt = [verdict, question, reaction].filter(Boolean).map((item) => Date.parse(item.createdAt));
-  const legacyApproved = !legacy || approvedAt.every((at) => !Number.isFinite(at) || at < LEGACY_EVIDENCE_UNTIL);
   const approvedNames = new Set(approved ? [
     ...(wireframe ? elementNames(wireframe) : []),
     ...earlierSameWireframe.flatMap(elementNames),
@@ -635,7 +633,7 @@ export function evaluate({ title, author, files, comments = [], parentComments =
   const reusesExistingUi = newElements.length === 0;
   const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4' || reusesExistingUi;
   const details = [];
-  if (!exempt && (!wireframe || !approved || !legacyApproved)) {
+  if (!exempt && (!wireframe || !approved)) {
     details.push(`UI change needs Valentin's yes on a wireframe on ${ticket.key}`);
   }
   if (missingNames.length) {

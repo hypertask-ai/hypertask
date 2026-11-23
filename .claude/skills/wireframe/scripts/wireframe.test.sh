@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Offline CLI tests. HTTP and board calls are stubs; link, token, capture and clone checks use local Playwright.
 set -euo pipefail
 cd "$(dirname "$0")"
 D=$(mktemp -d "$PWD/.wireframe-test.XXXXXX"); trap 'rm -rf "$D"' EXIT
@@ -97,7 +96,7 @@ chmod +x "$D/bin/stub"
 for cmd in hypertask vcc npx; do ln -s stub "$D/bin/$cmd"; done
 export PATH="$D/bin:$PATH"
 python3 - <<'PY'
-import base64, html, json, os, struct, subprocess, zlib
+import atexit, base64, html, json, os, re, struct, subprocess, zlib
 from datetime import date
 from pathlib import Path
 
@@ -137,8 +136,10 @@ def uploaded(log, status, ticket="HTPR-255", project=15):
     return calls
 
 def png_for(width, height):
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + ihdr + struct.pack(">I", zlib.crc32(b"IHDR" + ihdr))
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress((b"\0" + b"\xff" * (width * 3)) * height)) + chunk(b"IEND", b""))
 
 def add_today(folder):
     shots = folder / "today"
@@ -200,14 +201,15 @@ kit.write_text('<!doctype html><html><head><title>Local kit</title><style>html,b
 (D / "uploaded").write_bytes(b"remote kit")
 p, log = invoke("new", "HTPR-300")
 assert [(e["method"], e["url"]) for e in events(log, "http")] == [("GET", "https://hypertask.app/wireframes/base")]
-assert (home / "base/base-kit.html").read_bytes() == b"remote kit" == (home / "HTPR-300/index.html").read_bytes()
-assert (home / "HTPR-300/base.html").read_bytes() == b"remote kit"
+assert (home / "base/base-kit.html").read_bytes() == b"remote kit"
+assert "remote kit" in (home / "HTPR-300/index.html").read_text()
+assert (home / "HTPR-300/base.html").read_bytes() == (home / "HTPR-300/index.html").read_bytes()
 ok("new downloads the published base kit when none is installed")
 invoke("base", str(kit))
 p, _ = invoke("new", "htpr-255")
 assert Path(p.stdout.strip()) == home / "HTPR-255/index.html"
-assert Path(p.stdout.strip()).read_bytes() == kit.read_bytes()
-assert (home / "HTPR-255/base.html").read_bytes() == kit.read_bytes()
+assert 'data-wireframe-base="' in Path(p.stdout.strip()).read_text()
+assert (home / "HTPR-255/base.html").read_bytes() == Path(p.stdout.strip()).read_bytes()
 invoke("new", "YPER4-255")
 p, _ = invoke("new", "HTPR-255", fail=True)
 assert "already exists" in p.stderr
@@ -336,9 +338,16 @@ p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and "gradient" in p.stderr and not events(log, "http")
 ok("an off-token gradient is refused")
 
+for viewport, media in (("390x844", "max-width:600px"), ("1440x900", "min-width:1000px")):
+    page.write_text(valid_page.replace("</style>", "@media (" + media + "){body{background-color:#ff0000}}</style>"))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and viewport in p.stderr and not events(log, "http")
+ok("responsive off-token styles are refused at both mobile and desktop widths")
+
 live = home / "HTPR-402"
 invoke("new", "HTPR-402")
-cloned = (kit.read_text().replace("</body>", '<div style="border-radius:5px;background-color:#262a30">Live 5px</div></body>'))
+cloned = (kit.read_text().replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:5px;background-color:#262a30">Live 5px</div></body>'))
 (live / "index.html").write_text(cloned.replace("<body>", "<body>" + link))
 (live / "base.html").write_text(cloned)
 (live / "live-styles.json").write_text(json.dumps(styles))
@@ -346,6 +355,10 @@ add_today(live)
 p, log = invoke("publish", "HTPR-402", "--no-comment")
 assert len(uploaded(log, "waiting", "HTPR-402")) == 1
 ok("copied live CSS radii pass because the token check skips what the base already has")
+(live / "index.html").write_text((live / "index.html").read_text().replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:5px;background-color:#262a30">Added 5px</div></body>'))
+p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "radius 5px" in p.stderr and not events(log, "http")
+ok("new elements cannot borrow a copied live element's off-token exemption")
 
 redo = {"sourceTicket": "https://app.hypertask.ai/detail/project-15/6894", "viewport": {"width": 1440, "height": 900},
         "themes": {"porcelain": {"htmlClass": "light porcelain", "destructive": "0 72.22% 50.59%",
@@ -408,19 +421,56 @@ add_today(page.parent)
 app = D / "app"
 app.mkdir()
 (app / "screen.html").write_text((fixtures / "live-screen.html").read_text())
+server = subprocess.Popen(["python3", "-u", "-c", r'''
+import http.server, json, sys
+from pathlib import Path
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+    def do_GET(self):
+        cookies = dict(item.strip().split("=", 1) for item in self.headers.get("Cookie", "").split(";") if "=" in item)
+        if self.path == "/api/users/getById":
+            user = int(cookies.get("qa-user", "0"))
+            self.send_response(200 if user else 401)
+            self.end_headers()
+            self.wfile.write(json.dumps({"id": user}).encode())
+        elif self.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
+        elif self.path == "/screen.html":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            body = Path(sys.argv[1]).read_text().replace('<html lang="en">', '<html lang="en" data-theme="' + cookies.get("theme", "porcelain") + '">')
+            self.wfile.write(body.encode())
+        else:
+            self.send_response(500 if self.path == "/error" else 200)
+            self.end_headers()
+            self.wfile.write(b"Sign in")
+httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+print(httpd.server_port, flush=True)
+httpd.serve_forever()
+''', str(app / "screen.html")], env={**os.environ, "PYTHONPATH": ""}, stdout=subprocess.PIPE, text=True)
+atexit.register(lambda: (server.terminate(), server.wait(timeout=10)))
+app_url = "http://127.0.0.1:" + server.stdout.readline().strip()
+state = D / "qa.json"
+state.write_text(json.dumps({"cookies": [{"name": "qa-user", "value": "985", "domain": "127.0.0.1", "path": "/", "expires": -1, "httpOnly": True, "secure": False, "sameSite": "Lax"}], "origins": []}))
+qa_env = {"WIREFRAME_APP_BASE": app_url, "WIREFRAME_QA_STATE": str(state)}
 invoke("new", "HTPR-400")
-(app_page := home / "HTPR-400/index.html").write_text(app_page.read_text().replace("<body>", "<body>" + link))
+app_page = home / "HTPR-400/index.html"
+app_page.write_text(re.sub(r'(<body[^>]*>)', lambda match: match.group(1) + link, app_page.read_text(), count=1))
 (app_page.parent / "live-styles.json").write_text(json.dumps(styles))
-p, log = invoke("capture", "HTPR-400", "/screen.html", WIREFRAME_APP_BASE=f"file://{app}", WIREFRAME_QA_STATE="")
+p, log = invoke("capture", "HTPR-400", "/screen.html", **qa_env)
 manifest = json.loads((app_page.parent / "today.json").read_text())
 assert len(manifest) == 8 and {(e["theme"], e["viewport"]) for e in manifest} == {(t, v) for t in ("porcelain", "graphite", "amoled", "dia") for v in ("390x844", "1440x900")}
 assert all((app_page.parent / e["file"]).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n" for e in manifest)
 assert app_page.read_text().count('data-capture="') == 8
-p, log = invoke("publish", "HTPR-400", "--no-comment", WIREFRAME_APP_BASE=f"file://{app}")
+p, log = invoke("publish", "HTPR-400", "--no-comment", **qa_env)
 assert len(uploaded(log, "waiting", "HTPR-400")) == 1
 ok("capture takes eight live screenshots, writes today.json and the page publishes from the base kit")
 
-invoke("new", "HTPR-401", "--mobile", "/screen.html", WIREFRAME_APP_BASE=f"file://{app}", WIREFRAME_QA_STATE="")
+invoke("new", "HTPR-401", "--mobile", "/screen.html", **qa_env)
 cloned = home / "HTPR-401/index.html"
 body = cloned.read_text()
 assert (home / "HTPR-401/base.html").read_text() == body
@@ -431,7 +481,25 @@ assert "Live task entry" in body
 add_today(cloned.parent)
 p, log = invoke("publish", "HTPR-401", "--no-comment")
 assert len(uploaded(log, "waiting", "HTPR-401")) == 1
-ok("new --mobile clones the live phone page, strips scripts, adds the ticket link and publishes")
+assert "Phone layout" in body and "Desktop layout" not in body
+assert 'font-family:"IBM Plex Sans"' in body or 'font-family: "IBM Plex Sans"' in body
+ok("new --mobile clones the live phone page, keeps real CSS and fonts, strips scripts, adds the ticket link and publishes")
+
+for bad_state, message in ((D / "missing-state.json", "QA storage state is missing"), (D / "expired-state.json", "QA session required"), (D / "wrong-user.json", "QA session required")):
+    if bad_state.name != "missing-state.json":
+        data = json.loads(state.read_text())
+        data["cookies"][0]["value"] = "0" if "expired" in bad_state.name else "6"
+        bad_state.write_text(json.dumps(data))
+    for args in (("new", "HTPR-403", "--mobile", "/screen.html"), ("capture", "HTPR-400", "/screen.html")):
+        p, log = invoke(*args, fail=True, **{**qa_env, "WIREFRAME_QA_STATE": str(bad_state)})
+        assert message in p.stderr and not events(log, "http")
+        assert not (home / "HTPR-403/index.html").exists()
+for route in ("/redirect", "/error"):
+    for args in (("new", "HTPR-403", "--mobile", route), ("capture", "HTPR-400", route)):
+        p, log = invoke(*args, fail=True, **qa_env)
+        assert "QA screen did not load" in p.stderr and not events(log, "http")
+        assert not (home / "HTPR-403/index.html").exists()
+ok("capture and phone cloning refuse missing, expired, wrong-user, redirected and error sessions")
 
 p, log = invoke("publish", "BASE")
 assert len(uploaded(log, "waiting", "BASE", 4060)) == 1
