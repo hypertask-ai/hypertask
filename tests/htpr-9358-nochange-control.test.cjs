@@ -102,6 +102,19 @@ test("a search that found the error in the README on the previous build passes",
   assert.match(run.stdout, /nochange ok/);
 });
 
+test("a control that says the fault was not found fails", () => {
+  refused([opener + "<p>Control: the search has not found the fault on the previous build.</p>"]);
+  refused([opener + "<p>Control: the search never found the fault on the previous build.</p>"]);
+  refused([opener + "<p>Control: the search hasn't found the fault on the previous build.</p>"]);
+  refused([opener + "<p>Control: the search did not find the fault on the previous build.</p>"]);
+});
+
+test("a control that found the fault, and not the new one, passes", () => {
+  const run = nochange([opener + "<p>Control: the search found the fault on the previous build, not the new one.</p>"]);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /nochange ok/);
+});
+
 test("a control that found no fault fails", () => {
   refused([opener + "<p>Control: the search found no fault on the bad build.</p>"]);
 });

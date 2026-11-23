@@ -11,7 +11,7 @@
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
 #                                with evidence (an https URL or a <pre>/<code> block) and a Control: line naming a search or a drive that found
 #                                the fault on a known bad build. The thing found is the fault, an error, a match, a hit, or the same kind of defect.
-#                                A zero result does not count. No open PR titled with T, no bound PR, and no origin
+#                                A zero result does not count, and neither does a denial such as "not found" or "never found". No open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     test click removed for every PR (hookless sessions)
@@ -333,7 +333,7 @@ resolution_comment() {
           and test("(?i)\\bfound\\b(?:[ \\t]+(?:the|a|an|this|that|same|old|known|reported|original|exact|failing|broken|thrown|missing|wrong|expected|[1-9][0-9]*|one|two|three|four|five|six|seven|eight|nine|ten|several|many|some))*[ \\t]+(faults?|errors?|matches?|hits?|defects?|bugs?|failures?|exceptions?|regressions?)\\b")
           and (test("(?i)\\bfound[ \\t]+(0|zero|no|none|nothing)\\b") | not)
           and (test("(?i)\\b(0|zero)[ \\t]+(old[ \\t]+)?(errors?|faults?|hits?|matches?)\\b") | not)
-          and (test("(?i)\\b(did not|didn.t|not)[ \\t]+find\\b") | not)
+          and (test("(?i)\\b(?:not|never|hasn.t|haven.t|hadn.t|isn.t|aren.t|wasn.t|weren.t|didn.t|cannot|can.t|couldn.t)(?:[ \\t]+\\w+){0,1}[ \\t]+f(?:ound|ind)\\b") | not)
           and (test("(?i)\\bno[ \\t]+(fault|error|errors|match|matches|hit|hits)\\b") | not)
           and (
             test("(?i)\\b(known[ \\t-]+bad|bad|previous|prior|old|earlier)[ \\t]+build\\b")
