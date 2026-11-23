@@ -497,6 +497,50 @@ test("formal models and repros under verification are non-app; a src file stays 
   assert.match(result.notes, /^no app path: /);
 });
 
+for (const [name, files] of [
+  ["formal verification paths", ["verification/formal/seat-billing/SeatBilling.tla", "verification/formal/seat-billing/SeatBilling.cfg", "verification/formal/seat-billing/repro.cjs"]],
+  ["formal runner paths", ["scripts/formal-verification/run.mjs"]],
+  ["formal test paths", ["tests/formal-seat-billing.test.cjs", "tests/formal-webhook-retry.test.cjs"]],
+]) {
+  test(`${name} select the non-app plan and pass only with green checks`, async () => {
+    const { hasAppPath, selectPlan, decide } = await load();
+    const selected = { actions: [], expect: [], reason: "no user path: non-app files only" };
+    for (const file of files) {
+      assert.equal(hasAppPath([file]), false, file);
+      assert.deepEqual(selectPlan([file], false), selected, file);
+    }
+    const checked = plan([], { ...selected, files, filesTruncated: false });
+    const input = { model: {}, plan: checked, evidence: null, binding };
+    assert.equal(decide({ ...input, checksPassed: true }).verdict, "PASS+NOTES");
+    assert.equal(decide({ ...input, checksPassed: false }).verdict, "FAIL");
+    assert.equal(decide({ ...input, checksPending: true }).verdict, "PENDING");
+    assert.equal(selectPlan(files, true), null);
+    const mixed = [...files, "src/app/page.tsx"];
+    assert.equal(hasAppPath(mixed), true);
+    assert.equal(selectPlan(mixed, false), null);
+    assert.equal(decide({ ...input, plan: { ...checked, files: mixed }, checksPassed: true }).verdict, "FAIL");
+  });
+}
+
+test("PR 3697's complete file list takes the non-app pass", async () => {
+  const { hasAppPath, selectPlan, decide } = await load();
+  const files = [
+    ".claude/skills/INDEX.md",
+    ".claude/skills/formal-verification/SKILL.md",
+    "scripts/formal-verification/run.mjs",
+    "tests/formal-seat-billing.test.cjs",
+    "verification/formal/checks.json",
+    "verification/formal/seat-billing/SeatBilling.cfg",
+    "verification/formal/seat-billing/SeatBilling.tla",
+    "verification/formal/seat-billing/repro.cjs",
+  ];
+  assert.equal(hasAppPath(files), false);
+  const selected = selectPlan(files, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  const result = decide({ model: {}, plan: plan([], { ...selected, files, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.deepEqual(result, { verdict: "PASS+NOTES", notes: "no app path: no user path: non-app files only" });
+});
+
 test("a failed expect fails even when the model says PASS", async () => {
   const { decide } = await load();
   const result = decide({ model: { verdict: "PASS", notes: "" }, plan: plan([{ op: "shot", name: "a" }]), evidence: evidence({ expects: [{ ok: false, error: "missing" }] }), binding });
