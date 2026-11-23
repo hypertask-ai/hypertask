@@ -450,3 +450,34 @@ test("distinct unauthenticated command-line tokens stay bounded without resettin
   assert.ok(userIds.includes(985));
   assert.ok(userIds.includes(6));
 });
+
+test("unauthenticated overflow does not refuse a fresh authenticated caller", async () => {
+  let redisCalls = 0;
+  const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
+    "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => 1, expire: async () => 1 }; } },
+    "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count", HTPR_8978_AGENT_UPSTASH_SKIP_FLAG: "htpr-8978-agent-upstash-skip" },
+    "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => true },
+    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run) => run() },
+    "./session": {
+      extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
+      validateMcpAuth: async () => null,
+    },
+    "../operationContext": { getMcpOperationContext: () => undefined },
+  });
+  const call = (bearer, resolveAuth) => checkMcpRateLimit(new NextRequest("https://app.hypertask.ai/api/mcp/tasks", {
+    headers: { authorization: `Bearer ${bearer}` },
+  }), resolveAuth);
+  const anonymous = async () => null;
+  const known = async () => ({ user: { id: 6 }, agentId: null, teamScope: null });
+  const fresh = async () => ({ user: { id: 6 }, agentId: "fresh", teamScope: null });
+  for (let i = 0; i < 600; i += 1) assert.equal(await call("htk_known", known), null);
+  assert.equal((await call("htk_known", known)).status, 429);
+  for (let i = 0; i < 1000; i += 1) {
+    assert.equal(await call(`htk_${i}`, anonymous), null);
+    assert.equal(await call(`htk_${i}`, anonymous), null);
+  }
+  for (let i = 0; i < 601; i += 1) await call(`htk_extra_${i}`, anonymous);
+  assert.equal((await call("htk_known", known)).status, 429);
+  assert.equal(await call("htk_fresh", fresh), null);
+  assert.equal(redisCalls, 0);
+});
