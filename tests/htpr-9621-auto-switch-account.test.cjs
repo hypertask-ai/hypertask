@@ -71,16 +71,11 @@ function harness() {
     "next/server": {
       NextResponse: {
         json: (body, init) => Response.json(body, { headers: init?.headers }),
-        redirect: (url, status = 307) => {
-          const headers = new Headers({ location: String(url) });
-          const response = new Response(null, { status });
-          return new Proxy(response, {
-            get(target, prop, receiver) {
-              if (prop === "headers") return headers;
-              return Reflect.get(target, prop, receiver);
-            },
-          });
-        },
+        redirect: (url, status = 307) => ({
+          status,
+          headers: new Headers({ location: String(url) }),
+          text: async () => "",
+        }),
       },
     },
     "@/lib/auth/serverUser": {
@@ -167,6 +162,11 @@ function formRequest(fields) {
 
 function locationPath(response) {
   return new URL(response.headers.get("location")).pathname;
+}
+
+function cookieHeader(response) {
+  const listed = typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+  return listed.length ? listed.join("\n") : (response.headers.get("set-cookie") ?? "");
 }
 
 const ticketBody = {
@@ -286,7 +286,7 @@ test("a form post returns to that ticket and carries only the account that can o
     assert.equal(response.status, 303);
     assert.equal(locationPath(response), "/detail/project-15/9621");
     assert.equal(new URL(response.headers.get("location")).origin, "https://app.hypertask.ai");
-    const cookies = response.headers.get("set-cookie") ?? "";
+    const cookies = cookieHeader(response);
     assert.equal(cookies.includes(OWNER_TOKEN), true);
     assert.equal(cookies.includes(TASK.title), false);
     assert.equal(cookies.includes("owner@example.com"), false);
@@ -314,7 +314,7 @@ test("several accounts send the browser back with a choose mark and name none of
     const response = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }));
     assert.equal(response.status, 303);
     assert.equal(locationPath(response), "/detail/project-15/9621");
-    const cookies = response.headers.get("set-cookie") ?? "";
+    const cookies = cookieHeader(response);
     assert.equal(cookies.includes("ticket-account-switch=choose"), true);
     assert.equal(cookies.includes(OWNER_TOKEN), false);
     assert.equal(cookies.includes(MEMBER_TOKEN), false);
