@@ -288,19 +288,80 @@ export function cookiesFromHeader(header, base) {
     return [{ name, value, domain: host, path: "/", httpOnly: name !== "nookies_user", secure: false, sameSite: "Lax" }];
   });
 }
-export function authorFamily(body) {
-  const family = (/^Author-Model:\s*(\S+)\s*$/m.exec(String(body ?? ""))?.[1] ?? "").toLowerCase();
-  return FAMILIES.has(family) ? family : "";
+export function pullCommits(call, repo, number, expected) {
+  let found;
+  try {
+    const pages = JSON.parse(call(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${number}/commits`]));
+    found = Array.isArray(pages) ? pages.flat() : null;
+  } catch {
+    return null;
+  }
+  if (found === null || (expected != null && found.length !== expected)) return null;
+  return found;
 }
-export function authorGate(body) {
-  const author = authorFamily(body);
+function commitOwnedBy(commit, authorLogin) {
+  const login = String(authorLogin ?? "").toLowerCase();
+  if (!login) return false;
+  const owners = [commit?.author?.login, commit?.committer?.login].map((value) => String(value ?? "").toLowerCase()).filter(Boolean);
+  const botOpened = /\[bot\]$|^app\//.test(login);
+  return botOpened ? owners.length > 0 : owners.includes(login);
+}
+function trailerLines(commit) {
+  const paragraphs = String(commit?.commit?.message ?? "").trimEnd().split(/\r?\n[ \t]*\r?\n/);
+  if (paragraphs.length < 2) return [];
+  const block = paragraphs.at(-1);
+  if (!block.split(/\r?\n/).every((line) => /^[A-Za-z0-9-]+:[ \t]*[^\r\n]*$/.test(line))) return [];
+  return [...block.matchAll(/^(Author-Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)].map(([, key, value]) => ({ key: key.toLowerCase(), value: value.trim() }));
+}
+function proseOnly(body) {
+  let fence = "";
+  return String(body ?? "").split(/\r?\n/).map((line) => {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1] ?? "";
+    if (!fence) {
+      if (!marker) return line;
+      fence = marker;
+      return "";
+    }
+    if (marker && marker[0] === fence[0] && marker.length >= fence.length && /^\s*(`{3,}|~{3,})\s*$/.test(line)) fence = "";
+    return "";
+  }).join("\n");
+}
+export function authorFamily(body, commits = [], authorLogin = "") {
+  if (commits === null) return "";
+  const bodyFamilies = new Set();
+  for (const [, value] of proseOnly(body).matchAll(/^Author-Model:([^\r\n]*)/gim)) {
+    const family = value.trim().split(/\s+/)[0].toLowerCase();
+    if (!FAMILIES.has(family)) return "";
+    bodyFamilies.add(family);
+  }
+  if (bodyFamilies.size > 1) return "";
+  const commitFamilies = new Set();
+  for (const commit of commits) {
+    if (!commitOwnedBy(commit, authorLogin)) continue;
+    for (const { key, value } of trailerLines(commit)) {
+      if (key === "author-model") {
+        const family = value.split(/\s+/)[0].toLowerCase();
+        if (!FAMILIES.has(family)) return "";
+        commitFamilies.add(family);
+      } else {
+        const domain = String(/<([^<>]+)>\s*$/.exec(value)?.[1] ?? "").split("@")[1] ?? "";
+        for (const [family, , vendor] of FAMILY_PATTERNS) if (vendor.test(domain.toLowerCase())) commitFamilies.add(family);
+      }
+    }
+  }
+  if (commitFamilies.size > 1) return "";
+  const named = [...new Set([...bodyFamilies, ...commitFamilies])];
+  return named.length === 1 ? named[0] : "";
+}
+export function authorGate(body, commits = [], authorLogin = "") {
+  const author = authorFamily(body, commits, authorLogin);
   return author ? { stop: false, author } : { stop: true, verdict: "FAIL", notes: "author model unknown" };
 }
 const FAMILY_PATTERNS = [
-  ["claude", /claude|anthropic|opus|sonnet|haiku/i],
-  ["deepseek", /deepseek/i],
-  ["grok", /grok|x-ai|xai/i],
-  ["codex", /gpt|openai|codex|o[134]\b/i],
+  ["claude", /claude|anthropic|opus|sonnet|haiku/i, /^anthropic\.com$|^claude\.ai$/],
+  ["deepseek", /deepseek/i, /^deepseek\.com$/],
+  ["grok", /grok|x-ai|xai/i, /^x\.ai$|^xai\.com$/],
+  ["codex", /gpt|openai|codex|o[134]\b/i, /^openai\.com$/],
 ];
 export function modelFamily(model) {
   const id = String(model ?? "");
@@ -1219,7 +1280,7 @@ export function reusePayload({ item, sha, tree, diff, patchId, comments, artifac
     repo,
   });
 }
-async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
+async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId, author }) {
   const call = io.gh ?? gh;
   let comments;
   try {
@@ -1238,6 +1299,7 @@ async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
   } catch {
     return null;
   }
+  if (author && String(artifact.authorFamily ?? "") !== author) return null;
   let status = null;
   try {
     const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head || artifact.sha}/statuses`]));
@@ -1272,16 +1334,16 @@ export async function resolveCommand(io = {}) {
   if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
+  const owned = pullCommits(call, repo, item.number, item.commits);
+  const commitsKnown = owned ?? [];
   if (BOT_LOGINS.has(item.user?.login)) {
-    const commits = JSON.parse(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/commits`]));
-    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
-    const commitsKnown = Array.isArray(commits) ? commits : [];
     const lastSha = commitsKnown.at(-1)?.sha;
     if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
+    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
-      const gate = authorGate(item.body);
+      const gate = authorGate(item.body, owned, item.user.login);
       if (gate.stop) {
         output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
         return;
@@ -1294,7 +1356,7 @@ export async function resolveCommand(io = {}) {
       botLogin = item.user.login;
     }
   }
-  const gate = authorGate(item.body);
+  const gate = authorGate(item.body, owned, item.user?.login);
   if (!botLogin && gate.stop) {
     output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
@@ -1308,7 +1370,7 @@ export async function resolveCommand(io = {}) {
   const headTree = String(JSON.parse(call(["api", `repos/${repo}/commits/${headSha}`]))?.commit?.tree?.sha ?? "");
   const fullDiff = call(["api", "-H", "Accept: application/vnd.github.diff", pullUrl(repo, number)]);
   const patchId = patchIdOf(fullDiff, io.spawn ?? spawnSync);
-  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId });
+  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId, author: botLogin || gate.author });
   if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused), sha }); return; }
   if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip", sha }); return; }
   const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
