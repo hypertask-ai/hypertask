@@ -1,0 +1,61 @@
+name: HTPR-9639 quick-check proof
+on:
+  push:
+    branches: [mp/htpr-9639-quick-check]
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+      - run: timeout 600 npm ci --prefer-offline --no-audit --no-fund
+      - run: timeout 600 npx prisma generate
+      - name: Production full check and false TS7016 reproduction
+        env:
+          QUICK_CHECK_TYPE_BUDGET_MS: '600000'
+          QUICK_CHECK_FULL_TYPE_BUDGET_MS: '600000'
+        run: |
+          mkdir -p "$RUNNER_TEMP/proof"
+          cp scripts/quick-check.mjs "$RUNNER_TEMP/fixed-quick-check.mjs"
+          git show a1ffa33f6ad12e0b0f1d93bcf5ac34d6ce68b270:scripts/quick-check.mjs > scripts/quick-check.mjs
+          timeout 600 node node_modules/.bin/tsc --noEmit 2>&1 | tee "$RUNNER_TEMP/proof/full-tsc.log"
+          set +e
+          timeout 600 node scripts/quick-check.mjs --files src/app/api/ai-chat/add-message/route.ts > "$RUNNER_TEMP/proof/production-route.log" 2>&1
+          route_status=$?
+          timeout 600 node scripts/quick-check.mjs --files src/utils/helperFunctions/dateParse.ts > "$RUNNER_TEMP/proof/production-date.log" 2>&1
+          date_status=$?
+          set -e
+          cat "$RUNNER_TEMP/proof/production-route.log" "$RUNNER_TEMP/proof/production-date.log"
+          echo "Production route exit=$route_status, dateParse exit=$date_status"
+          test "$date_status" -eq 1
+          grep TS7016 "$RUNNER_TEMP/proof/production-date.log"
+      - name: Regression tests fail on production and real error still blocks
+        run: |
+          set +e
+          timeout 600 node --test --test-name-pattern='project declarations.*false|project globals.*false' tests/quick-check.test.cjs > "$RUNNER_TEMP/proof/red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/proof/red.log"
+          test "$status" -eq 1
+          grep TS7016 "$RUNNER_TEMP/proof/red.log"
+          timeout 600 node --test --test-name-pattern='a type error stops the push' tests/quick-check.test.cjs 2>&1 | tee "$RUNNER_TEMP/proof/production-real-error.log"
+      - name: Fixed partial check and all quick-check tests pass
+        env:
+          QUICK_CHECK_TYPE_BUDGET_MS: '600000'
+          QUICK_CHECK_FULL_TYPE_BUDGET_MS: '600000'
+        run: |
+          cp "$RUNNER_TEMP/fixed-quick-check.mjs" scripts/quick-check.mjs
+          timeout 600 node scripts/quick-check.mjs --files src/utils/helperFunctions/dateParse.ts 2>&1 | tee "$RUNNER_TEMP/proof/fixed-date.log"
+          timeout 600 node --test tests/quick-check.test.cjs 2>&1 | tee "$RUNNER_TEMP/proof/green.log"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: HTPR-9639-proof
+          path: ${{ runner.temp }}/proof

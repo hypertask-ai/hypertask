@@ -16,7 +16,7 @@ function makeRepository(files) {
   git(directory, "init", "-q", "-b", "main");
   git(directory, "config", "user.email", "quick-check@example.test");
   git(directory, "config", "user.name", "quick check");
-  for (const [name, body] of Object.entries(files)) {
+  for (const [name, body] of Object.entries({ "tsconfig.json": '{ "compilerOptions": {} }\n', ...files })) {
     mkdirSync(path.dirname(path.join(directory, name)), { recursive: true });
     writeFileSync(path.join(directory, name), body);
   }
@@ -68,6 +68,7 @@ function run(directory, stubs, { cwd = directory, args = [], env = {} } = {}) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd,
     encoding: "utf8",
+    timeout: 600_000,
     env: {
       ...process.env,
       PATH: `${stubs.directory}:${process.env.PATH}`,
@@ -125,12 +126,65 @@ test("a lint error stops the push", () => {
 test("a type error stops the push", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one: string = 11;\n");
-  const stubs = makeStubs({ tscExit: 2 });
+  const stubs = makeStubs();
+  const compiler = path.resolve(__dirname, "../node_modules/.bin/tsc");
+  writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${compiler}" "$@"\n`);
   const result = run(repository, stubs);
 
-  assert.equal(result.status, 1);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /TS2322/);
   assert.match(result.stderr, /the type check failed; the push was stopped/);
 });
+
+for (const broken of [false, true]) {
+  test(`project declarations prevent false TS7016 without hiding real errors: broken=${broken}`, () => {
+    const repository = makeRepository({
+      "src/one.ts": "export const one = 1;\n",
+      "node_modules/untyped-package/index.js": "exports.value = 1;\n",
+      "types/package.d.ts": 'declare module "untyped-package" { export const value: number; }\n',
+      "config/base.json": JSON.stringify({
+        compilerOptions: { strict: true, skipLibCheck: true, types: [], module: "esnext", moduleResolution: "bundler" },
+        include: ["../src/**/*.ts", "../types/**/*.d.ts"],
+        exclude: ["../types/excluded.d.ts"],
+      }),
+      "types/excluded.d.ts": "declare const missing: DoesNotExist;\n",
+      "tsconfig.json": '{\n  "extends": "./config/base.json",\n}\n',
+    });
+    commit(repository, "src/one.ts", `import { value } from "untyped-package";\nexport const one${broken ? ": string" : ""} = value;\n`);
+    const stubs = makeStubs();
+    const compiler = path.resolve(__dirname, "../node_modules/.bin/tsc");
+    writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${compiler}" "$@"\n`);
+    const full = spawnSync(process.execPath, [compiler, "--noEmit", "-p", path.join(repository, "tsconfig.json")], { encoding: "utf8", timeout: 600_000 });
+    assert.equal(full.status, broken ? 2 : 0, full.stdout + full.stderr);
+
+    const result = run(repository, stubs);
+
+    assert.equal(result.status, broken ? 1 : 0, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stdout, /TS7016/);
+    if (broken) {
+      assert.match(result.stdout, /TS2322/);
+      assert.match(result.stderr, /the type check failed; the push was stopped/);
+    }
+  });
+}
+
+for (const broken of [false, true]) {
+  test(`partial checks use project globals: broken=${broken}`, () => {
+    const repository = makeRepository({
+      "src/one.ts": "export const one = 1;\n",
+      "src/globals.d.ts": "declare const existing: number;\n",
+      "tsconfig.json": JSON.stringify({ compilerOptions: { skipLibCheck: true, types: [] }, include: ["src/**/*.ts"] }),
+    });
+    commit(repository, "src/one.ts", `export const one${broken ? ": string" : ""} = existing;\n`);
+    const stubs = makeStubs();
+    const compiler = path.resolve(__dirname, "../node_modules/.bin/tsc");
+    writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${compiler}" "$@"\n`);
+    const result = run(repository, stubs);
+
+    assert.equal(result.status, broken ? 1 : 0, result.stdout + result.stderr);
+    if (broken) assert.match(result.stdout, /TS2322/);
+  });
+}
 
 test("formatting fixes stop the push until they are committed", () => {
   const repository = makeRepository(TWO_FILES);

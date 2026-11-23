@@ -243,17 +243,26 @@ if (!typeTargets.length && !fullTypecheck) {
     configPath = join(typeDirectory, "full.json");
     cachePath = fullTypeCache;
   }
-  const declarations = split(git(root, ["ls-files", "-z", "--", "*.d.ts"]));
-  const augmentations = split(git(root, [
-    "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
-    "--", ":(glob)src/**/*.ts", ":(glob)src/**/*.tsx",
-  ]));
-  const include = [...new Set([
-    ...(existsSync(join(root, "next-env.d.ts")) ? ["next-env.d.ts"] : []),
-    ...declarations,
-    ...augmentations,
-    ...typeTargets,
-  ])].map((file) => relative(typeDirectory, join(root, file)));
+  let declarations = [];
+  let augmentations = [];
+  if (!fullTypecheck) {
+    const ts = require("typescript");
+    const project = ts.getParsedCommandLineOfConfigFile(join(root, "tsconfig.json"), {}, {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic: (diagnostic) => blocked(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")),
+    });
+    if (project.errors.length) {
+      blocked(project.errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")).join("\n"));
+    }
+    const projectFiles = new Set(project.fileNames);
+    declarations = project.fileNames.filter((file) => /\.d\.(?:ts|mts|cts)$/.test(file));
+    augmentations = split(git(root, [
+      "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
+      "--", ":(glob)src/**/*.ts", ":(glob)src/**/*.tsx",
+    ])).filter((file) => projectFiles.has(join(root, file)));
+  }
+  const include = [...new Set([...declarations, ...augmentations, ...typeTargets.map((file) => join(root, file))])]
+    .map((file) => relative(typeDirectory, file));
   writeFileSync(
     configPath,
     `${JSON.stringify(
