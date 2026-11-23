@@ -41,6 +41,8 @@ function harness() {
     taskExists: true,
     flagChecks: [],
     rateLimitThrows: false,
+    sessionLookupThrows: false,
+    ticketLookupThrows: false,
     identifierLookups: [],
     taskWhere: null,
     projectContentAccessWhere: null,
@@ -48,6 +50,7 @@ function harness() {
   const prisma = {
     task: {
       findFirst: async ({ where, select }) => {
+        if (state.ticketLookupThrows) throw new Error("ticket db down");
         state.ops.push(opOf("task", "findFirst", select));
         state.lookups.push({ where, select, userId: userIdFromWhere(where) });
         const keys = select ? Object.keys(select).sort().join() : "";
@@ -83,6 +86,7 @@ function harness() {
     },
     betterAuthSession: {
       findFirst: async ({ where }) => {
+        if (state.sessionLookupThrows) throw new Error("session db down");
         state.ops.push(opOf("betterAuthSession", "findFirst"));
         const cutoff = where?.expiresAt?.gt;
         const row = state.sessionRows.find((item) => item.token === where?.token && item.userId === where?.userId);
@@ -817,6 +821,34 @@ test("a rate limit outage returns the browser to the ticket", async () => {
     assert.deepEqual(await body.json(), { action: "stay" });
     assert.equal(app.state.lookups.length, 0);
     assert.equal(app.state.listed, 0);
+    assert.deepEqual(app.state.activated, []);
+  } finally {
+    app.restore();
+  }
+});
+
+test("a session or ticket lookup outage returns the browser to the ticket", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: OWNER }, session: { token: OWNER_TOKEN } },
+    ];
+    trust(app);
+    app.state.sessionLookupThrows = true;
+    const sessionPage = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }));
+    assert.equal(sessionPage.status, 303);
+    assert.equal(locationPath(sessionPage), "/detail/project-15/9621");
+    const sessionBody = await app.route(request(ticketBody));
+    assert.deepEqual(await sessionBody.json(), { action: "stay" });
+
+    app.state.sessionLookupThrows = false;
+    app.state.ticketLookupThrows = true;
+    const ticketPage = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }));
+    assert.equal(ticketPage.status, 303);
+    assert.equal(locationPath(ticketPage), "/detail/project-15/9621");
+    const ticketBodyResponse = await app.route(request(ticketBody));
+    assert.equal(ticketBodyResponse.status, 200);
+    assert.deepEqual(await ticketBodyResponse.json(), { action: "stay" });
     assert.deepEqual(app.state.activated, []);
   } finally {
     app.restore();

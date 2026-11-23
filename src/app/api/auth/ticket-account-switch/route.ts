@@ -112,16 +112,26 @@ export async function POST(request: Request) {
   } catch {
     return finish(request, page, "stay", locator);
   }
-  const siblings = await siblingSessions(accounts.filter((account) => account.userId !== user.id));
+  let siblings: DeviceAccount[] = [];
+  try {
+    siblings = await siblingSessions(accounts.filter((account) => account.userId !== user.id));
+  } catch {
+    return finish(request, page, "stay", locator);
+  }
   if (siblings.length === 0) return finish(request, page, "stay", locator);
 
-  const decision = await resolveTicketAccountSwitch({
-    enabled,
-    currentUserId: user.id,
-    projectSlug: locator.projectSlug,
-    uniqueIndex: locator.uniqueIndex,
-    accounts: siblings,
-  });
+  let decision: Awaited<ReturnType<typeof resolveTicketAccountSwitch>>;
+  try {
+    decision = await resolveTicketAccountSwitch({
+      enabled,
+      currentUserId: user.id,
+      projectSlug: locator.projectSlug,
+      uniqueIndex: locator.uniqueIndex,
+      accounts: siblings,
+    });
+  } catch {
+    return finish(request, page, "stay", locator);
+  }
   if (decision.action !== "switch") return finish(request, page, decision.action, locator);
 
   try {
