@@ -234,6 +234,40 @@ test("a day at or under 300,000 commands does not file, and one request over doe
   assert.equal(twoDaysOver.replace, true);
 });
 
+test("a lost alarm lock leaves the sample in place so the next run can still file", async () => {
+  const { runUpstashCommandCheck, UPSTASH_DAILY_COMMAND_LIMIT } = alarm();
+  const opened = Date.parse("2026-11-22T05:51:00.000Z");
+  const sample = { current: JSON.stringify({ total: 10, at: opened }) };
+  const created = [];
+  const at = opened + DAY_MS;
+  const info = `total_commands_processed:${10 + UPSTASH_DAILY_COMMAND_LIMIT + 1}`;
+  const deps = (claim) => ({
+    now: at,
+    info,
+    readSample: async () => sample.current,
+    writeSample: async (value) => { sample.current = value; },
+    claim,
+    findTicket: async () => null,
+    createTicket: async (ticket) => {
+      created.push(ticket);
+      return created.length;
+    },
+  });
+  const lost = await runUpstashCommandCheck(deps(async () => false));
+  assert.equal(lost.filed, false);
+  assert.equal(created.length, 0);
+  assert.equal(sample.current, JSON.stringify({ total: 10, at: opened }));
+  await assert.rejects(() => runUpstashCommandCheck({
+    ...deps(async () => true),
+    createTicket: async () => { throw new Error("board down"); },
+  }));
+  assert.equal(sample.current, JSON.stringify({ total: 10, at: opened }));
+  const filed = await runUpstashCommandCheck(deps(async () => true));
+  assert.equal(filed.filed, true);
+  assert.equal(created.length, 1);
+  assert.equal(JSON.parse(sample.current).total, 10 + UPSTASH_DAILY_COMMAND_LIMIT + 1);
+});
+
 test("the daily alarm files one Urgent ticket and the cron refuses the wrong caller", async () => {
   const { runUpstashCommandCheck, upstashAlarmDay, upstashAlarmMarker, UPSTASH_DAILY_COMMAND_LIMIT } = alarm();
   const now = Date.parse("2026-11-22T05:51:00.000Z");

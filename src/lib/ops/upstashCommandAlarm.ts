@@ -61,6 +61,7 @@ export async function runUpstashCommandCheck(input: {
   const decision = nextCommandSample(parseSample(await input.readSample()), total, input.now);
   let filed = false;
   let taskId: number | null = null;
+  let sampleReady = !decision.alert;
   if (decision.alert && decision.commands !== null && await input.claim()) {
     const day = upstashAlarmDay(input.now);
     const marker = upstashAlarmMarker(day);
@@ -73,8 +74,9 @@ export async function runUpstashCommandCheck(input: {
       });
       filed = true;
     }
+    sampleReady = true;
   }
-  if (decision.replace) await input.writeSample(JSON.stringify(decision.next));
+  if (decision.replace && sampleReady) await input.writeSample(JSON.stringify(decision.next));
   return { commands: decision.commands, filed, taskId };
 }
 
