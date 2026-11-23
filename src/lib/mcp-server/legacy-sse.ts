@@ -210,7 +210,20 @@ export async function handleLegacySseRequest(
         }, LEGACY_SSE_KEEPALIVE_MS)
       }
       if (request.signal.aborted) cleanup()
-      return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
+      const source = Readable.toWeb(stream) as ReadableStream<Uint8Array>
+      const sourceReader = source.getReader()
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          const chunk = await sourceReader.read()
+          if (chunk.done) controller.close()
+          else controller.enqueue(chunk.value)
+        },
+        cancel(reason) {
+          cleanup()
+          return sourceReader.cancel(reason)
+        },
+      })
+      return new Response(body, {
         headers: {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache, no-transform',
