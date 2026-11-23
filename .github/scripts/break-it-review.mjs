@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { authorFamily, completeWithOpenRouter, jsonObjects, pickVerifier, redact } from "../../scripts/pstack-verifier.mjs";
+import { authorFamily, completeWithOpenRouter, jsonObjects, pickVerifier, pullCommits, redact } from "../../scripts/pstack-verifier.mjs";
 
 const TICKET = /https:\/\/app\.hypertask\.ai\/\S+/;
 const SLUG = /^[a-z0-9-]{1,40}$/;
@@ -133,7 +133,8 @@ export async function main(io = {}) {
   const repo = process.env.GITHUB_REPOSITORY;
   const pr = String(process.env.PR ?? ""), sha = String(process.env.HEAD_SHA ?? "");
   if (!/^[0-9]+$/.test(pr) || !/^[0-9a-f]{40}$/.test(sha)) throw new Error("the pull request head is missing");
-  const item = JSON.parse((io.gh ?? ((args) => shell("gh", args)))(["api", `repos/${repo}/pulls/${pr}`]));
+  const call = io.gh ?? ((args) => shell("gh", args));
+  const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const tree = io.repo ?? process.env.CANDIDATE ?? process.cwd();
   let status = { state: "success", broke: 0, unproven: 0, text: "" };
   try {
@@ -143,8 +144,8 @@ export async function main(io = {}) {
     }
     const deps = io.deps ?? process.env.BREAK_IT_DEPS;
     if (deps && deps !== "success") throw new Error("dependencies did not install, so this fix is unproven");
-    const author = authorFamily(item.body);
-    if (!author) throw new Error("the pull request body has no Author-Model line");
+    const author = authorFamily(item.body, pullCommits(call, repo, pr), item.user?.login);
+    if (!author) throw new Error("the pull request has no Author-Model line and no matching commit trailer");
     const model = modelFor(author, process.env.PSTACK_VERIFIER_ALT_MODEL);
     const run = io.git ?? ((args) => shell("git", args, tree));
     const base = item.base?.sha ?? String(run(["merge-base", item.base.ref, sha])).trim();

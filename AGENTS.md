@@ -17,6 +17,7 @@ Paths in reference commands are repository-relative.
 - Add only your agent. Preserve human assignees.
 - Branch from `origin/production`; target `production`.
 - One ticket, one PR. Leave auto-merge off.
+- Name the pull request author family: a bare `Author-Model:` line, or a matching commit trailer.
 - Never stash or discard another session's changes.
 - Never use the archived `hypertask-ai/hypertasks` repository.
 - Verify the successful production deployment and live behavior before Done.
@@ -24,10 +25,6 @@ Paths in reference commands are repository-relative.
 - No explanatory code comments. Express intent in code.
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
-
-| PR author rule | Enforced by |
-| --- | --- |
-| Resolve the author family from the PR body or consistent commit trailers; reject unknown or conflicting families. | `scripts/pstack-verifier.mjs`, `tests/pstack-verifier.test.cjs` |
 
 ## Read X when Y
 

@@ -13,17 +13,26 @@ test("missing Author-Model fails", async () => {
   assert.equal(authorGate("Author-Model: grok").author, "grok");
 });
 
-for (const { name, body = "", messages = [], author = "", commitCount = messages.length } of [
+const RUNNER = "hypertask-runners[bot]";
+
+for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, author = "", commitCount = messages.length } of [
   { name: "parenthesised author model", body: "Author-Model: codex (gpt-6.1-sol)", author: "codex" },
+  { name: "lowercase body line", body: "author-model: claude (claude-opus-5)", author: "claude" },
   { name: "missing body line with codex commit trailer", messages: ["Fix verifier\n\nAuthor-Model: codex"], author: "codex" },
   { name: "missing body line with model coauthor", messages: ["Fix verifier\n\nCo-Authored-By: gpt-6.1-sol <noreply@openai.com>"], author: "codex" },
   { name: "agreeing commit trailers", messages: ["Fix\n\nAuthor-Model: codex", "Test\n\nCo-Authored-By: Codex <noreply@openai.com>"], author: "codex" },
   { name: "disagreeing commits", messages: ["Fix\n\nAuthor-Model: codex", "Test\n\nAuthor-Model: deepseek"] },
+  { name: "body line and commit trailer disagree", body: "Author-Model: claude", messages: ["Fix\n\nAuthor-Model: codex"] },
   { name: "unknown body family cannot fall back", body: "Author-Model: mystery (codex)", messages: ["Fix\n\nAuthor-Model: codex"] },
   { name: "unknown commit family", messages: ["Fix\n\nAuthor-Model: mystery"] },
   { name: "unknown commit family cannot be outvoted", messages: ["Fix\n\nAuthor-Model: mystery", "Test\n\nAuthor-Model: codex"] },
   { name: "incomplete commit list", messages: ["Fix\n\nAuthor-Model: codex"], commitCount: 2 },
   { name: "conflicting author after the first commit page", messages: [...Array.from({ length: 30 }, () => "Fix\n\nAuthor-Model: codex"), "Test\n\nAuthor-Model: deepseek"] },
+  { name: "agent account commits a bot-opened pull request", messages: ["Fix\n\nCo-Authored-By: OpenAI <noreply@openai.com>"], owners: [["codex", "codex"]], author: "codex" },
+  { name: "commit by another author cannot set the family", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "octocat"]], prAuthor: "valentinyeo" },
+  { name: "any attributed commit counts in a bot-opened pull request", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "octocat"]], author: "codex" },
+  { name: "commit authored elsewhere but committed by the pr author", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "valentinyeo"]], prAuthor: "valentinyeo", author: "codex" },
+  { name: "unattributed commit cannot set the family", messages: ["Fix\n\nAuthor-Model: codex"], owners: [[null, null]], prAuthor: "valentinyeo" },
 ]) {
   test(`author resolution: ${name}`, async () => {
     const { resolveCommand } = await load();
@@ -34,7 +43,7 @@ for (const { name, body = "", messages = [], author = "", commitCount = messages
     const output = path.join(dir, "output");
     const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
     const sha = "d".repeat(40);
-    const pull = { number: 7, state: "open", draft: false, user: { login: "hypertask-runners[bot]" }, body, base: { ref: "production", sha: "b".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } }, commits: commitCount };
+    const pull = { number: 7, state: "open", draft: false, user: { login: prAuthor }, body, base: { ref: "production", sha: "b".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } }, commits: commitCount };
     Object.assign(process.env, { GITHUB_REPOSITORY: "acme/app", GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", WORK: dir, GITHUB_OUTPUT: output });
     try {
       await resolveCommand({
@@ -42,7 +51,10 @@ for (const { name, body = "", messages = [], author = "", commitCount = messages
         gh: (args) => {
           const url = args.join(" ");
           if (url.includes("/pulls/7/commits")) {
-            const commits = messages.map((message, index) => ({ sha: index === messages.length - 1 ? sha : "c".repeat(40), commit: { message } }));
+            const commits = messages.map((message, index) => {
+              const [login, committer] = owners[index] ?? [RUNNER, RUNNER];
+              return { sha: index === messages.length - 1 ? sha : "c".repeat(40), author: { login }, committer: { login: committer }, commit: { message } };
+            });
             if (!args.includes("--paginate")) return JSON.stringify(commits.slice(0, 30));
             const pages = Array.from({ length: Math.max(1, Math.ceil(commits.length / 30)) }, (_, index) => commits.slice(index * 30, (index + 1) * 30));
             return args.includes("--slurp") ? JSON.stringify(pages) : pages.map((page) => JSON.stringify(page)).join("\n");
@@ -75,22 +87,31 @@ for (const { name, body = "", messages = [], author = "", commitCount = messages
   });
 }
 
-test("author trailers fail closed without treating prose or human coauthors as model evidence", async () => {
+test("author trailers fail closed without treating prose, other authors or human coauthors as model evidence", async () => {
   const { authorGate } = await load();
-  const commits = (...messages) => messages.map((message) => ({ commit: { message } }));
+  const commits = (...messages) => messages.map((message) => ({ author: { login: RUNNER }, committer: { login: RUNNER }, commit: { message } }));
+  const gate = (body, ...messages) => authorGate(body, commits(...messages), RUNNER);
   for (const family of ["claude", "deepseek", "grok", "codex", "other"]) {
     assert.equal(authorGate(`Author-Model: ${family.toUpperCase()} (model id)\r\n`).author, family);
   }
-  assert.equal(authorGate("Author-Model: codex", commits("Fix\n\nAuthor-Model: deepseek")).author, "codex");
-  assert.equal(authorGate("", commits("Fix\n\nCo-Authored-By: Codex Claude <noreply@example.com>")).stop, true);
-  assert.equal(authorGate("", commits("Fix\n\nAuthor-Model: codex\nCo-Authored-By: Claude <noreply@anthropic.com>")).stop, true);
-  assert.equal(authorGate("", commits("Fix\n\nCo-Authored-By: A human <human@example.com>")).stop, true);
-  assert.equal(authorGate("", commits("Author-Model: codex\n\nUnrelated prose")).stop, true);
-  assert.equal(authorGate("", commits("Author-Model: codex")).stop, true);
-  assert.equal(authorGate("", commits("Fix\n\nAuthor-Model: codex\nUnrelated prose")).stop, true);
-  assert.equal(authorGate("Author-Model:\ncodex", commits("Fix\n\nAuthor-Model: codex")).stop, true);
-  assert.equal(authorGate("Author-Model: codex\nAuthor-Model: deepseek").stop, true);
-  assert.equal(authorGate("", commits("Fix\n\nCo-Authored-By: Codex <noreply@openai.com>\nCo-Authored-By: A human <human@example.com>")).author, "codex");
+  assert.equal(authorGate("Author-Model: CODEX").author, "codex");
+  assert.equal(gate("", "Fix\n\nAuthor-Model: codex").author, "codex");
+  assert.equal(gate("Author-Model: claude", "Fix\n\nAuthor-Model: codex").stop, true);
+  assert.equal(authorGate("Author-Model: codex", [{ author: { login: "octocat" }, commit: { message: "Fix\n\nAuthor-Model: deepseek" } }], "valentinyeo").author, "codex");
+  assert.equal(authorGate("", [{ author: { login: "octocat" }, committer: { login: "octocat" }, commit: { message: "Fix\n\nAuthor-Model: codex" } }], "valentinyeo").stop, true);
+  assert.equal(authorGate("", [{ author: { login: "octocat" }, committer: { login: "valentinyeo" }, commit: { message: "Fix\n\nAuthor-Model: codex" } }], "valentinyeo").author, "codex");
+  assert.equal(authorGate("", [{ author: { login: "codex" }, committer: { login: "codex" }, commit: { message: "Fix\n\nCo-Authored-By: OpenAI <noreply@openai.com>" } }], RUNNER).author, "codex");
+  assert.equal(authorGate("", [{ commit: { message: "Fix\n\nAuthor-Model: codex" } }], RUNNER).stop, true);
+  assert.equal(authorGate("", commits("Fix\n\nAuthor-Model: codex")).stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex Claude <noreply@example.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nAuthor-Model: codex\nCo-Authored-By: Claude <noreply@anthropic.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: A human <human@example.com>").stop, true);
+  assert.equal(gate("", "Author-Model: codex\n\nUnrelated prose").stop, true);
+  assert.equal(gate("", "Author-Model: codex").stop, true);
+  assert.equal(gate("", "Fix\n\nAuthor-Model: codex\nUnrelated prose").stop, true);
+  assert.equal(gate("Author-Model:\ncodex", "Fix\n\nAuthor-Model: codex").stop, true);
+  assert.equal(gate("Author-Model: codex\nAuthor-Model: deepseek").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex <noreply@openai.com>\nCo-Authored-By: A human <human@example.com>").author, "codex");
 });
 
 test("deepseek author picks the alt model and an empty alt is unevaluated", async () => {
