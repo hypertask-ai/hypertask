@@ -14,69 +14,127 @@ const MEMBER_TOKEN = "member-session";
 const STRANGER_TOKEN = "stranger-session";
 const FORGED_TOKEN = "forged-session";
 
-function allows(where) {
-  if (!where || where.uniqueIndex !== TASK.uniqueIndex) return false;
-  if (where.status?.not !== "Deleted") return false;
-  const project = where.project;
-  if (!project || project.id !== BOARD.id || project.status?.not !== "Deleted") return false;
-  if (!Array.isArray(project.OR)) return false;
-  return project.OR.some((branch) => {
-    if (branch.ownerId === BOARD.ownerId) return true;
-    const some = branch.members?.some;
-    return Boolean(some && some.agentId === null && BOARD.members.includes(some.userId));
-  });
-}
-
 function userIdFromWhere(where) {
   const branches = where?.project?.OR ?? [];
   const owner = branches.find((branch) => typeof branch.ownerId === "number");
   return owner?.ownerId ?? branches.find((branch) => branch.members?.some)?.members.some.userId ?? null;
 }
 
+function opOf(model, op, select) {
+  return `${model}.${op}:${select ? Object.keys(select).sort().join() : ""}`;
+}
+
 function harness() {
   const state = {
     enabled: true,
+    prefixEnabled: true,
     userId: WRONG,
     sessions: [],
+    sessionRows: [],
     activated: [],
+    switchCookies: [],
     lookups: [],
+    ops: [],
     listed: 0,
     alias: null,
     liveSlug: null,
+    taskExists: true,
+    flagChecks: [],
+    identifierLookups: [],
+    taskWhere: null,
+    projectContentAccessWhere: null,
   };
   const prisma = {
     task: {
       findFirst: async ({ where, select }) => {
+        state.ops.push(opOf("task", "findFirst", select));
         state.lookups.push({ where, select, userId: userIdFromWhere(where) });
         const keys = select ? Object.keys(select).sort().join() : "";
-        if (keys === "id" && select.id === true) {
-          if (!where?.project && state.liveSlug && where?.uniqueIndex === state.liveSlug.uniqueIndex && where?.projectId === state.liveSlug.projectId) {
+        if (!where?.project) {
+          if (state.liveSlug && where?.uniqueIndex === state.liveSlug.uniqueIndex && where?.projectId === state.liveSlug.projectId) {
             return { id: state.liveSlug.id };
           }
-          return allows(where) ? { id: TASK.id } : null;
+          if (state.taskExists && where?.uniqueIndex === TASK.uniqueIndex && where?.projectId === TASK.projectId && where?.status?.not === "Deleted") {
+            return { id: TASK.id };
+          }
+          return null;
+        }
+        if (!state.taskExists) return null;
+        if (where?.id === TASK.id && !where.uniqueIndex && keys === "id,projectId,uniqueIndex") {
+          return ticketByProjectAccess(where.project, userIdFromWhere(where))
+            ? { id: TASK.id, projectId: TASK.projectId, uniqueIndex: TASK.uniqueIndex }
+            : null;
+        }
+        if (keys === "id" && select.id === true) {
+          return matchesRealTaskWhere(where) ? { id: TASK.id } : null;
         }
         if (keys === "projectId,uniqueIndex" && select.projectId === true && select.uniqueIndex === true) {
-          return allows(where) ? { projectId: TASK.projectId, uniqueIndex: TASK.uniqueIndex } : null;
+          return matchesRealTaskWhere(where) ? { projectId: TASK.projectId, uniqueIndex: TASK.uniqueIndex } : null;
         }
-        return { id: TASK.id, title: TASK.title };
+        return null;
       },
     },
     taskNumberAlias: {
-      findUnique: async () => state.alias,
+      findUnique: async () => {
+        state.ops.push(opOf("taskNumberAlias", "findUnique"));
+        return state.alias;
+      },
     },
+    betterAuthSession: {
+      findFirst: async ({ where }) => {
+        state.ops.push(opOf("betterAuthSession", "findFirst"));
+        const cutoff = where?.expiresAt?.gt;
+        const row = state.sessionRows.find((item) => item.token === where?.token && item.userId === where?.userId);
+        if (!row || !(cutoff instanceof Date) || !(row.expiresAt > cutoff)) return null;
+        return { userId: row.userId };
+      },
+    },
+  };
+
+  function ticketByProjectAccess(project, userId) {
+    if (!state.projectContentAccessWhere || (userId !== OWNER && userId !== MEMBER)) return false;
+    const expected = { status: { not: "Deleted" }, ...state.projectContentAccessWhere(userId) };
+    return JSON.stringify(project) === JSON.stringify(expected);
+  }
+
+  function matchesRealTaskWhere(where) {
+    const userId = userIdFromWhere(where);
+    if (!state.taskWhere || (userId !== OWNER && userId !== MEMBER)) return false;
+    if (where?.uniqueIndex !== TASK.uniqueIndex || where?.project?.id !== BOARD.id) return false;
+    const expected = state.taskWhere({ projectId: BOARD.id, uniqueIndex: TASK.uniqueIndex }, userId);
+    const expectedWhere = where?.id == null ? expected : { ...expected, id: where.id };
+    return JSON.stringify(where) === JSON.stringify(expectedWhere);
+  }
+  function cookieFrom(headers) {
+    if (!headers) return "";
+    if (typeof headers.get === "function") return headers.get("cookie") ?? "";
+    return headers.cookie ?? "";
+  }
+  const accountIdForToken = {
+    [OWNER_TOKEN]: OWNER,
+    [MEMBER_TOKEN]: MEMBER,
+    [STRANGER_TOKEN]: STRANGER,
   };
   const auth = {
     api: {
-      listDeviceSessions: async () => {
+      listDeviceSessions: async ({ headers } = {}) => {
         state.listed += 1;
+        const cookie = cookieFrom(headers);
+        if (!cookie.includes("better-auth.session_token=active")) return [];
         return state.sessions;
       },
-      setActiveSession: async ({ body }) => {
+      setActiveSession: async ({ body, headers }) => {
         state.activated.push(body.sessionToken);
-        return new Response(null, {
-          status: 200,
-          headers: { "set-cookie": `better-auth.session_token=${body.sessionToken}; Path=/` },
-        });
+        const cookie = cookieFrom(headers);
+        state.switchCookies.push(cookie);
+        const headerBag = new Headers();
+        headerBag.append("set-cookie", `better-auth.session_token=${body.sessionToken}; Path=/`);
+        if (cookie.includes("better-auth.session_token=active")) {
+          const accountId = accountIdForToken[body.sessionToken];
+          headerBag.append("set-cookie", `ht_session=bridge-${body.sessionToken}; Path=/; HttpOnly`);
+          headerBag.append("set-cookie", `nookies_user=${encodeURIComponent(JSON.stringify({ id: accountId, displayName: "Ada Owner" }))}; Path=/`);
+        }
+        return new Response(null, { status: 200, headers: headerBag });
       },
     },
   };
@@ -95,7 +153,12 @@ function harness() {
       getServerCookieUser: async () => (state.userId == null ? null : { id: state.userId }),
     },
     "@/lib/flags": {
-      isFeatureEnabled: async () => state.enabled,
+      isFeatureEnabled: async (flag, userId) => {
+        state.flagChecks.push([flag, userId]);
+        if (flag === "htpr-6868-ticket-prefix") return state.prefixEnabled;
+        if (flag === "htpr-9621-auto-switch-account") return state.enabled;
+        return false;
+      },
     },
     "@/lib/flags/definitions/htpr-9621-auto-switch-account": {
       HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG: "htpr-9621-auto-switch-account",
@@ -114,10 +177,21 @@ function harness() {
     },
     "@/lib/auth/agentScope": { agentScopeEnforced: () => true },
     "@/lib/tasks/sameBoardRelations": { stripForeignTaskRelations: (task) => task },
-    "@vercel/functions": { waitUntil: () => {} },
+    "@vercel/functions": { waitUntil: () => {}, ipAddress: () => "203.0.113.4" },
     "@/lib/realtime/server": { broadcastTaskChange: async () => {} },
     "@/lib/mcp/tasks/resolveTask": {
-      findTaskByIdentifier: async () => null,
+      findTaskByIdentifier: async (user, options, _agentId, projectAccess) => {
+        state.identifierLookups.push({
+          userId: user?.id,
+          ticket: options?.ticket_number,
+          projectId: options?.project_id,
+          projectAccess,
+        });
+        if (String(options?.ticket_number ?? "").toUpperCase() !== "HT-9621") return null;
+        if (options?.project_id !== BOARD.id || !state.taskExists) return null;
+        if (!ticketByProjectAccess(projectAccess, user?.id)) return null;
+        return { id: TASK.id, projectId: BOARD.id };
+      },
       TaskIdentifierAmbiguityError: class TaskIdentifierAmbiguityError extends Error {},
     },
     "@/lib/cycles": { CYCLE_WINDOW_SIZE: 2 },
@@ -144,11 +218,15 @@ function harness() {
   const route = load("src/app/api/auth/ticket-account-switch/route.ts", mocks);
   const access = load("src/lib/auth/ticketAccountSwitch.ts", mocks);
   const detail = load("src/utils/controllers/taskDetail/load.ts", mocks);
+  const projects = load("src/utils/controllers/projects/getAllIncludes.ts", mocks);
+  state.taskWhere = detail.taskWhere;
+  state.projectContentAccessWhere = projects.projectContentAccessWhere;
   return {
     state,
     route: route.POST,
     openTicketForAccount: access.openTicketForAccount,
     taskWhere: detail.taskWhere,
+    projectContentAccessWhere: projects.projectContentAccessWhere,
     parseDetailSlug: detail.parseDetailSlug,
     restore() {
       if (previous === undefined) delete process.env.BETTER_AUTH_ENABLED;
@@ -171,6 +249,21 @@ function formRequest(fields) {
     headers: { "content-type": "application/x-www-form-urlencoded", cookie: "better-auth.session_token=active" },
     body: new URLSearchParams(fields),
   });
+}
+
+function trust(app, sessions = app.state.sessions) {
+  app.state.sessionRows = sessions.map((row) => ({
+    token: row.session.token,
+    userId: Number(row.user.id),
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  }));
+}
+
+function bridgeUser(response) {
+  const listed = cookieHeader(response).split("\n");
+  const raw = listed.find((cookie) => cookie.startsWith("nookies_user="));
+  if (!raw) return null;
+  return JSON.parse(decodeURIComponent(raw.slice("nookies_user=".length).split(";")[0]));
 }
 
 function locationPath(response) {
@@ -198,6 +291,7 @@ test("refuses a ticket the signed-in account cannot open", async () => {
       { user: { id: STRANGER, email: "stranger@example.com" }, session: { token: STRANGER_TOKEN } },
       { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
     ];
+    trust(app);
     const refused = await app.openTicketForAccount(WRONG, "project-15", "9621");
     assert.equal(refused, null);
     const stranger = await app.openTicketForAccount(STRANGER, "project-15", "9621");
@@ -214,6 +308,11 @@ test("refuses a ticket the signed-in account cannot open", async () => {
     const wrongLookup = app.state.lookups.find((lookup) => lookup.userId === WRONG);
     assert.ok(wrongLookup);
     assert.deepEqual(wrongLookup.where, app.taskWhere(slug, WRONG));
+    assert.deepEqual(wrongLookup.where.project, {
+      id: slug.projectId,
+      status: { not: "Deleted" },
+      ...app.projectContentAccessWhere(WRONG),
+    });
     assert.deepEqual(wrongLookup.select, { id: true });
   } finally {
     app.restore();
@@ -241,6 +340,7 @@ test("the account that can open the ticket still opens it through the same check
     app.state.sessions = [
       { user: { id: String(OWNER), email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
     ];
+    trust(app);
     app.state.lookups.length = 0;
     const response = await app.route(request(ticketBody));
     assert.equal(response.status, 200);
@@ -250,12 +350,22 @@ test("the account that can open the ticket still opens it through the same check
     const switched = app.state.lookups.find((lookup) => lookup.userId === OWNER);
     assert.ok(switched);
     assert.deepEqual(switched.where, app.taskWhere(slug, OWNER));
-    assert.equal(allows(switched.where), true);
+    assert.deepEqual(switched.where.project, {
+      id: slug.projectId,
+      status: { not: "Deleted" },
+      ...app.projectContentAccessWhere(OWNER),
+    });
+    const openedAs = bridgeUser(response);
+    assert.equal(openedAs?.id, OWNER);
+    assert.equal(cookieHeader(response).includes("ht_session=bridge-owner-session"), true);
+    assert.equal(app.state.switchCookies[0]?.includes("better-auth.session_token=active"), true);
+    assert.deepEqual(await app.openTicketForAccount(openedAs.id, "project-15", "9621"), { id: TASK.id });
 
     app.state.userId = OWNER;
     app.state.sessions = [
       { user: { id: STRANGER }, session: { token: STRANGER_TOKEN } },
     ];
+    trust(app);
     app.state.activated.length = 0;
     const alreadyOpen = await app.route(request(ticketBody));
     assert.deepEqual(await alreadyOpen.json(), { action: "stay" });
@@ -272,6 +382,7 @@ test("a forged account id cannot open a ticket that device sessions cannot see",
     app.state.sessions = [
       { user: { id: STRANGER, email: "stranger@example.com" }, session: { token: STRANGER_TOKEN } },
     ];
+    trust(app);
     const response = await app.route(request(ticketBody));
     assert.deepEqual(await response.json(), { action: "stay" });
     assert.deepEqual(app.state.activated, []);
@@ -296,6 +407,7 @@ test("an old ticket number still opens for the account that can see where it mov
     app.state.sessions = [
       { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
     ];
+    trust(app);
     const response = await app.route(request({ projectSlug: "project-15", uniqueIndex: "1000", title: TASK.title }));
     const body = await response.json();
     assert.deepEqual(body, { action: "switch" });
@@ -326,6 +438,7 @@ test("a form post returns to that ticket and carries only the account that can o
       { user: { id: STRANGER, email: "stranger@example.com" }, session: { token: STRANGER_TOKEN } },
       { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
     ];
+    trust(app);
     const response = await app.route(formRequest({
       projectSlug: "project-15",
       uniqueIndex: "9621",
@@ -338,6 +451,12 @@ test("a form post returns to that ticket and carries only the account that can o
     assert.equal(new URL(response.headers.get("location")).origin, "https://app.hypertask.ai");
     const cookies = cookieHeader(response);
     assert.equal(cookies.includes(OWNER_TOKEN), true);
+    assert.equal(cookies.includes("ht_session=bridge-owner-session"), true);
+    assert.equal(cookies.includes("nookies_user="), true);
+    assert.equal(app.state.switchCookies[0]?.includes("better-auth.session_token=active"), true);
+    const openedAs = bridgeUser(response);
+    assert.equal(openedAs?.id, OWNER);
+    assert.deepEqual(await app.openTicketForAccount(openedAs.id, "project-15", "9621"), { id: TASK.id });
     assert.equal(cookies.includes(TASK.title), false);
     assert.equal(cookies.includes("owner@example.com"), false);
     assert.deepEqual(app.state.activated, [OWNER_TOKEN]);
@@ -361,6 +480,7 @@ test("several accounts send the browser back with a choose mark and name none of
       { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
       { user: { id: MEMBER, email: "member@example.com" }, session: { token: MEMBER_TOKEN } },
     ];
+    trust(app);
     const response = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }));
     assert.equal(response.status, 303);
     assert.equal(locationPath(response), "/detail/project-15/9621");
@@ -384,6 +504,7 @@ test("several accounts that can open the ticket show the switcher and name none 
       { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
       { user: { id: MEMBER, email: "member@example.com" }, session: { token: MEMBER_TOKEN } },
     ];
+    trust(app);
     const response = await app.route(request(ticketBody));
     const body = await response.json();
     assert.deepEqual(body, { action: "choose" });
@@ -407,6 +528,7 @@ test("the flag off leaves the block page without checking other accounts", async
     ];
     const response = await app.route(request(ticketBody));
     assert.deepEqual(await response.json(), { action: "stay" });
+    assert.deepEqual(app.state.flagChecks, [["htpr-9621-auto-switch-account", WRONG]]);
     assert.equal(app.state.listed, 0);
     assert.equal(app.state.lookups.length, 0);
     assert.deepEqual(app.state.activated, []);
@@ -431,10 +553,17 @@ test("ticket links outside a numeric detail url do not ask who can open them", a
     uniqueIndex: "9621",
   });
   assert.equal(ticketDetailLocator("/unauthorized"), null);
-  assert.equal(ticketDetailLocator("/detail/project-15/HT-9621"), null);
+  assert.deepEqual(ticketDetailLocator("/detail/project-15/HT-9621"), {
+    projectSlug: "project-15",
+    uniqueIndex: "HT-9621",
+  });
   assert.equal(ticketDetailFields("project-15", "9621")?.uniqueIndex, "9621");
   assert.equal(ticketDetailFields("board-15", "9621"), null);
-  assert.equal(ticketDetailFields("project-15", "HT-9621"), null);
+  assert.deepEqual(ticketDetailFields("project-15", "HT-9621"), {
+    projectSlug: "project-15",
+    uniqueIndex: "HT-9621",
+  });
+  assert.equal(ticketAccountSwitchPath("/detail/project-15/HT-9621"), "/detail/project-15/HT-9621");
   assert.equal(ticketAccountSwitchPath("/detail/project-15/9621/"), "/detail/project-15/9621");
   assert.equal(ticketAccountSwitchPath("/detail/project-15/9621?next=https://evil.test"), "/detail/project-15/9621");
   assert.equal(ticketAccountSwitchPath("//evil.test/detail/project-15/9621"), null);
@@ -537,6 +666,196 @@ test("choosing an account reloads that ticket, and any other return path still o
     assert.deepEqual(opened, ["switcher"]);
     assert.equal(cookie.includes("Max-Age=0"), true);
     assert.equal(storage.get("ticket-account-switch-return"), "/detail/project-15/1000");
+  } finally {
+    global.window = previousWindow;
+    global.document = previousDocument;
+  }
+});
+
+test("a missing ticket and a ticket no verified sibling can open answer the same way", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: STRANGER, email: "stranger@example.com" }, session: { token: STRANGER_TOKEN } },
+    ];
+    trust(app);
+    app.state.taskExists = false;
+    const missing = await app.route(request({ projectSlug: "project-15", uniqueIndex: "9621" }));
+    const missingBody = await missing.json();
+    const missingOps = app.state.ops.slice();
+
+    app.state.taskExists = true;
+    app.state.ops = [];
+    const hidden = await app.route(request({ projectSlug: "project-15", uniqueIndex: "9621" }));
+    const hiddenBody = await hidden.json();
+
+    assert.deepEqual(missingBody, { action: "stay" });
+    assert.deepEqual(hiddenBody, missingBody);
+    assert.equal(missing.status, hidden.status);
+    assert.deepEqual(hiddenBody, { action: "stay" });
+    assert.deepEqual(app.state.ops, missingOps);
+    assert.equal(missingOps.some((op) => op.startsWith("task.findFirst")), true);
+    assert.equal(JSON.stringify(missingBody).includes(String(TASK.id)), false);
+    assert.equal(JSON.stringify(hiddenBody).includes(TASK.title), false);
+    assert.deepEqual(app.state.activated, []);
+  } finally {
+    app.restore();
+  }
+});
+
+test("an unverified sibling session does not reveal whether the ticket exists", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+    ];
+    const hidden = await app.route(request(ticketBody));
+    const hiddenOps = app.state.ops.slice();
+    app.state.taskExists = false;
+    app.state.ops = [];
+    const missing = await app.route(request(ticketBody));
+    assert.deepEqual(await hidden.json(), { action: "stay" });
+    assert.deepEqual(await missing.json(), { action: "stay" });
+    assert.deepEqual(app.state.ops, hiddenOps);
+    assert.equal(hiddenOps.some((op) => op.startsWith("task.")), false);
+    assert.deepEqual(app.state.activated, []);
+    assert.equal(app.state.sessionRows.length, 0);
+  } finally {
+    app.restore();
+  }
+});
+
+test("a prefixed ticket key opens for the account the detail page would allow", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+    ];
+    trust(app);
+    const response = await app.route(request({ projectSlug: "project-15", uniqueIndex: "HT-9621", sessionToken: FORGED_TOKEN }));
+    assert.deepEqual(await response.json(), { action: "switch" });
+    const lookup = app.state.identifierLookups.find((item) => item.userId === OWNER);
+    assert.ok(lookup);
+    assert.deepEqual(lookup.projectAccess, {
+      status: { not: "Deleted" },
+      ...app.projectContentAccessWhere(OWNER),
+    });
+    assert.deepEqual(await app.openTicketForAccount(OWNER, "project-15", "HT-9621"), { id: TASK.id });
+    assert.equal(await app.openTicketForAccount(STRANGER, "project-15", "HT-9621"), null);
+
+    const form = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "HT-9621" }));
+    assert.equal(form.status, 303);
+    assert.equal(locationPath(form), "/detail/project-15/HT-9621");
+    assert.equal(bridgeUser(form)?.id, OWNER);
+    assert.equal(cookieHeader(form).includes("ht_session="), true);
+
+    const lookedUp = app.state.identifierLookups.length;
+    app.state.prefixEnabled = false;
+    app.state.activated = [];
+    const disabled = await app.route(request({ projectSlug: "project-15", uniqueIndex: "HT-9621" }));
+    assert.deepEqual(await disabled.json(), { action: "stay" });
+    assert.deepEqual(app.state.activated, []);
+    assert.equal(app.state.identifierLookups.length, lookedUp);
+  } finally {
+    app.restore();
+  }
+});
+
+test("repeated probes stop before another ticket lookup", async () => {
+  const app = harness();
+  try {
+    const limit = load("src/lib/auth/ticketAccountSwitchRateLimit.ts", {
+      "@/lib/redis": { getRedis: async () => { throw new Error("redis down"); } },
+      "@/lib/auth/qaLoginRateLimit": { getQaLoginClientIp: () => "203.0.113.4" },
+    }).TICKET_ACCOUNT_SWITCH_USER_LIMIT;
+    app.state.sessions = [
+      { user: { id: OWNER }, session: { token: OWNER_TOKEN } },
+    ];
+    trust(app);
+    for (let attempt = 0; attempt < limit; attempt += 1) {
+      const response = await app.route(request(ticketBody));
+      assert.equal((await response.json()).action, "switch");
+    }
+    const lookups = app.state.lookups.length;
+    const listed = app.state.listed;
+    const blocked = await app.route(request(ticketBody));
+    assert.deepEqual(await blocked.json(), { action: "stay" });
+    assert.equal(blocked.status, 200);
+    assert.equal(app.state.lookups.length, lookups);
+    assert.equal(app.state.listed, listed);
+    assert.equal(app.state.activated.length, limit);
+  } finally {
+    app.restore();
+  }
+});
+
+test("the toast names the account that was switched to and other tabs reload", () => {
+  const previousWindow = global.window;
+  const previousDocument = global.document;
+  const events = [];
+  const notices = [];
+  const storage = new Map();
+  const local = new Map();
+  const listeners = [];
+  let cookie = `nookies_user=${encodeURIComponent(JSON.stringify({ id: OWNER, displayName: "Ada Owner" }))}`;
+  global.window = {
+    location: {
+      pathname: "/detail/project-15/9621",
+      reload: () => events.push("reload"),
+      assign: (url) => events.push(["assign", url]),
+    },
+    sessionStorage: {
+      getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, value),
+      removeItem: (key) => storage.delete(key),
+    },
+    localStorage: {
+      getItem: (key) => (local.has(key) ? local.get(key) : null),
+      setItem: (key, value) => local.set(key, value),
+      removeItem: (key) => local.delete(key),
+    },
+    addEventListener: (type, listener) => listeners.push([type, listener]),
+    removeEventListener: () => {},
+  };
+  global.document = {
+    get cookie() { return cookie; },
+    set cookie(value) {
+      const pair = value.split(";")[0];
+      const name = pair.slice(0, pair.indexOf("="));
+      const parts = cookie.split("; ").filter((part) => part && !part.startsWith(`${name}=`));
+      if (!value.includes("Max-Age=0") && pair.slice(name.length + 1)) parts.push(pair);
+      cookie = parts.join("; ");
+    },
+  };
+  try {
+    const locator = load("src/lib/auth/ticketDetailLocator.ts");
+    assert.equal(locator.consumeAccountSwitchNotice(), null);
+    const stopOldTab = locator.syncSwitchedAccountTabs(WRONG, (message) => notices.push(message));
+    assert.deepEqual(notices, []);
+    locator.rememberSwitchedAccount("Ada Owner", OWNER);
+    const stopNewTab = locator.syncSwitchedAccountTabs(OWNER, (message) => notices.push(message));
+    assert.deepEqual(notices, ["Switched to Ada Owner"]);
+    assert.equal(local.get("ht-active-account"), String(OWNER));
+    const oldTab = listeners[0][1];
+    oldTab({ key: "ht-active-account", newValue: String(OWNER) });
+    assert.deepEqual(events, ["reload"]);
+    oldTab({ key: "ht-active-account", newValue: String(WRONG) });
+    assert.deepEqual(events, ["reload"]);
+    oldTab({ key: "other", newValue: "9" });
+    assert.deepEqual(events, ["reload"]);
+    stopOldTab();
+    stopNewTab();
+
+    notices.length = 0;
+    cookie = [
+      "ticket-account-switched=1",
+      `nookies_user=${encodeURIComponent(JSON.stringify({ id: MEMBER, email: "member@example.com" }))}`,
+    ].join("; ");
+    locator.syncSwitchedAccountTabs(MEMBER, (message) => notices.push(message));
+    assert.deepEqual(notices, ["Switched to member@example.com"]);
+    listeners.at(-1)[1]({ key: "ht-active-account", newValue: String(MEMBER) });
+    assert.deepEqual(events, ["reload"]);
+    assert.equal(cookie.includes("ticket-account-switched=1"), false);
   } finally {
     global.window = previousWindow;
     global.document = previousDocument;

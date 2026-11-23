@@ -2,13 +2,19 @@ import { NextResponse } from "next/server";
 
 import {
   TICKET_ACCOUNT_SWITCH_CHOOSE,
+  TICKET_ACCOUNT_SWITCHED,
   ticketDetailFields,
   type TicketDetailLocator,
 } from "@/lib/auth/ticketDetailLocator";
 import {
   resolveTicketAccountSwitch,
+  siblingSessions,
   type DeviceAccount,
 } from "@/lib/auth/ticketAccountSwitch";
+import {
+  claimTicketAccountSwitchAttempt,
+  getTicketAccountSwitchClientIp,
+} from "@/lib/auth/ticketAccountSwitchRateLimit";
 import { auth } from "@/lib/auth/betterAuth";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
@@ -77,6 +83,9 @@ function finish(request: Request, page: boolean, action: "stay" | "choose" | "sw
     response.headers.append("set-cookie", `${TICKET_ACCOUNT_SWITCH_CHOOSE}=choose; Path=/; Max-Age=30; SameSite=Lax`);
   }
   for (const cookie of setCookies) response.headers.append("set-cookie", cookie);
+  if (action === "switch") {
+    response.headers.append("set-cookie", `${TICKET_ACCOUNT_SWITCHED}=1; Path=/; Max-Age=30; SameSite=Lax`);
+  }
   return response;
 }
 
@@ -87,19 +96,26 @@ export async function POST(request: Request) {
   const enabled = await isFeatureEnabled(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG, user.id);
   if (!enabled || !locator) return finish(request, page, "stay", locator);
 
+  const clientIp = getTicketAccountSwitchClientIp(request);
+  if (!clientIp) return finish(request, page, "stay", locator);
+  const attempt = await claimTicketAccountSwitchAttempt(user.id, clientIp);
+  if (!attempt.allowed) return finish(request, page, "stay", locator);
+
   let accounts: DeviceAccount[] = [];
   try {
     accounts = await deviceAccounts(request);
   } catch {
     return finish(request, page, "stay", locator);
   }
+  const siblings = await siblingSessions(accounts.filter((account) => account.userId !== user.id));
+  if (siblings.length === 0) return finish(request, page, "stay", locator);
 
   const decision = await resolveTicketAccountSwitch({
-    enabled: true,
+    enabled,
     currentUserId: user.id,
     projectSlug: locator.projectSlug,
     uniqueIndex: locator.uniqueIndex,
-    accounts,
+    accounts: siblings,
   });
   if (decision.action !== "switch") return finish(request, page, decision.action, locator);
 

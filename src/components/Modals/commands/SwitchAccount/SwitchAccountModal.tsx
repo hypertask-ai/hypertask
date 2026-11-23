@@ -22,7 +22,7 @@ import {
   SwitchAccount,
 } from "@/lib/auth/accounts";
 import { authClient } from "@/lib/auth/betterAuthClient";
-import { forgetTicketAccountSwitch, openSwitchedTicketAccount, ticketAccountSwitchStays } from "@/lib/auth/ticketDetailLocator";
+import { forgetTicketAccountSwitch, openSwitchedTicketAccount, rememberSwitchedAccount, ticketAccountSwitchStays } from "@/lib/auth/ticketDetailLocator";
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
 
 interface ISwitchAccountModal {
@@ -92,6 +92,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
         switched = await switchAccount(account.sessionToken);
       }
       if (switched) {
+        rememberSwitchedAccount(account.name ?? account.email ?? "Account", account.id);
         if (stay) openSwitchedTicketAccount();
         return;
       }

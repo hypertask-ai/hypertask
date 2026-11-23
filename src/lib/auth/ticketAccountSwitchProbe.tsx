@@ -5,9 +5,10 @@ import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useStore } from "jotai";
 import { parseCookies } from "nookies";
+import toast from "react-hot-toast";
 import authConfig from "@/lib/configs/auth.config";
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
-import { submitTicketAccountSwitch } from "@/lib/auth/ticketDetailLocator";
+import { submitTicketAccountSwitch, syncSwitchedAccountTabs } from "@/lib/auth/ticketDetailLocator";
 
 function signedInUserId(): number {
   try {
@@ -24,6 +25,9 @@ export function TicketAccountSwitchProbe() {
   const pathname = usePathname() ?? "";
   const client = useQueryClient();
   const store = useStore();
+  useEffect(() => syncSwitchedAccountTabs(signedInUserId(), (message) => {
+    toast(message);
+  }), [pathname]);
   useEffect(() => {
     const ask = () => {
       const userId = signedInUserId();
