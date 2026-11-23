@@ -152,6 +152,13 @@ export function syncSwitchedAccountTabs(userId: number, notify: (message: string
   return () => window.removeEventListener("storage", onStorage);
 }
 
+const TICKET_ACCOUNT_SWITCH_ATTEMPT_TTL_MS = 5 * 60_000;
+
+export function ticketAccountSwitchAttemptFresh(raw: string | null): boolean {
+  const at = Number(raw);
+  return Number.isFinite(at) && at > 0 && Date.now() - at < TICKET_ACCOUNT_SWITCH_ATTEMPT_TTL_MS;
+}
+
 export function submitTicketAccountSwitch(pathname: string, openSwitcher: () => void) {
   if (typeof document === "undefined" || !document.getElementById("unauthorized-title")) return;
   const locator = ticketDetailLocator(pathname);
@@ -165,8 +172,8 @@ export function submitTicketAccountSwitch(pathname: string, openSwitcher: () => 
   }
   const attemptKey = `ticket-account-switch:${pathname}`;
   const storage = ticketSwitchStorage();
-  if (!storage || storage.getItem(attemptKey)) return;
-  storage.setItem(attemptKey, "1");
+  if (!storage || ticketAccountSwitchAttemptFresh(storage.getItem(attemptKey))) return;
+  storage.setItem(attemptKey, String(Date.now()));
   const form = document.createElement("form");
   form.method = "POST";
   form.action = "/api/auth/ticket-account-switch";

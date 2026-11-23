@@ -756,10 +756,14 @@ test("choosing an account reloads that ticket, and any other return path still o
     assert.equal(forms.length, 1);
     assert.deepEqual(opened, []);
 
+    storage.set("ticket-account-switch:/detail/project-15/9621", String(Date.now() - 6 * 60_000));
+    locator.submitTicketAccountSwitch("/detail/project-15/9621", () => opened.push("switcher"));
+    assert.equal(forms.length, 2);
+
     cookie = "ticket-account-switch=choose";
     global.window.location.pathname = "/detail/project-15/1000";
     locator.submitTicketAccountSwitch("/detail/project-15/1000", () => opened.push("switcher"));
-    assert.equal(forms.length, 1);
+    assert.equal(forms.length, 2);
     assert.deepEqual(opened, ["switcher"]);
     assert.equal(cookie.includes("Max-Age=0"), true);
     assert.equal(storage.get("ticket-account-switch-return"), "/detail/project-15/1000");
