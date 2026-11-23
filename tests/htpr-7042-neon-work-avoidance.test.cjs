@@ -294,6 +294,29 @@ test("HTPR-8978 command-line flag requests stay off Redis on cold and expired re
   assert.equal(h.redisAcquisitions, 0);
   assert.ok(h.tables >= 1);
 });
+test("HTPR-8978 turning the skip flag off leaves the Upstash snapshot for the following read", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const h = flagHarness();
+  const skip = "htpr-8978-agent-upstash-skip";
+  h.rows.set(skip, { key: skip, mode: "EVERYONE" });
+  assert.equal(await h.modeCache.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(target, 7), "cli"), true);
+  assert.equal(h.redisAcquisitions, 0);
+  now = 60_000;
+  h.rows.get(skip).mode = "OFF";
+  assert.equal(await h.modeCache.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(skip, 7), "cli"), false);
+  assert.equal(h.redisAcquisitions, 0);
+  assert.ok(h.modeCache.readProcessFlagCache());
+  h.modeCache.releaseFlagSnapshotUnless(false);
+  assert.equal(h.modeCache.readProcessFlagCache(), undefined);
+  assert.equal(await h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(target, 7)), true);
+  assert.equal(h.redisAcquisitions, 1);
+  const held = h.redisAcquisitions;
+  now = 90_000;
+  assert.equal(await h.flags.withFeatureFlagSnapshot(() => h.flags.isFeatureEnabled(target, 7)), true);
+  assert.equal(h.redisAcquisitions, held);
+  assert.match(read("src/lib/mcp-server/handler.ts"), /releaseFlagSnapshotUnless\(skipUpstash\)/);
+  assert.match(read("src/lib/mcp/auth/rateLimit.ts"), /releaseFlagSnapshotUnless\(skip\)/);
+});
 test("HTPR-8978 an agent cannot join a human lookup that is using Redis", async () => {
   const h = flagHarness();
   let release, entered;

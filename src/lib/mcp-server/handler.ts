@@ -18,7 +18,7 @@ import { selectMcpTools } from './consolidated-tools'
 import { appendAgentChatTools } from './tools/chat-inbox.tool'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { featureFlagCandidateUserIds, isFeatureEnabled, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
-import { upstashFlagAudience, withFeatureFlagSnapshot as withUpstashFlagAudience } from '@/lib/flags/modeCache'
+import { releaseFlagSnapshotUnless, upstashFlagAudience, withFeatureFlagSnapshot as withUpstashFlagAudience } from '@/lib/flags/modeCache'
 import { HTPR_7893_BOARD_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7893-board-alias'
 import { HTPR_7863_MCP_PAGE_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7863-mcp-page-alias'
 import { HTPR_7895_TASK_NUMBER_ALIAS_FLAG } from '@/lib/flags/definitions/htpr-7895-task-number-alias'
@@ -192,6 +192,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
         () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, Number.isFinite(userId) ? userId : 0),
         audience,
       )
+      releaseFlagSnapshotUnless(skipUpstash)
       if (skipUpstash) return await withUpstashFlagAudience(() => serve(), audience)
     }
     return await serve()

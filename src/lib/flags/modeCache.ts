@@ -54,6 +54,10 @@ export function withFeatureFlagSnapshot<T>(run: () => T, audience = flagModeScop
   return flagModeScope.run({ audience }, run);
 }
 
+export function releaseFlagSnapshotUnless(skipUpstash: boolean): void {
+  if (!skipUpstash) clearProcessFlagCache();
+}
+
 export async function flagCacheCommand<T>(operation: Promise<T>, timeoutMs = 100): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

@@ -597,7 +597,7 @@ test("the skip flag follows the authenticated user and a failed login stays off 
       featureFlagCandidateUserIds: async () => null,
       isFeatureEnabled: async (_key, userId) => { userIds.push(userId); return userId === 6; },
     },
-    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run) => run() },
+    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run) => run(), releaseFlagSnapshotUnless: () => {} },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
       validateMcpAuth: async () => null,
@@ -629,7 +629,7 @@ test("distinct unauthenticated command-line tokens stay bounded without resettin
       featureFlagCandidateUserIds: async () => null,
       isFeatureEnabled: async (_key, userId) => { userIds.push(userId); return true; },
     },
-    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run, audience) => { audiences.push(audience); return run(); } },
+    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run, audience) => { audiences.push(audience); return run(); }, releaseFlagSnapshotUnless: () => {} },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
       validateMcpAuth: async () => null,
@@ -659,7 +659,7 @@ test("unauthenticated overflow does not refuse a fresh authenticated caller", as
     "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => 1, expire: async () => 1 }; } },
     "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count", HTPR_8978_AGENT_UPSTASH_SKIP_FLAG: "htpr-8978-agent-upstash-skip" },
     "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => true },
-    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run) => run() },
+    "@/lib/flags/modeCache": { withFeatureFlagSnapshot: (run) => run(), releaseFlagSnapshotUnless: () => {} },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
       validateMcpAuth: async () => null,

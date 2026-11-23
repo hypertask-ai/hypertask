@@ -86,7 +86,7 @@ async function agentRateLimitSkipsUpstash(
   const { isFeatureEnabled } = await import('@/lib/flags')
   if (typeof isFeatureEnabled !== 'function') return { skip: true, authenticated: false }
   const { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } = await import('@/lib/flags/keys')
-  const { withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
+  const { releaseFlagSnapshotUnless, withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
   let userId = unverifiedUserId(token)
   let authenticated = false
   if (resolveAuth) {
@@ -105,6 +105,7 @@ async function agentRateLimitSkipsUpstash(
     () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, userId),
     audience,
   )
+  releaseFlagSnapshotUnless(skip)
   return { skip, authenticated: skip && authenticated }
 }
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
