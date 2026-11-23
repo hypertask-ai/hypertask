@@ -1061,12 +1061,12 @@ test("an api action passes from the preview response with no page navigation", a
   try {
   const { parsePlan, runPlan, decide, buildPrompt } = await load();
   const parsed = parsePlan(JSON.stringify({
-    actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
+    actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "updated" }],
     expect: [],
     reason: "",
   }));
-  assert.deepEqual(parsed.actions[0], { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" });
-  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/project", body: {}, expectStatus: 200, expectText: "saved" }] })), /path is not on this app/);
+  assert.deepEqual(parsed.actions[0], { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "updated" });
+  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/project", body: {}, expectStatus: 200, expectText: "updated" }] })), /path is not on this app/);
   const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
   assert.equal(prompt.includes('"op":"api"'), true);
   assert.equal(buildPrompt({ kind: "judge", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1", plan: parsed, evidence: { steps: [], expects: [], navigations: [], offOrigin: [] } }, "<<<fence>>>").includes("response text"), true);
@@ -1074,7 +1074,7 @@ test("an api action passes from the preview response with no page navigation", a
   const page = {
     async goto() { throw new Error("navigated"); },
     async screenshot() { throw new Error("screenshot"); },
-    request: { async fetch(url, options) { calls.push({ url, options }); return { status: () => 200, async text() { return '{"ok":true,"saved":true}'; } }; } },
+    request: { async fetch(url, options) { calls.push({ url, options }); return { status: () => 200, async text() { return '{"ok":true,"updated":true}'; } }; } },
   };
   const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [] };
   const body = plan(parsed.actions);
@@ -1082,7 +1082,7 @@ test("an api action passes from the preview response with no page navigation", a
   assert.deepEqual(calls, [{ url: "http://127.0.0.1:3100/api/mcp/tasks/7", options: { method: "POST", headers: { Authorization: "Bearer smoke-token" }, maxRedirects: 0, failOnStatusCode: false, data: {} } }]);
   assert.deepEqual(run.navigations, []);
   assert.equal(run.steps[0].ok, true);
-  assert.equal(run.steps[0].text.includes("saved"), true);
+  assert.equal(run.steps[0].text.includes("updated"), true);
   const seen = evidence({ steps: run.steps, expects: run.expects, navigations: [] });
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: body, evidence: seen, binding, checksPassed: true }).verdict, "PASS");
   assert.equal(decide({ model: { verdict: "", notes: "" }, plan: body, evidence: seen, binding }).verdict, "FAIL");
@@ -1094,9 +1094,9 @@ test("an api action passes from the preview response with no page navigation", a
   });
   assert.equal(miss.steps[0].ok, false);
   assert.match(miss.steps[0].error, /response text missing/);
-  assert.equal(decide({ model: { verdict: "PASS", notes: "saved" }, plan: body, evidence: evidence({ steps: miss.steps, expects: [], navigations: [] }), binding }).verdict, "FAIL");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "updated" }, plan: body, evidence: evidence({ steps: miss.steps, expects: [], navigations: [] }), binding }).verdict, "FAIL");
   const down = await runPlan({
-    page: { ...page, request: { async fetch() { return { status: () => 500, async text() { return "saved"; } }; } } },
+    page: { ...page, request: { async fetch() { return { status: () => 500, async text() { return "updated"; } }; } } },
     plan: body,
     ...drive,
     navigations: [],
@@ -1189,6 +1189,106 @@ test("the seed mints an agent token for the seeded agent and exports it", async 
   assert.match(source, /prisma\.chatSession\.create\(/);
   assert.match(source, /replyToMessageId: lastQuestion\.id/);
 });
+
+for (const run of ["45173881467", "45154622521"]) {
+  test(`planner replay ${run} removes copied example expectations`, async () => {
+    const { parsePlan } = await load();
+    const captured = require(`./fixtures/pstack-verifier/planner-${run}.json`);
+    for (const journey of captured.journeys) {
+      const parsed = parsePlan(JSON.stringify(journey));
+      assert.deepEqual(parsed.expect, journey.expect.filter((item) => item.text !== "Core actions smoke"), journey.journey);
+      assert.equal(parsed.actions.length, journey.actions.length);
+    }
+  });
+}
+
+test("planner example literals cannot become text expectations", async () => {
+  const { buildPrompt, parsePlan } = await load();
+  const examples = new Set(["Core actions smoke", "saved", "Smoke"]);
+  for (const kind of ["plan", "page"]) {
+    const prompt = buildPrompt({ kind });
+    const shape = JSON.parse(prompt.split("\nShape: ")[1].split("\n")[0]);
+    for (const action of shape.actions) {
+      for (const key of ["text", "label", "value", "expectText"]) if (action[key]) examples.add(action[key]);
+    }
+    for (const item of shape.expect) if (item.text) examples.add(item.text);
+  }
+  for (const text of examples) {
+    const parsed = parsePlan(JSON.stringify({
+      actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", expectStatus: 200, expectText: ` ${text} ` }],
+      expect: [{ text }, text, { text: "Board rooms" }],
+    }));
+    assert.deepEqual(parsed.expect, [{ text: "Board rooms" }], text);
+    assert.equal(parsed.actions[0].expectText, "", text);
+    assert.equal(parsed.actions[0].expectStatus, 200);
+  }
+  const real = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: "/api/mcp/hello", expectStatus: 200, expectText: "success" }] }));
+  assert.equal(real.actions[0].expectText, "success");
+});
+
+test("planner replay 45173881467 authenticates agent-only refusals before dispatch", async () => {
+  const { parsePlan, runPlan } = await load();
+  const captured = require("./fixtures/pstack-verifier/planner-45173881467.json");
+  const primary = captured.journeys.find((item) => item.journey === "change:primary");
+  const paths = ["/api/mcp/tasks/lease/claim", "/api/mcp/chat/activity", "/api/mcp/chat/sessions/{task}/messages", "/api/mcp/agents/runs/{task}/activities"];
+  const parsed = parsePlan(JSON.stringify({ ...primary, actions: primary.actions.filter((action) => paths.includes(action.path)), expect: [] }));
+  assert.deepEqual(parsed.actions.map((action) => action.auth), paths.map(() => "agent"));
+  const sent = [];
+  const result = await runPlan({
+    page: { request: { async fetch(url, options) {
+      sent.push(options.headers.Authorization);
+      const agent = options.headers.Authorization === "Bearer seeded-agent";
+      return { status: () => agent ? 400 : 403, text: async () => agent ? "invalid" : "Task mutation leases require an agent token" };
+    } } },
+    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
+  });
+  assert.deepEqual(sent, paths.map(() => "Bearer seeded-agent"));
+  assert.equal(result.steps.length, paths.length);
+  assert.equal(result.steps.every((step) => step.ok), true);
+});
+
+test("every route refusing non-agent callers gets agent auth at the plan boundary", async () => {
+  const { parsePlan } = await load();
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const root = path.join(__dirname, "../src/app/api");
+  const guarded = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && /requires? an agent token/i.test(fs.readFileSync(path.join(root, file), "utf8")));
+  assert.ok(guarded.length >= 9);
+  for (const file of guarded) {
+    const route = `/api/${file.slice(0, -"/route.ts".length).replace(/\[[^/]+\]/g, "7")}`;
+    for (const target of [route, `${route}?limit=1`]) {
+      const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: target, expectStatus: 400 }] }));
+      assert.equal(parsed.actions[0].auth, "agent", file);
+    }
+  }
+  for (const route of ["/api/mcp/tasks/{task}", "/api/mcp/tasks/lease/claim-extra", "/api/mcp/agents/runs/7/activities-extra"]) {
+    const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: route, expectStatus: 200 }] }));
+    assert.equal(parsed.actions[0].auth, undefined, route);
+  }
+});
+
+for (const { expected, actual, ok } of [
+  { expected: "/project?id={id}", actual: "/project?id=1&view=default", ok: true },
+  { expected: "/project?id={id}", actual: "/project?view=default&id=1", ok: true },
+  { expected: "/project?id={id}", actual: "/project?id=10&view=default", ok: false },
+  { expected: "/project?id={id}", actual: "/project?view=default", ok: false },
+  { expected: "/project?id={id}", actual: "/my-tasks?id=1&view=default", ok: false },
+  { expected: "/project?id={id}&view=default", actual: "/project?id=1&view=other", ok: false },
+  { expected: "/agents/chat?view=rooms", actual: "/agents/chat?view=rooms&board=1", ok: true },
+  { expected: "/agents/chat?view=rooms", actual: "/agents/chat?view=roster&board=1", ok: false },
+  { expected: "/project?id={id}&name=Board%20rooms", actual: "/project?name=Board+rooms&view=default&id=1", ok: true },
+]) {
+  test(`planner URL subset ${expected} against ${actual}`, async () => {
+    const { parsePlan, runPlan } = await load();
+    const parsed = parsePlan(JSON.stringify({ actions: [], expect: [{ path: expected }] }));
+    const result = await runPlan({
+      page: { async waitForURL(matches) { if (!matches(new URL(actual, "http://127.0.0.1:3100"))) throw new Error("timeout"); } },
+      plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", navigations: [],
+    });
+    assert.equal(result.expects[0].ok, ok);
+    if (!ok) assert.equal(result.expects[0].error, "url did not match");
+  });
+}
 
 test("an agent-only route is called with the seeded agent token", async () => {
   const { parsePlan, runPlan, smokeDriveIds } = await load();

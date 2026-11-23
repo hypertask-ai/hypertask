@@ -1,0 +1,131 @@
+{
+  "run": "45173881467",
+  "pr": 3808,
+  "artifact": "https://github.com/hypertask-ai/hypertask/actions/runs/45173881467",
+  "journeys": [
+    {
+      "journey": "change:primary",
+      "page": "",
+      "actions": [
+        {
+          "op": "api",
+          "method": "POST",
+          "path": "/api/mcp/tasks/lease/claim",
+          "body": {},
+          "expectStatus": 400,
+          "expectText": "invalid"
+        },
+        {
+          "op": "api",
+          "method": "POST",
+          "path": "/api/mcp/tasks/escalate",
+          "body": {},
+          "expectStatus": 400,
+          "expectText": "invalid"
+        },
+        {
+          "op": "api",
+          "method": "POST",
+          "path": "/api/mcp/chat/activity",
+          "body": {},
+          "expectStatus": 400,
+          "expectText": "invalid"
+        },
+        {
+          "op": "api",
+          "method": "POST",
+          "path": "/api/mcp/chat/sessions/{task}/messages",
+          "body": {},
+          "expectStatus": 400,
+          "expectText": "invalid"
+        },
+        {
+          "op": "api",
+          "method": "POST",
+          "path": "/api/mcp/agents/runs/{task}/activities",
+          "body": {},
+          "expectStatus": 400,
+          "expectText": "invalid"
+        },
+        {
+          "op": "api",
+          "method": "POST",
+          "path": "/api/mcp/agents/runs/{task}/stop",
+          "body": {},
+          "expectStatus": 400,
+          "expectText": "invalid"
+        },
+        {
+          "op": "goto",
+          "path": "/project?id={id}"
+        },
+        {
+          "op": "shot",
+          "name": "board-after-refusals"
+        }
+      ],
+      "expect": [
+        {
+          "text": "Core actions smoke"
+        },
+        {
+          "path": "/project?id={id}"
+        }
+      ]
+    },
+    {
+      "journey": "area:activation-analytics",
+      "page": "activation-analytics",
+      "actions": [
+        {
+          "op": "goto",
+          "path": "/my-tasks"
+        },
+        {
+          "op": "shot",
+          "name": "signed-in-doctor"
+        },
+        {
+          "op": "shot",
+          "name": "cron-refusal"
+        }
+      ],
+      "expect": [
+        {
+          "text": "Core actions smoke"
+        }
+      ]
+    },
+    {
+      "journey": "area:agent-runs",
+      "page": "agent-runs",
+      "actions": [
+        {
+          "op": "goto",
+          "path": "/project?id={id}"
+        },
+        {
+          "op": "goto",
+          "path": "/logs"
+        },
+        {
+          "op": "shot",
+          "name": "logs-redirect-home"
+        },
+        {
+          "op": "goto",
+          "path": "/api/agent-sidebar-chats?projectId=7049"
+        },
+        {
+          "op": "shot",
+          "name": "after"
+        }
+      ],
+      "expect": [
+        {
+          "text": "Core actions smoke"
+        }
+      ]
+    }
+  ]
+}

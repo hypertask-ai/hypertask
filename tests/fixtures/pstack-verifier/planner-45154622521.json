@@ -1,0 +1,95 @@
+{
+  "run": "45154622521",
+  "pr": 3806,
+  "artifact": "https://github.com/hypertask-ai/hypertask/actions/runs/45154622521",
+  "journeys": [
+    {
+      "journey": "area:activation-analytics",
+      "page": "activation-analytics",
+      "actions": [
+        {
+          "op": "goto",
+          "path": "/my-tasks"
+        },
+        {
+          "op": "shot",
+          "name": "signed-in-doctor"
+        },
+        {
+          "op": "shot",
+          "name": "cron-refusal"
+        }
+      ],
+      "expect": [
+        {
+          "text": "Core actions smoke"
+        }
+      ]
+    },
+    {
+      "journey": "area:agent-rooms",
+      "page": "agent-rooms",
+      "actions": [
+        {
+          "op": "goto",
+          "path": "/agents/chat?view=rooms"
+        },
+        {
+          "op": "shot",
+          "name": "rooms-desktop"
+        },
+        {
+          "op": "goto",
+          "path": "/agents/chat?view=rooms&board={id}"
+        },
+        {
+          "op": "shot",
+          "name": "rooms-board-desktop"
+        },
+        {
+          "op": "goto",
+          "path": "/agents/chat?view=rooms&board={id}"
+        },
+        {
+          "op": "shot",
+          "name": "rooms-board-phone"
+        }
+      ],
+      "expect": [
+        {
+          "text": "Board rooms"
+        },
+        {
+          "path": "/agents/chat?view=rooms"
+        }
+      ]
+    },
+    {
+      "journey": "area:agent-runs",
+      "page": "agent-runs",
+      "actions": [
+        {
+          "op": "goto",
+          "path": "/logs"
+        },
+        {
+          "op": "shot",
+          "name": "logs-redirect-home"
+        },
+        {
+          "op": "goto",
+          "path": "/login"
+        },
+        {
+          "op": "shot",
+          "name": "logs-signed-out-login"
+        }
+      ],
+      "expect": [
+        {
+          "text": "Core actions smoke"
+        }
+      ]
+    }
+  ]
+}
