@@ -3,19 +3,21 @@ export const MOBILE_VIEWPORT = { width: 390, height: 844 } as const, MOBILE_THEM
 export type MobileRule = (typeof MOBILE_RULES)[number]
 export type MobileScreenSpec = { id: string; name: string; path: (c: { boardPath: string; tablePath: string; taskPath: string }) => string; ready?: string; taps?: Array<{ role: 'button' | 'tab'; name: string | RegExp }> }
 export const MOBILE_SCREENS: readonly MobileScreenSpec[] = [
-  { id: 'my-tasks', name: 'My Tasks', path: () => '/my-tasks' }, { id: 'board-kanban', name: 'Kanban board', path: (c) => c.boardPath, ready: '.kanban-column-title' },
-  { id: 'board-table', name: 'Table view', path: (c) => c.tablePath }, { id: 'calendar', name: 'Calendar', path: () => '/calendar' },
-  { id: 'task-detail', name: 'Task detail', path: (c) => c.taskPath, ready: '#title-input' }, { id: 'inbox', name: 'Inbox', path: () => '/inbox' },
-  { id: 'ai-chat-sheet', name: 'AI chat sheet', path: (c) => c.boardPath, ready: '.kanban-column-title', taps: [{ role: 'button', name: /^AI$/ }] }, { id: 'ai-chat-full', name: 'AI chat full', path: () => '/chat' },
-  { id: 'commands-search', name: 'Commands sheet', path: (c) => c.boardPath, ready: '.kanban-column-title', taps: [{ role: 'button', name: /^Commands$/ }] }, { id: 'commands-new-task', name: 'Ctrl+J task writer', path: (c) => c.boardPath, ready: '.kanban-column-title', taps: [{ role: 'button', name: /^Commands$/ }, { role: 'tab', name: /^New Task$/ }] },
-  { id: 'new-task-modal', name: 'New task modal', path: (c) => c.boardPath, ready: '.kanban-column-title', taps: [{ role: 'button', name: /^Create task$/ }] }, { id: 'board-switcher', name: 'Board switcher', path: (c) => c.boardPath, ready: '.kanban-column-title', taps: [{ role: 'button', name: /^Switch board$/ }] },
-  { id: 'view-switcher', name: 'View switcher', path: (c) => c.boardPath, ready: '.kanban-column-title', taps: [{ role: 'button', name: /^Switch view/ }] }, { id: 'search', name: 'Search', path: () => '/search' },
-  { id: 'settings-menu', name: 'Settings menu', path: () => '/settings' }, { id: 'settings-general', name: 'Settings General', path: () => '/settings/general' },
+  { id: 'my-tasks', name: 'My Tasks', path: () => '/my-tasks', ready: '[data-testid="my-tasks-list"]' }, { id: 'board-kanban', name: 'Kanban board', path: (c) => c.boardPath, ready: '.kanban-column-title' },
+  { id: 'board-table', name: 'Table view', path: (c) => c.tablePath, ready: '.table-view-header' }, { id: 'calendar', name: 'Calendar', path: () => '/calendar', ready: '.mobile-calendar' },
+  { id: 'task-detail', name: 'Task detail', path: (c) => c.taskPath, ready: '#title-input' }, { id: 'inbox', name: 'Inbox', path: () => '/inbox', ready: '[data-testid="inbox-panel"]' },
+  { id: 'ai-chat-sheet', name: 'AI chat sheet', path: (c) => c.boardPath, ready: '#ai-chat-tiptap-editor', taps: [{ role: 'button', name: /^AI$/ }] }, { id: 'ai-chat-full', name: 'AI chat full', path: () => '/chat', ready: '#ai-chat-tiptap-editor' },
+  { id: 'commands-search', name: 'Commands sheet', path: (c) => c.boardPath, ready: '#htc', taps: [{ role: 'button', name: /^Commands$/ }] }, { id: 'commands-new-task', name: 'Ctrl+J task writer', path: (c) => c.boardPath, ready: '[aria-label="Describe the task"]', taps: [{ role: 'button', name: /^Commands$/ }, { role: 'tab', name: /^New Task$/ }] },
+  { id: 'new-task-modal', name: 'New task modal', path: (c) => c.boardPath, ready: '#createTaskModal', taps: [{ role: 'button', name: /^Create task$/ }] }, { id: 'board-switcher', name: 'Board switcher', path: (c) => c.boardPath, ready: '[id^="mobile-board-option-"]', taps: [{ role: 'button', name: /^Switch board$/ }] },
+  { id: 'view-switcher', name: 'View switcher', path: (c) => c.boardPath, ready: '#mobile-board-view-picker', taps: [{ role: 'button', name: /^Switch view/ }] }, { id: 'search', name: 'Search', path: () => '/search', ready: '#search-input' },
+  { id: 'settings-menu', name: 'Settings menu', path: () => '/settings', ready: 'input[placeholder="Search settings"]' }, { id: 'settings-general', name: 'Settings General', path: () => '/settings/general', ready: '#settings-display-name' },
 ]
-export type MeasuredElement = { key: string; stableId?: string; tag: string; role: string; label: string; cls: string; w: number; h: number; x: number; y: number; disabled: boolean; textField: boolean; contenteditable: boolean; fontSize: number | null; radius: string; radiusBad: boolean; visibleSurface: boolean; roundMarker: boolean; outsideX: boolean; inHScroller: boolean; clippedByAncestor: boolean; textClipped: boolean; ellipsis: boolean; scrollW: number; clientW: number }
+export type MeasuredElement = { key: string; stableId?: string; tag: string; role: string; label: string; cls: string; w: number; h: number; x: number; y: number; disabled: boolean; interactive: boolean; textField: boolean; contenteditable: boolean; fontSize: number | null; radius: string; radiusBad: boolean; visibleSurface: boolean; roundMarker: boolean; outsideX: boolean; inHScroller: boolean; clippedByAncestor: boolean; textClipped: boolean; ellipsis: boolean; scrollW: number; clientW: number }
 export type MeasuredTextField = { key: string; stableId?: string; label: string; kind: string; disabled: boolean; x: number; y: number; w: number; h: number; micFound: boolean; micLabel: string; micW: number; micH: number; micBgAlpha: number; micRightBound: boolean; micIsPrimaryRight: boolean }
 export type MeasuredPurple = { key: string; stableId?: string; label: string; hits: string[]; ai: boolean }
-export type MobileScreenMetrics = { coarsePointer: boolean; docOverflowX: number; elements: MeasuredElement[]; textFields: MeasuredTextField[]; purple: MeasuredPurple[] }
+export type MeasuredRadius = { stableId?: string; label: string; radius: string }
+export type MeasuredClip = { stableId?: string; label: string; scrollW: number; clientW: number }
+export type MobileScreenMetrics = { coarsePointer: boolean; docOverflowX: number; elements: MeasuredElement[]; textFields: MeasuredTextField[]; purple: MeasuredPurple[]; radii: MeasuredRadius[]; clips: MeasuredClip[] }
 export type MobileViolation = { id: string; screen: string; theme: string; rule: MobileRule; element: string; measured: string }
 export type MobileDesignBaseline = { generatedAt: string; viewport: { width: number; height: number }; touchEmulation: true; themes: readonly string[]; screens: Record<string, Record<string, Record<MobileRule, string[]>>> }
 const r1 = (n: number) => Math.round(n * 10) / 10, elSig = (e: MeasuredElement) => `${e.tag}|${e.role}|${e.label}|${e.cls}|${Math.round(e.x)}|${Math.round(e.y)}|${Math.round(e.w)}|${Math.round(e.h)}`, tfSig = (t: MeasuredTextField) => `${t.label}|${t.kind}|${Math.round(t.x)}|${Math.round(t.y)}|${Math.round(t.w)}|${Math.round(t.h)}`, NON_TEXT_INPUT = /^(checkbox|radio|button|submit|reset|hidden|file|range|color|image)$/i
@@ -51,21 +53,37 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
       const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, true)) return
       const hit = document.elementFromPoint((Math.max(r.left, 0) + Math.min(r.right, vw)) / 2, (Math.max(r.top, 0) + Math.min(r.bottom, vh)) / 2); if (!hit || !(hit === el || el.contains(hit) || hit.contains(el))) return
       const cls = (el.getAttribute('class') || '').slice(0, 80), label = labelOf(el), stableId = stableIdOf(el, tag, role, label, cls), roundMarker = `${cls} ${el.getAttribute('data-testid') || ''}`.split(/\s+/).some((n) => /^(?:[\w-]*[-_])?(?:avatar|status-dot)(?:[-_][\w-]*)?$/i.test(n)), rad = radiusOf(cs, r.width, r.height, roundMarker), inner = tf.is && tf.kind === 'multiline' ? (el.querySelector('p') || el.querySelector('div')) : null, ellipsis = cs.textOverflow === 'ellipsis' || Boolean(el.firstElementChild && getComputedStyle(el.firstElementChild).textOverflow === 'ellipsis')
-      kept.push({ el, tf, dropped: false, via, rec: { key, stableId, tag, role, label, cls, w: round1(r.width), h: round1(r.height), x: round1(r.left), y: round1(r.top), disabled: Boolean((el as HTMLButtonElement).disabled) || el.getAttribute('aria-disabled') === 'true', textField: tf.is, contenteditable: el.getAttribute('contenteditable') === '' || el.getAttribute('contenteditable') === 'true', fontSize: tf.is ? parseFloat(getComputedStyle(inner || el).fontSize) : null, radius: rad.radius, radiusBad: rad.bad, visibleSurface: surfaceOf(cs), roundMarker, outsideX: r.left < -1 || r.right > vw + 1, inHScroller: inHScroll(el), clippedByAncestor: clippedByAnc(el, r, cs), textClipped: !['input', 'textarea', 'select'].includes(tag) && el.scrollWidth > el.clientWidth + 1 && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && !ellipsis, ellipsis, scrollW: el.scrollWidth, clientW: el.clientWidth } }); keptEls.add(el)
+      kept.push({ el, tf, dropped: false, via, rec: { key, stableId, tag, role, label, cls, w: round1(r.width), h: round1(r.height), x: round1(r.left), y: round1(r.top), disabled: Boolean((el as HTMLButtonElement).disabled) || el.getAttribute('aria-disabled') === 'true', interactive: true, textField: tf.is, contenteditable: el.getAttribute('contenteditable') === '' || el.getAttribute('contenteditable') === 'true', fontSize: tf.is ? parseFloat(getComputedStyle(inner || el).fontSize) : null, radius: rad.radius, radiusBad: rad.bad, visibleSurface: surfaceOf(cs), roundMarker, outsideX: r.left < -1 || r.right > vw + 1, inHScroller: inHScroll(el), clippedByAncestor: clippedByAnc(el, r, cs), textClipped: !['input', 'textarea', 'select'].includes(tag) && el.scrollWidth > el.clientWidth + 1 && (cs.overflowX === 'hidden' || cs.overflowX === 'clip') && !ellipsis, ellipsis, scrollW: el.scrollWidth, clientW: el.clientWidth } }); keptEls.add(el)
     }
     document.querySelectorAll(SEL).forEach((el) => add(el, ''))
     for (const el of body.querySelectorAll('*')) { if (SKIP.has(el.tagName.toLowerCase()) || keptEls.has(el) || getComputedStyle(el).cursor !== 'pointer') continue; let anc = false; for (let p = el.parentElement; p; p = p.parentElement) if (keptEls.has(p)) { anc = true; break }; if (!anc) add(el, 'cursor') }
     const byEl = new Map(kept.map((k) => [k.el, k]))
     for (let i = kept.length - 1; i >= 0; i--) { const k = kept[i]; if (k.dropped || k.rec.textField) continue; for (let p = k.el.parentElement; p; p = p.parentElement) { const pk = byEl.get(p); if (!pk || pk.dropped) continue; if (pk.rec.textField) break; const a = k.rec, b = pk.rec; if (Math.abs(a.x - b.x) <= 2 && Math.abs(a.w - b.w) <= 2 && Math.abs(a.h - b.h) <= 2) { if (pk.via === 'cursor' && !k.via) pk.dropped = true; else k.dropped = true; break } } }
+    const radii: MeasuredRadius[] = [], clips: MeasuredClip[] = [], directText = (el: Element) => Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent || '').trim())
+    for (const el of body.querySelectorAll('*')) {
+      const tag = el.tagName.toLowerCase(); if (SKIP.has(tag) || keptEls.has(el)) continue
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, false)) continue
+      const cls = (el.getAttribute('class') || '').slice(0, 80), label = labelOf(el), roundMarker = `${cls} ${el.getAttribute('data-testid') || ''}`.split(/\s+/).some((n) => /^(?:[\w-]*[-_])?(?:avatar|status-dot)(?:[-_][\w-]*)?$/i.test(n)), stableId = stableIdOf(el, tag, (el.getAttribute('role') || '').toLowerCase(), label, cls)
+      const rad = radiusOf(cs, r.width, r.height, roundMarker); if (rad.bad && surfaceOf(cs)) radii.push({ stableId, label, radius: rad.radius })
+      const ellipsis = cs.textOverflow === 'ellipsis' || Boolean(el.firstElementChild && getComputedStyle(el.firstElementChild).textOverflow === 'ellipsis')
+      if (directText(el) && !['input', 'textarea', 'select', 'svg'].includes(tag) && !ellipsis && el.scrollWidth > el.clientWidth + 1 && ['hidden', 'clip'].includes(cs.overflowX)) clips.push({ stableId, label, scrollW: el.scrollWidth, clientW: el.clientWidth })
+    }
     const MIC_RE = /dictat|microphone|\bmic\b|voice|speech|record/i, AI_RE = /\bai\b|ask-?ai|writer|sparkl|magic|assistant|\bwand\b|copilot|\bagent/i
     const isShown = (el: Element) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width >= 1 && r.height >= 1 && cs.display !== 'none' && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none' }
     const isMic = (b: Element) => { const svg = b.querySelector('svg'); return [b.getAttribute('aria-label'), b.getAttribute('title'), b.getAttribute('data-testid'), b.getAttribute('class'), (b as HTMLElement).innerText?.slice(0, 80), svg?.getAttribute('class'), svg?.getAttribute('data-icon')].some((v) => Boolean(v && MIC_RE.test(v))) }
     const textFields: MeasuredTextField[] = [], purple: MeasuredPurple[] = []
     for (const k of kept) {
       if (k.dropped || !k.rec.textField) continue
-      let mic: Element | null = null; for (let anc = k.el.parentElement, d = 0; anc && d < 8 && !mic; d++, anc = anc.parentElement) mic = Array.from(anc.querySelectorAll('button,[role="button"]')).find((b) => isShown(b) && isMic(b)) || null
+      let mic: Element | null = null; const fr = k.el.getBoundingClientRect(), fcy = fr.top + fr.height / 2
+      const sameRow = (b: Element) => { const br = b.getBoundingClientRect(); return Math.abs(br.top + br.height / 2 - fcy) <= Math.max(fr.height, br.height) / 2 + 4 && br.left + br.width / 2 >= fr.left + fr.width / 2 }
+      for (let anc = k.el.parentElement, d = 0; anc && anc !== body && d < 8; d++, anc = anc.parentElement) {
+        const others = Array.from(anc.querySelectorAll(SEL)).filter((f) => f !== k.el && tfOf(f).is && isShown(f) && isVis(f, f.getBoundingClientRect(), getComputedStyle(f), false))
+        if (others.length) break
+        mic = Array.from(anc.querySelectorAll('button,[role="button"]')).find((b) => isShown(b) && isMic(b) && sameRow(b)) || null
+        if (mic) break
+      }
       if (!mic) { textFields.push({ key: k.rec.key, stableId: k.rec.stableId, label: k.rec.label, kind: k.tf.kind, disabled: k.rec.disabled, x: k.rec.x, y: k.rec.y, w: k.rec.w, h: k.rec.h, micFound: false, micLabel: '', micW: 0, micH: 0, micBgAlpha: 0, micRightBound: false, micIsPrimaryRight: false }); continue }
-      const mr = mic.getBoundingClientRect(), fr = k.el.getBoundingClientRect(), mcs = getComputedStyle(mic), cy = mr.top + mr.height / 2, tol = Math.max(4, mr.height / 2)
+      const mr = mic.getBoundingClientRect(), mcs = getComputedStyle(mic), cy = mr.top + mr.height / 2, tol = Math.max(4, mr.height / 2)
       const after = (mic.parentElement ? Array.from(mic.parentElement.querySelectorAll('button,a,[role="button"]')) : []).filter((o) => o !== mic && isShown(o) && Math.abs(o.getBoundingClientRect().top + o.getBoundingClientRect().height / 2 - cy) <= tol && o.getBoundingClientRect().left > mr.right - 2).length
       textFields.push({ key: k.rec.key, stableId: k.rec.stableId, label: k.rec.label, kind: k.tf.kind, disabled: k.rec.disabled, x: k.rec.x, y: k.rec.y, w: k.rec.w, h: k.rec.h, micFound: true, micLabel: labelOf(mic), micW: round1(mr.width), micH: round1(mr.height), micBgAlpha: round1(rgba(mcs.backgroundColor).a), micRightBound: mr.left + mr.width / 2 >= fr.left + fr.width / 2, micIsPrimaryRight: after === 0 })
     }
@@ -79,23 +97,23 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
       if (el instanceof SVGElement && el.tagName.toLowerCase() !== 'svg') { if (cs.fill && cs.fill !== 'none' && isPurple(cs.fill)) hits.push(`fill ${norm(cs.fill)}`); if ((parseFloat(cs.strokeWidth) || 0) > 0 && cs.stroke && cs.stroke !== 'none' && isPurple(cs.stroke)) hits.push(`stroke ${norm(cs.stroke)}`) }
       if (hits.length) { const host = el.closest('button,a,[role="button"],[role="tab"],input,textarea,[contenteditable]') || el, hLabel = labelOf(host); purple.push({ key: keyOf(el), stableId: stableIdOf(host, host.tagName.toLowerCase(), (host.getAttribute('role') || '').toLowerCase(), hLabel, (host.getAttribute('class') || '').slice(0, 80)), label: hLabel, hits, ai: isAi(el) }) }
     }
-    return { coarsePointer: window.matchMedia('(pointer: coarse)').matches, docOverflowX: Math.max(de.scrollWidth, body.scrollWidth) - de.clientWidth, elements: kept.filter((k) => !k.dropped).map((k) => k.rec), textFields, purple }
+    return { coarsePointer: window.matchMedia('(pointer: coarse)').matches, docOverflowX: Math.max(de.scrollWidth, body.scrollWidth) - de.clientWidth, elements: kept.filter((k) => !k.dropped).map((k) => k.rec), textFields, purple, radii, clips }
   })
-  const first = await sample(), elMap = new Map<string, MeasuredElement>(), tfMap = new Map<string, MeasuredTextField>(), pMap = new Map<string, MeasuredPurple>(), elSigs = new Set<string>(), tfSigs = new Set<string>()
-  const merge = (s: MobileScreenMetrics) => { for (const e of s.elements) { const sg = elSig(e); if (!elMap.has(e.key) && !elSigs.has(sg)) { elMap.set(e.key, e); elSigs.add(sg) } } for (const t of s.textFields) { const sg = tfSig(t); if (!tfMap.has(t.key) && !tfSigs.has(sg)) { tfMap.set(t.key, t); tfSigs.add(sg) } } for (const p of s.purple) if (!pMap.has(p.key)) pMap.set(p.key, p) }
+  const first = await sample(), elMap = new Map<string, MeasuredElement>(), tfMap = new Map<string, MeasuredTextField>(), pMap = new Map<string, MeasuredPurple>(), rMap = new Map<string, MeasuredRadius>(), cMap = new Map<string, MeasuredClip>(), elSigs = new Set<string>(), tfSigs = new Set<string>()
+  const merge = (s: MobileScreenMetrics) => { for (const e of s.elements) { const sg = elSig(e); if (!elMap.has(e.key) && !elSigs.has(sg)) { elMap.set(e.key, e); elSigs.add(sg) } } for (const t of s.textFields) { const sg = tfSig(t); if (!tfMap.has(t.key) && !tfSigs.has(sg)) { tfMap.set(t.key, t); tfSigs.add(sg) } } for (const p of s.purple) if (!pMap.has(p.key)) pMap.set(p.key, p); for (const r of s.radii) { const rid = r.stableId || r.label; if (!rMap.has(rid)) rMap.set(rid, r) } for (const c of s.clips) { const cid = c.stableId || c.label; if (!cMap.has(cid)) cMap.set(cid, c) } }
   merge(first); let maxOverflow = first.docOverflowX
   for (let step = 1; step <= 3; step++) {
     const moved = await page.evaluate((s) => { const cands = [document.scrollingElement, ...Array.from(document.querySelectorAll('*'))].filter((e): e is HTMLElement => e instanceof HTMLElement && ['auto', 'scroll'].includes(getComputedStyle(e).overflowY) && e.scrollHeight - e.clientHeight > 40).sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight)); const sc = cands[0]; if (!sc) return false; const before = sc.scrollTop; sc.scrollTop = Math.min(sc.scrollHeight - sc.clientHeight, Math.round(sc.clientHeight * 0.8 * s)); return Math.abs(sc.scrollTop - before) > 2 }, step)
     if (!moved) break
     await page.waitForTimeout(300); const next = await sample(); maxOverflow = Math.max(maxOverflow, next.docOverflowX); merge(next)
   }
-  return { coarsePointer: first.coarsePointer, docOverflowX: maxOverflow, elements: [...elMap.values()], textFields: [...tfMap.values()], purple: [...pMap.values()] }
+  return { coarsePointer: first.coarsePointer, docOverflowX: maxOverflow, elements: [...elMap.values()], textFields: [...tfMap.values()], purple: [...pMap.values()], radii: [...rMap.values()], clips: [...cMap.values()] }
 }
 export function findViolations(screen: string, theme: string, m: MobileScreenMetrics): MobileViolation[] {
   const out: MobileViolation[] = [], seenPurple = new Set<string>()
   if (m.docOverflowX > 0) out.push({ id: 'document', screen, theme, rule: 'overflow-x', element: 'document', measured: `docOverflowX ${r1(m.docOverflowX)}px` })
   for (const el of m.elements) {
-    if (el.disabled) continue
+    if (el.disabled || !el.interactive) continue
     const id = el.stableId || `${el.tag}${el.role ? `[role=${el.role}]` : ''}:${el.label}`, tiptap = /\b(tiptap|prosemirror)\b/i.test(el.cls) && (el.contenteditable || el.textField || el.role === 'textbox'), inlineLink = el.tag === 'a' && !el.role && el.h <= 24 && !el.key.split('>').some((p) => p.startsWith('nav:'))
     if ((el.w < 44 || el.h < 44) && !tiptap && !inlineLink) out.push({ id, screen, theme, rule: 'tap-target', element: el.label, measured: `${r1(el.w)}x${r1(el.h)} (< 44x44)` })
     if (el.textField && el.fontSize !== null && el.fontSize < 16) out.push({ id, screen, theme, rule: 'input-font', element: el.label, measured: `${r1(el.fontSize)}px (< 16px)` })
@@ -108,6 +126,8 @@ export function findViolations(screen: string, theme: string, m: MobileScreenMet
     else if (!tf.micRightBound || !tf.micIsPrimaryRight || tf.micBgAlpha <= 0.5 || tf.micW < 44 || tf.micH < 44) out.push({ id: `${baseId}->${tf.micLabel}`, screen, theme, rule: 'mic-action', element: `${tf.label} -> ${tf.micLabel}`, measured: `non-standard mic (${r1(tf.micW)}x${r1(tf.micH)}, bgAlpha=${tf.micBgAlpha}, right=${tf.micRightBound}, primaryRight=${tf.micIsPrimaryRight})` })
   }
   for (const p of m.purple) { const id = p.stableId || `purple:${p.label}`; if (!p.ai && !seenPurple.has(id)) { seenPurple.add(id); out.push({ id, screen, theme, rule: 'purple-non-ai', element: p.label, measured: p.hits.join(', ') }) } }
+  for (const rd of m.radii ?? []) out.push({ id: rd.stableId || `radius:${rd.label}`, screen, theme, rule: 'radius', element: rd.label, measured: `${rd.radius.replace(/3\.35544e\+07px/gi, '999px')} (not in {0,2,4}px)` })
+  for (const c of m.clips ?? []) out.push({ id: c.stableId || `clip:${c.label}`, screen, theme, rule: 'overflow-x', element: c.label, measured: `clipped (${c.scrollW}px > ${c.clientW}px)` })
   return out
 }
 export function evaluateMobileDesign(screen: string, theme: string, metrics: MobileScreenMetrics, baseline: MobileDesignBaseline | null, strict = false) {
