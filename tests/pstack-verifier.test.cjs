@@ -826,6 +826,29 @@ test("non-app files skip the model and pass on green checks", async () => {
   assert.equal(passed.notes, "no app path: no user path: non-app files only");
 });
 
+test("tooling folders that src never imports take the non-app pass", async () => {
+  const { selectPlan, hasAppPath, decide } = await load();
+  const pr3806 = [
+    "eslint-local-rules/radius-baseline.json",
+    "eslint-local-rules/style-guide-suppressions.json",
+    "eslint-local-rules/style-guide.mjs",
+    "scripts/generate-radius-baseline.mjs",
+    "scripts/prove-radius-rule.mjs",
+    "tests/style-guide-eslint-rules.test.cjs",
+  ];
+  assert.equal(hasAppPath(pr3806), false);
+  const selected = selectPlan(pr3806, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  const passed = decide({ model: { verdict: "FAIL", notes: "model should not run" }, plan: plan([], { ...selected, files: pr3806, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.deepEqual([passed.verdict, passed.notes], ["PASS+NOTES", "no app path: no user path: non-app files only"]);
+  for (const file of ["eslint-local-rules/style-guide.mjs", "config/quarantined-tests.json", "design-system/tokens/colors.html", "evals/mcp-client/run.mjs", "licenses/Iconoir.txt"]) {
+    assert.equal(hasAppPath([file]), false, file);
+    assert.deepEqual(selectPlan([file], false), { actions: [], expect: [], reason: "no user path: non-app files only" }, file);
+  }
+  assert.equal(hasAppPath(["eslint-local-rules/style-guide.mjs", "src/app/page.tsx"]), true);
+  assert.equal(hasAppPath(["config/quarantined-tests.json", "src/lib/api/task-writes/create-global.ts"]), true);
+});
+
 test("a preview that never listens is not a model verdict", async () => {
   const { decide, notePreviewDown, previewDownBody, waitForPreview } = await load();
   const refused = decide({
