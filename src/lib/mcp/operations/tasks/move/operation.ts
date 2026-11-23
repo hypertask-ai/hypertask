@@ -1,7 +1,7 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
-import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByIdentifier as resolveTaskByIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, withMcpRouteMutationLease as withAdoptedAgentMutationLease } from '@/lib/mcp/routeWrapper'
@@ -77,7 +77,9 @@ async function findTaskByIdentifier(
       });
     }
 
-    return null;
+    return typeof resolveTaskByIdentifier === "function"
+      ? resolveTaskByIdentifier(user, { ticket_number: reference, project_id: project_id ?? null }, agentId, undefined, teamScope)
+      : null;
   }
 
   if (
@@ -93,7 +95,10 @@ async function findTaskByIdentifier(
       },
       select: { id: true, projectId: true },
     });
-    return task;
+    if (task) return task;
+    return typeof resolveTaskByIdentifier === "function"
+      ? resolveTaskByIdentifier(user, { unique_index, project_id }, agentId, undefined, teamScope)
+      : null;
   }
 
   return null;

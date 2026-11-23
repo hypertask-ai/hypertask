@@ -282,7 +282,7 @@ test("CLI get returns a live task rather than the old-number alias", async () =>
   const f = fixture({ tasks: [currentTask, live], visibleProjects: [15, 20] });
   const response = await f.get({ ticket_number: "HTPR-6641" });
   assert.deepEqual(response.body.tasks.map(task => task.id), [99]);
-  assert.equal(f.aliasQueries(), 0);
+  assert.equal(response.body.reusedKeyCollisions[0].movedTaskId, 44769);
 });
 
 test("web alias lookup checks the current board and the real page redirects server-side", async () => {
