@@ -14,8 +14,19 @@ class NextResponse {
   }
 }
 
-function loadMove({ agentId = "agent-a", onBoard = false, guidance = false, projectExists = true, accessError = null } = {}) {
+function loadMove({
+  agentId = "agent-a",
+  onBoard = false,
+  membershipStatus = "Accepted",
+  guidance = false,
+  projectExists = true,
+  projectStatus = "Normal",
+  accessError = null,
+} = {}) {
   const calls = { moved: [], flags: [], access: 0 };
+  const membership = onBoard
+    ? { projectId: FOREIGN_BOARD, agentId: "agent-a", status: membershipStatus, revokedAt: null }
+    : null;
   const route = load("src/lib/mcp/operations/tasks/move/operation.ts", {
     "next/server": { NextResponse, NextRequest: class {} },
     "@/lib/planLimits": {
@@ -43,7 +54,22 @@ function loadMove({ agentId = "agent-a", onBoard = false, guidance = false, proj
           findUnique: async () => ({ id: 6, email: "owner@example.invalid", displayName: "Owner", photoURL: null }),
         },
         project: {
-          findFirst: async () => (projectExists ? { id: FOREIGN_BOARD } : null),
+          findFirst: async ({ where } = {}) => {
+            if (!projectExists) return null;
+            if (where.id != null && where.id !== FOREIGN_BOARD) return null;
+            const allowed = where.status?.in;
+            if (Array.isArray(allowed) && !allowed.includes(projectStatus)) return null;
+            return { id: FOREIGN_BOARD, status: projectStatus };
+          },
+        },
+        member: {
+          findFirst: async ({ where } = {}) => {
+            if (!membership) return null;
+            if (where.projectId !== membership.projectId || where.agentId !== membership.agentId) return null;
+            if (where.status != null && where.status !== membership.status) return null;
+            if (where.agent?.revokedAt === null && membership.revokedAt != null) return null;
+            return { id: 1 };
+          },
         },
       },
     },
@@ -72,9 +98,6 @@ function loadMove({ agentId = "agent-a", onBoard = false, guidance = false, proj
       getSectionForTask: async () => ({ section: { id: 5 }, error: null }),
     },
     "@/lib/realtime/server": { broadcastBoardChange: () => {} },
-    "@/utils/controllers/agents/boardMembers": {
-      isAgentOnBoard: async (projectId, id) => onBoard && projectId === FOREIGN_BOARD && id === "agent-a",
-    },
     "@/lib/flags": {
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push({ key, userId });
@@ -123,6 +146,23 @@ test("an archived board the agent is not on is refused for membership before the
   assert.equal(status, 403);
   assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
   assert.equal(calls.access, 0);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("an invited membership does not let the agent move onto that board", async () => {
+  const { status, body, calls } = await move({ onBoard: true, membershipStatus: "Invited" });
+  assert.equal(status, 403);
+  assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
+  assert.equal(calls.access, 0);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("a deleted board stays not found", async () => {
+  const missing = { status: 404, message: "Project with ID 15 not found" };
+  const { status, body, calls } = await move({ projectStatus: "Deleted", accessError: missing });
+  assert.equal(status, 404);
+  assert.equal(body.error, "Project with ID 15 not found");
+  assert.equal(calls.access, 1);
   assert.deepEqual(calls.moved, []);
 });
 

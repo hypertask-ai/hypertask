@@ -17,7 +17,6 @@ import {
   getSectionForTask,
 } from "@/lib/mcp/tasks/services";
 import { broadcastBoardChange } from "@/lib/realtime/server";
-import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
 import { buildFieldError } from '@/lib/mcp/fieldError';
@@ -218,11 +217,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (ctx.agentId && !(await isAgentOnBoard(target_project_id, ctx.agentId))) {
-      const targetBoard = await prisma.project.findFirst({
-        where: { id: target_project_id },
+    if (ctx.agentId) {
+      const acceptedMembership = await prisma.member.findFirst({
+        where: {
+          projectId: target_project_id,
+          agentId: ctx.agentId,
+          status: "Accepted",
+          agent: { revokedAt: null },
+        },
         select: { id: true },
       });
+      const targetBoard = acceptedMembership
+        ? null
+        : await prisma.project.findFirst({
+            where: { id: target_project_id, status: { in: ["Normal", "Archive"] } },
+            select: { id: true },
+          });
       if (targetBoard) {
         const boardAccessGuidance = await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id);
         return NextResponse.json(
