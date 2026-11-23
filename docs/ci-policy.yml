@@ -301,6 +301,17 @@ required_check_settings_monitor:
     user_login_fallback: false
     interval_seconds: 120
 
+required_check_publishers:
+  ticket: https://app.hypertask.ai/detail/project-15/9357
+  workflow: .github/workflows/required-check-publishers.yml
+  script: .github/scripts/required-check-publishers.cjs
+  required: false
+  quiet_hours: 3
+  sample: newest 20 open production pull requests at least 3 hours old
+  ruleset_writes: false
+  removes_required_checks: false
+  fail_closed_on: [unreadable_ruleset, unreadable_checks, missing_board_token, post_error, comment_hidden_from_people]
+
 ux_signoff_chain:
   ticket: https://app.hypertask.ai/detail/project-4060/985
   workflow: .github/workflows/ux-signoff-chain.yml

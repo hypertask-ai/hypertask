@@ -1,0 +1,52 @@
+name: Required Check Publishers
+on:
+  schedule:
+    - cron: '41 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  report:
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production')
+    concurrency:
+      group: required-check-publishers
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+      statuses: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: production
+          persist-credentials: false
+      - name: Comment when a required check has no result
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node .github/scripts/required-check-publishers.cjs
+  chain:
+    needs: [report]
+    if: ${{ !cancelled() }}
+    concurrency:
+      group: required-check-publishers-chain
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: production
+          persist-credentials: false
+      - name: Start the next hourly link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/schedule-chain.cjs hand-off --workflow required-check-publishers.yml --gap-minutes 60
