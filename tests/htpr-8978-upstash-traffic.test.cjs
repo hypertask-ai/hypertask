@@ -33,6 +33,63 @@ test("the tool connection relays between module copies and sends no Redis comman
   assert.equal(second.publishLegacySse("missing-session", "x"), 0);
 });
 
+test("a tool call on another server reaches the open connection", async () => {
+  const clients = [];
+  class FakeRedis {
+    constructor() {
+      clients.push(this);
+      this.subs = new Set();
+      this.handlers = {};
+      this.published = [];
+    }
+    on(event, fn) { this.handlers[event] = fn; return this; }
+    async connect() {}
+    async subscribe(channel) { this.subs.add(channel); }
+    async unsubscribe(channel) { this.subs.delete(channel); }
+    async publish(channel, message) {
+      this.published.push([channel, message]);
+      let delivered = 0;
+      for (const client of clients) {
+        if (client === this || !client.subs.has(channel)) continue;
+        delivered += 1;
+        client.handlers.message?.(channel, message);
+      }
+      return delivered;
+    }
+    disconnect() {}
+  }
+  const previous = process.env.REDIS_URL;
+  process.env.REDIS_URL = "redis://relay.example";
+  delete globalThis.__hypertaskLegacySseRelay;
+  delete globalThis.__hypertaskLegacySsePublisher;
+  const bus = loadModule("src/lib/mcp-server/legacySseBus.ts", {
+    ioredis: { default: FakeRedis },
+  });
+  const channel = `htpr-8978:remote:${Date.now()}`;
+  try {
+    const seen = [];
+    const stop = await bus.subscribeLegacySseAcrossProcesses(channel, (message) => { seen.push(message); });
+    assert.equal(clients.length, 1);
+    assert.equal(clients[0].subs.has(channel), true);
+    assert.equal(await bus.publishLegacySseAcrossProcesses(channel, "same-server"), 1);
+    assert.deepEqual(seen, ["same-server"]);
+    const remote = new FakeRedis();
+    assert.equal(await remote.publish(channel, "other-server"), 1);
+    assert.deepEqual(seen, ["same-server", "other-server"]);
+    stop();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(clients[0].subs.has(channel), false);
+    assert.equal(await bus.publishLegacySseAcrossProcesses("mcp:legacy:session:missing", "x"), 0);
+    const publisher = clients.find((client) => client.published.some((entry) => entry[0] === "mcp:legacy:session:missing"));
+    assert.deepEqual(publisher.published, [["mcp:legacy:session:missing", "x"]]);
+  } finally {
+    delete globalThis.__hypertaskLegacySseRelay;
+    delete globalThis.__hypertaskLegacySsePublisher;
+    if (previous === undefined) delete process.env.REDIS_URL;
+    else process.env.REDIS_URL = previous;
+  }
+});
+
 function alarm() {
   return loadModule("src/lib/ops/upstashCommandAlarm.ts");
 }
@@ -41,6 +98,7 @@ test("a day at or under 300,000 commands does not file, and one request over doe
   const { nextCommandSample, readCommandTotal, UPSTASH_DAILY_COMMAND_LIMIT } = alarm();
   const start = Date.parse("2026-11-22T00:00:00.000Z");
   assert.equal(readCommandTotal("# Stats\r\ntotal_commands_processed:10\r\n"), 10);
+  assert.equal(readCommandTotal("total_commands_processed:11\r"), 11);
   assert.equal(readCommandTotal("no-total"), null);
   const first = nextCommandSample(null, 10, start);
   assert.equal(first.alert, false);
@@ -148,7 +206,7 @@ test("agent and command-line calls are limited without Upstash, and a human call
   const { checkMcpRateLimit, rateLimitSkipsUpstash } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
     "@/lib/redis": { getRedis: async () => redis },
     "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count" },
-    "@/lib/flags": { featureFlagCandidateUserIds: async () => null },
+    "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => true },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
       validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null, teamScope: null }),
@@ -174,12 +232,32 @@ test("agent and command-line calls are limited without Upstash, and a human call
   assert.equal(redisCalls, 1, "a human call still uses Upstash");
 });
 
+test("with the Upstash skip off, command-line calls count in Upstash again", async () => {
+  let redisCalls = 0;
+  const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
+    "@/lib/redis": { getRedis: async () => ({ incr: async () => { redisCalls += 1; return redisCalls; }, expire: async () => 1, decrby: async () => 0 }) },
+    "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count" },
+    "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => false },
+    "@/lib/flags/definitions/htpr-8978-agent-upstash-skip": { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG: "htpr-8978-agent-upstash-skip" },
+    "./session": {
+      extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
+      validateMcpAuth: async () => ({ user: { id: 6 }, agentId: null, teamScope: null }),
+    },
+    "../operationContext": { getMcpOperationContext: () => undefined },
+  });
+  const response = await checkMcpRateLimit(new NextRequest("https://app.hypertask.ai/api/mcp/tasks", {
+    headers: { authorization: "Bearer htk_cli" },
+  }));
+  assert.equal(response, null);
+  assert.equal(redisCalls, 1);
+});
+
 test("distinct unauthenticated command-line tokens cannot grow the in-memory limit without a cap", async () => {
   let redisCalls = 0;
   const { checkMcpRateLimit } = loadModule("src/lib/mcp/auth/rateLimit.ts", {
     "@/lib/redis": { getRedis: async () => { redisCalls += 1; return { incr: async () => 1, expire: async () => 1 }; } },
     "@/lib/flags/keys": { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: "htpr-7462-mcp-ratelimit-exact-count" },
-    "@/lib/flags": { featureFlagCandidateUserIds: async () => null },
+    "@/lib/flags": { featureFlagCandidateUserIds: async () => null, isFeatureEnabled: async () => true },
     "./session": {
       extractBearerToken: (value) => value?.replace(/^Bearer /, "") ?? null,
       validateMcpAuth: async () => null,

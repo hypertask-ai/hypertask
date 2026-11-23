@@ -7,7 +7,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import type { ServerResponse } from 'node:http'
 import { PassThrough, Readable } from 'node:stream'
 import crypto from 'node:crypto'
-import { publishLegacySse, subscribeLegacySse } from './legacySseBus'
+import { publishLegacySse, publishLegacySseAcrossProcesses, subscribeLegacySseAcrossProcesses } from './legacySseBus'
 import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
 import { appendAgentChatTools } from './tools/chat-inbox.tool'
@@ -84,7 +84,7 @@ export async function handleLegacySseRequest(
       try {
         let settle!: (response: Response) => void
         const response = new Promise<Response>((resolve) => { settle = resolve })
-        unsubscribe = subscribeLegacySse(replyChannel, (message) => {
+        unsubscribe = await subscribeLegacySseAcrossProcesses(replyChannel, (message) => {
           try {
             const result = JSON.parse(message) as { status: number; body: string }
             settle(new Response(result.body, { status: result.status }))
@@ -97,7 +97,7 @@ export async function handleLegacySseRequest(
         request.signal.addEventListener('abort', aborted, { once: true })
         if (request.signal.aborted) aborted()
         else {
-          const listeners = publishLegacySse(`mcp:legacy:session:${sessionId}`, JSON.stringify({
+          const listeners = await publishLegacySseAcrossProcesses(`mcp:legacy:session:${sessionId}`, JSON.stringify({
             replyChannel, body, authInfo,
           } satisfies RelayMessage))
           if (!listeners) settle(new Response('SSE session not found', { status: 404 }))
@@ -152,7 +152,7 @@ export async function handleLegacySseRequest(
     stream.once('error', cleanup)
     request.signal.addEventListener('abort', cleanup, { once: true })
     const channel = `mcp:legacy:session:${transport.sessionId}`
-    unsubscribe = subscribeLegacySse(channel, (message) => {
+    unsubscribe = await subscribeLegacySseAcrossProcesses(channel, (message) => {
       if (closed) return
       void (async () => {
         const incoming = JSON.parse(message) as RelayMessage
@@ -196,7 +196,7 @@ export async function handleLegacySseRequest(
             result = 'Invalid message'
           }
         }
-        publishLegacySse(incoming.replyChannel, JSON.stringify({ status, body: result }))
+        await publishLegacySseAcrossProcesses(incoming.replyChannel, JSON.stringify({ status, body: result }))
       })().catch(() => cleanup())
     })
     try {

@@ -6,10 +6,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type CommandSample = { total: number; at: number };
 
 export function readCommandTotal(info: string): number | null {
-  const match = info.match(/^total_commands_processed:(\d+)$/m);
-  if (!match) return null;
-  const total = Number(match[1]);
-  return Number.isSafeInteger(total) ? total : null;
+  for (const rawLine of info.split("\n")) {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    const match = /^total_commands_processed:(\d+)$/.exec(line);
+    if (!match) continue;
+    const total = Number(match[1]);
+    return Number.isSafeInteger(total) ? total : null;
+  }
+  return null;
 }
 
 export function upstashAlarmDay(now: number): string {

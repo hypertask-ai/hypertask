@@ -31,6 +31,7 @@ import { HTPR_7910_RENAMED_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-
 import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
 import { actAsAgentAvailable } from './utils/actAsAgentCatalog'
 import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
+import { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } from '@/lib/flags/definitions/htpr-8978-agent-upstash-skip'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
@@ -186,8 +187,10 @@ export async function mcpHandler(request: Request): Promise<Response> {
         }),
       )
     }
-    if (!audience) return await serve()
-    return await withUpstashFlagAudience(() => serve(), audience)
+    if (audience && await isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, Number.isFinite(userId) ? userId : 0)) {
+      return await withUpstashFlagAudience(() => serve(), audience)
+    }
+    return await serve()
   } finally {
     recordLegacyMcpRequest(request, telemetryUserId, timestamp)
   }
