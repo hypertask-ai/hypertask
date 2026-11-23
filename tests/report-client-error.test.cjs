@@ -12,10 +12,6 @@ const source = fs.readFileSync(
 
 function loadReportClientError(context) {
   const javascript = source
-    .replace(
-      /import\s+\{[^}]+\}\s+from\s+['"][^'"]+['"]\s*/g,
-      ""
-    )
     .replace(/export type ClientErrorPayload = \{[\s\S]*?\n\}\n/, "")
     .replace(
       "export function reportClientError(payload: ClientErrorPayload)",
@@ -426,43 +422,4 @@ test("client error reporting drops chunk timeouts that fire before the 120s chun
   pageTimeMs = 121_000;
   reportClientError(chunkTimeout);
   assert.equal(beacons.length, 2, "a real stalled download after 120s still reports");
-});
-
-test("client error reporting ignores an injected wallet provider and still reports application failures", () => {
-  const beacons = [];
-  const reportClientError = loadReportClientError({
-    Blob,
-    navigator: {
-      webdriver: false,
-      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.6 Safari/605.1.15",
-      sendBeacon(url, body) {
-        beacons.push({ url, body });
-        return true;
-      },
-    },
-    window: { location: { href: "https://app.hypertask.ai/detail/project-15/9561" } },
-  });
-  const walletMessages = [
-    "TypeError: undefined is not an object (evaluating 'window.ethereum.selectedAddress = undefined')",
-    "undefined is not an object (evaluating 'window.ethereum.selectedAddress = undefined')",
-    "Uncaught TypeError: undefined is not an object (evaluating 'window.ethereum.selectedAddress = undefined')",
-    "Cannot set properties of undefined (setting 'selectedAddress')",
-    'can\'t set property "selectedAddress" of undefined',
-  ];
-
-  for (const message of walletMessages) {
-    reportClientError({ source: "window.onerror", message });
-  }
-  assert.equal(beacons.length, 0);
-
-  reportClientError({
-    source: "window.onerror",
-    message: "Cannot set properties of undefined (setting 'id')",
-  });
-  assert.equal(beacons.length, 1);
-  reportClientError({
-    source: "window.onerror",
-    message: "Cannot read properties of undefined (reading 'title')",
-  });
-  assert.equal(beacons.length, 2);
 });

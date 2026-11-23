@@ -42,15 +42,3 @@ const isNetworkBlipException = (entry: ExceptionEntry | undefined): boolean =>
 export const dropNetworkBlipException = (
   event: CaptureResult | null,
 ): CaptureResult | null => dropWhenEveryException(event, isNetworkBlipException);
-
-const INJECTED_WALLET_EXCEPTION = /window\.ethereum\b|['"]selectedAddress['"]/;
-
-export const isInjectedWalletExceptionMessage = (message: unknown): boolean =>
-  typeof message === "string" && INJECTED_WALLET_EXCEPTION.test(message);
-
-export const dropInjectedWalletException = (
-  event: CaptureResult | null,
-): CaptureResult | null =>
-  dropWhenEveryException(event, (entry) =>
-    isInjectedWalletExceptionMessage(entry?.value),
-  );

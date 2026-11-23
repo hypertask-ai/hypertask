@@ -1,7 +1,5 @@
 let sent = 0
 
-const INJECTED_WALLET_EXCEPTION = /window\.ethereum\b|['"]selectedAddress['"]/
-
 const CHUNK_LOAD_TIMEOUT_MS = 120_000
 
 export type ClientErrorPayload = {
@@ -21,7 +19,6 @@ export function reportClientError(payload: ClientErrorPayload) {
     payload.componentStack,
   ].filter(Boolean).join('\n')
   if (payload.message?.trim().toLowerCase() === 'script error.') return
-  if (typeof payload.message === 'string' && INJECTED_WALLET_EXCEPTION.test(payload.message)) return
   if (payload.message === 'CancelledError') return
   if (
     payload.source === 'window.onerror' &&

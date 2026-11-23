@@ -21,12 +21,26 @@ import {
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
 import {
-  dropInjectedWalletException,
   dropNetworkBlipException,
   dropResizeObserverLoopException,
   dropSelfRecoveringChunkLoadException,
 } from "@/lib/analytics/browserNoise";
 import { installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
+
+const INJECTED_WALLET_EXCEPTION = /window\.ethereum\b|['"]selectedAddress['"]/;
+
+function dropInjectedWalletException(event: { event?: string; properties?: { $exception_list?: { value?: unknown }[] } } | null) {
+  if (!event || event.event !== "$exception") return event;
+  const exceptions = event.properties?.$exception_list;
+  if (
+    Array.isArray(exceptions) &&
+    exceptions.length > 0 &&
+    exceptions.every((entry) => typeof entry?.value === "string" && INJECTED_WALLET_EXCEPTION.test(entry.value))
+  ) {
+    return null;
+  }
+  return event;
+}
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
 const AUTHENTICATED_ANALYTICS_MAX_WAIT_MS = 8_000;
