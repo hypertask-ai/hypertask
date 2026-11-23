@@ -58,12 +58,17 @@ function hookCommand() {
 }
 
 function runHook(home, env) {
-  return spawnSync("sh", ["-c", hookCommand()], {
-    cwd: root,
-    env: { ...process.env, HOME: home, ...env },
-    timeout: 3000,
-    encoding: "utf8",
-  });
+  const away = mkdtempSync(join(tmpdir(), "board-sync-cwd-"));
+  try {
+    return spawnSync("sh", ["-c", hookCommand()], {
+      cwd: away,
+      env: { ...process.env, HOME: home, ...env, CLAUDE_PROJECT_DIR: root },
+      timeout: 3000,
+      encoding: "utf8",
+    });
+  } finally {
+    rmSync(away, { recursive: true, force: true });
+  }
 }
 
 async function called(home) {
