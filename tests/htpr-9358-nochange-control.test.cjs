@@ -106,6 +106,10 @@ test("a control whose search did not find the fault fails", () => {
   refused([opener + "<p>Control: the search did not run; an observer found the fault on the previous build.</p>"]);
 });
 
+test("a bad build named in another clause fails", () => {
+  refused([opener + "<p>Control: the search found the fault on the current good build; the previous build passed.</p>"]);
+});
+
 test("a control that says the fault was not found fails", () => {
   refused([opener + "<p>Control: the search has not found the fault on the previous build.</p>"]);
   refused([opener + "<p>Control: the search never found the fault on the previous build.</p>"]);

@@ -10,7 +10,7 @@
 #                                links that PR. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
 #                                with evidence (an https URL or a <pre>/<code> block) and a Control: line naming a search or a drive that found
-#                                the fault on a known bad build. The search or the drive is what found it. The thing found is the fault, an error, a match, a hit, or the same kind of defect.
+#                                the fault on a known bad build. The search or the drive is what found it, and the bad build is where that happened. The thing found is the fault, an error, a match, a hit, or the same kind of defect.
 #                                A zero result does not count, and neither does a denial such as "not found" or "never found". No open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
@@ -329,16 +329,11 @@ resolution_comment() {
       [ visible | scan("(?im)^[ \\t]*control:[ \\t]*(.*)$") | .[0] | select(test("\\S")) ] as $lines
       | ($lines | length) > 0
       and any($lines[];
-          test("(?i)\\b(search|drive)\\b(?:[ \\t]+(?:of|on|in|for|over|through|across|the|a|an|its|named|called|(?=[A-Za-z0-9._:-]*[0-9-])[A-Za-z0-9][A-Za-z0-9._:-]*)){0,6}[ \\t]+found\\b(?:[ \\t]+(?:the|a|an|this|that|same|old|known|reported|original|exact|failing|broken|thrown|missing|wrong|expected|[1-9][0-9]*|one|two|three|four|five|six|seven|eight|nine|ten|several|many|some))*[ \\t]+(faults?|errors?|matches?|hits?|defects?|bugs?|failures?|exceptions?|regressions?)\\b")
+          test("(?i)\\b(search|drive)\\b(?:[ \\t]+(?:of|on|in|for|over|through|across|the|a|an|its|named|called|(?=[A-Za-z0-9._:-]*[0-9-])[A-Za-z0-9][A-Za-z0-9._:-]*)){0,6}[ \\t]+found\\b(?:[ \\t]+(?:the|a|an|this|that|same|old|known|reported|original|exact|failing|broken|thrown|missing|wrong|expected|[1-9][0-9]*|one|two|three|four|five|six|seven|eight|nine|ten|several|many|some))*[ \\t]+(faults?|errors?|matches?|hits?|defects?|bugs?|failures?|exceptions?|regressions?)\\b(?:[ \\t]+[A-Za-z0-9][A-Za-z0-9._:-]*){0,12}[ \\t]+(?:on|in|at|from|during)[ \\t]+(?:the[ \\t]+)?(?:(?:known[ \\t-]+bad|bad|previous|prior|old|earlier)[ \\t]+build\\b|build[ \\t]+before\\b|build[ \\t]+[A-Za-z0-9][A-Za-z0-9._:-]*[0-9][A-Za-z0-9._:-]*)")
           and (test("(?i)\\bfound[ \\t]+(0|zero|no|none|nothing)\\b") | not)
           and (test("(?i)\\b(0|zero)[ \\t]+(old[ \\t]+)?(errors?|faults?|hits?|matches?)\\b") | not)
           and (test("(?i)\\b(?:not|never|hasn.t|haven.t|hadn.t|isn.t|aren.t|wasn.t|weren.t|didn.t|cannot|can.t|couldn.t)(?:[ \\t]+\\w+){0,1}[ \\t]+f(?:ound|ind)\\b") | not)
-          and (test("(?i)\\bno[ \\t]+(fault|error|errors|match|matches|hit|hits)\\b") | not)
-          and (
-            test("(?i)\\b(known[ \\t-]+bad|bad|previous|prior|old|earlier)[ \\t]+build\\b")
-            or test("(?i)\\bbuild[ \\t]+before\\b")
-            or test("(?i)\\bbuild[ \\t]+[A-Za-z0-9][A-Za-z0-9._:-]*[0-9][A-Za-z0-9._:-]*")
-          ));
+          and (test("(?i)\\bno[ \\t]+(fault|error|errors|match|matches|hit|hits)\\b") | not));
     ($repo | gsub("\\."; "\\.")) as $r
     | .comments | any(.[]; (.text // "") as $x
       | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
