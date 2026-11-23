@@ -1312,6 +1312,8 @@ test('only /wireframes/ evidence counts for comments added after the cutover', a
   assert.equal((await decision({ comments: [explorations, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
   const artifact = wireframe({ text: '<p>https://claude.ai/artifact/NewDesign123</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z' });
   assert.equal((await decision({ comments: [artifact, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
+  const editedLegacy = wireframe({ text: '<p>https://hypertask.app/explorations/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z', editedAt: '2026-11-23T10:00:00Z' });
+  assert.equal((await decision({ comments: [editedLegacy, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
   const wireframes = wireframe({ text: '<p>https://hypertask.app/wireframes/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z' });
   assert.equal((await decision({ comments: [wireframes, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'success');
 });

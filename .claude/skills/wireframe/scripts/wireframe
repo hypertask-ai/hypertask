@@ -124,6 +124,10 @@ def design_tokens():
                         "ui-sans-serif", "system-ui", "sans-serif", "serif", "monospace"):
                     fonts.add(name.lower())
     tailwind = (root / "tailwind.config.ts").read_text()
+    for raw in re.findall(r"#[0-9a-fA-F]{3,8}\b", tailwind) + re.findall(r"rgba?\([^)]*\)", tailwind):
+        rgb = _rgb(raw)
+        if rgb:
+            colors.add(rgb)
     block = re.search(r"fontSize:\s*\{(.*?)\n      \}", tailwind, re.S)
     if block:
         for raw in re.findall(r"\"([\d.]+)px\"", block.group(1)):
@@ -158,15 +162,27 @@ def node(script, *args):
 COLLECT_JS = r"""
 function collect() {
     const out = [];
+    const solid = (value) => value && value !== 'none' && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)';
     for (const el of document.body ? document.body.querySelectorAll('*') : []) {
         if (el.closest('[data-wireframe-today]')) continue;
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) continue;
         if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
         const style = getComputedStyle(el);
-        out.push([el.tagName.toLowerCase(), style.fontFamily, style.fontSize, style.color, style.backgroundColor,
-                  style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius,
-                  style.borderBottomLeftRadius].join('\u0001'));
+        const colors = [style.color, style.backgroundColor];
+        const sides = [['top', style.borderTopWidth, style.borderTopColor], ['right', style.borderRightWidth, style.borderRightColor],
+                       ['bottom', style.borderBottomWidth, style.borderBottomColor], ['left', style.borderLeftWidth, style.borderLeftColor]];
+        for (const [, width, color] of sides) {
+            if (parseFloat(width) > 0) colors.push(color);
+        }
+        if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(style.outlineColor);
+        if (solid(style.fill)) colors.push(style.fill);
+        if (solid(style.stroke)) colors.push(style.stroke);
+        out.push({
+            tag: el.tagName.toLowerCase(), font: style.fontFamily, size: style.fontSize,
+            colors: colors.filter(solid),
+            radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
+        });
     }
     return out;
 }
@@ -188,17 +204,17 @@ const rgb = (value) => {
 };
 const px = (value) => value.endsWith('px') ? parseFloat(value) : NaN;
 const check = (row) => {
-    const [tag, font, size, color, background, ...radius] = row.split('\u0001');
-    const family = font.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
+    const family = row.font.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
     const problems = [];
     if (!fonts.has(family)) problems.push('font ' + family);
-    if (!sizes.some((allowed) => Math.abs(allowed - px(size)) < 0.5)) problems.push('size ' + size);
-    if (!colors.has(rgb(color))) problems.push('color ' + color);
-    if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent' && !colors.has(rgb(background))) problems.push('background ' + background);
-    for (const corner of radius) {
+    if (!sizes.some((allowed) => Math.abs(allowed - px(row.size)) < 0.5)) problems.push('size ' + row.size);
+    for (const color of row.colors) {
+        if (!colors.has(rgb(color))) problems.push('color ' + color);
+    }
+    for (const corner of row.radii) {
         if (!radii.has(px(corner))) problems.push('radius ' + corner);
     }
-    return problems.length ? tag + ' uses ' + [...new Set(problems)].join(', ') : null;
+    return problems.length ? row.tag + ' uses ' + [...new Set(problems)].join(', ') : null;
 };
 (async () => {
     const browser = await chromium.launch({ headless: true });
@@ -209,11 +225,11 @@ const check = (row) => {
             await page.setContent(fs.readFileSync(file, 'utf8'), { waitUntil: 'domcontentloaded' });
             return page.evaluate(collect);
         };
-        const base = new Set(await load(process.argv[3]));
+        const base = new Set((await load(process.argv[3])).map((row) => JSON.stringify(row)));
         const page_ = await load(process.argv[2]);
         const problems = [];
         for (const row of page_) {
-            if (base.has(row)) continue;
+            if (base.has(JSON.stringify(row))) continue;
             const problem = check(row);
             if (problem && !problems.includes(problem)) problems.push(problem);
         }

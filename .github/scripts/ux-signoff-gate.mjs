@@ -18,7 +18,8 @@ function evidenceLink(comment) {
   const current = comment.text.match(WIREFRAME)?.[0];
   if (current) return current;
   const legacy = comment.text.match(LEGACY_EVIDENCE)?.[0];
-  return legacy && Date.parse(comment.createdAt) < LEGACY_EVIDENCE_UNTIL ? legacy : null;
+  const changed = Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt);
+  return legacy && changed < LEGACY_EVIDENCE_UNTIL ? legacy : null;
 }
 
 function ticketFromTitle(title) {
