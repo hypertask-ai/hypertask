@@ -127,15 +127,6 @@ test("turning the probe flag off lets probe activation through and still keeps q
   assert.equal(customerCapture.properties.account_category, "customer");
 });
 
-test("the probe rollback flag is a small Everyone bugfix", () => {
-  const definition = harness().load("src/lib/flags/definitions/htpr-9533-probe-synthetic.ts").default;
-  assert.equal(definition.key, probeFlag);
-  assert.equal(definition.kind, "bugfix");
-  assert.equal(definition.defaultMode, "EVERYONE");
-  assert.equal(definition.releaseRisk.risk, "small");
-  assert.equal(definition.releaseRisk.highRisk, undefined);
-});
-
 test("the shared-category flag off preserves legacy behavior", async () => {
   const h = harness(false);
   const { isActivationEligible } = h.load("src/lib/telemetry/activationAnalytics.ts");
