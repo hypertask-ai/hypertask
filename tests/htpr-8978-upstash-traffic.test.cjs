@@ -216,6 +216,7 @@ test("a relay subscribe failure is retried once and then refused", async () => {
     disconnect() { this.status = "end"; }
   }
   const previous = process.env.REDIS_URL;
+  const previousKv = process.env.KV_URL;
   process.env.REDIS_URL = "redis://relay.example";
   const channel = `htpr-8978:subscribe:${Date.now()}`;
   try {
@@ -255,10 +256,28 @@ test("a relay subscribe failure is retried once and then refused", async () => {
     assert.equal(clients.at(-1).subs.size, 1);
     keep();
     assert.equal(globalThis.__hypertaskLegacySseRelayLive, undefined);
+    clearRelay();
+    delete process.env.REDIS_URL;
+    delete process.env.KV_URL;
+    const offline = loadModule("src/lib/mcp-server/legacySseBus.ts");
+    await assert.rejects(() => offline.subscribeLegacySseAcrossProcesses(`${channel}:offline`, () => {}));
+    assert.equal(offline.publishLegacySse(`${channel}:offline`, "x"), 0);
+    process.env.REDIS_URL = "redis://relay.example";
+    const down = loadModule("src/lib/mcp-server/legacy-sse.ts", {
+      ioredis: { __esModule: true, default: class { on() { return this; } connect() { return Promise.reject(new Error("down")); } disconnect() {} } },
+    });
+    const refusedStream = await down.handleLegacySseRequest(
+      new Request("https://app.hypertask.ai/sse", { headers: { accept: "text/event-stream" } }),
+      { clientId: "1", token: "t", scopes: [] },
+      [],
+    );
+    assert.equal(refusedStream.status, 503);
   } finally {
     clearRelay();
     if (previous === undefined) delete process.env.REDIS_URL;
     else process.env.REDIS_URL = previous;
+    if (previousKv === undefined) delete process.env.KV_URL;
+    else process.env.KV_URL = previousKv;
   }
 });
 

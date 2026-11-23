@@ -35,6 +35,36 @@ const { handleLegacySseRequest, LEGACY_SSE_KEEPALIVE_MS } = jiti(path.join(root,
 
 async function openStream(t) {
   process.env.REDIS_URL = 'redis://fake'
+  delete globalThis.__hypertaskLegacySseRelay
+  delete globalThis.__hypertaskLegacySseRelayLive
+  delete globalThis.__hypertaskLegacySsePublisher
+  delete globalThis.__hypertaskLegacySsePublisherLive
+  delete globalThis.__hypertaskLegacySseRelayDown
+  delete globalThis.__hypertaskLegacySseBus
+  const ioredisPath = require.resolve('ioredis')
+  const previousIoredis = require.cache[ioredisPath]
+  const clients = []
+  require.cache[ioredisPath] = {
+    id: ioredisPath,
+    filename: ioredisPath,
+    loaded: true,
+    exports: {
+      default: class {
+        constructor() { clients.push(this); this.commands = [] }
+        on() { return this }
+        connect() { this.commands.push('connect'); return Promise.resolve() }
+        subscribe() { this.commands.push('subscribe'); return Promise.resolve() }
+        unsubscribe() { return Promise.resolve() }
+        publish() { this.commands.push('publish'); return Promise.resolve(0) }
+        quit() { return Promise.resolve() }
+        disconnect() {}
+      },
+    },
+  }
+  t.after(() => {
+    if (previousIoredis) require.cache[ioredisPath] = previousIoredis
+    else delete require.cache[ioredisPath]
+  })
   const abort = new AbortController()
   t.after(() => abort.abort())
   const response = await handleLegacySseRequest(
@@ -53,7 +83,7 @@ async function openStream(t) {
       text += decoder.decode(value)
     }
   })()
-  return { LEGACY_SSE_KEEPALIVE_MS, read: () => text, pump }
+  return { LEGACY_SSE_KEEPALIVE_MS, read: () => text, pump, commands: () => clients.flatMap((client) => client.commands) }
 }
 
 const tick = () => new Promise((resolve) => setImmediate(resolve))
@@ -72,6 +102,8 @@ test('a quiet legacy SSE stream sends a keep-alive every minute without Redis', 
   t.mock.timers.tick(60000 * 4)
   await tick()
   assert.equal(stream.read().match(/: keepalive\n\n/g)?.length, 5)
+  assert.equal(stream.commands().includes('ping'), false)
+  assert.equal(stream.commands().includes('publish'), false)
 })
 
 test('with the flag off the stream stays as before', async (t) => {

@@ -157,10 +157,17 @@ test('legacy SSE registration preserves SDK annotations and resolves per-message
     '@modelcontextprotocol/sdk/server/sse.js': { SSEServerTransport: Transport },
     '@/lib/mcp/agents/scopes': { getAgentRole: async () => role },
     '@/lib/flags': { isFeatureEnabled: async (key) => (assert.notEqual(key, 'htpr-6927-mcp-v2'), false) },
+    ioredis: { __esModule: true, default: class { on() { return this } connect() { return Promise.resolve() } subscribe() { return Promise.resolve() } unsubscribe() { return Promise.resolve() } publish() { return Promise.resolve(0) } quit() { return Promise.resolve() } disconnect() {} } },
   })('src/lib/mcp-server/legacy-sse.ts')
   const sse = legacySse.handleLegacySseRequest
   const originalRedis = process.env.REDIS_URL
   process.env.REDIS_URL = 'redis://fixture.invalid'
+  delete globalThis.__hypertaskLegacySseRelay
+  delete globalThis.__hypertaskLegacySseRelayLive
+  delete globalThis.__hypertaskLegacySsePublisher
+  delete globalThis.__hypertaskLegacySsePublisherLive
+  delete globalThis.__hypertaskLegacySseRelayDown
+  delete globalThis.__hypertaskLegacySseBus
   const abort = new AbortController()
   try {
     await sse(new Request('https://mcp.example.com/sse', { signal: abort.signal }), auth, legacy, selectMcpTools(legacy, false, { agent: true }))

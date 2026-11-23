@@ -188,7 +188,7 @@ async function commandClient(): Promise<RelayClient | null> {
 
 async function subscribeRemote(channel: string): Promise<() => void> {
   const current = await relay()
-  if (!current) return () => {}
+  if (!current) throw new Error("Legacy SSE relay is unavailable")
   const previous = current.tails.get(channel) ?? Promise.resolve()
   let release = async () => {}
   let settled: Promise<void> | undefined
