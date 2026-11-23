@@ -19,7 +19,6 @@ const route = taskWriteRoute({
       return viewWriteJson({ message: "Missing required information" }, 400);
     }
     const userId = session.userId;
-    const keepTableSettings = await isFeatureEnabled("htpr-8973-table-sort-columns", userId);
     const where = {
       id: newViewId,
       project_view: { projectId, project: savedViewBoardAccessWhere(userId) },
@@ -29,16 +28,19 @@ const route = taskWriteRoute({
     const notFound = () => viewWriteJson({ message: "View not found on this board" }, 404);
     try {
       if (!await prisma.view.findFirst({ where, select })) return notFound();
+      const keepTableSettings = await isFeatureEnabled("htpr-8973-table-sort-columns", userId).catch(() => false);
       const switched = await prisma.$transaction(async tx => {
         await acquireBoardFilterWriteLock(tx, projectId);
         const view = await tx.view.findFirst({ where, select });
         if (!view) return false;
         const pv = view.project_view;
         const appliedViewId = pv.default_view_id === newViewId ? null : newViewId;
-        const previous = await tx.user_Project_View.findUnique({
-          where: { user_project: { userId, project_view_id: pv.id } },
-          select: { appliedViewId: true, unsavedViewId: true },
-        });
+        const previous = keepTableSettings
+          ? await tx.user_Project_View.findUnique({
+            where: { user_project: { userId, project_view_id: pv.id } },
+            select: { appliedViewId: true, unsavedViewId: true },
+          })
+          : null;
         const state = await tx.user_Project_View.upsert({
           create: { userId, project_view_id: pv.id, appliedViewId },
           update: { appliedViewId },
