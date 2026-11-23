@@ -10,10 +10,6 @@ const source = fs.readFileSync(
   "utf8"
 );
 
-const {
-  isInjectedWalletExceptionMessage,
-} = require("../src/lib/analytics/injectedWalletNoise.mjs");
-
 function loadReportClientError(context) {
   const javascript = source
     .replace(
@@ -25,7 +21,6 @@ function loadReportClientError(context) {
       "export function reportClientError(payload: ClientErrorPayload)",
       "function reportClientError(payload)"
     );
-  context = { ...context, isInjectedWalletExceptionMessage };
   assert.notEqual(javascript, source, "TypeScript source projection failed");
   vm.runInNewContext(
     `${javascript}\nthis.reportClientError = reportClientError`,
