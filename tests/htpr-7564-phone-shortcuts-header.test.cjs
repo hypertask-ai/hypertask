@@ -47,6 +47,8 @@ function render(enabled, phoneHelp, legacy = false) {
     "lucide-react": require("lucide-react"),
     "@/lib/flags/keys": keys,
     "@/lib/flags/definitions/htpr-8929-column-select-all": jiti(path.join(root, "src/lib/flags/definitions/htpr-8929-column-select-all.ts")),
+    "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top": { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG: "htpr-8998-ticket-jump-to-top" },
+    "@/lib/taskDetailJumpToTop": { addTicketJumpToTopShortcut() {} },
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey ? enabled : key === phoneHelpKey && phoneHelp },
     "@/lib/state": { useRecoilValue: () => false, useRecoilState: () => [true, () => {}] },
     "@/store": { appShellRailAtom: {}, showShortcutsAtom: {} },
