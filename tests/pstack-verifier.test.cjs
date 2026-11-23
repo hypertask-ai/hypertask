@@ -558,22 +558,113 @@ test("fill reaches a search box and a number box", async () => {
   assert.deepEqual(none.filled, []);
 });
 
-test("the model call uses the eval headers and AbortSignal.timeout", async () => {
-  const { completeWithOpenRouter, PSTACK_VERIFIER } = await load();
+test("the model call uses token ladder with the pr-verifier purpose", async () => {
+  const { completeWithOpenRouter, callLadder, LADDER_CALL_PURPOSE } = await load();
   const seen = [];
-  const original = AbortSignal.timeout;
-  AbortSignal.timeout = (ms) => { seen.push(ms); return original(ms); };
+  await completeWithOpenRouter("{}", {
+    model: "deepseek/deepseek-v4.1-flash",
+    ladderImpl: (payload) => {
+      seen.push(payload);
+      return "{\"verdict\":\"PASS\"}";
+    },
+  });
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].model, "deepseek/deepseek-v4.1-flash");
+  assert.equal(seen[0].reasoning?.enabled, false);
+  assert.equal(LADDER_CALL_PURPOSE, "pr-verifier");
+  const spawnImpl = (bin, args, options) => {
+    seen.push(bin, args, options.input);
+    return { status: 0, stdout: "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}\n", stderr: "" };
+  };
+  process.env.LADDER_CALL_BIN = "/tmp/ladder-call";
   try {
-    await completeWithOpenRouter("{}", {
-      key: "secret",
-      model: "deepseek/deepseek-v4.1-flash",
-      fetchImpl: async (url, options) => {
-        seen.push(url, options.headers.Authorization, options.headers["Content-Type"], options.signal instanceof AbortSignal);
-        return { ok: true, async json() { return { choices: [{ message: { content: "{\"verdict\":\"PASS\"}" } }] }; } };
-      },
-    });
-  } finally { AbortSignal.timeout = original; }
-  assert.deepEqual(seen, [60000, PSTACK_VERIFIER.endpoint, "Bearer secret", "application/json", true]);
+    await callLadder({ model: "deepseek/deepseek-v4.1-flash", messages: [{ role: "user", content: "hi" }] }, spawnImpl);
+  } finally { delete process.env.LADDER_CALL_BIN; }
+  assert.equal(seen[1], "/tmp/ladder-call");
+  assert.deepEqual(seen[2], ["--purpose", "pr-verifier"]);
+});
+
+const LADDER_LANES = [
+  { name: "vercel-ai-gateway", key_env: "AI_GATEWAY_API_KEY", url: "https://ai-gateway.vercel.sh/v1/chat/completions", model: "deepseek/deepseek-v4.1-flash" },
+  { name: "opencode-go", key_env: "OPENCODE_API_KEY", url: "https://opencode.ai/zen/go/v1/chat/completions", model: "deepseek-v4.1-flash" },
+  { name: "deepseek", key_env: "DEEPSEEK_API_KEY", url: "https://api.deepseek.com/chat/completions", model: "deepseek-v4.1-flash" },
+  { name: "openrouter", key_env: "OPENROUTER_API_KEY", url: "https://openrouter.ai/api/v1/chat/completions", model: "deepseek/deepseek-v4.1-flash" },
+];
+
+async function withLadderLanes(lanes, run) {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ladder-root-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "ladder-work-"));
+  fs.mkdirSync(path.join(root, "ci"), { recursive: true });
+  fs.writeFileSync(path.join(root, "ci", "lanes.json"), `${JSON.stringify(lanes)}\n`);
+  const previous = {
+    LADDER_CALL_ROOT: process.env.LADDER_CALL_ROOT,
+    LADDER_CALL_BIN: process.env.LADDER_CALL_BIN,
+    LADDER_CALL_LANES: process.env.LADDER_CALL_LANES,
+    WORK: process.env.WORK,
+  };
+  process.env.LADDER_CALL_ROOT = root;
+  process.env.LADDER_CALL_BIN = path.join(root, "ci", "ladder-call");
+  process.env.WORK = work;
+  delete process.env.LADDER_CALL_LANES;
+  const spawn = () => ({ status: 0, stdout: "{\"choices\":[{\"message\":{\"content\":\"{}\"}}]}\n", stderr: "" });
+  try {
+    return await run({ fs, spawn });
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+test("a deepseek author never gets a deepseek verifier on any lane", async () => {
+  const { callLadder, pickVerifier, modelFamily, modelRequest } = await load();
+  await withLadderLanes(LADDER_LANES, async ({ fs, spawn }) => {
+    let env;
+    const capture = (_bin, _args, options) => {
+      env = options.env;
+      return spawn();
+    };
+    const authored = pickVerifier("deepseek", "openai/gpt-5");
+    await callLadder(modelRequest("plan", { model: authored.model }), capture);
+    const lanes = JSON.parse(fs.readFileSync(env.LADDER_CALL_LANES, "utf8"));
+    assert.deepEqual(lanes.map((lane) => [lane.name, lane.model]), [
+      ["vercel-ai-gateway", "openai/gpt-5"],
+      ["openrouter", "openai/gpt-5"],
+    ]);
+    assert.equal(lanes.every((lane) => modelFamily(lane.model) !== "deepseek"), true);
+    const other = pickVerifier("grok", "openai/gpt-5");
+    await callLadder(modelRequest("plan", { model: other.model }), capture);
+    assert.equal(env.LADDER_CALL_LANES, undefined);
+    assert.equal(LADDER_LANES[0].name, "vercel-ai-gateway");
+    assert.equal(modelFamily(LADDER_LANES[0].model), "deepseek");
+  });
+});
+
+test("judge screenshots skip lanes that cannot take images", async () => {
+  const { callLadder, modelAcceptsImages, modelRequest, FLASH } = await load();
+  const lanes = [
+    ...LADDER_LANES,
+    { name: "deepseek-pro", key_env: "DEEPSEEK_API_KEY", url: "https://api.deepseek.com/chat/completions", model: "deepseek-v4-pro" },
+  ];
+  await withLadderLanes(lanes, async ({ fs, spawn }) => {
+    let env;
+    const capture = (_bin, _args, options) => {
+      env = options.env;
+      return spawn();
+    };
+    await callLadder(modelRequest("judge", { model: FLASH, images: ["abc"] }), capture);
+    const judged = JSON.parse(fs.readFileSync(env.LADDER_CALL_LANES, "utf8"));
+    assert.equal(judged.some((lane) => lane.name === "deepseek" || lane.name === "deepseek-pro"), false);
+    assert.equal(judged[0].name, "vercel-ai-gateway");
+    assert.equal(judged.every((lane) => modelAcceptsImages(lane.model, lane)), true);
+    await callLadder(modelRequest("plan", { model: FLASH }), capture);
+    assert.equal(env.LADDER_CALL_LANES, undefined);
+    assert.equal(lanes[0].name, "vercel-ai-gateway");
+  });
 });
 
 test("the model call turns reasoning off and leaves room for a full plan", async () => {

@@ -101,6 +101,8 @@ board picker, and the model line.
 
 ## Gotchas
 
+Known failing on production, tracked in [HTPR-9582](https://app.hypertask.ai/detail/project-15/9582).
+
 Mobile-only layout and interaction bugs desktop testing never catches, most
 recently: mobile Task Writer direct save locking up and new-task layout
 ([HTPR-6564](https://app.hypertask.ai/detail/project-15/6564), two rounds), mobile Agent Chat chrome and composer showing on

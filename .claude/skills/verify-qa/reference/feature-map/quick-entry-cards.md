@@ -72,6 +72,7 @@ draft is still here."
 
 ## Gotchas
 
+- Known failing on production, tracked in [HTPR-9582](https://app.hypertask.ai/detail/project-15/9582).
 - The **+**, `N` or table **New task** opens the full create window instead of the inline box, or `N` does nothing.
 - The tooltip shows `C`, `N / Shift+C` or anything other than `N` while `htpr-8265-task-shortcuts-writer-model` is on. With that flag off, `N / Shift+C` is the expected bottom-row tooltip.
 - `Shift+C` still opens the box, or `N` opens the first column while another column is hovered.
