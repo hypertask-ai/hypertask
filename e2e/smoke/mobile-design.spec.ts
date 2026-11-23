@@ -15,8 +15,7 @@ for (const theme of MOBILE_THEMES) {
       const context = await browser.newContext({ baseURL: origin, storageState, viewport: MOBILE_VIEWPORT, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA })
       await context.addCookies([{ name: 'theme', value: theme, url: origin, secure: origin.startsWith('https:'), sameSite: 'Strict' }])
       try {
-        const label = `[${screen.id}/${theme}]`, page = await context.newPage(); await page.goto(screen.path({ boardPath, tablePath: `/project?id=${boardId}&surface=table`, taskPath }), { waitUntil: 'load', timeout: 30_000 })
-        await page.waitForLoadState('networkidle', { timeout: 4_000 }).catch(() => {})
+        const label = `[${screen.id}/${theme}]`, page = await context.newPage(); await page.goto(screen.path({ boardPath, tablePath: `/project?id=${boardId}&surface=table`, taskPath }), { waitUntil: 'load', timeout: 30_000 }).then(() => page.waitForLoadState('networkidle', { timeout: 4_000 })).catch(() => {})
         for (const step of screen.taps ?? []) { const btn = page.getByRole(step.role, { name: step.name }).first(); await btn.waitFor({ state: 'visible', timeout: 10_000 }); await btn.tap(); await page.waitForTimeout(900) }
         const ready = screen.ready; if (!ready) { failures.push(`${label} no readiness landmark; every audited screen must define one`); continue }
         await expect(page.locator(ready).first(), `${label} readiness landmark ${ready} did not render`).toBeVisible({ timeout: 15_000 })
