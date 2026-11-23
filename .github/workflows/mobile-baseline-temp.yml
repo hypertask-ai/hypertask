@@ -21,5 +21,6 @@ jobs:
         timeout-minutes: 20
       - env: { SMOKE_BASE_URL: 'https://app.hypertask.ai', SMOKE_POSTDEPLOY: '1', MOBILE_DESIGN_UPDATE: '1', MOBILE_DESIGN_THEMES: '${{ matrix.theme }}', MOBILE_DESIGN_BASELINE: 'mobile-design.baseline.${{ matrix.theme }}.json', QA_LOGIN_EMAIL: '${{ secrets.QA_LOGIN_EMAIL }}', QA_LOGIN_PASSWORD: '${{ secrets.QA_LOGIN_PASSWORD }}', SMOKE_BOARD_PATH: '/project?id=7049&surface=board', SMOKE_TASK_PATH: '/detail/project-7049/6283' }
         run: timeout 1800 npx playwright test -c e2e/smoke/playwright.config.mobile.ts --project=mobile-design
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: 'baseline-${{ matrix.theme }}', path: 'mobile-design.baseline.${{ matrix.theme }}.json', if-no-files-found: error, retention-days: 7 }

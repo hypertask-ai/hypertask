@@ -15,17 +15,17 @@ for (const theme of MOBILE_THEMES) {
       const context = await browser.newContext({ baseURL: origin, storageState, viewport: MOBILE_VIEWPORT, deviceScaleFactor: 3, isMobile: true, hasTouch: true, userAgent: UA })
       await context.addCookies([{ name: 'theme', value: theme, url: origin, secure: origin.startsWith('https:'), sameSite: 'Strict' }])
       try {
-        const page = await context.newPage(); await page.goto(screen.path({ boardPath, tablePath: `/project?id=${boardId}&surface=table`, taskPath }), { waitUntil: 'load', timeout: 30_000 })
+        const label = `[${screen.id}/${theme}]`, page = await context.newPage(); await page.goto(screen.path({ boardPath, tablePath: `/project?id=${boardId}&surface=table`, taskPath }), { waitUntil: 'load', timeout: 30_000 })
         await page.waitForLoadState('networkidle', { timeout: 4_000 }).catch(() => {})
         for (const step of screen.taps ?? []) { const btn = page.getByRole(step.role, { name: step.name }).first(); await btn.waitFor({ state: 'visible', timeout: 10_000 }); await btn.tap(); await page.waitForTimeout(900) }
-        const ready = screen.ready || (() => { throw new Error(`${screen.id} has no readiness landmark; every audited screen must define one`) })()
-        await expect(page.locator(ready).first(), `${screen.id} readiness landmark ${ready} did not render`).toBeVisible({ timeout: 15_000 })
-        await page.waitForTimeout(1000); expect(await page.locator('html').getAttribute('data-theme'), `${screen.id} theme`).toBe(theme)
-        const metrics = await collectMobileMetrics(page); expect(metrics.coarsePointer, `${screen.id}/${theme} pointer:coarse`).toBe(true)
+        const ready = screen.ready; if (!ready) { failures.push(`${label} no readiness landmark; every audited screen must define one`); continue }
+        await expect(page.locator(ready).first(), `${label} readiness landmark ${ready} did not render`).toBeVisible({ timeout: 15_000 })
+        await page.waitForTimeout(1000); expect(await page.locator('html').getAttribute('data-theme'), `${label} theme`).toBe(theme)
+        const metrics = await collectMobileMetrics(page); expect(metrics.coarsePointer, `${label} pointer:coarse`).toBe(true)
         const result = evaluateMobileDesign(screen.id, theme, metrics, UPDATE ? null : baseline, STRICT); themeIds[screen.id] = result.idsByRule; if (!UPDATE) failures.push(...result.failures)
-      } finally { await context.close() }
+      } catch (err) { failures.push(`[${screen.id}/${theme}] ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`) } finally { await context.close() }
     }
-    if (UPDATE) { mkdirSync(path.dirname(BASELINE_PATH), { recursive: true }); const merged = (existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : null)?.screens ?? {}; for (const [sid, ids] of Object.entries(themeIds)) merged[sid] = { ...(merged[sid] ?? {}), [theme]: ids }; writeFileSync(BASELINE_PATH, `${JSON.stringify({ generatedAt: new Date().toISOString(), viewport: MOBILE_VIEWPORT, touchEmulation: true, themes: [...MOBILE_THEMES], screens: merged }, null, 2)}\n`); return }
+    if (UPDATE) { mkdirSync(path.dirname(BASELINE_PATH), { recursive: true }); const merged = (existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : null)?.screens ?? {}; for (const [sid, ids] of Object.entries(themeIds)) merged[sid] = { ...(merged[sid] ?? {}), [theme]: ids }; writeFileSync(BASELINE_PATH, `${JSON.stringify({ generatedAt: new Date().toISOString(), viewport: MOBILE_VIEWPORT, touchEmulation: true, themes: [...MOBILE_THEMES], screens: merged }, null, 2)}\n`) }
     expect(failures, failures.join('\n')).toEqual([])
   })
 }
