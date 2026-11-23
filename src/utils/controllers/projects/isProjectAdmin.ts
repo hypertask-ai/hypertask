@@ -1,11 +1,7 @@
 import prisma from "@/lib/prisma";
 
-const isProjectAdmin = async (
-  userId: number,
-  projectId: number,
-  database: { project: Pick<typeof prisma.project, "findFirst"> } = prisma,
-): Promise<boolean> => {
-  const project = await database.project.findFirst({
+const isProjectAdmin = async (userId: number, projectId: number): Promise<boolean> => {
+  const project = await prisma.project.findFirst({
     where: {
       id: projectId,
       OR: [

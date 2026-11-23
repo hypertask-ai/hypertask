@@ -30,7 +30,6 @@ function load(relativePath, mocks = {}) {
     if (specifier === "@/lib/auth/crossTeamContext") return { crossTeamRequestFence: () => null };
     if (specifier === "@/lib/agents/crossTeam") return { crossTeamAgentsEnabled: async () => false };
     if (specifier === "@/lib/mcp/agents/selfJoin") return { allowAgentSelfJoin: async () => ({ ok: false, projectId: 15 }) };
-    if (specifier === "@/utils/controllers/projects/isProjectAdmin") return { default: async () => false };
     throw new Error(`Unexpected import in ${relativePath}: ${specifier}`);
   };
   loaded._compile(javascript, filename);
