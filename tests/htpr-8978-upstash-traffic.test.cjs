@@ -261,6 +261,7 @@ test("a lost alarm lock leaves the sample in place so the next run can still fil
     at: opened,
     pendingCommands: UPSTASH_DAILY_COMMAND_LIMIT + 1,
     pendingAt: at,
+    pendingTotal: 10 + UPSTASH_DAILY_COMMAND_LIMIT + 1,
   });
   await assert.rejects(() => runUpstashCommandCheck({
     ...deps(async () => true),
@@ -302,11 +303,41 @@ test("a missed alert still files after a quiet following day", async () => {
   assert.equal(JSON.parse(sample.current).pendingCommands, 400_001);
   const next = await run(opened + 2 * DAY_MS, async () => true);
   assert.equal(next.filed, true);
-  assert.equal(next.commands, 400_001);
+  assert.equal(next.commands, 0);
   assert.equal(created.length, 1);
   assert.match(created[0].description, /400,001/);
   assert.match(created[0].description, /Marker: upstash-daily-commands:2026-11-23/);
   assert.equal(JSON.parse(sample.current).total, spike);
+  assert.equal(JSON.parse(sample.current).pendingCommands, undefined);
+});
+
+test("a second hot day is still filed after the owed alert", async () => {
+  const { runUpstashCommandCheck } = alarm();
+  const opened = Date.parse("2026-11-22T05:51:00.000Z");
+  const first = 10 + 400_001;
+  const second = first + 400_001;
+  const sample = { current: JSON.stringify({ total: 10, at: opened }) };
+  const created = [];
+  const run = (at, total, claim) => runUpstashCommandCheck({
+    now: at,
+    info: `total_commands_processed:${total}`,
+    readSample: async () => sample.current,
+    writeSample: async (value) => { sample.current = value; },
+    claim,
+    findTicket: async (marker) => created.find((ticket) => ticket.description.includes(marker))?.id ?? null,
+    createTicket: async (ticket) => {
+      created.push(ticket);
+      return created.length;
+    },
+  });
+  assert.equal((await run(opened + DAY_MS, first, async () => false)).filed, false);
+  const both = await run(opened + 2 * DAY_MS, second, async () => true);
+  assert.equal(both.filed, true);
+  assert.equal(both.commands, 400_001);
+  assert.equal(created.length, 2);
+  assert.match(created[0].description, /Marker: upstash-daily-commands:2026-11-23/);
+  assert.match(created[1].description, /Marker: upstash-daily-commands:2026-11-24/);
+  assert.equal(JSON.parse(sample.current).total, second);
   assert.equal(JSON.parse(sample.current).pendingCommands, undefined);
 });
 

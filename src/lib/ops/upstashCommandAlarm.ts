@@ -3,7 +3,7 @@ export const UPSTASH_SAMPLE_KEY = "upstash:command-sample:v1";
 export const UPSTASH_ALARM_LOCK_KEY = "upstash:command-alarm:lock";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type CommandSample = { total: number; at: number; pendingCommands?: number; pendingAt?: number };
+export type CommandSample = { total: number; at: number; pendingCommands?: number; pendingAt?: number; pendingTotal?: number };
 
 export function readCommandTotal(info: string): number | null {
   for (const rawLine of info.split("\n")) {
@@ -59,11 +59,21 @@ export async function runUpstashCommandCheck(input: {
   const total = readCommandTotal(input.info);
   if (total === null) return { commands: null, filed: false, taskId: null, error: "unreadable" };
   const previous = parseSample(await input.readSample());
-  if (previous?.pendingCommands != null && previous.pendingAt != null) {
+  if (previous?.pendingCommands != null && previous.pendingAt != null && previous.pendingTotal != null) {
     if (!(await input.claim())) return { commands: previous.pendingCommands, filed: false, taskId: null };
     const filedAlert = await fileAlarm(input, previous.pendingCommands, previous.pendingAt);
-    await input.writeSample(JSON.stringify({ total, at: input.now }));
-    return { commands: previous.pendingCommands, ...filedAlert };
+    const baseline = { total: previous.pendingTotal, at: previous.pendingAt };
+    const following = nextCommandSample(baseline, total, input.now);
+    let filed = filedAlert.filed;
+    let taskId = filedAlert.taskId;
+    if (following.alert && following.commands !== null) {
+      const nextAlert = await fileAlarm(input, following.commands, input.now);
+      filed = filed || nextAlert.filed;
+      taskId = nextAlert.taskId;
+    }
+    if (following.replace || following.alert) await input.writeSample(JSON.stringify(following.next));
+    else await input.writeSample(JSON.stringify(baseline));
+    return { commands: following.commands ?? previous.pendingCommands, filed, taskId };
   }
   const decision = nextCommandSample(previous, total, input.now);
   let filed = false;
@@ -81,6 +91,7 @@ export async function runUpstashCommandCheck(input: {
         at: previous?.at ?? input.now,
         pendingCommands: decision.commands,
         pendingAt: input.now,
+        pendingTotal: total,
       }));
     }
   }
@@ -114,8 +125,9 @@ function parseSample(raw: string | null): CommandSample | null {
     if (!Number.isSafeInteger(value.at) || value.at < 0) return null;
     const pendingCommands = Number.isSafeInteger(value.pendingCommands) && value.pendingCommands > 0 ? value.pendingCommands : undefined;
     const pendingAt = Number.isSafeInteger(value.pendingAt) && value.pendingAt > 0 ? value.pendingAt : undefined;
-    if (pendingCommands == null || pendingAt == null) return { total: value.total, at: value.at };
-    return { total: value.total, at: value.at, pendingCommands, pendingAt };
+    const pendingTotal = Number.isSafeInteger(value.pendingTotal) && value.pendingTotal >= 0 ? value.pendingTotal : undefined;
+    if (pendingCommands == null || pendingAt == null || pendingTotal == null) return { total: value.total, at: value.at };
+    return { total: value.total, at: value.at, pendingCommands, pendingAt, pendingTotal };
   } catch {
     return null;
   }
