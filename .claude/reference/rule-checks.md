@@ -21,3 +21,10 @@ or when a row names a check file that is not in the repository.
 | Clean only your own finished worktree and branch. | nothing yet |
 | No explanatory code comments. Express intent in code. | `eslint-local-rules/no-comments.mjs` |
 | Hypertask board: 15 (https://app.hypertask.ai/project?id=15). | `tests/board-sync-stop-hook.test.cjs` |
+| Mobile tap targets >= 44x44 at 390x844 touch across all 4 themes. | `e2e/smoke/mobile-design.spec.ts`, `tests/mobile-design.test.cjs`, `.github/workflows/mobile-verify.yml` |
+| Mobile text inputs compute to >= 16px font size. | `e2e/smoke/mobile-design.spec.ts`, `tests/mobile-design.test.cjs`, `.github/workflows/mobile-verify.yml` |
+| Mobile surfaces use 0, 2, or 4px corners (avatars/status-dots exempt). | `e2e/smoke/mobile-design.spec.ts`, `tests/mobile-design.test.cjs`, `.github/workflows/mobile-verify.yml` |
+| Mobile screens have zero horizontal overflow or unellipsized clipping. | `e2e/smoke/mobile-design.spec.ts`, `tests/mobile-design.test.cjs`, `.github/workflows/mobile-verify.yml` |
+| Mobile non-AI elements use no purple. | `e2e/smoke/mobile-design.spec.ts`, `tests/mobile-design.test.cjs`, `.github/workflows/mobile-verify.yml` |
+| Mobile text fields expose the standard right-bound mic button. | `e2e/smoke/mobile-design.spec.ts`, `tests/mobile-design.test.cjs`, `.github/workflows/mobile-verify.yml` |
+| Mobile user journeys pass with real taps at 390x844 touch. | `e2e/smoke/journeys.spec.ts`, `.github/workflows/mobile-verify.yml`, `.github/scripts/feature-map-live-daily.mjs` |

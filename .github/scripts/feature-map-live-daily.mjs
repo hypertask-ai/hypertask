@@ -21,6 +21,7 @@ const QA_STATE = 'e2e/smoke/.state/smoke-state.json'
 const SUITES = [
   { file: 'e2e/smoke/prod.spec.ts', project: 'Desktop' },
   { file: 'e2e/smoke/journeys.spec.ts', project: 'journeys' },
+  { file: 'e2e/smoke/journeys.spec.ts', project: 'mobile-journeys' },
 ]
 const RANK = { passed: 0, skipped: 1, failed: 2, timedOut: 2, interrupted: 2 }
 

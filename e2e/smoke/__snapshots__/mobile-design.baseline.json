@@ -1,0 +1,560 @@
+{
+  "generatedAt": "2026-11-23T22:12:34.661Z",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "touchEmulation": true,
+  "themes": [
+    "porcelain",
+    "graphite",
+    "amoled",
+    "dia"
+  ],
+  "screens": {
+    "my-tasks": {
+      "porcelain": {
+        "tap-target": 28,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 28,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 28,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 28,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "board-kanban": {
+      "porcelain": {
+        "tap-target": 9,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 14,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 14,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 15,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "board-table": {
+      "porcelain": {
+        "tap-target": 67,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 80,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 80,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 80,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "calendar": {
+      "porcelain": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "task-detail": {
+      "porcelain": {
+        "tap-target": 16,
+        "input-font": 0,
+        "radius": 4,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 16,
+        "input-font": 0,
+        "radius": 4,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 15,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 2
+      },
+      "dia": {
+        "tap-target": 14,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    },
+    "inbox": {
+      "porcelain": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "ai-chat-sheet": {
+      "porcelain": {
+        "tap-target": 7,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 7,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 7,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 7,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "ai-chat-full": {
+      "porcelain": {
+        "tap-target": 21,
+        "input-font": 1,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 21,
+        "input-font": 1,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 21,
+        "input-font": 1,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 17,
+        "input-font": 1,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "commands-search": {
+      "porcelain": {
+        "tap-target": 4,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 4,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 12,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "dia": {
+        "tap-target": 15,
+        "input-font": 0,
+        "radius": 2,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    },
+    "commands-new-task": {
+      "porcelain": {
+        "tap-target": 3,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 3,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 3,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "dia": {
+        "tap-target": 3,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    },
+    "new-task-modal": {
+      "porcelain": {
+        "tap-target": 2,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 2,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 2,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 2,
+        "input-font": 1,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "board-switcher": {
+      "porcelain": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "dia": {
+        "tap-target": 2,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    },
+    "view-switcher": {
+      "porcelain": {
+        "tap-target": 0,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "graphite": {
+        "tap-target": 0,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "amoled": {
+        "tap-target": 0,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      },
+      "dia": {
+        "tap-target": 0,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 0
+      }
+    },
+    "search": {
+      "porcelain": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "dia": {
+        "tap-target": 1,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    },
+    "settings-menu": {
+      "porcelain": {
+        "tap-target": 10,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 10,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 10,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "dia": {
+        "tap-target": 10,
+        "input-font": 0,
+        "radius": 1,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    },
+    "settings-general": {
+      "porcelain": {
+        "tap-target": 5,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "graphite": {
+        "tap-target": 5,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "amoled": {
+        "tap-target": 5,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      },
+      "dia": {
+        "tap-target": 5,
+        "input-font": 0,
+        "radius": 0,
+        "overflow-x": 0,
+        "purple-non-ai": 0,
+        "mic-action": 1
+      }
+    }
+  }
+}

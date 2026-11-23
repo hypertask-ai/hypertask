@@ -24,6 +24,13 @@ Reference command paths are repo-relative.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
 - Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
+- Mobile tap targets >= 44x44 at 390x844 touch across all 4 themes.
+- Mobile text inputs compute to >= 16px font size.
+- Mobile surfaces use 0, 2, or 4px corners (avatars/status-dots exempt).
+- Mobile screens have zero horizontal overflow or unellipsized clipping.
+- Mobile non-AI elements use no purple.
+- Mobile text fields expose the standard right-bound mic button.
+- Mobile user journeys pass with real taps at 390x844 touch.
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
 
@@ -31,21 +38,22 @@ Each rule names the check that enforces it in [rule checks](.claude/reference/ru
 
 Read linked sections on demand.
 
+
 | When | Read |
 |---|---|
 | Checking what enforces an agent rule | [Rule checks](.claude/reference/rule-checks.md) |
-| Starting, claiming, delegating, shipping | [Session rules](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claim rules](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
-| Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [ticket template](docs/ticket-template.md) |
+| Starting, claiming, delegating, shipping | [Sessions](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claims](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
+| Reading tickets or writing board content | [Access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [exceptions](.claude/reference/boards.md#repo-board-exceptions), [template](docs/ticket-template.md) |
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
-| Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup), [.claude/skills/clean-up/SKILL.md](.claude/skills/clean-up/SKILL.md) |
-| Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
-| Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
-| UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
-| Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
-| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
-| App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
-| pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
-| Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |
+| Branching, PRs, merging, deploying, cleanup | [Workflow](.claude/reference/workflow.md#repository-workflow), [detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup](.claude/reference/workflow.md#worktree-cleanup), [clean-up](.claude/skills/clean-up/SKILL.md) |
+| Workflows, runners, checks, previews | [CI](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
+| Preview creation, polling, login | [.claude/reference/previews.md](.claude/reference/previews.md) |
+| UI code, layout, selection | [Shared UI](.claude/reference/ui.md#reuse-existing-ui-enforced), [reuse-existing-ui](.claude/skills/reuse-existing-ui/SKILL.md) |
+| Behavior, flags, premerge, live QA | [Flags](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [verify-hypertask](.claude/skills/verify-hypertask/SKILL.md) |
+| New components or visible UI | [Design/approval](.claude/reference/flags.md), [verify-hypertask](.claude/skills/verify-hypertask/SKILL.md) |
+| App architecture | [Stack](.claude/reference/architecture.md#stack-orientation) |
+| pstack skills or model selection | [pstack](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
+| AI models or saved choices | [Models](.claude/reference/architecture.md#ai-models) |
 | Access or security changes | [Still-allowed tests](.claude/reference/workflow.md#repo-workflow-detail) |
 
 Access and security changes need still-allowed tests.
