@@ -977,9 +977,7 @@ An identical diff is not an identity: a rebase onto a new base can bring product
 
 ## Task writer and chip quality baseline
 
-The existing [AI evals workflow](../.github/workflows/ai-evals.yml) also replays
-`tests/fixtures/task-writer-eval/recorded.json` through
-`scripts/task-writer-eval.cjs --verify-baseline` on relevant PRs. This is recorded
+Refresh or verify the committed baseline with `node scripts/task-writer-eval.cjs --verify-baseline` when the corpus or scorer changes. The live workflow runs `node --test tests/task-writer-eval.test.cjs` on production only. This is recorded
 behavior, not a live-model claim. The corpus has twenty historical first-version /
 current-description pairs from our own board, plus two explicitly synthetic A/B
 cases. First saved versions follow the [approved source decision](https://app.hypertask.ai/detail/project-15/7976#comment-314535);
