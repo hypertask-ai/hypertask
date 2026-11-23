@@ -308,6 +308,18 @@ p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and not events(log, "http")
 ok("a wireframe that adds an off-token radius is refused")
 
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;border:2px solid #ff0000">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "border" in p.stderr.lower() and not events(log, "http")
+ok("a wireframe that adds an off-token border colour is refused")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;color:#4455bb">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment")
+assert len(uploaded(log, "waiting")) == 1
+ok("a Tailwind design token colour from tailwind.config.ts passes")
+
 live = home / "HTPR-402"
 invoke("new", "HTPR-402")
 cloned = (kit.read_text().replace("</body>", '<div style="border-radius:5px;background-color:#262a30">Live 5px</div></body>'))

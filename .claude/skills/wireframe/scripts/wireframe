@@ -169,18 +169,18 @@ function collect() {
         if (rect.width <= 0 || rect.height <= 0) continue;
         if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
         const style = getComputedStyle(el);
-        const colors = [style.color, style.backgroundColor];
+        const colors = [['color', style.color], ['background', style.backgroundColor]];
         const sides = [['top', style.borderTopWidth, style.borderTopColor], ['right', style.borderRightWidth, style.borderRightColor],
                        ['bottom', style.borderBottomWidth, style.borderBottomColor], ['left', style.borderLeftWidth, style.borderLeftColor]];
-        for (const [, width, color] of sides) {
-            if (parseFloat(width) > 0) colors.push(color);
+        for (const [side, width, color] of sides) {
+            if (parseFloat(width) > 0) colors.push(['border-' + side, color]);
         }
-        if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(style.outlineColor);
-        if (solid(style.fill)) colors.push(style.fill);
-        if (solid(style.stroke)) colors.push(style.stroke);
+        if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(['outline', style.outlineColor]);
+        if (solid(style.fill)) colors.push(['fill', style.fill]);
+        if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
         out.push({
             tag: el.tagName.toLowerCase(), font: style.fontFamily, size: style.fontSize,
-            colors: colors.filter(solid),
+            colors: colors.filter(([, color]) => solid(color)),
             radii: [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius],
         });
     }
@@ -208,8 +208,8 @@ const check = (row) => {
     const problems = [];
     if (!fonts.has(family)) problems.push('font ' + family);
     if (!sizes.some((allowed) => Math.abs(allowed - px(row.size)) < 0.5)) problems.push('size ' + row.size);
-    for (const color of row.colors) {
-        if (!colors.has(rgb(color))) problems.push('color ' + color);
+    for (const [kind, color] of row.colors) {
+        if (!colors.has(rgb(color))) problems.push(kind + ' ' + color);
     }
     for (const corner of row.radii) {
         if (!radii.has(px(corner))) problems.push('radius ' + corner);
