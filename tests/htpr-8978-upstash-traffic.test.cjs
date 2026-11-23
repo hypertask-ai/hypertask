@@ -256,16 +256,58 @@ test("a lost alarm lock leaves the sample in place so the next run can still fil
   const lost = await runUpstashCommandCheck(deps(async () => false));
   assert.equal(lost.filed, false);
   assert.equal(created.length, 0);
-  assert.equal(sample.current, JSON.stringify({ total: 10, at: opened }));
+  assert.deepEqual(JSON.parse(sample.current), {
+    total: 10,
+    at: opened,
+    pendingCommands: UPSTASH_DAILY_COMMAND_LIMIT + 1,
+    pendingAt: at,
+  });
   await assert.rejects(() => runUpstashCommandCheck({
     ...deps(async () => true),
     createTicket: async () => { throw new Error("board down"); },
   }));
-  assert.equal(sample.current, JSON.stringify({ total: 10, at: opened }));
+  assert.equal(JSON.parse(sample.current).pendingCommands, UPSTASH_DAILY_COMMAND_LIMIT + 1);
   const filed = await runUpstashCommandCheck(deps(async () => true));
   assert.equal(filed.filed, true);
   assert.equal(created.length, 1);
   assert.equal(JSON.parse(sample.current).total, 10 + UPSTASH_DAILY_COMMAND_LIMIT + 1);
+  assert.equal(JSON.parse(sample.current).pendingCommands, undefined);
+});
+
+test("a missed alert still files after a quiet following day", async () => {
+  const { runUpstashCommandCheck } = alarm();
+  const opened = Date.parse("2026-11-22T05:51:00.000Z");
+  const spike = 10 + 400_001;
+  const sample = { current: JSON.stringify({ total: 10, at: opened }) };
+  const created = [];
+  const run = (at, claim) => runUpstashCommandCheck({
+    now: at,
+    info: `total_commands_processed:${spike}`,
+    readSample: async () => sample.current,
+    writeSample: async (value) => { sample.current = value; },
+    claim,
+    findTicket: async (marker) => created.find((ticket) => ticket.description.includes(marker))?.id ?? null,
+    createTicket: async (ticket) => {
+      created.push(ticket);
+      return created.length;
+    },
+  });
+  const steady = await run(opened + 2 * DAY_MS, async () => true);
+  assert.equal(steady.filed, false);
+  assert.equal(steady.commands, 200_001);
+  assert.equal(created.length, 0);
+  sample.current = JSON.stringify({ total: 10, at: opened });
+  const lost = await run(opened + DAY_MS, async () => false);
+  assert.equal(lost.filed, false);
+  assert.equal(JSON.parse(sample.current).pendingCommands, 400_001);
+  const next = await run(opened + 2 * DAY_MS, async () => true);
+  assert.equal(next.filed, true);
+  assert.equal(next.commands, 400_001);
+  assert.equal(created.length, 1);
+  assert.match(created[0].description, /400,001/);
+  assert.match(created[0].description, /Marker: upstash-daily-commands:2026-11-23/);
+  assert.equal(JSON.parse(sample.current).total, spike);
+  assert.equal(JSON.parse(sample.current).pendingCommands, undefined);
 });
 
 test("the daily alarm files one Urgent ticket and the cron refuses the wrong caller", async () => {

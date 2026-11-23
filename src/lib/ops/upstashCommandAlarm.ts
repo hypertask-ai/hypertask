@@ -3,7 +3,7 @@ export const UPSTASH_SAMPLE_KEY = "upstash:command-sample:v1";
 export const UPSTASH_ALARM_LOCK_KEY = "upstash:command-alarm:lock";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export type CommandSample = { total: number; at: number };
+export type CommandSample = { total: number; at: number; pendingCommands?: number; pendingAt?: number };
 
 export function readCommandTotal(info: string): number | null {
   for (const rawLine of info.split("\n")) {
@@ -58,26 +58,52 @@ export async function runUpstashCommandCheck(input: {
 }): Promise<{ commands: number | null; filed: boolean; taskId: number | null; error?: "unreadable" }> {
   const total = readCommandTotal(input.info);
   if (total === null) return { commands: null, filed: false, taskId: null, error: "unreadable" };
-  const decision = nextCommandSample(parseSample(await input.readSample()), total, input.now);
+  const previous = parseSample(await input.readSample());
+  if (previous?.pendingCommands != null && previous.pendingAt != null) {
+    if (!(await input.claim())) return { commands: previous.pendingCommands, filed: false, taskId: null };
+    const filedAlert = await fileAlarm(input, previous.pendingCommands, previous.pendingAt);
+    await input.writeSample(JSON.stringify({ total, at: input.now }));
+    return { commands: previous.pendingCommands, ...filedAlert };
+  }
+  const decision = nextCommandSample(previous, total, input.now);
   let filed = false;
   let taskId: number | null = null;
   let sampleReady = !decision.alert;
-  if (decision.alert && decision.commands !== null && await input.claim()) {
-    const day = upstashAlarmDay(input.now);
-    const marker = upstashAlarmMarker(day);
-    taskId = await input.findTicket(marker);
-    if (taskId === null) {
-      taskId = await input.createTicket({
-        title: `Upstash served more than 300,000 requests on ${day}`,
-        description: upstashAlarmDescription(decision.commands, day),
-        priorityIndex: 1,
-      });
-      filed = true;
+  if (decision.alert && decision.commands !== null) {
+    if (await input.claim()) {
+      const filedAlert = await fileAlarm(input, decision.commands, input.now);
+      filed = filedAlert.filed;
+      taskId = filedAlert.taskId;
+      sampleReady = true;
+    } else {
+      await input.writeSample(JSON.stringify({
+        total: previous?.total ?? total,
+        at: previous?.at ?? input.now,
+        pendingCommands: decision.commands,
+        pendingAt: input.now,
+      }));
     }
-    sampleReady = true;
   }
   if (decision.replace && sampleReady) await input.writeSample(JSON.stringify(decision.next));
   return { commands: decision.commands, filed, taskId };
+}
+
+async function fileAlarm(input: {
+  findTicket: (marker: string) => Promise<number | null>;
+  createTicket: (ticket: { title: string; description: string; priorityIndex: number }) => Promise<number>;
+}, commands: number, at: number): Promise<{ filed: boolean; taskId: number | null }> {
+  const day = upstashAlarmDay(at);
+  const marker = upstashAlarmMarker(day);
+  const existing = await input.findTicket(marker);
+  if (existing !== null) return { filed: false, taskId: existing };
+  return {
+    filed: true,
+    taskId: await input.createTicket({
+      title: `Upstash served more than 300,000 requests on ${day}`,
+      description: upstashAlarmDescription(commands, day),
+      priorityIndex: 1,
+    }),
+  };
 }
 
 function parseSample(raw: string | null): CommandSample | null {
@@ -86,7 +112,10 @@ function parseSample(raw: string | null): CommandSample | null {
     const value = JSON.parse(raw) as CommandSample;
     if (!Number.isSafeInteger(value?.total) || value.total < 0) return null;
     if (!Number.isSafeInteger(value.at) || value.at < 0) return null;
-    return { total: value.total, at: value.at };
+    const pendingCommands = Number.isSafeInteger(value.pendingCommands) && value.pendingCommands > 0 ? value.pendingCommands : undefined;
+    const pendingAt = Number.isSafeInteger(value.pendingAt) && value.pendingAt > 0 ? value.pendingAt : undefined;
+    if (pendingCommands == null || pendingAt == null) return { total: value.total, at: value.at };
+    return { total: value.total, at: value.at, pendingCommands, pendingAt };
   } catch {
     return null;
   }
