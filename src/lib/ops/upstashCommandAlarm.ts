@@ -67,6 +67,13 @@ export async function runUpstashCommandCheck(input: {
     let filed = filedAlert.filed;
     let taskId = filedAlert.taskId;
     if (following.alert && following.commands !== null) {
+      await input.writeSample(JSON.stringify({
+        total: baseline.total,
+        at: baseline.at,
+        pendingCommands: following.commands,
+        pendingAt: input.now,
+        pendingTotal: total,
+      }));
       const nextAlert = await fileAlarm(input, following.commands, input.now);
       filed = filed || nextAlert.filed;
       taskId = nextAlert.taskId;

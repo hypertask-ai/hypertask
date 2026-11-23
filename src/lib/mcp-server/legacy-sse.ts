@@ -152,7 +152,8 @@ export async function handleLegacySseRequest(
     stream.once('error', cleanup)
     request.signal.addEventListener('abort', cleanup, { once: true })
     const channel = `mcp:legacy:session:${transport.sessionId}`
-    unsubscribe = await subscribeLegacySseAcrossProcesses(channel, (message) => {
+    try {
+      unsubscribe = await subscribeLegacySseAcrossProcesses(channel, (message) => {
       if (closed) return
       void (async () => {
         const incoming = JSON.parse(message) as RelayMessage
@@ -199,6 +200,10 @@ export async function handleLegacySseRequest(
         await publishLegacySseAcrossProcesses(incoming.replyChannel, JSON.stringify({ status, body: result }))
       })().catch(() => cleanup())
     }, () => cleanup())
+    } catch (error) {
+      cleanup()
+      throw error
+    }
     if (closed) {
       unsubscribe()
       return new Response(null, { status: 204 })

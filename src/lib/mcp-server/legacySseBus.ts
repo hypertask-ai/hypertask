@@ -193,7 +193,14 @@ async function subscribeRemote(channel: string): Promise<() => void> {
   let release = async () => {}
   const next = previous.then(async () => {
     const count = current.counts.get(channel) ?? 0
-    if (count === 0) await current.client.subscribe(channel)
+    if (count === 0) {
+      try {
+        await current.client.subscribe(channel)
+      } catch (error) {
+        if (clientEnded(current.client)) throw error
+        await current.client.subscribe(channel)
+      }
+    }
     current.counts.set(channel, count + 1)
     release = () => {
       let settled: Promise<void> | undefined
@@ -216,9 +223,10 @@ async function subscribeRemote(channel: string): Promise<() => void> {
       current.tails.set(channel, settled)
       return done
     }
-  }).catch(() => {
+  }).catch((error: unknown) => {
     release = async () => {}
     if (clientEnded(current.client)) forgetRelay(current.client)
+    throw error
   })
   current.tails.set(channel, next.then(() => undefined, () => undefined))
   await next
@@ -234,7 +242,14 @@ export async function subscribeLegacySseAcrossProcesses(
 ): Promise<() => void> {
   const unsubscribeLocal = subscribeLegacySse(channel, listener)
   if (onRelayDown) relayDowns().add(onRelayDown)
-  const unsubscribeRemote = await subscribeRemote(channel)
+  let unsubscribeRemote: () => void
+  try {
+    unsubscribeRemote = await subscribeRemote(channel)
+  } catch (error) {
+    if (onRelayDown) relayDowns().delete(onRelayDown)
+    unsubscribeLocal()
+    throw error
+  }
   let stopped = false
   return () => {
     if (stopped) return

@@ -193,6 +193,55 @@ function alarm() {
   return loadModule("src/lib/ops/upstashCommandAlarm.ts");
 }
 
+test("a relay subscribe failure is retried once and then refused", async () => {
+  const clients = [];
+  class FlakyRedis {
+    constructor() {
+      clients.push(this);
+      this.subs = new Set();
+      this.handlers = {};
+      this.status = "ready";
+      this.attempts = 0;
+      this.fail = 0;
+    }
+    on(event, fn) { this.handlers[event] = fn; return this; }
+    async connect() {}
+    async subscribe(channel) {
+      this.attempts += 1;
+      if (this.attempts <= this.fail) throw new Error("subscribe failed");
+      this.subs.add(channel);
+    }
+    async unsubscribe(channel) { this.subs.delete(channel); }
+    async publish() { return 0; }
+    disconnect() { this.status = "end"; }
+  }
+  const previous = process.env.REDIS_URL;
+  process.env.REDIS_URL = "redis://relay.example";
+  const channel = `htpr-8978:subscribe:${Date.now()}`;
+  try {
+    clearRelay();
+    const adopted = loadModule("src/lib/mcp-server/legacySseBus.ts", {
+      ioredis: { default: class extends FlakyRedis { constructor() { super(); this.fail = 1; } } },
+    });
+    const stop = await adopted.subscribeLegacySseAcrossProcesses(channel, () => {});
+    assert.equal(clients.at(-1).attempts, 2);
+    assert.equal(clients.at(-1).subs.has(channel), true);
+    stop();
+    clearRelay();
+    const refused = loadModule("src/lib/mcp-server/legacySseBus.ts", {
+      ioredis: { default: class extends FlakyRedis { constructor() { super(); this.fail = 2; } } },
+    });
+    await assert.rejects(() => refused.subscribeLegacySseAcrossProcesses(channel, () => {}));
+    assert.equal(clients.at(-1).attempts, 2);
+    assert.equal(clients.at(-1).subs.size, 0);
+    assert.equal(refused.publishLegacySse(channel, "local"), 0);
+  } finally {
+    clearRelay();
+    if (previous === undefined) delete process.env.REDIS_URL;
+    else process.env.REDIS_URL = previous;
+  }
+});
+
 test("a day at or under 300,000 commands does not file, and one request over does", () => {
   const { nextCommandSample, readCommandTotal, UPSTASH_DAILY_COMMAND_LIMIT } = alarm();
   const start = Date.parse("2026-11-22T00:00:00.000Z");
@@ -336,6 +385,47 @@ test("a second hot day is still filed after the owed alert", async () => {
   assert.equal(both.commands, 400_001);
   assert.equal(created.length, 2);
   assert.match(created[0].description, /Marker: upstash-daily-commands:2026-11-23/);
+  assert.match(created[1].description, /Marker: upstash-daily-commands:2026-11-24/);
+  assert.equal(JSON.parse(sample.current).total, second);
+  assert.equal(JSON.parse(sample.current).pendingCommands, undefined);
+});
+
+test("a failed second-day filing stays pending for the next run", async () => {
+  const { runUpstashCommandCheck } = alarm();
+  const opened = Date.parse("2026-11-22T05:51:00.000Z");
+  const first = 10 + 400_001;
+  const second = first + 400_001;
+  const sample = { current: JSON.stringify({ total: 10, at: opened }) };
+  const created = [];
+  let attempts = 0;
+  const run = (at, total, claim) => runUpstashCommandCheck({
+    now: at,
+    info: `total_commands_processed:${total}`,
+    readSample: async () => sample.current,
+    writeSample: async (value) => { sample.current = value; },
+    claim,
+    findTicket: async (marker) => created.find((ticket) => ticket.description.includes(marker))?.id ?? null,
+    createTicket: async (ticket) => {
+      attempts += 1;
+      if (attempts === 2) throw new Error("board down");
+      created.push(ticket);
+      return created.length;
+    },
+  });
+  assert.equal((await run(opened + DAY_MS, first, async () => false)).filed, false);
+  await assert.rejects(() => run(opened + 2 * DAY_MS, second, async () => true));
+  assert.equal(created.length, 1);
+  assert.deepEqual(JSON.parse(sample.current), {
+    total: first,
+    at: opened + DAY_MS,
+    pendingCommands: 400_001,
+    pendingAt: opened + 2 * DAY_MS,
+    pendingTotal: second,
+  });
+  const recovered = await run(opened + 3 * DAY_MS, second, async () => true);
+  assert.equal(recovered.filed, true);
+  assert.equal(created.length, 2);
+  assert.match(created[1].description, /400,001/);
   assert.match(created[1].description, /Marker: upstash-daily-commands:2026-11-24/);
   assert.equal(JSON.parse(sample.current).total, second);
   assert.equal(JSON.parse(sample.current).pendingCommands, undefined);
