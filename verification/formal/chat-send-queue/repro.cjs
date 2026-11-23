@@ -186,8 +186,17 @@ async function switchKeepsTheQueue() {
 
 async function queuedMessageSortsBeforeItsReply() {
   const replyCreatedAt = new Date("2026-11-20T10:00:00.500Z");
-  const createdAt = await resolveQueuedMessageCreatedAt("human", "assistant-1", async () => ({ createdAt: replyCreatedAt }));
-  return { replyCreatedAt: replyCreatedAt.toISOString(), queuedCreatedAt: createdAt.toISOString(), before: createdAt.getTime() < replyCreatedAt.getTime() };
+  const insertAt = new Date(replyCreatedAt.getTime() + 4000);
+  const lookup = async () => ({ createdAt: replyCreatedAt });
+  const createdAt = await resolveQueuedMessageCreatedAt("human", "assistant-1", lookup);
+  const withoutBackdate = await resolveQueuedMessageCreatedAt("human", undefined, lookup);
+  return {
+    replyCreatedAt: replyCreatedAt.toISOString(),
+    queuedCreatedAt: createdAt.toISOString(),
+    before: createdAt.getTime() < replyCreatedAt.getTime(),
+    preFixCreatedAt: (withoutBackdate ?? insertAt).toISOString(),
+    preFixBefore: (withoutBackdate ?? insertAt).getTime() < replyCreatedAt.getTime(),
+  };
 }
 
 (async () => {
@@ -207,6 +216,7 @@ async function queuedMessageSortsBeforeItsReply() {
     && second.backInA.join(",") === "one,two"
     && second.inB.length === 0
     && second.queueAfter.length === 0
-    && third.before;
+    && third.before
+    && !third.preFixBefore;
   process.exitCode = clean ? 0 : 1;
 })();

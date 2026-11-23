@@ -10,6 +10,7 @@ const covered = [
   "src/hooks/MultiPages/AIChat/useAiChatSessions.ts",
   "src/lib/aiChat/sessionMessageQueue.ts",
   "src/lib/aiChat/queuedMessageOrder.ts",
+  "src/app/api/ai-chat/add-message/route.ts",
   "src/app/api/mcp/chat/pending/route.ts",
   "verification/formal/checks.json",
   "verification/formal/chat-send-queue/ChatSendQueue.tla",
@@ -18,9 +19,12 @@ const covered = [
   "verification/formal/chat-send-queue/Bug7767.cfg",
   "verification/formal/chat-send-queue/Bug7794.cfg",
   "verification/formal/chat-send-queue/Bug9111.cfg",
+  "verification/formal/chat-send-queue/Bug9111Replay.cfg",
   "verification/formal/chat-send-queue/repro.cjs",
   ".claude/skills/formal-verification/SKILL.md",
 ];
+
+const variants = ["7785", "7767", "7794", "9111", "9111-replay"];
 
 test("the chat send queue model covers the files its record names", () => {
   for (const file of covered) {
@@ -31,7 +35,7 @@ test("the chat send queue model covers the files its record names", () => {
 test("every recorded bug variant still expects the property it broke to fail", () => {
   const manifest = require(path.join(root, "verification/formal/checks.json"));
   assert.ok(manifest.checks["chat-send-queue"].properties.every((property) => property.expect === "holds"));
-  for (const variant of ["7785", "7767", "7794", "9111"]) {
+  for (const variant of variants) {
     const properties = manifest.checks[`chat-send-queue-${variant}`].properties;
     assert.ok(properties.some((property) => property.expect === "violated"), `chat-send-queue-${variant} lost its violation`);
   }
@@ -40,21 +44,21 @@ test("every recorded bug variant still expects the property it broke to fail", (
 test("the current queue model holds and every past bug variant breaks it", () => {
   const checked = spawnSync(
     process.execPath,
-    ["scripts/formal-verification/run.mjs", "chat-send-queue", "chat-send-queue-7785", "chat-send-queue-7767", "chat-send-queue-7794", "chat-send-queue-9111"],
+    ["scripts/formal-verification/run.mjs", "chat-send-queue", ...variants.map((variant) => `chat-send-queue-${variant}`)],
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
   assert.match(
     checked.stdout,
-    /formal-verification: ok chat-send-queue matches its record .*NoQueuedMessageLost holds, FailedSendKeepsQueued holds, ChatSwitchKeepsQueue holds, QueueOrderKept holds, StoppedReleasesSend holds, StoppedStreamCloses holds, ReplyEndReleasesSend holds, AcquisitionBounded holds, AcquisitionNotReplayed holds/,
+    /formal-verification: ok chat-send-queue matches its record .*MessageConserved holds, DoneNotQueued holds, FailedSendKeepsQueued holds, ChatSwitchKeepsQueue holds, QueueOrderKept holds, QueuedStoredBeforeReply holds, StoppedReleasesSend holds, StoppedStreamCloses holds, ReplyEndReleasesSend holds, AcquisitionWindowKept holds, AcquisitionRetried holds, AcquisitionAttemptsBounded holds, AcquisitionNotReplayed holds/,
   );
   assert.match(
     checked.stdout,
-    /formal-verification: ok chat-send-queue-7785 matches its record .*FailedSendKeepsQueued violated \(recorded finding\), QueueOrderKept violated \(recorded finding\)/,
+    /formal-verification: ok chat-send-queue-7785 matches its record .*QueuedStoredBeforeReply violated \(recorded finding\)/,
   );
   assert.match(
     checked.stdout,
-    /formal-verification: ok chat-send-queue-7767 matches its record .*ChatSwitchKeepsQueue violated \(recorded finding\)/,
+    /formal-verification: ok chat-send-queue-7767 matches its record .*MessageConserved violated \(recorded finding\), ChatSwitchKeepsQueue violated \(recorded finding\), FailedSendKeepsQueued violated \(recorded finding\), QueueOrderKept violated \(recorded finding\)/,
   );
   assert.match(
     checked.stdout,
@@ -62,6 +66,17 @@ test("the current queue model holds and every past bug variant breaks it", () =>
   );
   assert.match(
     checked.stdout,
-    /formal-verification: ok chat-send-queue-9111 matches its record .*AcquisitionBounded violated \(recorded finding\)/,
+    /formal-verification: ok chat-send-queue-9111 matches its record .*AcquisitionWindowKept violated \(recorded finding\), AcquisitionRetried violated \(recorded finding\)/,
   );
+  assert.match(
+    checked.stdout,
+    /formal-verification: ok chat-send-queue-9111-replay matches its record .*AcquisitionNotReplayed violated \(recorded finding\)/,
+  );
+});
+
+test("the repro drives the real queue through the recorded traces", () => {
+  const repro = spawnSync(process.execPath, ["verification/formal/chat-send-queue/repro.cjs"], { cwd: root, encoding: "utf8" });
+  assert.equal(repro.status, 0, `${repro.stdout}\n${repro.stderr}`);
+  assert.match(repro.stdout, /"afterFailure": \[\s*"one",\s*"two"\s*\]/);
+  assert.match(repro.stdout, /"preFixBefore": false/);
 });

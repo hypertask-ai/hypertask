@@ -1,8 +1,9 @@
 --------------------------- MODULE ChatSendQueue ---------------------------
 EXTENDS Naturals, Sequences, TLC
 
-CONSTANTS Messages, Sessions, MessageSession, MaxWait,
-          BugLostQueued, BugSwitchClears, BugStopLeavesOpen, BugNoAcquisitionBound
+CONSTANTS Messages, Sessions, MessageSession,
+          MaxWait, RequiredWait, RetryPolicy,
+          BackdateQueued, BugSwitchClears, BugStopLeavesOpen
 
 ASSUME /\ Messages # {}
        /\ Messages \subseteq Nat
@@ -10,171 +11,222 @@ ASSUME /\ Messages # {}
        /\ MessageSession \in Sessions
        /\ MaxWait \in Nat
        /\ MaxWait >= 1
-       /\ BugLostQueued \in BOOLEAN
+       /\ RequiredWait \in Nat
+       /\ RequiredWait >= 1
+       /\ RetryPolicy \in {"none", "acquisition", "always"}
+       /\ BackdateQueued \in BOOLEAN
        /\ BugSwitchClears \in BOOLEAN
        /\ BugStopLeavesOpen \in BOOLEAN
-       /\ BugNoAcquisitionBound \in BOOLEAN
 
-VARIABLES state, composer, queue, active, inflight, stream, stopped,
-          delivered, ord, nextOrd, retry, poll, slot, waited, attempts, callbacks
+VARIABLES composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+          acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+          poll, holder, waited, attempts, callbacks, lastError
 
-vars == <<state, composer, queue, active, inflight, stream, stopped,
-          delivered, ord, nextOrd, retry, poll, slot, waited, attempts, callbacks>>
+vars == <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+          acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+          poll, holder, waited, attempts, callbacks, lastError>>
 
-Typed(m) == state[m] \in {"queued", "sending", "acked", "done", "lost"}
+InQueue(m) == \E s \in Sessions : \E i \in 1..Len(queue[s]) : queue[s][i] = m
 
-HeadSent == queue[active] # <<>> /\ Head(queue[active]) = inflight
+HeldHead == inflight # 0 /\ queue[inflightSession] # <<>> /\ Head(queue[inflightSession]) = inflight
 
-Init == /\ state = [m \in Messages |-> "idle"]
-        /\ composer = 0
+HeldRemoved == [queue EXCEPT ![inflightSession] =
+                  IF HeldHead THEN Tail(queue[inflightSession]) ELSE queue[inflightSession]]
+
+Present(m) == (IF InQueue(m) /\ inflight # m THEN 1 ELSE 0)
+            + (IF inflight = m THEN 1 ELSE 0)
+            + (IF settled[m] THEN 1 ELSE 0)
+
+Init == /\ composer = 0
+        /\ entered = [m \in Messages |-> FALSE]
         /\ queue = [s \in Sessions |-> <<>>]
-        /\ active = MessageSession
-        /\ inflight = 0
-        /\ stream = "idle"
-        /\ stopped = FALSE
-        /\ delivered = [m \in Messages |-> FALSE]
         /\ ord = [m \in Messages |-> 0]
         /\ nextOrd = 1
+        /\ active = MessageSession
+        /\ inflight = 0
+        /\ inflightSession = MessageSession
+        /\ acked = [m \in Messages |-> FALSE]
+        /\ settled = [m \in Messages |-> FALSE]
         /\ retry = [m \in Messages |-> FALSE]
+        /\ stream = "idle"
+        /\ stopped = FALSE
+        /\ stamp = [m \in Messages |-> 0]
+        /\ replyStamp = [m \in Messages |-> 0]
+        /\ clock = 0
         /\ poll = "idle"
-        /\ slot = 1
+        /\ holder = "other"
         /\ waited = 0
         /\ attempts = 0
         /\ callbacks = 0
+        /\ lastError = "none"
 
 Compose(m) == /\ active = MessageSession
               /\ composer = 0
-              /\ state[m] = "idle"
+              /\ ~entered[m]
               /\ composer' = m
-              /\ state' = [state EXCEPT ![m] = "draft"]
-              /\ UNCHANGED <<queue, active, inflight, stream, stopped, delivered, ord, nextOrd, retry,
-                             poll, slot, waited, attempts, callbacks>>
+              /\ UNCHANGED <<entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                             acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                             poll, holder, waited, attempts, callbacks, lastError>>
 
-Enqueue(m) == /\ state[m] = "draft"
-              /\ composer = m
+Enqueue(m) == /\ composer = m
+              /\ ~entered[m]
               /\ queue' = [queue EXCEPT ![MessageSession] = Append(@, m)]
-              /\ state' = [state EXCEPT ![m] = "queued"]
+              /\ entered' = [entered EXCEPT ![m] = TRUE]
               /\ ord' = [ord EXCEPT ![m] = nextOrd]
               /\ nextOrd' = nextOrd + 1
               /\ composer' = 0
-              /\ UNCHANGED <<active, inflight, stream, stopped, delivered, retry,
-                             poll, slot, waited, attempts, callbacks>>
+              /\ UNCHANGED <<active, inflight, inflightSession, acked, settled, retry, stream, stopped,
+                             stamp, replyStamp, clock, poll, holder, waited, attempts, callbacks, lastError>>
 
-SendQueued(m) == /\ active = MessageSession
-                 /\ inflight = 0
-                 /\ queue[active] # <<>>
-                 /\ m = Head(queue[active])
-                 /\ state[m] = "queued"
+SendQueued == /\ inflight = 0
+              /\ queue[MessageSession] # <<>>
+              /\ UNCHANGED <<composer, entered, ord, nextOrd, active, acked, settled, stamp, replyStamp, clock,
+                             poll, holder, waited, attempts, callbacks, lastError>>
+              /\ LET m == Head(queue[MessageSession]) IN
                  /\ inflight' = m
-                 /\ state' = [state EXCEPT ![m] = "sending"]
+                 /\ inflightSession' = MessageSession
                  /\ stream' = "open"
                  /\ stopped' = FALSE
                  /\ retry' = [retry EXCEPT ![m] = FALSE]
-                 /\ IF BugLostQueued
-                    THEN queue' = [queue EXCEPT ![active] = Tail(@)]
-                    ELSE queue' = queue
-                 /\ UNCHANGED <<composer, active, delivered, ord, nextOrd,
-                                poll, slot, waited, attempts, callbacks>>
+                 /\ queue' = queue
+
+ReplyStored(m) == /\ inflight = m
+                  /\ replyStamp[m] = 0
+                  /\ replyStamp' = [replyStamp EXCEPT ![m] = clock + 1]
+                  /\ clock' = clock + 1
+                  /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                                 acked, settled, retry, stream, stopped, stamp,
+                                 poll, holder, waited, attempts, callbacks, lastError>>
 
 Accept == /\ inflight # 0
-          /\ state[inflight] = "sending"
-          /\ state' = [state EXCEPT ![inflight] = "acked"]
-          /\ delivered' = [delivered EXCEPT ![inflight] = TRUE]
-          /\ UNCHANGED <<composer, queue, active, inflight, stream, stopped, ord, nextOrd, retry,
-                         poll, slot, waited, attempts, callbacks>>
+          /\ ~acked[inflight]
+          /\ LET m == inflight IN
+             /\ stamp' = [stamp EXCEPT ![m] =
+                  IF BackdateQueued /\ replyStamp[m] # 0
+                  THEN replyStamp[m] - 1
+                  ELSE clock + 1]
+             /\ clock' = clock + 1
+             /\ acked' = [acked EXCEPT ![m] = TRUE]
+             /\ retry' = [retry EXCEPT ![m] = FALSE]
+          /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                         settled, stream, stopped, replyStamp,
+                         poll, holder, waited, attempts, callbacks, lastError>>
 
 Refuse == /\ inflight # 0
-          /\ state[inflight] = "sending"
-          /\ state' = [state EXCEPT ![inflight] = IF BugLostQueued THEN "lost" ELSE "queued"]
-          /\ retry' = [retry EXCEPT ![inflight] = TRUE]
-          /\ inflight' = 0
-          /\ stream' = "idle"
-          /\ UNCHANGED <<composer, queue, active, stopped, delivered, ord, nextOrd,
-                         poll, slot, waited, attempts, callbacks>>
+          /\ ~acked[inflight]
+          /\ LET m == inflight IN
+             /\ inflight' = 0
+             /\ stream' = "idle"
+             /\ retry' = [retry EXCEPT ![m] = TRUE]
+          /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflightSession,
+                         acked, settled, stopped, stamp, replyStamp, clock,
+                         poll, holder, waited, attempts, callbacks, lastError>>
 
 ReplyEnd == /\ inflight # 0
-            /\ state[inflight] = "acked"
-            /\ state' = [state EXCEPT ![inflight] = "done"]
-            /\ queue' = [queue EXCEPT ![active] = IF HeadSent THEN Tail(queue[active]) ELSE queue[active]]
-            /\ inflight' = 0
-            /\ stream' = "closed"
-            /\ UNCHANGED <<composer, active, stopped, delivered, ord, nextOrd, retry,
-                           poll, slot, waited, attempts, callbacks>>
+            /\ acked[inflight]
+            /\ LET m == inflight IN
+               /\ settled' = [settled EXCEPT ![m] = TRUE]
+               /\ queue' = HeldRemoved
+               /\ inflight' = 0
+               /\ stream' = "closed"
+            /\ UNCHANGED <<composer, entered, ord, nextOrd, active, inflightSession,
+                           acked, retry, stopped, stamp, replyStamp, clock,
+                           poll, holder, waited, attempts, callbacks, lastError>>
 
 Stop == /\ inflight # 0
-        /\ state[inflight] = "acked"
+        /\ acked[inflight]
         /\ stopped' = TRUE
         /\ IF BugStopLeavesOpen
-           THEN UNCHANGED <<inflight, stream, state, queue>>
-           ELSE /\ state' = [state EXCEPT ![inflight] = "done"]
-                /\ queue' = [queue EXCEPT ![active] = IF HeadSent THEN Tail(queue[active]) ELSE queue[active]]
+           THEN UNCHANGED <<inflight, stream, settled, queue>>
+           ELSE LET m == inflight IN
+                /\ settled' = [settled EXCEPT ![m] = TRUE]
+                /\ queue' = HeldRemoved
                 /\ inflight' = 0
                 /\ stream' = "closed"
-        /\ UNCHANGED <<composer, active, delivered, ord, nextOrd, retry,
-                       poll, slot, waited, attempts, callbacks>>
+        /\ UNCHANGED <<composer, entered, ord, nextOrd, active, inflightSession,
+                       acked, retry, stamp, replyStamp, clock,
+                       poll, holder, waited, attempts, callbacks, lastError>>
 
 Switch(s) == /\ s \in Sessions
              /\ active # s
              /\ active' = s
              /\ IF BugSwitchClears
-                THEN /\ queue' = [t \in Sessions |-> <<>>]
-                     /\ state' = [m \in Messages |-> IF state[m] = "queued" THEN "lost" ELSE state[m]]
-                ELSE /\ queue' = queue
-                     /\ state' = state
-             /\ UNCHANGED <<composer, inflight, stream, stopped, delivered, ord, nextOrd, retry,
-                            poll, slot, waited, attempts, callbacks>>
-
-AcquisitionDeadline == MaxWait + (IF BugNoAcquisitionBound THEN 1 ELSE 0)
+                THEN queue' = [t \in Sessions |-> <<>>]
+                ELSE queue' = queue
+             /\ UNCHANGED <<composer, entered, ord, nextOrd, inflight, inflightSession,
+                            acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                            poll, holder, waited, attempts, callbacks, lastError>>
 
 PollStart == /\ poll = "idle"
              /\ poll' = "waiting"
              /\ waited' = 0
              /\ attempts' = 1
-             /\ UNCHANGED <<state, composer, queue, active, inflight, stream, stopped,
-                            delivered, ord, nextOrd, retry, slot, callbacks>>
+             /\ lastError' = "none"
+             /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                            acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                            holder, callbacks>>
 
 PollWait == /\ poll = "waiting"
-            /\ slot = 1
-            /\ waited < MaxWait + (IF BugNoAcquisitionBound THEN 1 ELSE 0)
+            /\ holder = "other"
+            /\ waited < MaxWait
             /\ waited' = waited + 1
-            /\ UNCHANGED <<state, composer, queue, active, inflight, stream, stopped,
-                           delivered, ord, nextOrd, retry, poll, slot, attempts, callbacks>>
+            /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                           acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                           poll, holder, attempts, callbacks, lastError>>
+
+OtherReleases == /\ holder = "other"
+                 /\ holder' = "none"
+                 /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                                acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                                poll, waited, attempts, callbacks, lastError>>
 
 PollAcquire == /\ poll = "waiting"
-               /\ slot = 0
+               /\ holder = "none"
                /\ poll' = "reading"
-               /\ slot' = 1
+               /\ holder' = "poll"
                /\ callbacks' = callbacks + 1
-               /\ UNCHANGED <<state, composer, queue, active, inflight, stream, stopped,
-                              delivered, ord, nextOrd, retry, waited, attempts>>
+               /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                              acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                              waited, attempts, lastError>>
 
-PollRead == /\ poll = "reading"
-            /\ poll' = "done"
-            /\ slot' = 0
-            /\ UNCHANGED <<state, composer, queue, active, inflight, stream, stopped,
-                           delivered, ord, nextOrd, retry, waited, attempts, callbacks>>
+PollCommit == /\ poll = "reading"
+              /\ poll' = "done"
+              /\ holder' = "none"
+              /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                             acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                             waited, attempts, callbacks, lastError>>
 
-PollTimeout == /\ poll = "waiting"
-               /\ slot = 1
-               /\ waited = AcquisitionDeadline
-               /\ waited' = 0
-               /\ IF BugNoAcquisitionBound \/ attempts = 2
-                  THEN /\ poll' = "done"
-                       /\ attempts' = attempts
-                  ELSE /\ poll' = "waiting"
-                       /\ attempts' = attempts + 1
-               /\ UNCHANGED <<state, composer, queue, active, inflight, stream, stopped,
-                              delivered, ord, nextOrd, retry, slot, callbacks>>
+CallbackFail == /\ poll = "reading"
+                /\ holder' = "none"
+                /\ lastError' = "callback"
+                /\ IF RetryPolicy = "always" /\ attempts = 1
+                   THEN /\ poll' = "waiting"
+                        /\ attempts' = 2
+                        /\ waited' = 0
+                   ELSE /\ poll' = "failed"
+                        /\ UNCHANGED <<waited, attempts>>
+                /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                               acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                               callbacks>>
 
-PollRelease == /\ slot = 1
-               /\ poll # "reading"
-               /\ slot' = 0
-               /\ UNCHANGED <<state, composer, queue, active, inflight, stream, stopped,
-                              delivered, ord, nextOrd, retry, poll, waited, attempts, callbacks>>
+AcquisitionFail == /\ poll = "waiting"
+                   /\ holder = "other"
+                   /\ waited = MaxWait
+                   /\ lastError' = "acquire"
+                   /\ IF RetryPolicy # "none" /\ attempts = 1
+                      THEN /\ poll' = "waiting"
+                           /\ attempts' = 2
+                           /\ waited' = 0
+                      ELSE /\ poll' = "failed"
+                           /\ UNCHANGED <<waited, attempts>>
+                   /\ UNCHANGED <<composer, entered, queue, ord, nextOrd, active, inflight, inflightSession,
+                                  acked, settled, retry, stream, stopped, stamp, replyStamp, clock,
+                                  holder, callbacks>>
 
 Next == \/ \E m \in Messages : Compose(m)
         \/ \E m \in Messages : Enqueue(m)
-        \/ \E m \in Messages : SendQueued(m)
+        \/ SendQueued
+        \/ \E m \in Messages : ReplyStored(m)
         \/ Accept
         \/ Refuse
         \/ ReplyEnd
@@ -182,29 +234,40 @@ Next == \/ \E m \in Messages : Compose(m)
         \/ \E s \in Sessions : Switch(s)
         \/ PollStart
         \/ PollWait
+        \/ OtherReleases
         \/ PollAcquire
-        \/ PollRead
-        \/ PollTimeout
-        \/ PollRelease
+        \/ PollCommit
+        \/ CallbackFail
+        \/ AcquisitionFail
 
 Spec == Init /\ [][Next]_vars
 
-NoQueuedMessageLost == \A m \in Messages : Typed(m) => state[m] # "lost"
+MessageConserved == \A m \in Messages : entered[m] => Present(m) = 1
 
-FailedSendKeepsQueued == \A m \in Messages : retry[m] => state[m] \in {"queued", "sending"}
+DoneNotQueued == \A m \in Messages : settled[m] => ~InQueue(m)
 
-ChatSwitchKeepsQueue == active # MessageSession => \A m \in Messages : Typed(m) => state[m] # "lost"
+FailedSendKeepsQueued == \A m \in Messages : retry[m] => InQueue(m)
 
-QueueOrderKept == \A m \in Messages : delivered[m] =>
-                    \A n \in Messages : ord[n] # 0 /\ ord[n] < ord[m] => delivered[n]
+ChatSwitchKeepsQueue == active # MessageSession =>
+                          \A m \in Messages : entered[m] /\ ~settled[m] => InQueue(m) \/ inflight = m
+
+QueueOrderKept == \A m \in Messages : settled[m] =>
+                    \A n \in Messages : ord[n] # 0 /\ ord[n] < ord[m] => settled[n]
+
+QueuedStoredBeforeReply == \A m \in Messages : stamp[m] # 0 =>
+                             replyStamp[m] = 0 \/ stamp[m] < replyStamp[m]
 
 StoppedReleasesSend == stopped => inflight = 0
 
 StoppedStreamCloses == stopped => stream = "closed"
 
-ReplyEndReleasesSend == inflight # 0 => state[inflight] # "done"
+ReplyEndReleasesSend == \A m \in Messages : settled[m] => inflight # m
 
-AcquisitionBounded == poll = "waiting" => waited <= MaxWait
+AcquisitionWindowKept == poll = "failed" /\ lastError = "acquire" => waited >= RequiredWait
+
+AcquisitionRetried == lastError = "acquire" => attempts = 2
+
+AcquisitionAttemptsBounded == attempts <= 2
 
 AcquisitionNotReplayed == callbacks <= 1
 
