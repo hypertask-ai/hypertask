@@ -1,4 +1,3 @@
-import "./ensureFlagIndex";
 import type { FeatureFlagMode } from "@prisma/client";
 import type { FeatureFlagReleaseRisk } from "./releaseRisk";
 import { FLAG_DEFINITIONS } from "./definitions/index.generated";

@@ -714,16 +714,6 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
   if (mutation) throw new Error(`${name} must not be reassigned, aliased, or mutated`);
 }
 
-function registryWrapperImportAllowed(statement) {
-  if (statement.importClause?.isTypeOnly) return true;
-  const specifier = statement.moduleSpecifier.text;
-  if (specifier === "./ensureFlagIndex" && !statement.importClause) return true;
-  const bindings = statement.importClause?.namedBindings;
-  return specifier === "./definitions/index.generated" && !statement.importClause?.name &&
-    typescript.isNamedImports(bindings) && bindings.elements.length === 1 &&
-    bindings.elements[0].name.text === "FLAG_DEFINITIONS" && !bindings.elements[0].propertyName;
-}
-
 export function parseDefinitions(ref) {
   const paths = ["src/lib/flags.ts"];
   const definitionsPath = "src/lib/flags/definitions.ts";
@@ -786,7 +776,13 @@ export function parseDefinitions(ref) {
     const wrapper = definitionsBinding.sourceFile;
     if (wrapper.fileName !== definitionsPath || wrapper.statements.some((statement) => {
       if (typescript.isTypeAliasDeclaration(statement) || typescript.isInterfaceDeclaration(statement)) return false;
-      if (typescript.isImportDeclaration(statement)) return !registryWrapperImportAllowed(statement);
+      if (typescript.isImportDeclaration(statement)) {
+        if (statement.importClause?.isTypeOnly) return false;
+        const bindings = statement.importClause?.namedBindings;
+        return statement.moduleSpecifier.text !== "./definitions/index.generated" || statement.importClause?.name ||
+          !bindings || !typescript.isNamedImports(bindings) || bindings.elements.length !== 1 ||
+          bindings.elements[0].name.text !== "FLAG_DEFINITIONS" || bindings.elements[0].propertyName;
+      }
       return !typescript.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
         statement.declarationList.declarations[0] !== definitionsBinding.declaration;
     })) {

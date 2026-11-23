@@ -1,15 +1,15 @@
 const assert = require("node:assert/strict");
-const { execFileSync, spawnSync } = require("node:child_process");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const { pathToFileURL } = require("node:url");
+const ts = require("typescript");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-const jiti = createJiti(__filename, { interopDefault: true });
-const { ensureFlagIndex } = jiti(path.join(root, "src/lib/flags/ensureFlagIndex.ts"));
+const output = path.join(root, "src/lib/flags/definitions/index.generated.ts");
+const helper = path.join(root, "src/lib/flags/ensureFlagIndex.ts");
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flag-index-"));
@@ -23,81 +23,77 @@ function fixture(t) {
   return dir;
 }
 
-function withNodeEnv(value, run) {
-  const previous = process.env.NODE_ENV;
-  if (value === undefined) delete process.env.NODE_ENV;
-  else process.env.NODE_ENV = value;
+function withFlagRoot(dir, nodeEnv, run) {
+  const previousRoot = process.env.HYPERTASK_FLAG_INDEX_ROOT;
+  const previousEnv = process.env.NODE_ENV;
+  process.env.HYPERTASK_FLAG_INDEX_ROOT = dir;
+  if (nodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = nodeEnv;
   try {
     return run();
   } finally {
-    if (previous === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previous;
+    if (previousRoot === undefined) delete process.env.HYPERTASK_FLAG_INDEX_ROOT;
+    else process.env.HYPERTASK_FLAG_INDEX_ROOT = previousRoot;
+    if (previousEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousEnv;
   }
-}
-
-function entry(dir, body) {
-  const ensure = path.join(root, "src/lib/flags/ensureFlagIndex.ts");
-  const flags = path.join(dir, "src/lib/flags");
-  fs.writeFileSync(
-    path.join(flags, "local-ensure.ts"),
-    `import { ensureFlagIndex } from ${JSON.stringify(ensure)};\nensureFlagIndex(${JSON.stringify(dir)});\n`,
-  );
-  const file = path.join(flags, "entry.ts");
-  fs.writeFileSync(file, `import "./local-ensure";\n${body}`);
-  return file;
 }
 
 test("a checkout without the flag list builds it before the keys resolve", (t) => {
   const dir = fixture(t);
-  const loaded = withNodeEnv(undefined, () => jiti(entry(dir, 'export * from "./definitions/index.generated";\n')));
+  const entry = path.join(dir, "src/lib/flags/entry.ts");
+  fs.writeFileSync(entry, `import ${JSON.stringify(helper)};\nexport * from "./definitions/index.generated";\n`);
+  const loaded = withFlagRoot(dir, undefined, () => createJiti(__filename, { interopDefault: true })(entry));
   assert.equal(loaded.FIRST_FLAG, "htpr-1-first");
-  assert.match(fs.readFileSync(path.join(dir, "src/lib/flags/definitions/index.generated.ts"), "utf8"), /FIRST_FLAG/);
+  const generated = createJiti(__filename + ":generated", { interopDefault: true })(path.join(dir, "src/lib/flags/definitions/index.generated.ts"));
+  assert.equal(generated.FLAG_DEFINITIONS[0].key, "htpr-1-first");
 });
 
 test("production startup leaves a missing flag list untouched", (t) => {
   const dir = fixture(t);
-  withNodeEnv("production", () => ensureFlagIndex(dir));
+  const result = withFlagRoot(dir, "production", () => spawnSync(process.execPath, ["--experimental-strip-types", "--disable-warning=ExperimentalWarning", helper], {
+    cwd: root,
+    encoding: "utf8",
+    env: process.env,
+  }));
+  assert.equal(result.status, 0, result.stderr);
   assert.equal(fs.existsSync(path.join(dir, "src/lib/flags/definitions/index.generated.ts")), false);
 });
 
-test("a direct definitions import builds a missing flag list", (t) => {
+test("the flag list builder can be evaluated by the CommonJS test loader", (t) => {
   const dir = fixture(t);
-  const loaded = withNodeEnv(undefined, () => jiti(entry(dir, 'import { FLAG_DEFINITIONS } from "./definitions/index.generated";\nexport const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n')));
-  assert.equal(loaded.FEATURE_FLAG_DEFINITIONS.length, 1);
-  assert.equal(loaded.FEATURE_FLAG_DEFINITIONS[0].key, "htpr-1-first");
+  const javascript = ts.transpileModule(fs.readFileSync(helper, "utf8"), {
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  assert.equal(javascript.includes("import.meta"), false);
+  assert.equal(javascript.includes("exports"), false);
+  withFlagRoot(dir, undefined, () => {
+    new Function("module", "exports", "require", javascript)({ exports: {} }, {}, require);
+  });
+  assert.equal(fs.existsSync(path.join(dir, "src/lib/flags/definitions/index.generated.ts")), true);
 });
 
-test("the registry wrapper may import the flag list builder and nothing else that runs", (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flag-wrapper-"));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const write = (relative, content) => {
-    const file = path.join(dir, relative);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, content);
-  };
-  const git = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
-  write("src/lib/flags.ts", 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
-  write(
-    "src/lib/flags/definitions/htpr-1-first.ts",
-    'export const FIRST_FLAG = "htpr-1-first";\nexport default { key: FIRST_FLAG, shippedOn: "2026-10-10", description: "Fixture" } as const;\n',
-  );
-  write(
-    "src/lib/flags/definitions.ts",
-    'import "./ensureFlagIndex";\nimport { FLAG_DEFINITIONS } from "./definitions/index.generated";\nexport const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n',
-  );
-  git(["init", "-q"]);
-  git(["add", "-A"]);
-  git(["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "allow the builder"]);
-  const allowed = git(["rev-parse", "HEAD"]).trim();
-  write(
-    "src/lib/flags/definitions.ts",
-    'import { readFileSync } from "node:fs";\nimport { FLAG_DEFINITIONS } from "./definitions/index.generated";\nexport const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n',
-  );
-  git(["add", "src/lib/flags/definitions.ts"]);
-  git(["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-q", "-m", "reject another import"]);
-  const rejected = git(["rev-parse", "HEAD"]).trim();
-  const script = path.join(dir, "check.mjs");
-  fs.writeFileSync(script, `process.chdir(${JSON.stringify(dir)});\nprocess.env.FEATURE_FLAG_TYPESCRIPT_PATH = ${JSON.stringify(require.resolve("typescript"))};\nconst { parseDefinitions } = await import(${JSON.stringify(pathToFileURL(path.join(root, ".github/scripts/feature-flag-registry.mjs")).href)});\nconst parsed = parseDefinitions(${JSON.stringify(allowed)});\nif (parsed.keys[0] !== "htpr-1-first") throw new Error(parsed.keys.join(","));\ntry { parseDefinitions(${JSON.stringify(rejected)}); throw new Error("import was allowed"); }\ncatch (error) { if (!/data-only generated registry wrapper/.test(error.message)) throw error; }\n`);
-  const result = spawnSync(process.execPath, [script], { encoding: "utf8" });
-  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+test("importing flag keys builds a missing list", () => {
+  const original = fs.readFileSync(output);
+  const child = path.join(os.tmpdir(), "flag-index-keys-check.cjs");
+  fs.writeFileSync(child, `const fs = require("fs");
+const path = require("path");
+const { createJiti } = require("jiti");
+const root = ${JSON.stringify(root)};
+const output = path.join(root, "src/lib/flags/definitions/index.generated.ts");
+fs.rmSync(output, { force: true });
+const keys = createJiti(__filename, { interopDefault: true })(path.join(root, "src/lib/flags/keys.ts"));
+if (typeof keys.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG !== "string") process.exit(2);
+if (!fs.existsSync(output)) process.exit(3);
+`);
+  const env = { ...process.env, NODE_PATH: path.join(root, "node_modules") };
+  delete env.HYPERTASK_FLAG_INDEX_ROOT;
+  delete env.NODE_ENV;
+  try {
+    const result = spawnSync(process.execPath, [child], { cwd: root, encoding: "utf8", env });
+    assert.equal(result.status, 0, result.stderr);
+  } finally {
+    fs.writeFileSync(output, original);
+    fs.rmSync(child, { force: true });
+  }
 });
