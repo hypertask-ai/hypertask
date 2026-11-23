@@ -22,6 +22,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StateRoot } from "@/lib/state";
+import { TicketAccountSwitchSlot } from "@/lib/auth/ticketAccountSwitchSlot";
 import { AuthProvider } from "@/hooks/General/useAuth";
 import GlobalProvider from "@/components/ProviderGlobal/GloablProviders";
 import MobileViewProvider from "@/lib/contexts/mobileContext";
@@ -211,6 +212,7 @@ export default function Provider({
         <DeviceProvider initialIsApple={initialIsApple}>
           <MobileViewProvider initialIsMobile={initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
+              <TicketAccountSwitchSlot />
               <UndoProvider>
                 <MobileBlockingProvider>
                   <AuthProvider authenticatedUserId={authenticatedUserId}>

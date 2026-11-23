@@ -568,12 +568,16 @@ test("the flag off leaves the block page without checking other accounts", async
 });
 
 test("the flag provider asks only while that flag is on", () => {
-  const state = fs.readFileSync("src/lib/state.tsx", "utf8");
+  const stateRoot = fs.readFileSync("src/lib/state.tsx", "utf8");
+  const slot = fs.readFileSync("src/lib/auth/ticketAccountSwitchSlot.tsx", "utf8");
+  const providers = fs.readFileSync("src/utils/Providers.tsx", "utf8");
   const probe = fs.readFileSync("src/lib/auth/ticketAccountSwitchProbe.tsx", "utf8");
-  assert.equal(state.includes('import("@/lib/auth/ticketAccountSwitchProbe")'), true);
-  assert.equal(state.includes("ticketAccountSwitchFlagOn"), true);
-  assert.equal(state.includes("if (!enabled) return;"), true);
-  assert.equal(state.includes("return enabled && Probe ? <Probe /> : null;"), true);
+  assert.equal(stateRoot.includes("TicketAccountSwitchSlot"), false);
+  assert.equal(providers.includes("<TicketAccountSwitchSlot />"), true);
+  assert.equal(slot.includes('import("@/lib/auth/ticketAccountSwitchProbe")'), true);
+  assert.equal(slot.includes("ticketAccountSwitchFlagOn"), true);
+  assert.equal(slot.includes("if (!enabled) return;"), true);
+  assert.equal(slot.includes("return enabled && Probe ? <Probe /> : null;"), true);
   assert.equal(probe.includes("if (!ticketAccountSwitchFlagOn(flags))"), true);
   assert.equal(probe.includes("ticketAccountSwitchFlagOn"), true);
   assert.equal(
@@ -585,7 +589,7 @@ test("the flag provider asks only while that flag is on", () => {
 test("with the flag off neither the slot nor the tab sync runs", () => {
   const key = load("src/lib/flags/definitions/htpr-9621-auto-switch-account.ts").HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG;
   const { ticketAccountSwitchFlagOn } = load("src/lib/auth/ticketDetailLocator.ts");
-  const state = fs.readFileSync("src/lib/state.tsx", "utf8");
+  const state = fs.readFileSync("src/lib/auth/ticketAccountSwitchSlot.tsx", "utf8");
   const probe = fs.readFileSync("src/lib/auth/ticketAccountSwitchProbe.tsx", "utf8");
   assert.equal(ticketAccountSwitchFlagOn(undefined), false);
   assert.equal(ticketAccountSwitchFlagOn({}), false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
@@ -12,8 +12,6 @@ import {
 } from "jotai";
 import { RESET } from "jotai/utils";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { useQueryClient } from "@tanstack/react-query";
-import { signedInUserId, ticketAccountSwitchFlagOn } from "@/lib/auth/ticketDetailLocator";
 
 const hydrationDefaults = createStore();
 const initialAtomDefaults = new Map<WritableAtom<any, [any], any>, unknown>();
@@ -289,30 +287,6 @@ export const useResetRecoilState = <T,>(recoilAtom: ResettableAtom<T>) => {
   return useCallback(() => setAtom(RESET), [setAtom]);
 };
 
-function TicketAccountSwitchSlot() {
-  const queryClient = useQueryClient();
-  const userId = signedInUserId();
-  const enabled = useSyncExternalStore(
-    (onChange) => queryClient.getQueryCache().subscribe(onChange),
-    () => ticketAccountSwitchFlagOn(queryClient.getQueryData<Record<string, boolean>>(["feature-flags", userId])),
-    () => false
-  );
-  const [Probe, setProbe] = useState<ComponentType | null>(null);
-  useEffect(() => {
-    if (!enabled) return;
-    let cancelled = false;
-    void import("@/lib/auth/ticketAccountSwitchProbe")
-      .then((mod) => {
-        if (!cancelled) setProbe(() => mod.TicketAccountSwitchProbe);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [enabled]);
-  return enabled && Probe ? <Probe /> : null;
-}
-
 export const StateRoot = ({ children, initialValues }: {
   children: ReactNode;
   initialValues?: StateInitialValues;
@@ -330,12 +304,11 @@ export const StateRoot = ({ children, initialValues }: {
     }
     return { live, snapshot: { store: snapshot, initialized: new Set(initialAtomDefaults.keys()) } };
   });
-  if (!initial) return <JotaiProvider>{children}<TicketAccountSwitchSlot /></JotaiProvider>;
+  if (!initial) return <JotaiProvider>{children}</JotaiProvider>;
   return (
     <JotaiProvider store={initial.live}>
       <InitialSnapshotContext.Provider value={initial.snapshot}>
         {children}
-        <TicketAccountSwitchSlot />
       </InitialSnapshotContext.Provider>
     </JotaiProvider>
   );
