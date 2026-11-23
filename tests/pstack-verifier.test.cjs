@@ -111,6 +111,7 @@ test("author trailers fail closed without treating prose, other authors or human
   assert.equal(authorGate("Author-Model: codex", null, RUNNER).stop, true);
   assert.equal(gate("", "Fix\n\nCo-Authored-By: Claude Smith <claude.smith@example.com>").stop, true);
   assert.equal(gate("", "Fix\n\nCo-Authored-By: Cody Exter <cody.exter@example.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex <noreply@OpenAI.com>").author, "codex");
   assert.equal(gate("", "Fix\n\nAuthor-Model: codex").author, "codex");
   assert.equal(gate("Author-Model: claude", "Fix\n\nAuthor-Model: codex").stop, true);
   assert.equal(authorGate("Author-Model: codex", [{ author: { login: "octocat" }, commit: { message: "Fix\n\nAuthor-Model: deepseek" } }], "valentinyeo").author, "codex");

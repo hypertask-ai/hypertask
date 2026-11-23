@@ -332,7 +332,7 @@ export function authorFamily(body, commits = [], authorLogin = "") {
         commitFamilies.add(family);
       } else {
         const domain = String(/<([^<>]+)>\s*$/.exec(value)?.[1] ?? "").split("@")[1] ?? "";
-        for (const [family, , vendor] of FAMILY_PATTERNS) if (vendor.test(domain)) commitFamilies.add(family);
+        for (const [family, , vendor] of FAMILY_PATTERNS) if (vendor.test(domain.toLowerCase())) commitFamilies.add(family);
       }
     }
   }
@@ -1267,7 +1267,7 @@ export function reusePayload({ item, sha, tree, diff, patchId, comments, artifac
     repo,
   });
 }
-async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
+async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId, author }) {
   const call = io.gh ?? gh;
   let comments;
   try {
@@ -1286,6 +1286,7 @@ async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
   } catch {
     return null;
   }
+  if (author && String(artifact.authorFamily ?? "") !== author) return null;
   let status = null;
   try {
     const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head || artifact.sha}/statuses`]));
@@ -1356,7 +1357,7 @@ export async function resolveCommand(io = {}) {
   const headTree = String(JSON.parse(call(["api", `repos/${repo}/commits/${headSha}`]))?.commit?.tree?.sha ?? "");
   const fullDiff = call(["api", "-H", "Accept: application/vnd.github.diff", pullUrl(repo, number)]);
   const patchId = patchIdOf(fullDiff, io.spawn ?? spawnSync);
-  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId });
+  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId, author: botLogin || gate.author });
   if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused), sha }); return; }
   if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip", sha }); return; }
   const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
