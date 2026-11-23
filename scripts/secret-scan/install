@@ -1,6 +1,7 @@
 #!/bin/sh
 # Installs the commit-time key scan for every repo of this user (YPER4-324). Safe to rerun.
-#   global git hooks path -> ~/.config/git/hooks (scan, then each repo's own hook)
+#   global git hooks path -> ~/.config/git/hooks (scan, then each repo's own hook, then a
+#                            wrapper lefthook left there)
 #   husky repos           -> one line in ~/.config/husky/init.sh that sources husky-init.sh
 set -e
 src=$(cd "$(dirname "$0")" && pwd)
@@ -14,6 +15,12 @@ fi
 mkdir -p "$hooks" "$config/husky"
 cp "$src/scan-staged" "$src/git-hook" "$src/husky-init.sh" "$src/gitleaks.toml" "$hooks/"
 chmod +x "$hooks/scan-staged" "$hooks/git-hook"
+# A repo's `lefthook install --force` renames pre-commit here and writes its own wrapper, which
+# scans nothing (VSTA-172). Keep that wrapper as pre-commit-chained so the scan runs first and
+# the wrapper still runs after it.
+if [ -f "$hooks/pre-commit" ] && [ ! -L "$hooks/pre-commit" ]; then
+  mv -f "$hooks/pre-commit" "$hooks/pre-commit-chained"
+fi
 # Every hook name git looks up in core.hooksPath, so each repo's own hooks keep running.
 for name in applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit \
   prepare-commit-msg commit-msg post-commit pre-rebase post-checkout post-merge pre-push \
