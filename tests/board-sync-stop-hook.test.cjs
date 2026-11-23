@@ -20,8 +20,10 @@ def login_for_session(env=None):
 
 const STUB = `import json, os, sys, time
 home = os.environ["HOME"]
-open(os.path.join(home, "called.json"), "w").write(json.dumps(sys.argv))
 open(os.path.join(home, "pid"), "w").write(str(os.getpid()) + "\\n" + str(os.getppid()))
+tmp = os.path.join(home, "called.json.tmp")
+open(tmp, "w").write(json.dumps(sys.argv))
+os.replace(tmp, os.path.join(home, "called.json"))
 time.sleep(30)
 `;
 
