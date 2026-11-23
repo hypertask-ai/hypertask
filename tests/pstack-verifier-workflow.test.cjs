@@ -349,7 +349,7 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   assert.equal(readFileSync(ready, "utf8"), `url=http://127.0.0.1:3100\nenv=${join(dir, "smoke.env")}\n`);
   const cli = spawnSync(process.execPath, [join(root, "scripts/pstack-verifier.mjs")], { encoding: "utf8" });
   assert.equal(cli.status, 1);
-  assert.match(cli.stderr, /usage: pstack-verifier.mjs resolve\|plan\|judge\|mark\|post\|cancel/);
+  assert.match(cli.stderr, /usage: pstack-verifier\.mjs resolve\|plan\|judge-ask\|judge\|mark\|post\|cancel\|base-plan/);
 });
 
 function playwrightModules() {
