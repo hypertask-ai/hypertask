@@ -22,6 +22,7 @@ Paths in reference commands are repository-relative.
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
 

@@ -1,0 +1,1 @@
+{ "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "sh -c 'f=\"$HOME/.claude/hooks/reconcile-auto.py\"; [ -f \"$f\" ] || exit 0; exec /usr/bin/python3 \"$f\"'" } ] } ] } }
