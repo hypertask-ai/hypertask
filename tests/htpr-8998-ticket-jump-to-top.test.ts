@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   addTicketJumpToTopShortcut,
@@ -51,18 +50,6 @@ test("shortcut help names G then G as jump to top", () => {
     { shortTitle: "Follow task", pressKey: ["F"] },
     { shortTitle: "Jump to top", pressKey: ["G", null, "G"] },
   ]);
-});
-
-test("the ticket page gates the button and G then G on the flag", () => {
-  const handler = readFileSync(new URL("../src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", import.meta.url), "utf8");
-  const panels = readFileSync(new URL("../src/app/detail/[...slug]/TaskDetailPanels.tsx", import.meta.url), "utf8");
-  const help = readFileSync(new URL("../src/components/sidebars/keyboardShortcuts.tsx", import.meta.url), "utf8");
-  const settings = readFileSync(new URL("../src/components/Modals/Settings/ShortcutsSection.tsx", import.meta.url), "utf8");
-  assert.match(handler, /else if \(jumpToTop\) \{\s*scrollTicketToTop\(scrollElementRef\?\.current \?\? window\);/);
-  assert.match(panels, /\{jumpToTop && !_mbl && \(/);
-  assert.match(panels, /aria-label="Jump to top"/);
-  assert.match(help, /if \(jumpToTop\) addTicketJumpToTopShortcut\(mainData\);/);
-  assert.match(settings, /if \(jumpToTop\) addTicketJumpToTopShortcut\(shortcutGroups\);/);
 });
 
 test("htpr-8998 jump to top ships as a small feature for everyone", async () => {
