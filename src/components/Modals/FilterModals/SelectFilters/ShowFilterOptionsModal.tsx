@@ -1,4 +1,3 @@
-/* eslint-disable react/jsx-key */
 import {
   ModalHeaderComp,
   ModalInput,
@@ -18,10 +17,11 @@ import { HTPR_8171_HIDE_TAGS_FLAG } from "@/lib/flags/definitions/htpr-8171-hide
 import { ModalBody } from "reactstrap";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { useRecoilValue } from "@/lib/state";
-import { currentUserAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
-import { formatDateDisplay } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
+import { formatDateDisplay, notStaleFilterHint } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { useFilterView } from "@/hooks/MultiPages/Filters/useFilterView";
+import { HTPR_9605_NOT_STALE_HINT_FLAG } from "@/lib/flags/definitions/htpr-9605-not-stale-hint";
 
 const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.ReactNode }> = ({
   handleAction,
@@ -39,6 +39,8 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
   } = useFilterView(view);
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } =
     useHandleMouseGlobal({ setSelectedIndex });
+  const notStaleHintEnabled = useFlag(HTPR_9605_NOT_STALE_HINT_FLAG);
+  const currentProject = useRecoilValue(currentProjectAtom);
 
   const onClickOrEnterHandler = (idx: number) => {
     setTimeout(() => handleAction(filteredCommands[idx].commandMode), 20);
@@ -67,6 +69,34 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
     };
   }, [keyword, filteredCommands, selectedIndex, toggleFilterMatchOptions]);
 
+  const rows: React.ReactNode[] = [];
+  for (const [index, filter] of filteredCommands.entries()) {
+    rows.push(
+      <ModalRowElementContainer
+        key={`${filter.key}-${index}`}
+        onMouseEnter={() => handleMouseEnter(index)}
+        handleMouseLeave={handleMouseLeave}
+        onClick={() => onClickOrEnterHandler(index)}
+        id={`filter-htc-option-${index}`}
+        index={index}
+        commandRef={elRef}
+        isSelected={selectedIndex === index}
+        className={filter.type === "NotStale" ? "h-auto min-h-[36px] py-1.5" : undefined}
+      >
+        <FilterCommandRowEl
+          el={filter}
+          activeFilters={activeFilters}
+          view={view}
+          hint={
+            notStaleHintEnabled && filter.type === "NotStale"
+              ? notStaleFilterHint(currentProject?.staleWarnDays)
+              : undefined
+          }
+        />
+      </ModalRowElementContainer>,
+    );
+  }
+
   return (
     <>
       <ModalHeaderComp header="Filters">
@@ -86,21 +116,7 @@ const ShowFilterOptions: React.FC<IFilterModalProps & { extraFilters?: React.Rea
           handleMouseMove={handleMouseMove}
           id="filteredCommandsList"
         >
-          {filteredCommands?.map((filter, index) => {
-            return (
-              <ModalRowElementContainer
-                onMouseEnter={() => handleMouseEnter(index)}
-                handleMouseLeave={handleMouseLeave}
-                onClick={() => onClickOrEnterHandler(index)}
-                id={`filter-htc-option-${index}`}
-                index={index}
-                commandRef={elRef}
-                isSelected={selectedIndex === index}
-              >
-                <FilterCommandRowEl el={filter} activeFilters={activeFilters} view={view} />
-              </ModalRowElementContainer>
-            );
-          })}
+          {rows}
           {extraFilters}
         </ModalListContainer>
       </ModalBody>
@@ -132,10 +148,11 @@ export const ToggleFilterType = ({
   );
 };
 
-const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Calendar" | "MyTasks" }> = ({
+const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Calendar" | "MyTasks"; hint?: string }> = ({
   el,
   activeFilters,
   view,
+  hint,
 }) => {
   const currentlyActive = activeFilters.addedFilters.find(
     (filter) => filter.type === el.type
@@ -143,7 +160,14 @@ const FilterCommandRowEl: React.FC<IFilterCommandRowEl & { view: "Kanban" | "Cal
 
   return (
     <>
-      <span>{el.name}</span>
+      <span className="flex flex-col items-start">
+        <span>{el.name}</span>
+        {hint && (
+          <span className="text-micro font-normal text-text-light-gray">
+            {hint}
+          </span>
+        )}
+      </span>
 
       {currentlyActive && (view === "Kanban" || view === "MyTasks") && (
         <RenderActiveFilters elKey={el.key} currentlyActive={currentlyActive} />

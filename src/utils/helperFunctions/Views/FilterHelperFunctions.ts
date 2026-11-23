@@ -3,8 +3,8 @@ import { IFilterSettings, TFilter, TCondition, IFilter, TMatchFilters, TFilterMa
 import { getFromLocalStorage, setInLocalStorage, returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { IPrioritiesConstants, IEstimateConstants } from "@/lib/constants/constants";
 import { buildViewId, getActiveFiltersFromProject } from "./ViewsHelperFunctions";
-import { daysSince, stalenessLevel } from "@/lib/staleness";
-import { addDays, endOfDay, endOfMonth, endOfWeek, isSameDay, startOfDay, startOfMonth, startOfWeek, subDays } from "date-fns";
+import { daysSince, stalenessLevel, STALE_WARN_DAYS } from "@/lib/staleness";
+import { addDays, endOfDay, endOfMonth, endOfWeek, isSameDay, startOfDay, startOfMonth, startOfWeek, subDays , format } from "date-fns";
 import {
   BuiltinViewContext,
   BuiltinViewId,
@@ -91,6 +91,11 @@ export const notStaleFilterCondition = (
     daysSince(item.sectionChangedAt ?? item.createdAt),
     projectStalenessThresholds(project),
   ) === "none";
+
+export const notStaleFilterHint = (warnDays?: number | null) => {
+  const days = warnDays ?? STALE_WARN_DAYS;
+  return `No comment and no column move in ${days} ${days === 1 ? "day" : "days"} hides a card.`;
+};
 
 export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boolean {
   const today = new Date();
@@ -481,7 +486,6 @@ export function applyFilters(
 }
 
 
-import { format } from 'date-fns';
 
 export const renderDynamicDateRange = (option: { isDynamic: any; dynamicRange: string; }, calculateDynamicDateRange: (arg0: any) => any, className = "text-text-light-gray text-meta") => {
   if (!option?.isDynamic || !option?.dynamicRange || option.dynamicRange === "ANY") {
