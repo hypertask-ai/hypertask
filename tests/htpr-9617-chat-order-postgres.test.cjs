@@ -103,6 +103,7 @@ test('real route keeps a queued human before a reply attempted between lookup an
   t.diagnostic(`lookupMissed=${lookupMissed} replyBlocked=${replyBlocked} human=${human.createdAt.toISOString()} reply=${reply.createdAt.toISOString()}`);
   assert.equal(lookupMissed, true);
   assert.ok(human.createdAt < reply.createdAt, 'queued human must sort before its answer');
+  assert.equal(replyBlocked, true, 'reply cannot commit between the lookup and the human insert');
   assert.deepEqual(rows.map(row => row.content), ['question', 'answer']);
 });
 

@@ -199,7 +199,7 @@ async function queuedMessageSortsBeforeItsReply() {
   };
 }
 
-async function replyStoredBetweenLookupAndInsert() {
+async function replaySplitLookupAndInsert() {
   let reply = null;
   const createdAt = await resolveQueuedMessageCreatedAt("human", "assistant-1", async () => reply);
   reply = { createdAt: new Date("2026-11-20T10:00:00.500Z") };
@@ -216,12 +216,12 @@ async function replyStoredBetweenLookupAndInsert() {
   const first = await failedSendKeepsTheOlderMessage();
   const second = await switchKeepsTheQueue();
   const third = await queuedMessageSortsBeforeItsReply();
-  const fourth = await replyStoredBetweenLookupAndInsert();
+  const fourth = await replaySplitLookupAndInsert();
   const result = {
     failedSend: first,
     switchChat: second,
     orderInHistory: third,
-    lookupInsertRace: fourth,
+    lookupInsertBugReplay: fourth,
   };
   console.log(JSON.stringify(result, null, 2));
   const clean = first.afterFailure.join(",") === "one,two"

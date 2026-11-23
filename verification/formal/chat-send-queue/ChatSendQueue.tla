@@ -3,7 +3,7 @@ EXTENDS Naturals, Sequences, TLC
 
 CONSTANTS Messages, Sessions, MessageSession,
           MaxWait, RequiredWait, RetryPolicy,
-          BackdateQueued, BugSwitchClears, BugStopLeavesOpen
+          BackdateQueued, BugLookupRace, BugSwitchClears, BugStopLeavesOpen
 
 ASSUME /\ Messages # {}
        /\ Messages \subseteq Nat
@@ -15,6 +15,7 @@ ASSUME /\ Messages # {}
        /\ RequiredWait >= 1
        /\ RetryPolicy \in {"none", "acquisition", "always"}
        /\ BackdateQueued \in BOOLEAN
+       /\ BugLookupRace \in BOOLEAN
        /\ BugSwitchClears \in BOOLEAN
        /\ BugStopLeavesOpen \in BOOLEAN
 
@@ -102,7 +103,8 @@ ReplyStored(m) == /\ inflight = m
                                  acked, settled, retry, stream, stopped, stamp,
                                  poll, holder, waited, attempts, callbacks, lastError, lookedUp, lookupStamp>>
 
-LookupReply == /\ inflight # 0
+LookupReply == /\ BugLookupRace
+               /\ inflight # 0
                /\ ~acked[inflight]
                /\ ~lookedUp
                /\ lookedUp' = TRUE
@@ -112,12 +114,14 @@ LookupReply == /\ inflight # 0
                               poll, holder, waited, attempts, callbacks, lastError>>
 
 Accept == /\ inflight # 0
-          /\ lookedUp
+          /\ (~BugLookupRace \/ lookedUp)
           /\ ~acked[inflight]
-          /\ LET m == inflight IN
+          /\ LET m == inflight
+                 reply == IF BugLookupRace THEN lookupStamp ELSE replyStamp[m]
+             IN
              /\ stamp' = [stamp EXCEPT ![m] =
-                  IF BackdateQueued /\ lookupStamp # 0
-                  THEN lookupStamp - 1
+                  IF BackdateQueued /\ reply # 0
+                  THEN reply - 1
                   ELSE clock + 1]
              /\ clock' = clock + 1
              /\ acked' = [acked EXCEPT ![m] = TRUE]
