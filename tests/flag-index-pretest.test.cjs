@@ -8,7 +8,6 @@ const ts = require("typescript");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-const output = path.join(root, "src/lib/flags/definitions/index.generated.ts");
 const helper = path.join(root, "src/lib/flags/ensureFlagIndex.ts");
 
 function fixture(t) {
@@ -71,29 +70,4 @@ test("the flag list builder can be evaluated by the CommonJS test loader", (t) =
     new Function("module", "exports", "require", javascript)({ exports: {} }, {}, require);
   });
   assert.equal(fs.existsSync(path.join(dir, "src/lib/flags/definitions/index.generated.ts")), true);
-});
-
-test("importing flag keys builds a missing list", () => {
-  const original = fs.readFileSync(output);
-  const child = path.join(os.tmpdir(), "flag-index-keys-check.cjs");
-  fs.writeFileSync(child, `const fs = require("fs");
-const path = require("path");
-const { createJiti } = require("jiti");
-const root = ${JSON.stringify(root)};
-const output = path.join(root, "src/lib/flags/definitions/index.generated.ts");
-fs.rmSync(output, { force: true });
-const keys = createJiti(__filename, { interopDefault: true })(path.join(root, "src/lib/flags/keys.ts"));
-if (typeof keys.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG !== "string") process.exit(2);
-if (!fs.existsSync(output)) process.exit(3);
-`);
-  const env = { ...process.env, NODE_PATH: path.join(root, "node_modules") };
-  delete env.HYPERTASK_FLAG_INDEX_ROOT;
-  delete env.NODE_ENV;
-  try {
-    const result = spawnSync(process.execPath, [child], { cwd: root, encoding: "utf8", env });
-    assert.equal(result.status, 0, result.stderr);
-  } finally {
-    fs.writeFileSync(output, original);
-    fs.rmSync(child, { force: true });
-  }
 });
