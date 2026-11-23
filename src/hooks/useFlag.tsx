@@ -8,7 +8,6 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
-  type ComponentType,
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -194,29 +193,10 @@ export function FeatureFlagProvider({
   const hydrated = useHydrated();
   const values = hydrated ? (query.data ?? seed?.values ?? {}) : (seed?.values ?? {});
   const context = useMemo(() => ({ values, seeded: seed !== undefined, fallback: query.isError }), [values, seed, query.isError]);
-  const askTicketAccount = values["htpr-9621-auto-switch-account"] === true;
-  const [TicketAccountSwitchProbe, setTicketAccountSwitchProbe] = useState<ComponentType | null>(null);
-  useEffect(() => {
-    if (!askTicketAccount) {
-      setTicketAccountSwitchProbe((current) => (current ? null : current));
-      return;
-    }
-    let cancelled = false;
-    void import("@/lib/auth/ticketAccountSwitchProbe")
-      .then((mod) => {
-        if (!cancelled) setTicketAccountSwitchProbe(() => mod.TicketAccountSwitchProbe);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [askTicketAccount]);
-  const ticketAccountSwitch = TicketAccountSwitchProbe ? <TicketAccountSwitchProbe /> : null;
-  if (subscribeByKey) return <FlagStoreProvider key={userId} context={context}>{children}{ticketAccountSwitch}</FlagStoreProvider>;
+  if (subscribeByKey) return <FlagStoreProvider key={userId} context={context}>{children}</FlagStoreProvider>;
   return (
     <FeatureFlagsContext.Provider value={context}>
       {children}
-      {ticketAccountSwitch}
     </FeatureFlagsContext.Provider>
   );
 }
