@@ -2,6 +2,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const test = require('node:test')
 const { createJiti } = require('jiti')
+const { stubModule } = require('./helpers/loadModule.cjs')
 
 const root = path.resolve(__dirname, '..')
 let flagOn = true
@@ -41,29 +42,18 @@ async function openStream(t) {
   delete globalThis.__hypertaskLegacySsePublisherLive
   delete globalThis.__hypertaskLegacySseRelayDown
   delete globalThis.__hypertaskLegacySseBus
-  const ioredisPath = require.resolve('ioredis')
-  const previousIoredis = require.cache[ioredisPath]
   const clients = []
-  require.cache[ioredisPath] = {
-    id: ioredisPath,
-    filename: ioredisPath,
-    loaded: true,
-    exports: {
-      default: class {
-        constructor() { clients.push(this); this.commands = [] }
-        on() { return this }
-        connect() { this.commands.push('connect'); return Promise.resolve() }
-        subscribe() { this.commands.push('subscribe'); return Promise.resolve() }
-        unsubscribe() { return Promise.resolve() }
-        publish() { this.commands.push('publish'); return Promise.resolve(0) }
-        quit() { return Promise.resolve() }
-        disconnect() {}
-      },
+  stubModule(t, 'ioredis', {
+    default: class {
+      constructor() { clients.push(this); this.commands = [] }
+      on() { return this }
+      connect() { this.commands.push('connect'); return Promise.resolve() }
+      subscribe() { this.commands.push('subscribe'); return Promise.resolve() }
+      unsubscribe() { return Promise.resolve() }
+      publish() { this.commands.push('publish'); return Promise.resolve(0) }
+      quit() { return Promise.resolve() }
+      disconnect() {}
     },
-  }
-  t.after(() => {
-    if (previousIoredis) require.cache[ioredisPath] = previousIoredis
-    else delete require.cache[ioredisPath]
   })
   const abort = new AbortController()
   t.after(() => abort.abort())

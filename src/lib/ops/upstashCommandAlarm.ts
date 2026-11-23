@@ -124,15 +124,20 @@ async function fileAlarm(input: {
   };
 }
 
+function finiteCount(count: number | undefined, minimum: number): number | undefined {
+  if (typeof count !== "number" || !Number.isSafeInteger(count) || count < minimum) return undefined;
+  return count;
+}
+
 function parseSample(raw: string | null): CommandSample | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as CommandSample;
     if (!Number.isSafeInteger(value?.total) || value.total < 0) return null;
     if (!Number.isSafeInteger(value.at) || value.at < 0) return null;
-    const pendingCommands = Number.isSafeInteger(value.pendingCommands) && value.pendingCommands > 0 ? value.pendingCommands : undefined;
-    const pendingAt = Number.isSafeInteger(value.pendingAt) && value.pendingAt > 0 ? value.pendingAt : undefined;
-    const pendingTotal = Number.isSafeInteger(value.pendingTotal) && value.pendingTotal >= 0 ? value.pendingTotal : undefined;
+    const pendingCommands = finiteCount(value.pendingCommands, 1);
+    const pendingAt = finiteCount(value.pendingAt, 1);
+    const pendingTotal = finiteCount(value.pendingTotal, 0);
     if (pendingCommands == null || pendingAt == null || pendingTotal == null) return { total: value.total, at: value.at };
     return { total: value.total, at: value.at, pendingCommands, pendingAt, pendingTotal };
   } catch {
