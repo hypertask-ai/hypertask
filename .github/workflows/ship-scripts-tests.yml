@@ -20,6 +20,12 @@ on:
       - '.claude/skills/verify-hypertask/bin/**'
       - '.claude/skills/verify-qa/scripts/**'
       - '.claude/skills/verify-design/**'
+      - '.claude/skills/wireframe/**'
+      - '.github/scripts/ux-signoff-gate.mjs'
+      - 'tests/ux-signoff-gate.test.cjs'
+      - 'tailwind.config.ts'
+      - 'src/styles/tailwindThemes/**'
+      - 'src/lib/fonts/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
       - '.github/scripts/ci-runner-policy.cjs'
@@ -112,6 +118,52 @@ jobs:
           bash .claude/skills/ship/scripts/error-collector.test.sh
           node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
           bash .claude/skills/ship/scripts/ship-claim.test.sh
+
+
+  wireframe-tests:
+    name: wireframe-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Install Python and Playwright
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright@1.64.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "$RUNNER_TEMP/pw/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Run the wireframe publish and capture tests
+        shell: bash
+        run: bash .claude/skills/wireframe/scripts/wireframe.test.sh
+
+  wireframe-signoff-tests:
+    name: wireframe-signoff-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Run the UX sign-off gate tests
+        run: node --test tests/ux-signoff-gate.test.cjs
 
   ship-scripts-tests-siblings:
     name: ship-scripts-tests-siblings

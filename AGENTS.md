@@ -53,6 +53,14 @@ Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first
 Runners never switch a flag Off; Off is Valentin's own safety switch.
 `src/` enforces comment rules through `local/no-comments`.
 
+## Rule table
+
+| Rule | Enforced by |
+|---|---|
+| Prototypes use the live app's design system | `wireframe publish` token check |
+| Prototypes start from mobile+desktop captures in all themes | `wireframe publish` `today.json` check |
+| Sign-off evidence only from `/wireframes/` | `ux-signoff-gate` |
+
 Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.
 
 <!-- BEGIN:nextjs-agent-rules -->

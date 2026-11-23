@@ -1306,6 +1306,23 @@ test('new elements need normalized names in approved wireframes or approving hum
   assert.equal((await decision({ files: [added], comments: [wireframe({ text: approved.text }), yes({ text: 'maybe ExamplePanel' })] })).state, 'failure');
 });
 
+test('only /wireframes/ evidence counts for comments added after the cutover', async () => {
+  const explorations = wireframe({ text: '<p>https://hypertask.app/explorations/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z', reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-11-23T10:05:00Z' }] });
+  assert.equal((await decision({ comments: [explorations] })).state, 'failure');
+  assert.equal((await decision({ comments: [explorations, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
+  const artifact = wireframe({ text: '<p>https://claude.ai/artifact/NewDesign123</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z' });
+  assert.equal((await decision({ comments: [artifact, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
+  const wireframes = wireframe({ text: '<p>https://hypertask.app/wireframes/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z' });
+  assert.equal((await decision({ comments: [wireframes, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'success');
+});
+
+test('approvals recorded on legacy explorations and artifacts still count', async () => {
+  const explorations = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
+  assert.equal((await decision({ comments: [explorations, yes({ createdAt: '2026-10-10T12:05:00Z' })] })).state, 'success');
+  const artifact = wireframe({ text: '<p>https://claude.ai/artifact/LegacyDesign1</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
+  assert.equal((await decision({ comments: [artifact, yes({ createdAt: '2026-10-10T12:05:00Z' })] })).state, 'success');
+});
+
 test('copied components need names; renamed components, CSS and app files need no names and no wireframe', async () => {
   assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [{ ...added, status: 'copied' }] })).state, 'failure');
   for (const file of [{ ...added, status: 'renamed' }, { ...added, filename: 'src/components/Panel.css' }, { ...added, filename: 'src/app/inbox/page.tsx' }]) {
