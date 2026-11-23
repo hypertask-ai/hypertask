@@ -192,6 +192,13 @@ export async function updateOwnedAgentBoards(
               'agent_id'
             )
           }
+          if (requireProjectAdmin && (agent.revokedAt || agent.archivedAt)) {
+            throw new AgentBoardUpdateError(
+              selfBoardAccessRefusal(input.addProjectIds[0] ?? 0, input.agentId),
+              403,
+              'add_project_ids'
+            )
+          }
 
           let allowedProjects: Set<number> | undefined
           if (actingAgentId) {
@@ -236,25 +243,31 @@ export async function updateOwnedAgentBoards(
                 )
               }
               if (requireProjectAdmin) {
-                const adminBoard = await tx.project.findFirst({
-                  where: {
-                    id,
-                    OR: [
-                      { ownerId: userId },
-                      {
-                        members: {
-                          some: {
-                            userId,
-                            status: 'Accepted',
-                            agentId: null,
-                            role: 'Admin',
+                const selfHomeTeamId = agent.boardHomeTeamId ??
+                  agent.credentialTeamId ??
+                  agent.members.find((membership) => membership.project.teamId)?.project.teamId ??
+                  null
+                const adminBoard = selfHomeTeamId && project.teamId === selfHomeTeamId
+                  ? await tx.project.findFirst({
+                      where: {
+                        id,
+                        OR: [
+                          { ownerId: userId },
+                          {
+                            members: {
+                              some: {
+                                userId,
+                                status: 'Accepted',
+                                agentId: null,
+                                role: 'Admin',
+                              },
+                            },
                           },
-                        },
+                        ],
                       },
-                    ],
-                  },
-                  select: { id: true },
-                })
+                      select: { id: true },
+                    })
+                  : null
                 if (!adminBoard) {
                   throw new AgentBoardUpdateError(
                     selfBoardAccessRefusal(id, input.agentId),

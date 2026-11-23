@@ -88,6 +88,8 @@ function harness(options = {}) {
           if (row.agentId == null && row.role === "Admin") row.role = "Member";
         }
       }
+      if (options.revokeOnTransaction) state.agents[0].revokedAt = new Date();
+      if (options.archiveOnTransaction) state.agents[0].archivedAt = new Date();
       return run(prisma);
     },
   };
@@ -196,6 +198,26 @@ test("a demotion inside the transaction refuses the self-join and writes nothing
     demoteOnTransaction: true,
     humanMember: { id: 11, projectId: 2, agentId: null, userId: OWNER, status: "Accepted", role: "Admin" },
   });
+  const response = await h.patch({ add_project_ids: [2] });
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error, invite(2));
+  assert.match(body.error, /project invite/);
+  assert.deepEqual(h.state.members.filter((row) => row.agentId === AGENT).map((row) => row.projectId), [1]);
+});
+
+test("revoking the agent inside the transaction refuses the self-join and writes nothing", async () => {
+  const h = harness({ revokeOnTransaction: true });
+  const response = await h.patch({ add_project_ids: [2] });
+  assert.equal(response.status, 403);
+  const body = await response.json();
+  assert.equal(body.error, invite(2));
+  assert.match(body.error, /project invite/);
+  assert.deepEqual(h.state.members.filter((row) => row.agentId === AGENT).map((row) => row.projectId), [1]);
+});
+
+test("archiving the agent inside the transaction refuses the self-join and writes nothing", async () => {
+  const h = harness({ archiveOnTransaction: true });
   const response = await h.patch({ add_project_ids: [2] });
   assert.equal(response.status, 403);
   const body = await response.json();
