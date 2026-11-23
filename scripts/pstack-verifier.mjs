@@ -1564,25 +1564,50 @@ export function basePlanCommand({ work = workDir(), binding = bindingNow() } = {
   output({ needed: "true" });
   return basePlan;
 }
-export async function judgeJourneys({ plan, evidence, baseEvidence = null, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key, work = workDir() }) {
+function judgedSoFar(head) {
+  const judged = String(head?.judged ?? "");
+  return judged === "UNEVALUATED" ? "" : judged;
+}
+export function worthAsking(plan, item, head, picked, reuseJudged = false) {
+  if (!head || plan.fail || !picked?.model || picked.model !== plan.verifierModel) return false;
+  if (reuseJudged && judgedSoFar(head)) return false;
+  return !compareLib.classifyRun(head, item).state.match(/failed|unavailable/);
+}
+async function askJourney({ plan, item, head, viewport, index, picked, ask, work }) {
+  try {
+    const { prompt, options } = judgePrompt(plan, item, head, work, viewport, index);
+    const parsed = await ask(prompt, { model: picked.model, models: picked.models, ...options }, parseAnswer);
+    console.log(`journey ${item.journey} [${viewport || "plain"}]: ${parsed.verdict} ${parsed.notes}`);
+    return parsed.verdict;
+  } catch (error) {
+    console.log(`journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
+    return "UNEVALUATED";
+  }
+}
+export async function judgeAskCommand({ work = workDir(), binding = bindingNow(), ask = askVerifier, evidence = null, picked = null } = {}) {
+  const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
+  const head = evidence ?? readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding);
+  const judge = picked ?? pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
+  let asked = 0;
+  for (const [index, item] of (plan.journeys ?? []).entries()) {
+    for (const viewport of planViewports(plan)) {
+      const run = (head.journeys ?? []).find((each) => each.journey === item.journey && runViewport(each) === viewport) ?? null;
+      if (!worthAsking(plan, item, run, judge, true)) continue;
+      run.judged = await askJourney({ plan, item, head: run, viewport, index, picked: judge, ask, work });
+      asked += 1;
+    }
+  }
+  if (!asked) return null;
+  writeFileSync(path.join(work, "evidence", "evidence.json"), `${JSON.stringify(head)}\n`, { mode: 0o600 });
+  return head;
+}
+export async function judgeJourneys({ plan, evidence, baseEvidence = null, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key, work = workDir(), reuseJudged = false }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     for (const viewport of planViewports(plan)) {
       const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey && runViewport(run) === viewport) ?? null;
       const base = (baseEvidence?.journeys ?? []).find((run) => run.journey === item.journey && runViewport(run) === viewport) ?? null;
-      let judged = head ? String(head.judged ?? "") : "";
-      const worthAsking = !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/);
-      if (head && worthAsking) {
-        try {
-          const { prompt, options } = judgePrompt(plan, item, head, work, viewport, index);
-          const parsed = await ask(prompt, { key, model: picked.model, models: picked.models, ...options }, parseAnswer);
-          judged = parsed.verdict;
-          console.log(`journey ${item.journey} [${viewport || "plain"}]: ${parsed.verdict} ${parsed.notes}`);
-        } catch (error) {
-          judged = "UNEVALUATED";
-          console.log(`journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
-        }
-      }
+      const judged = worthAsking(plan, item, head, picked, reuseJudged) ? await askJourney({ plan, item, head, viewport, index, picked, ask: (prompt, options, read) => ask(prompt, { key, ...options }, read), work }) : String(head?.judged ?? "");
       journeys.push({ journey: item.journey, viewport, plan: item, head: head ? { ...head, judged } : null, base });
     }
   }
@@ -1623,7 +1648,7 @@ async function judgeCommand() {
       baseEvidence = readJourneyEvidence(readFileSync(path.join(workDir(), "evidence", "base-evidence.json"), "utf8"), binding);
     } catch { baseEvidence = null; }
     const bugfixProved = bugfixNoPath && noRepro ? await reproFirstProof(binding) : false;
-    compared = await judgeJourneys({ plan, evidence, baseEvidence, picked, redFeatures: readNightlyRed(), bugfixProved });
+    compared = await judgeJourneys({ plan, evidence, baseEvidence, picked, redFeatures: readNightlyRed(), bugfixProved, reuseJudged: true });
   } else if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
       const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
@@ -1722,11 +1747,12 @@ async function main() {
   if (command === "resolve") await resolveCommand();
   else if (command === "plan") await planCommand();
   else if (command === "base-plan") await basePlanCommand();
+  else if (command === "judge-ask") await judgeAskCommand();
   else if (command === "judge") await judgeCommand();
   else if (command === "mark") await markCommand();
   else if (command === "post") await postCommand();
   else if (command === "cancel") await cancelCommand();
-  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|mark|post|cancel|base-plan");
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge-ask|judge|mark|post|cancel|base-plan");
 }
 const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
 if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

@@ -17,7 +17,7 @@ const expected = {
   resolve: { contents: "read", "pull-requests": "read", actions: "read" },
   plan: { contents: "read" },
   drive: { contents: "read", packages: "read" },
-  judge: { contents: "read", checks: "read", statuses: "read", actions: "read" },
+  judge: { contents: "read", packages: "read", checks: "read", statuses: "read", actions: "read" },
   mark: { contents: "read", statuses: "read" },
   post: { actions: "read", contents: "read", "pull-requests": "write", statuses: "read" },
   cancel: { contents: "read", statuses: "read" },
@@ -104,6 +104,7 @@ test("only mark, post and cancel use the verifier environment and the job token 
   }
   assert.equal(refs(trusted.jobs.drive).includes("${{ needs.resolve.outputs.sha }}"), true);
   assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("HYPERTASK_RUNNERS_KEY")), false);
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("secrets.")), false);
 });
 
 test("recheck waits on production, reruns only a verifier wait, and pages past a full run list", async () => {
@@ -398,7 +399,7 @@ test("a smoke boot that never writes ready records a down preview", (t) => {
   });
 });
 
-test("the plan lane plans the head only and nothing restores a base result", () => {
+test("the plan lane plans the head only and the drive lane never seeds a base result", () => {
   const steps = trusted.jobs.plan.steps;
   assert.equal(steps.some((step) => String(step.uses ?? "").startsWith("actions/cache/")), false);
   const planStep = steps.find((step) => String(step.run ?? "").includes("pstack-verifier.mjs plan"));
@@ -408,27 +409,31 @@ test("the plan lane plans the head only and nothing restores a base result", () 
   assert.deepEqual(Object.keys(trusted.jobs), ["resolve", "plan", "drive", "judge", "mark", "post", "cancel"]);
 });
 
-test("the judge reads the nightly live pass and no base evidence", () => {
+test("the judge asks the model first, then re-drives failed side journeys against the production base", () => {
   assert.deepEqual(Object.keys(trusted.on), ["workflow_run"]);
   const judge = trusted.jobs.judge;
   assert.equal(judge.permissions.actions, "read");
-  assert.equal(judge.steps.some((step) => String(step.with?.name ?? "").includes("base-evidence")), false);
-  const judgeStep = judge.steps.find((step) => String(step.run ?? "").includes("pstack-verifier.mjs judge"));
-  assert.equal(judgeStep.env.PSTACK_BASE_EVIDENCE, undefined);
-  assert.equal(strings(judge).some((value) => value.includes("base-evidence") || value.includes("PSTACK_BASE_CACHE")), false);
-});
-
-test("drive conditionally re-drives failed side journeys against the production base", () => {
-  const steps = trusted.jobs.drive.steps;
-  const headDrive = steps.findIndex((step) => String(step.run ?? "").includes("candidate\""));
+  const steps = judge.steps;
+  const ask = steps.findIndex((step) => String(step.run ?? "").includes("pstack-verifier.mjs judge-ask"));
   const basePlan = steps.findIndex((step) => step.id === "base-plan" && String(step.run ?? "").includes("pstack-verifier.mjs base-plan"));
   const baseCheckout = steps.findIndex((step) => step.with?.path === "candidate-base");
   const baseDrive = steps.findIndex((step) => String(step.run ?? "").includes("candidate-base"));
-  assert.equal(headDrive >= 0 && basePlan > headDrive && baseCheckout > basePlan && baseDrive > baseCheckout, true);
+  const decide = steps.findIndex((step) => String(step.run ?? "").trim().endsWith("pstack-verifier.mjs judge"));
+  assert.equal(ask >= 0 && basePlan > ask && baseCheckout > basePlan && baseDrive > baseCheckout && decide > baseDrive, true);
+  assert.equal(steps[ask].env.OPENROUTER_API_KEY, "${{ secrets.OPENROUTER_EVAL_KEY }}");
   assert.equal(steps[baseCheckout].if, "steps.base-plan.outputs.needed == 'true'");
   assert.equal(steps[baseCheckout].with.ref, "${{ needs.resolve.outputs.base }}");
   assert.equal(steps[baseDrive].if, "steps.base-plan.outputs.needed == 'true'");
   assert.equal(steps[baseDrive]["continue-on-error"], true);
   assert.equal(steps[baseDrive].env.PSTACK_PLAN_FILE, "${{ runner.temp }}/pstack-verifier/plan/base-plan.json");
   assert.match(String(steps[baseDrive].run), /base-evidence\.json/);
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("candidate-base") || value.includes("base-plan")), false);
+});
+
+test("the head evidence artifact is uploaded before the judge re-drives the base", () => {
+  const steps = trusted.jobs.drive.steps;
+  const upload = steps.findIndex((step) => String(step.with?.name ?? "").startsWith("pstack-evidence-"));
+  assert.equal(upload, steps.length - 1);
+  assert.equal(steps[upload].if, "always()");
+  assert.equal(strings(trusted.jobs.drive).some((value) => value.includes("base-evidence")), false);
 });

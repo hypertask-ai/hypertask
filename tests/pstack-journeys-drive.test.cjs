@@ -228,6 +228,48 @@ test("basePlanCommand writes base-plan.json and signals needed only when a side 
   }
 });
 
+test("judge-ask records the model verdict so a judge-only side journey failure is re-driven on the base", async () => {
+  const { judgeAskCommand, basePlanCommand, judgeJourneys } = await load();
+  const fs = require("node:fs");
+  const work = mkdtempSync(join(tmpdir(), "judge-ask-"));
+  const outFile = join(work, "github-output");
+  const previousOut = process.env.GITHUB_OUTPUT;
+  fs.mkdirSync(join(work, "plan"), { recursive: true });
+  fs.mkdirSync(join(work, "evidence"), { recursive: true });
+  try {
+    process.env.GITHUB_OUTPUT = outFile;
+    fs.writeFileSync(outFile, "");
+    const plan = planFor([journeyItem("change:primary"), journeyItem("area:ci-runner-policy")]);
+    fs.writeFileSync(join(work, "plan", "plan.json"), JSON.stringify(plan));
+    fs.writeFileSync(join(work, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [headRun("change:primary"), headRun("area:ci-runner-policy")] }));
+    assert.equal(basePlanCommand({ work, binding }), null);
+    const asked = [];
+    await judgeAskCommand({ work, binding, picked: { model: "deepseek/deepseek-v4.1-flash" }, ask: (prompt) => { asked.push(prompt); return asked.length === 1 ? { verdict: "PASS", notes: "the new total is right" } : { verdict: "FAIL", notes: "the same wrong total is on production" }; } });
+    assert.equal(asked.length, 2);
+    const recorded = JSON.parse(fs.readFileSync(join(work, "evidence", "evidence.json"), "utf8"));
+    assert.deepEqual(recorded.journeys.map((run) => run.judged), ["PASS", "FAIL"]);
+    const written = basePlanCommand({ work, binding });
+    assert.deepEqual(written.journeys.map((item) => item.journey), ["area:ci-runner-policy"]);
+    let reasked = 0;
+    const judged = await judgeJourneys({
+      plan,
+      evidence: recorded,
+      baseEvidence: { ...binding, journeys: [headRun("area:ci-runner-policy", false)] },
+      picked: { model: "deepseek/deepseek-v4.1-flash" },
+      ask: () => { reasked += 1; return { verdict: "PASS", notes: "" }; },
+      reuseJudged: true,
+      work: "",
+    });
+    assert.equal(reasked, 0);
+    assert.equal(judged.verdict, "PASS+NOTES");
+    assert.match(judged.notes, /area:ci-runner-policy also fails on production/);
+  } finally {
+    if (previousOut === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = previousOut;
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
 test("judgeJourneys excuses failed side journeys that also fail on production base and blocks real regressions", async () => {
   const { judgeJourneys } = await load();
   const plan = planFor([journeyItem("change:primary"), journeyItem("area:ci-runner-policy")]);
