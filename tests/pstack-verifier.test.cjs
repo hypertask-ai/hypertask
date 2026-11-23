@@ -23,6 +23,8 @@ for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, aut
   { name: "agreeing commit trailers", messages: ["Fix\n\nAuthor-Model: codex", "Test\n\nCo-Authored-By: Codex <noreply@openai.com>"], author: "codex" },
   { name: "disagreeing commits", messages: ["Fix\n\nAuthor-Model: codex", "Test\n\nAuthor-Model: deepseek"] },
   { name: "body line and commit trailer disagree", body: "Author-Model: claude", messages: ["Fix\n\nAuthor-Model: codex"] },
+  { name: "fenced example beside a real line", body: "```\nAuthor-Model: deepseek\n```\n\nAuthor-Model: codex (gpt-6.1-sol)", author: "codex" },
+  { name: "fenced example alone", body: "```md\nAuthor-Model: codex\n```" },
   { name: "unknown body family cannot fall back", body: "Author-Model: mystery (codex)", messages: ["Fix\n\nAuthor-Model: codex"] },
   { name: "unknown commit family", messages: ["Fix\n\nAuthor-Model: mystery"] },
   { name: "unknown commit family cannot be outvoted", messages: ["Fix\n\nAuthor-Model: mystery", "Test\n\nAuthor-Model: codex"] },
@@ -128,6 +130,9 @@ test("author trailers fail closed without treating prose, other authors or human
   assert.equal(gate("", "Fix\n\nAuthor-Model: codex\nUnrelated prose").stop, true);
   assert.equal(gate("Author-Model:\ncodex", "Fix\n\nAuthor-Model: codex").stop, true);
   assert.equal(gate("Author-Model: codex\nAuthor-Model: deepseek").stop, true);
+  assert.equal(gate("```\nAuthor-Model: codex\n```\nAuthor-Model: deepseek").author, "deepseek");
+  assert.equal(gate("```\nAuthor-Model: codex\n```").stop, true);
+  assert.equal(gate("~~~\nAuthor-Model: mystery\n~~~", "Fix\n\nAuthor-Model: codex").author, "codex");
   assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex <noreply@openai.com>\nCo-Authored-By: A human <human@example.com>").author, "codex");
 });
 

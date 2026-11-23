@@ -313,10 +313,23 @@ function trailerLines(commit) {
   if (!block.split(/\r?\n/).every((line) => /^[A-Za-z0-9-]+:[ \t]*[^\r\n]*$/.test(line))) return [];
   return [...block.matchAll(/^(Author-Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)].map(([, key, value]) => ({ key: key.toLowerCase(), value: value.trim() }));
 }
+function proseOnly(body) {
+  let fence = "";
+  return String(body ?? "").split(/\r?\n/).map((line) => {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1] ?? "";
+    if (!fence) {
+      if (!marker) return line;
+      fence = marker;
+      return "";
+    }
+    if (marker && marker[0] === fence[0] && marker.length >= fence.length && /^\s*(`{3,}|~{3,})\s*$/.test(line)) fence = "";
+    return "";
+  }).join("\n");
+}
 export function authorFamily(body, commits = [], authorLogin = "") {
   if (commits === null) return "";
   const bodyFamilies = new Set();
-  for (const [, value] of String(body ?? "").matchAll(/^Author-Model:([^\r\n]*)/gim)) {
+  for (const [, value] of proseOnly(body).matchAll(/^Author-Model:([^\r\n]*)/gim)) {
     const family = value.trim().split(/\s+/)[0].toLowerCase();
     if (!FAMILIES.has(family)) return "";
     bodyFamilies.add(family);
