@@ -172,7 +172,7 @@ test("a board outside the agent team is still refused, without the access-reques
   assert.deepEqual(calls.moved, []);
 });
 
-test("an archived board the agent is not on is refused for membership before the archived-board message", async () => {
+test("the agent token, not the person token, is refused with not a member on an archived board", async () => {
   const archived = { status: 400, message: 'Board "Old" is archived, so it cannot take new tickets.' };
   const { status, body, calls } = await move({ accessError: archived });
   assert.equal(status, 403);
