@@ -251,18 +251,32 @@ function harness() {
   };
 }
 
-function request(body) {
-  return new Request("https://app.hypertask.ai/api/auth/ticket-account-switch", {
+const SITE = "https://app.hypertask.ai";
+
+function request(body, origin = SITE) {
+  return new Request(`${SITE}/api/auth/ticket-account-switch`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: "better-auth.session_token=active" },
+    headers: {
+      "content-type": "application/json",
+      cookie: "better-auth.session_token=active",
+      host: "app.hypertask.ai",
+      "x-forwarded-proto": "https",
+      ...(origin === null ? {} : { origin }),
+    },
     body: JSON.stringify(body),
   });
 }
 
-function formRequest(fields) {
-  return new Request("https://app.hypertask.ai/api/auth/ticket-account-switch", {
+function formRequest(fields, origin = SITE) {
+  return new Request(`${SITE}/api/auth/ticket-account-switch`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded", cookie: "better-auth.session_token=active" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      cookie: "better-auth.session_token=active",
+      host: "app.hypertask.ai",
+      "x-forwarded-proto": "https",
+      ...(origin === null ? {} : { origin }),
+    },
     body: new URLSearchParams(fields),
   });
 }
@@ -554,12 +568,75 @@ test("the flag off leaves the block page without checking other accounts", async
 });
 
 test("the flag provider asks only while that flag is on", () => {
-  const key = load("src/lib/flags/definitions/htpr-9621-auto-switch-account.ts").HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG;
   const state = fs.readFileSync("src/lib/state.tsx", "utf8");
   const probe = fs.readFileSync("src/lib/auth/ticketAccountSwitchProbe.tsx", "utf8");
   assert.equal(state.includes('import("@/lib/auth/ticketAccountSwitchProbe")'), true);
-  assert.equal(probe.includes(`flags?.[${"HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG"}] !== true`), true);
-  assert.equal(probe.includes(key), true);
+  assert.equal(state.includes("ticketAccountSwitchFlagOn"), true);
+  assert.equal(state.includes("if (!enabled) return;"), true);
+  assert.equal(state.includes("return enabled && Probe ? <Probe /> : null;"), true);
+  assert.equal(probe.includes("if (!ticketAccountSwitchFlagOn(flags))"), true);
+  assert.equal(probe.includes("ticketAccountSwitchFlagOn"), true);
+  assert.equal(
+    probe.indexOf("syncSwitchedAccountTabs(") > probe.indexOf("if (!ticketAccountSwitchFlagOn(flags))"),
+    true,
+  );
+});
+
+test("with the flag off neither the slot nor the tab sync runs", () => {
+  const key = load("src/lib/flags/definitions/htpr-9621-auto-switch-account.ts").HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG;
+  const { ticketAccountSwitchFlagOn } = load("src/lib/auth/ticketDetailLocator.ts");
+  const state = fs.readFileSync("src/lib/state.tsx", "utf8");
+  const probe = fs.readFileSync("src/lib/auth/ticketAccountSwitchProbe.tsx", "utf8");
+  assert.equal(ticketAccountSwitchFlagOn(undefined), false);
+  assert.equal(ticketAccountSwitchFlagOn({}), false);
+  assert.equal(ticketAccountSwitchFlagOn({ [key]: false }), false);
+  assert.equal(ticketAccountSwitchFlagOn({ "htpr-another-flag": true }), false);
+  assert.equal(ticketAccountSwitchFlagOn({ [key]: true }), true);
+  assert.equal(state.includes("return enabled && Probe ? <Probe /> : null;"), true);
+  assert.equal(state.includes("if (!enabled) return;"), true);
+  assert.equal(
+    probe.indexOf("syncSwitchedAccountTabs(") > probe.indexOf("if (!ticketAccountSwitchFlagOn(flags))"),
+    true,
+  );
+});
+
+test("a cross-origin post returns to the ticket without switching", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+    ];
+    trust(app);
+    const json = await app.route(request(ticketBody, "https://evil.test"));
+    assert.deepEqual(await json.json(), { action: "stay" });
+    const missing = await app.route(request(ticketBody, null));
+    assert.deepEqual(await missing.json(), { action: "stay" });
+    const page = await app.route(formRequest({ projectSlug: "project-15", uniqueIndex: "9621" }, "https://evil.test"));
+    assert.equal(page.status, 303);
+    assert.equal(locationPath(page), "/detail/project-15/9621");
+    assert.equal(cookieHeader(page).includes("ticket-account-switched=1"), false);
+    assert.deepEqual(app.state.flagChecks, []);
+    assert.equal(app.state.listed, 0);
+    assert.deepEqual(app.state.lookups, []);
+    assert.deepEqual(app.state.activated, []);
+  } finally {
+    app.restore();
+  }
+});
+
+test("a same-origin post still switches", async () => {
+  const app = harness();
+  try {
+    app.state.sessions = [
+      { user: { id: OWNER, email: "owner@example.com" }, session: { token: OWNER_TOKEN } },
+    ];
+    trust(app);
+    const response = await app.route(request(ticketBody));
+    assert.deepEqual(await response.json(), { action: "switch" });
+    assert.deepEqual(app.state.activated, [OWNER_TOKEN]);
+  } finally {
+    app.restore();
+  }
 });
 
 test("ticket links outside a numeric detail url do not ask who can open them", async () => {

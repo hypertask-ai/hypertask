@@ -17,11 +17,16 @@ import {
 } from "@/lib/auth/ticketAccountSwitchRateLimit";
 import { auth } from "@/lib/auth/betterAuth";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
 import { isFeatureEnabled } from "@/lib/flags";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function trustedMutationOrigin(request: Request) {
+  return request.headers.get("origin") === new URL(getRequestBaseUrl(request)).origin;
+}
 
 function jsonAction(action: "stay" | "choose" | "switch") {
   return NextResponse.json(
@@ -91,6 +96,7 @@ function finish(request: Request, page: boolean, action: "stay" | "choose" | "sw
 
 export async function POST(request: Request) {
   const { locator, page } = await readRequest(request);
+  if (!trustedMutationOrigin(request)) return finish(request, page, "stay", locator);
   const user = await getServerCookieUser();
   if (!user) return finish(request, page, "stay", locator);
   const enabled = await isFeatureEnabled(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG, user.id);

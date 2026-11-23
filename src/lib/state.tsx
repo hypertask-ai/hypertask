@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 import {
   Provider as JotaiProvider,
   atom as jotaiAtom,
@@ -12,6 +12,8 @@ import {
 } from "jotai";
 import { RESET } from "jotai/utils";
 import { useHydrated } from "@/hooks/General/useHydrated";
+import { useQueryClient } from "@tanstack/react-query";
+import { signedInUserId, ticketAccountSwitchFlagOn } from "@/lib/auth/ticketDetailLocator";
 
 const hydrationDefaults = createStore();
 const initialAtomDefaults = new Map<WritableAtom<any, [any], any>, unknown>();
@@ -288,8 +290,16 @@ export const useResetRecoilState = <T,>(recoilAtom: ResettableAtom<T>) => {
 };
 
 function TicketAccountSwitchSlot() {
+  const queryClient = useQueryClient();
+  const userId = signedInUserId();
+  const enabled = useSyncExternalStore(
+    (onChange) => queryClient.getQueryCache().subscribe(onChange),
+    () => ticketAccountSwitchFlagOn(queryClient.getQueryData<Record<string, boolean>>(["feature-flags", userId])),
+    () => false
+  );
   const [Probe, setProbe] = useState<ComponentType | null>(null);
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void import("@/lib/auth/ticketAccountSwitchProbe")
       .then((mod) => {
@@ -299,8 +309,8 @@ function TicketAccountSwitchSlot() {
     return () => {
       cancelled = true;
     };
-  }, []);
-  return Probe ? <Probe /> : null;
+  }, [enabled]);
+  return enabled && Probe ? <Probe /> : null;
 }
 
 export const StateRoot = ({ children, initialValues }: {

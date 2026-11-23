@@ -1,3 +1,5 @@
+import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
+
 export type TicketDetailLocator = {
   projectSlug: string;
   uniqueIndex: string;
@@ -87,6 +89,22 @@ export function rememberSwitchedAccount(label: string, userId: number) {
   } catch {
     return;
   }
+}
+
+export function signedInUserId(): number {
+  if (typeof document === "undefined") return 0;
+  try {
+    const raw = document.cookie.split("; ").find((part) => part.startsWith("nookies_user="));
+    if (!raw) return 0;
+    const id = Number(JSON.parse(decodeURIComponent(raw.slice("nookies_user=".length))).id);
+    return Number.isInteger(id) && id > 0 ? id : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function ticketAccountSwitchFlagOn(flags: Record<string, boolean> | undefined): boolean {
+  return flags?.[HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG] === true;
 }
 
 function accountLabelFromCookie(): string | null {
