@@ -417,11 +417,11 @@ test("the flag off leaves the block page without checking other accounts", async
 
 test("the flag provider asks only while that flag is on", () => {
   const key = load("src/lib/flags/definitions/htpr-9621-auto-switch-account.ts").HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG;
-  const providers = fs.readFileSync("src/utils/Providers.tsx", "utf8");
+  const state = fs.readFileSync("src/lib/state.tsx", "utf8");
   const probe = fs.readFileSync("src/lib/auth/ticketAccountSwitchProbe.tsx", "utf8");
-  assert.equal(providers.includes("<TicketAccountSwitchProbe />"), true);
+  assert.equal(state.includes('import("@/lib/auth/ticketAccountSwitchProbe")'), true);
+  assert.equal(probe.includes(`flags?.[${"HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG"}] !== true`), true);
   assert.equal(probe.includes(key), true);
-  assert.equal(probe.includes("if (!enabled) return;"), true);
 });
 
 test("ticket links outside a numeric detail url do not ask who can open them", async () => {

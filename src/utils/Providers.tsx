@@ -32,7 +32,6 @@ import { MobileBlockingProvider } from "@/lib/contexts/mobileBlockingContext";
 import { TourProvider } from "@/lib/contexts/TourContext";
 import { shouldDehydratePersistedQuery } from "@/utils/queryPersistence";
 import { FeatureFlagProvider, featureFlagsQueryKey } from "@/hooks/useFlag";
-import { TicketAccountSwitchProbe } from "@/lib/auth/ticketAccountSwitchProbe";
 import { HTPR_7555_PERSIST_SIZE_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7555-persist-size-once";
 import {
   createQueryPersister,
@@ -220,7 +219,6 @@ export default function Provider({
                         <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
                         <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags ?? flagSeed ?? undefined}>
-                          <TicketAccountSwitchProbe />
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <FathomSignupCompleted accountId={authenticatedUserId} />

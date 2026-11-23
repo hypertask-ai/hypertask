@@ -64,7 +64,6 @@ const Provider = load('src/utils/Providers.tsx', {
   '@/lib/contexts/deviceContext': { DeviceProvider: pass }, '@/lib/contexts/ThemeListener': { default: empty },
   '@/lib/contexts/mobileBlockingContext': { MobileBlockingProvider: pass }, '@/lib/contexts/TourContext': { TourProvider: pass },
   '@/utils/queryPersistence': { shouldDehydratePersistedQuery: () => true }, '@/hooks/useFlag': flags,
-  '@/lib/auth/ticketAccountSwitchProbe': { TicketAccountSwitchProbe: empty },
   '@/lib/flags/definitions/htpr-7555-persist-size-once': { HTPR_7555_PERSIST_SIZE_ONCE_FLAG: 'persist-size' },
   '@/utils/queryIndexedDbPersister': { createQueryPersister: () => ({ dispose() {} }) },
   '@/utils/helperFunctions/chunkLoadRecovery': { CHUNK_RELOAD_STORAGE_KEY: 'recovery', stripChunkRecoveryParam: () => null },
