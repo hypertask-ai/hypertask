@@ -1,5 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const { readFileSync, readdirSync } = require("node:fs");
+const path = require("node:path");
 const { journeyIds, pagesForFiles } = require("../scripts/lib/pstack-journeys.cjs");
 
 const pages = [
@@ -100,6 +102,25 @@ test("a change to script paths matches no area", () => {
   assert.deepEqual(pagesForFiles({ files: ["scripts/generate-radius-baseline.mjs", "scripts/prove-radius-rule.mjs"], pages: tooling }), []);
   assert.deepEqual(pagesForFiles({ files: ["scripts/generate-radius-baseline.mjs", "tests/style-guide-eslint-rules.test.cjs"], pages: tooling }), []);
   assert.deepEqual(pagesForFiles({ files: ["src/lib/api/task-writes/create-global.ts"], diff: "+  if (flags.htpr-9106-save-limit) return;\n", pages: tooling }), []);
+});
+
+test("a mixed app and scripts/verify-qa change matches no feature-map area", () => {
+  const dir = path.join(__dirname, "../.claude/skills/verify-qa/reference/feature-map");
+  const mapped = readdirSync(dir)
+    .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
+    .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
+  assert.ok(mapped.length > 0);
+  assert.deepEqual(pagesForFiles({ files: ["scripts/verify-qa", "src/lib/unrelated.ts"], pages: mapped }), []);
+});
+
+test("a mixed app and tooling change selects only the app area", () => {
+  const mapped = [
+    ...pages,
+    { name: "tooling", text: "Run scripts/task-writer-eval.cjs and scripts/lib/pstack-journeys.cjs. Test tests/inbox.test.cjs. Also task-writer-eval.cjs and scripts/lib/." },
+  ];
+  const files = ["scripts/task-writer-eval.cjs", "scripts/lib/pstack-journeys.cjs", "scripts/lib/unrelated.cjs", "tests/inbox.test.cjs"];
+  assert.deepEqual(pagesForFiles({ files, pages: mapped }), []);
+  assert.deepEqual(pagesForFiles({ files: [...files, "src/pages/api/queues/inboxReminder.ts"], pages: mapped }), [{ page: "inbox", score: 3 }]);
 });
 
 test("a flag-looking test filename is not a flag key, a changed flag line still is", () => {
