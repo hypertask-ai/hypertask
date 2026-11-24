@@ -126,7 +126,7 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
       await page.reload()
       await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 }); return
     }
-    await expect(boardCard, 'task did not persist after reload').toBeVisible({ timeout: 10_000 }); return
+    await page.reload(); await expect(boardCard, 'task did not persist after reload').toBeVisible({ timeout: 10_000 }); return
   }
 
   const modalTitleInput = page.locator('#title-input-modal')
