@@ -51,7 +51,11 @@ import { CommandGroup, ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
+import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG , HTPR_7939_GROK_GEMINI4_MODELS_FLAG , HTPR_6936_ASK_AI_FULLSCREEN_FLAG , HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG ,
+  GOOGLE_CALENDAR_FLAG,
+  HTPR_7260_KANBAN_SELECT_ALL_FLAG,
+  HTPR_6868_TICKET_PREFIX_FLAG,
+} from "@/lib/flags/keys";
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { ModalContainerCustom, ModalHintBar, ModalInput } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
@@ -80,22 +84,14 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { INBOX_TRIAGE_PROMPT } from "@/lib/ai/prompts/inboxTriage";
 import { HTPR_8044_TRIAGE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8044-triage-inbox";
 import { HTPR_8025_REACTIVE_COMMAND_SEARCH_FLAG } from "@/lib/flags/definitions/htpr-8025-reactive-command-search";
 import { HTPR_8015_AMOLED_MODE_OUTLINE_FLAG } from "@/lib/flags/definitions/htpr-8015-amoled-mode-outline";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG } from "@/lib/flags/definitions/htpr-7891-palette-share-key-labels";
-import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
-import {
-  GOOGLE_CALENDAR_FLAG,
-  HTPR_7260_KANBAN_SELECT_ALL_FLAG,
-  HTPR_6868_TICKET_PREFIX_FLAG,
-} from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
 import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
