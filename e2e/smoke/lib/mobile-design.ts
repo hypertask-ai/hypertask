@@ -15,9 +15,7 @@ export const MOBILE_SCREENS: readonly MobileScreenSpec[] = [
 export type MeasuredElement = { key: string; stableId?: string; tag: string; role: string; label: string; cls: string; w: number; h: number; x: number; y: number; disabled: boolean; interactive: boolean; display: string; textField: boolean; contenteditable: boolean; fontSize: number | null; radius: string; radiusBad: boolean; visibleSurface: boolean; roundMarker: boolean; outsideX: boolean; inHScroller: boolean; clippedByAncestor: boolean; textClipped: boolean; ellipsis: boolean; scrollW: number; clientW: number }
 export type MeasuredTextField = { key: string; stableId?: string; label: string; kind: string; disabled: boolean; x: number; y: number; w: number; h: number; micFound: boolean; micLabel: string; micW: number; micH: number; micBgAlpha: number; micRightBound: boolean; micIsPrimaryRight: boolean }
 export type MeasuredPurple = { key: string; stableId?: string; label: string; hits: string[]; ai: boolean }
-export type MeasuredRadius = { stableId?: string; label: string; radius: string }
-export type MeasuredClip = { stableId?: string; label: string; scrollW: number; clientW: number }
-export type MobileScreenMetrics = { coarsePointer: boolean; docOverflowX: number; elements: MeasuredElement[]; textFields: MeasuredTextField[]; purple: MeasuredPurple[]; radii: MeasuredRadius[]; clips: MeasuredClip[] }
+export type MobileScreenMetrics = { coarsePointer: boolean; docOverflowX: number; elements: MeasuredElement[]; textFields: MeasuredTextField[]; purple: MeasuredPurple[]; radii: Array<{ stableId?: string; label: string; radius: string }>; clips: Array<{ stableId?: string; label: string; scrollW: number; clientW: number }> }
 export type MobileViolation = { id: string; screen: string; theme: string; rule: MobileRule; element: string; measured: string }
 export type MobileDesignBaseline = { generatedAt: string; viewport: { width: number; height: number }; touchEmulation: true; themes: readonly string[]; screens: Record<string, Record<string, Record<MobileRule, string[]>>> }
 const r1 = (n: number) => Math.round(n * 10) / 10, elSig = (e: MeasuredElement) => `${e.tag}|${e.role}|${e.label}|${e.cls}|${Math.round(e.x)}|${Math.round(e.y)}|${Math.round(e.w)}|${Math.round(e.h)}`, tfSig = (t: MeasuredTextField) => `${t.label}|${t.kind}|${Math.round(t.x)}|${Math.round(t.y)}|${Math.round(t.w)}|${Math.round(t.h)}`, NON_TEXT_INPUT = /^(checkbox|radio|button|submit|reset|hidden|file|range|color|image)$/i
@@ -59,7 +57,7 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
     for (const el of body.querySelectorAll('*')) { if (SKIP.has(el.tagName.toLowerCase()) || keptEls.has(el) || getComputedStyle(el).cursor !== 'pointer') continue; let anc = false; for (let p = el.parentElement; p; p = p.parentElement) if (keptEls.has(p)) { anc = true; break }; if (!anc) add(el, 'cursor') }
     const byEl = new Map(kept.map((k) => [k.el, k]))
     for (let i = kept.length - 1; i >= 0; i--) { const k = kept[i]; if (k.dropped || k.rec.textField) continue; for (let p = k.el.parentElement; p; p = p.parentElement) { const pk = byEl.get(p); if (!pk || pk.dropped) continue; if (pk.rec.textField) break; const a = k.rec, b = pk.rec; if (Math.abs(a.x - b.x) <= 2 && Math.abs(a.w - b.w) <= 2 && Math.abs(a.h - b.h) <= 2) { if (pk.via === 'cursor' && !k.via) pk.dropped = true; else k.dropped = true; break } } }
-    const radii: MeasuredRadius[] = [], clips: MeasuredClip[] = [], directText = (el: Element) => Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent || '').trim())
+    const radii: MobileScreenMetrics['radii'] = [], clips: MobileScreenMetrics['clips'] = [], directText = (el: Element) => Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent || '').trim())
     for (const el of body.querySelectorAll('*')) {
       const tag = el.tagName.toLowerCase(); if (SKIP.has(tag) || keptEls.has(el)) continue
       const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, false)) continue
@@ -99,7 +97,7 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
     }
     return { coarsePointer: window.matchMedia('(pointer: coarse)').matches, docOverflowX: Math.max(de.scrollWidth, body.scrollWidth) - de.clientWidth, elements: kept.filter((k) => !k.dropped).map((k) => k.rec), textFields, purple, radii, clips }
   })
-  const first = await sample(), elMap = new Map<string, MeasuredElement>(), tfMap = new Map<string, MeasuredTextField>(), pMap = new Map<string, MeasuredPurple>(), rMap = new Map<string, MeasuredRadius>(), cMap = new Map<string, MeasuredClip>(), elSigs = new Set<string>(), tfSigs = new Set<string>()
+  const first = await sample(), elMap = new Map<string, MeasuredElement>(), tfMap = new Map<string, MeasuredTextField>(), pMap = new Map<string, MeasuredPurple>(), rMap = new Map<string, MobileScreenMetrics['radii'][number]>(), cMap = new Map<string, MobileScreenMetrics['clips'][number]>(), elSigs = new Set<string>(), tfSigs = new Set<string>()
   const merge = (s: MobileScreenMetrics) => { for (const e of s.elements) { const sg = elSig(e); if (!elMap.has(e.key) && !elSigs.has(sg)) { elMap.set(e.key, e); elSigs.add(sg) } } for (const t of s.textFields) { const sg = tfSig(t); if (!tfMap.has(t.key) && !tfSigs.has(sg)) { tfMap.set(t.key, t); tfSigs.add(sg) } } for (const p of s.purple) if (!pMap.has(p.key)) pMap.set(p.key, p); for (const r of s.radii) { const rid = r.stableId || r.label; if (!rMap.has(rid)) rMap.set(rid, r) } for (const c of s.clips) { const cid = c.stableId || c.label; if (!cMap.has(cid)) cMap.set(cid, c) } }
   merge(first); let maxOverflow = first.docOverflowX
   for (let step = 1; step <= 3; step++) {
