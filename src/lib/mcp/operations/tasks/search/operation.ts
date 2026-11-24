@@ -373,9 +373,10 @@ export async function GET(request: NextRequest) {
       ? [...(and == null ? [] : Array.isArray(and) ? and : [and]), aliasOffBoardScope]
       : and
     if (aliasOffBoard) where.projectId = { in: [aliasOffBoard.targetProjectId, aliasOffBoard.projectId] }
+    const aliasScopedWhere = aliasOffBoardScope ? { ...where, AND: withAliasBoardScope(where.AND) } : where
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
-        { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
+        { ...aliasScopedWhere, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
         sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined,
         Boolean(parsed.filters.assignee?.length) && await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id))
       if (aliasMatch && !filtered.rankedIds.includes(aliasMatch.id)) filtered.rankedIds.unshift(aliasMatch.id)
