@@ -35,28 +35,6 @@ With `htpr-8977-indexed-ticket-lookup` on and `htpr-8977-materialized-ticket-loo
 
 With both flags on, the equality lookup runs inside a materialized step first. Wildcard numbers stay on the `ILIKE` query. `htpr-8977-indexed-ticket-lookup` off uses the older match and ignores `htpr-8977-materialized-ticket-lookup`. Do not switch either flag on production. Do not create a ticket to force two matches. Record an unavailable second match as UNREACHABLE.
 
-### Old keys after a board move
-
-After a ticket moves to another board, every lookup path also answers for the key it
-held on the source board, and for the source board plus its old number. On the seeded
-QA fixtures, with the active board `{id}` and its ticket 1 `{task}` (`SMOKE-1`,
-unique index 1), call each of these with the signed-in QA account:
-
-- `GET /api/mcp/tasks?task_id={task}`: 200, `ticketNumber` present.
-- `GET /api/mcp/tasks?ticket_number=SMOKE-1`: 200 with the same ticket.
-- `GET /api/mcp/tasks?project_id={id}&unique_index=1`: 200 with the same ticket.
-- `GET /api/mcp/tasks/search?query=SMOKE-1`: 200 with `tasks`.
-- `GET /api/mcp/tasks/context?task_id={task}&project_id={id}`: 200 with `task`.
-- `GET /detail/project-<board>/<number>` and `/detail/project-<board>/<old key>`: 200 after redirect.
-
-The identifier goes in the query string. There is no `GET /api/mcp/tasks/{task}` route,
-so that path is 404. `search` needs `q` or `query`; `context` needs `task_id` and
-`project_id`. Both answer 400 without them. A caller without access to the destination
-board gets 404 or an empty list, never the moved ticket. `reusedKeyCollisions` (MCP) and
-`reusedKeyCollision` (REST) name a moved ticket only when an old key was reused by a live
-ticket the caller can also see. A new ticket on the source board never takes a number a
-moved ticket left behind, so `unique_index` keeps climbing after a move.
-
 ### Unknown input field guidance
 
 Call `hypertask_comments` with `action: "add"` and `input: { task_id: <readable ticket>, contnet: "probe" }`.
