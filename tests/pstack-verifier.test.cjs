@@ -428,6 +428,21 @@ test("agent docs and root markdown are non-app; a src file stays app", async () 
   assert.match(app.notes, /no user path verified/);
 });
 
+test("repo dotfiles are non-app; a shipped asset stays app", async () => {
+  const { decide, hasAppPath, selectPlan } = await load();
+  for (const file of [".gitignore", ".gitattributes", ".npmrc", ".gitleaksignore", ".githooks/pre-commit"]) {
+    assert.equal(hasAppPath([file]), false, file);
+  }
+  assert.deepEqual(selectPlan([".gitignore"], false), { actions: [], expect: [], reason: "no user path: non-app files only" });
+  assert.equal(hasAppPath([".gitignore", "src/app/page.tsx"]), true);
+  assert.equal(hasAppPath(["public/login-app-dark.png"]), true);
+  const reason = "no user path: the deepsec ignore rule has no screen or API route";
+  const passed = decide({ model: {}, plan: plan([], { reason, files: [".gitignore"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.deepEqual([passed.verdict, passed.notes], ["PASS+NOTES", `no app path: ${reason}`]);
+  const failed = decide({ model: {}, plan: plan([], { reason, files: [".gitignore"], filesTruncated: false }), evidence: null, binding, checksPassed: false });
+  assert.equal(failed.verdict, "FAIL");
+});
+
 test("a red or pending bot review never fails or holds the empty plan", async () => {
   const { decide, emptyPlanGate, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
   const kept = ["ci-tests", "feature-flag-gate", "pr-title", "next-public-secrets", "secret-scan"];
