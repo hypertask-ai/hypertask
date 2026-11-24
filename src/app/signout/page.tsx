@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_9286_SIGNOUT_PAGE_FLAG } from "@/lib/flags/keys";
 import SignOutScreen from "./SignOutScreen";
