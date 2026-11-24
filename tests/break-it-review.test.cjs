@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, "..");
 const head = "b".repeat(40);
 const load = () => import(path.join(root, ".github/scripts/break-it-review.mjs"));
 const pull = (body, extra = {}) => ({ title: "HTPR-9408 [BUGFIX] keep the empty title from saving", body, base: { sha: "a".repeat(40), ref: "production" }, ...extra });
+const ghApi = (item) => (args) => (args.join(" ").includes("/pulls/7/commits") ? "[]" : JSON.stringify(item));
 const good = "const assert = require(\"node:assert/strict\");\nconst test = require(\"node:test\");\nconst { loadModule } = require(\"../helpers/loadModule.cjs\");\ntest(\"adds\", () => { assert.equal(loadModule(\"src/lib/flags/index.ts\") ? 2 : 2, 2); });\n";
 
 async function runMain({ reply, name = "blank-title", io = {}, item = pull("Author-Model: claude"), key = "sk-test-break-it-secret", token = "ghs-test" } = {}) {
@@ -21,7 +22,7 @@ async function runMain({ reply, name = "blank-title", io = {}, item = pull("Auth
   };
   Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: key, GH_TOKEN: token });
   try {
-    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: () => JSON.stringify(item), ...io });
+    await main({ fetch: fetchImpl, git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"), gh: ghApi(item), ...io });
   } finally {
     delete process.env.OPENROUTER_EVAL_KEY;
     delete process.env.GH_TOKEN;
@@ -38,7 +39,7 @@ async function runCli({ reply = "", item = pull("Author-Model: claude"), io = {}
   Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "42", PR: "7", HEAD_SHA: head, OPENROUTER_EVAL_KEY: "sk-test-break-it-secret", GH_TOKEN: "ghs-test" });
   const fetchImpl = async (url) => ({ ok: true, json: async () => (String(url).includes("openrouter") ? { choices: [{ message: { content: reply } }] } : {}) });
   try {
-    const status = await cli({ fetch: fetchImpl, git: () => "- old\n+ new", gh: () => JSON.stringify(item), spawn: () => ({ status: 0, stdout: "", stderr: "" }), ...io });
+    const status = await cli({ fetch: fetchImpl, git: () => "- old\n+ new", gh: ghApi(item), spawn: () => ({ status: 0, stdout: "", stderr: "" }), ...io });
     const text = (stream) => lines.filter(([name]) => name === stream).map(([, value]) => value).join("");
     return { status, code: process.exitCode, stdout: text("stdout"), stderr: text("stderr") };
   } finally {
@@ -108,7 +109,7 @@ async function runWithAnswers(answers) {
     const status = await main({
       fetch: fetchImpl,
       git: (args) => (args.includes("--name-only") ? "src/lib/title.ts\n" : "- old\n+ new"),
-      gh: () => JSON.stringify(pull("Author-Model: claude")),
+      gh: ghApi(pull("Author-Model: claude")),
       spawn: () => ({ status: 0, stdout: "", stderr: "" }),
       log: (line) => lines.push(line),
       warn: () => {},
@@ -203,6 +204,30 @@ test("a pull request that cannot be judged fails closed instead of passing quiet
   assert.deepEqual([noAuthor[0].body.state, /no Author-Model/.test(noAuthor[0].body.description)], ["failure", true]);
   const noDeps = await runMain({ io: { deps: "failure" }, item: pull("Author-Model: claude", { title: "HTPR-9408 [BUGFIX] x" }) });
   assert.deepEqual([noDeps[0].body.state, /unproven/.test(noDeps[0].body.description), noDeps.some((entry) => /BROKE/.test(String(entry.body.body ?? "")))], ["failure", true, false]);
+});
+
+test("a bugfix with no body line takes its author family from its own commits", async () => {
+  const body = "Summary only.\n\nTicket: https://app.hypertask.ai/detail/project-15/9408";
+  const commit = (login) => JSON.stringify([[{ author: { login }, committer: { login }, commit: { message: "Fix the title\n\nAuthor-Model: codex" } }]]);
+  const run = ({ commitLogin, prLogin }) => {
+    const item = pull(body, { title: "HTPR-9408 [BUGFIX] keep the empty title from saving", user: { login: prLogin } });
+    return runMain({
+      reply: good,
+      item,
+      io: {
+        gh: (args) => (args.join(" ").includes("/pulls/7/commits") ? commit(commitLogin) : JSON.stringify(item)),
+        spawn: () => ({ status: 0, stdout: "", stderr: "" }),
+      },
+    });
+  };
+  const posts = await run({ commitLogin: "codex", prLogin: "hypertask-runners[bot]" });
+  assert.match(posts.find((entry) => String(entry.url).endsWith("/issues/7/comments")).body.body, /Break-it review: author codex/);
+  assert.equal(posts.find((entry) => String(entry.url).endsWith(`/statuses/${head}`)).body.state, "success");
+  const foreign = await run({ commitLogin: "octocat", prLogin: "valentinyeo" });
+  assert.deepEqual([foreign[0].body.state, /no Author-Model/.test(foreign[0].body.description)], ["failure", true]);
+  const short = pull(body, { title: "HTPR-9408 [BUGFIX] keep the empty title from saving", user: { login: "hypertask-runners[bot]" }, commits: 2 });
+  const partial = await runMain({ reply: good, item: short, io: { gh: (args) => (args.join(" ").includes("/pulls/7/commits") ? commit("codex") : JSON.stringify(short)) } });
+  assert.deepEqual([partial[0].body.state, /no Author-Model/.test(partial[0].body.description)], ["failure", true]);
 });
 
 test("a generated test cannot see the key, the network, or the host", async () => {

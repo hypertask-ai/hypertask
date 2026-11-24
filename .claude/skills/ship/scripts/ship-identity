@@ -37,8 +37,11 @@ runner_slot() {
 }
 
 name=${SHIP_SESSION_NAME:-$(session_name)}
-# A per-ticket title ("HTPR-6629 | ...") or a "<name> | ..." form: the identity is the part before " | ".
 name=${name%% | *}
+if [ "${1:-}" = --name ]; then
+  printf '%s\n' "$name"
+  exit 0
+fi
 slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')
 if [ -n "$slug" ] && [ -s "$SESSION_CREDS/$slug-agent-token" ]; then
   printf '%s\t%s\n' "$name" "$SESSION_CREDS/$slug-agent-token"

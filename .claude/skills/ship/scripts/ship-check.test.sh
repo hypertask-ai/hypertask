@@ -813,11 +813,16 @@ unset -f gh
 sha=$(gh pr view 809 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
 R=$E/HTPR-6570/2026-10-01-qa-run-1; mkdir -p "$R"; : > "$R/a.png"
 T() { if ./ship-check proof HTPR-6570 >/dev/null; then [ "$1" = pass ] && ok "$2" || bad "$2"; else [ "$1" = fail ] && ok "$2" || bad "$2"; fi; }
-printf 'Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
+printf 'Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\nLeftovers: none\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
 T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
 T fail "empty screenshot rejected"
 printf 'png' > "$R/a.png"; T pass "fresh proof accepted"
+cp "$E/HTPR-6570/proof.md" "$E/HTPR-6570/proof.md.with-leftovers"
+grep -v '^Leftovers:' "$E/HTPR-6570/proof.md" > "$E/HTPR-6570/proof.md.no-leftovers"
+mv "$E/HTPR-6570/proof.md.no-leftovers" "$E/HTPR-6570/proof.md"
+T fail "proof without leftovers rejected"
+mv "$E/HTPR-6570/proof.md.with-leftovers" "$E/HTPR-6570/proof.md"
 sed -i 's@feature-map/my-tasks.md@feature-map/public-sites.md@' "$E/HTPR-6570/proof.md"
 T pass "public-site proof accepted"
 echo '- PASS: y -> missing output.png' >> "$E/HTPR-6570/proof.md"; T fail "malformed PASS line rejected"
@@ -1384,6 +1389,42 @@ else bad "other repo: $got $out"; fi
 unset -f gh hypertask
 unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
 
+leftovers_proof_tests() {
+  local bin=$E/left-bin run=$E/HTPR-9360/2026-11-16-qa-run-1
+  local head tail out got
+  mkdir -p "$bin" "$run"
+  printf 'png' > "$run/a.png"
+  echo 4242 > "$E/HTPR-9360/pr"
+  cat > "$bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == pr && $2 == view && $3 == 4242 ]] || exit 1
+printf '%s\n' '{"number":4242,"title":"HTPR-9360 [INFRA] Leftovers proof","state":"MERGED","mergeCommit":{"oid":"0123456789abcdef0123456789abcdef01234567"},"baseRefName":"production"}'
+MOCK
+  chmod +x "$bin/gh"
+  head=$'Feature map: .claude/skills/verify-qa/reference/feature-map/inbox.md\nDoctor: sha 012345678 deployment success\nRun: 2026-11-16-qa-run-1\n'
+  tail=$'## Cases\n- PASS: open -> a.png\n'
+  P() {
+    local want=$1 label=$2
+    out=$(PATH="$bin:$PATH" ./ship-check proof HTPR-9360 2>&1); got=$?
+    if [ "$want" = 0 ]; then
+      [ "$got" = 0 ] && [ "$out" = "proof ok" ] && ok "$label" || bad "$label: got $got $out"
+    else
+      [ "$got" = 1 ] && [[ $out == *"Leftovers:"* ]] && ok "$label" || bad "$label: got $got $out"
+    fi
+  }
+  printf '%s%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 1 "proof without a leftovers line fails"
+  printf '%sLeftovers:\n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 1 "an empty leftovers line fails"
+  printf '%sLeftovers:   \n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 1 "a blank leftovers line fails"
+  printf '%sLeftovers: none\n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 0 "leftovers none passes"
+  printf '%sLeftovers: test login, label qa-tmp, dark mode on\n%s' "$head" "$tail" > "$E/HTPR-9360/proof.md"
+  P 0 "a leftovers list passes"
+}
+leftovers_proof_tests
+
 if [ "${1:-}" = --premerge-only ]; then
   echo "$passes passed, $fails failed"
   [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
@@ -1466,6 +1507,7 @@ cat > "$NC/bin/hypertask" <<'MOCK'
 [[ $1 == comment && $2 == list ]] && cat "$NC/comments" || exit 1
 MOCK
 chmod +x "$NC/bin/gh" "$NC/bin/hypertask"; export NC
+CTRL='<p>Control: the search found the fault on the previous build.</p>'
 N() { CLAUDE_CODE_SESSION_ID=nc-fixture SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
 echo '[]' > "$NC/prs"; echo 0 > "$NC/ahead"
 echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
@@ -1475,12 +1517,30 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an opener without evid
 echo '{"success":true,"comments":[{"text":"<p>Note: https://example.com/x</p><p><strong>Resolved without a change:</strong> fine.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted evidence in another comment" || ok "nochange needs the opener and evidence in one comment"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted proof without a Control line" || ok "nochange refuses proof without a Control line"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: x</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a Control line that names no check" || ok "nochange refuses a Control line that names no check"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found zero old errors on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a control that found nothing" || ok "nochange refuses a control that found nothing"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found the README on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a control that found something other than the fault" || ok "nochange refuses a control that found something other than the fault"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search has not found the fault on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a control that says the fault was not found" || ok "nochange refuses a control that says the fault was not found"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search did not run; an observer found the fault on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a control whose search did not find the fault" || ok "nochange refuses a control whose search did not find the fault"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search found the fault on the current good build; the previous build passed.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a bad build named in another clause" || ok "nochange refuses a bad build named in another clause"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p><p>Control: the search of the production logs found the error on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a descriptive search name" || bad "nochange rejected a descriptive search name"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"},{"text":"<p>Control: the search found the fault on the previous build.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange borrowed a Control line from another comment" || ok "nochange needs the Control line in the opener comment"
+jq -n --arg c "$CTRL" '{success:true,comments:[{text:("<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>" + $c)}]}' > "$NC/comments"
 N nochange FOO-901 >/dev/null && bad "nochange accepted a non-ticket id" || ok "nochange refuses a non-ticket id (FOO-901)"
 N nochange HTPR-901x >/dev/null && bad "nochange accepted a malformed id" || ok "nochange refuses a malformed id (HTPR-901x)"
 N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange accepts HTPR with a resolution comment" || bad "nochange HTPR"
 echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
 N nochange HTPR-901 >/dev/null && bad "nochange HTPR accepted no comment" || ok "nochange HTPR refuses a ticket with no comment"
-echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+jq -n --arg c "$CTRL" '{success:true,comments:[{text:("<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>" + $c)}]}' > "$NC/comments"
 rm -f "$E/HTPR-901/nochange"
 echo '[{"number":5,"title":"YPER4-901 [INFRA] a fix"}]' > "$NC/prs"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted an open PR" || ok "nochange refuses an open PR"
@@ -1516,7 +1576,7 @@ echo 0 > "$NC/ahead"
 G 2 vcc task move YPER4-901 $DONE
 echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener plus URL)" || bad "nochange pass case"
-echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
+jq -n --arg c "$CTRL" '{success:true,comments:[{text:("<p>Resolved without a change: <pre>curl -s x</pre></p>" + $c)}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
 # Each must print what its ship-gates EXPECT line matches (pr expects "title ok").
 for x in merged:merged deployed:deployed proof:proof pr:title docs:docs; do
@@ -1561,10 +1621,10 @@ echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | 
   && ok "guard allows Done for HTPR after nochange" || bad "guard blocks Done for HTPR after nochange"
 # Empty evidence does not count.
 for body in '<code></code>' '<pre> </pre>' '<pre><code>&nbsp;</code></pre>'; do
-  jq -n --arg b "<p><strong>Resolved without a change:</strong> done</p>$body" '{success:true,comments:[{text:$b}]}' > "$NC/comments"
+  jq -n --arg b "<p><strong>Resolved without a change:</strong> done</p>${CTRL}$body" '{success:true,comments:[{text:$b}]}' > "$NC/comments"
   N nochange YPER4-901 >/dev/null && bad "nochange accepted empty evidence $body" || ok "nochange refuses empty evidence $body"
 done
-jq -n '{success:true,comments:[{text:"<p><strong>Resolved without a change:</strong> done</p><pre><code>ok 3 checks</code></pre>"}]}' > "$NC/comments"
+jq -n --arg c "$CTRL" '{success:true,comments:[{text:("<p><strong>Resolved without a change:</strong> done</p>" + $c + "<pre><code>ok 3 checks</code></pre>")}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a pre/code block with output" || bad "nochange refused real output"
 echo 830 > "$E/YPER4-901/pr"
 N merged YPER4-901 >/dev/null && bad "nochange survived a bound PR" || ok "a bound PR ends the nochange pass"
