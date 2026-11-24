@@ -137,8 +137,21 @@ for (const area of ["demo", "learn", "slack", "pusher"]) {
     assert.equal(h.state.flagReads, 1);
   });
 
-  test(`${area}: same ungranted internal agent retains legacy access in WATCH`, async () => {
+  test(`${area}: same ungranted internal agent is refused in WATCH once it already has boards`, async () => {
     const h = harness({ area, enforce: false });
+    const result = await h.request();
+    if (area === "demo") {
+      assert.equal(result.status, 200);
+      assert.equal(result.body.projectId, 901);
+      assert.deepEqual(h.writes, [{ provision: "" }]);
+    } else assert.equal(result.status, area === "learn" ? 422 : 403);
+    assert.equal(h.subscriptions.length, 0);
+    assert.equal(h.state.flagReads, 1);
+  });
+
+  test(`${area}: zero-board internal agent retains legacy access in WATCH`, async () => {
+    const h = harness({ area, enforce: false });
+    h.projects.forEach(project => { project.members = []; });
     await allowed(h, area);
     assert.equal(h.state.flagReads, 1);
   });
@@ -242,6 +255,12 @@ test("learn: disabled tutorial still returns the unchanged 410 response", async 
   assert.equal(h.queries.length, 0);
 });
 
+test("learn: signed-out caller gets 401 while the tutorial is off", async () => {
+  const h = harness({ area: "learn", actor: "owner", authenticated: false, tutorialEnabled: false });
+  assert.deepEqual(await h.request(), { status: 401, body: { error: "Sign in to start the tutorial" } });
+  assert.equal(h.queries.length, 0);
+});
+
 test("learn: human return board keeps its team, membership and Normal requirements", async () => {
   for (const mutation of [{}, { ownerId: 99, members: [] }, { teamId: null }, { status: "Archive" }]) {
     const h = harness({ area: "learn", actor: "owner" });
@@ -305,22 +324,30 @@ for (const actor of ["owner", "member", "guest"]) {
   });
 }
 
-test("pusher: D74 task lookup independently scopes the row even if the later board gate allows", async () => {
+test("pusher: D74 task lookup independently scopes the row in both scope modes even if the later board gate allows", async () => {
   for (const enforce of [true, false]) {
     const h = harness({ area: "pusher", enforce, bypassBoardGate: true });
-    assert.equal((await h.request()).status, enforce ? 403 : 200);
+    assert.equal((await h.request()).status, 403);
     assert.equal(h.queries.filter(query => query.model === "task").length, 1);
-    assert.equal(h.subscriptions.length, enforce ? 0 : 1);
+    assert.equal(h.subscriptions.length, 0);
   }
+  const open = harness({ area: "pusher", enforce: false, bypassBoardGate: true });
+  open.projects.forEach(project => { project.members = []; });
+  assert.equal((await open.request()).status, 200);
+  assert.equal(open.subscriptions.length, 1);
 });
 
 for (const kind of ["private-project", "private-time-project", "private-task", "private-time-task"]) {
-  test(`pusher: ${kind} transports authenticated agent to the board gate, including WATCH`, async () => {
+  test(`pusher: ${kind} transports authenticated agent to the board gate in both scope modes`, async () => {
     for (const enforce of [true, false]) {
       const h = harness({ area: "pusher", enforce });
       const channel = `${kind}-${kind.endsWith("task") ? h.task.id : h.project.id}`;
-      assert.equal((await h.request({ channel_name: channel })).status, enforce ? 403 : 200);
+      assert.equal((await h.request({ channel_name: channel })).status, 403);
     }
+    const open = harness({ area: "pusher", enforce: false });
+    open.projects.forEach(project => { project.members = []; });
+    const channel = `${kind}-${kind.endsWith("task") ? open.task.id : open.project.id}`;
+    assert.equal((await open.request({ channel_name: channel })).status, 200);
   });
 }
 

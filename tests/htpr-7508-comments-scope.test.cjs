@@ -96,8 +96,17 @@ for (const area of ["reaction", "save"]) {
     assert.deepEqual(h.broadcasts, []);
   });
 
-  test(`${area}: same ungranted agent still allowed with flag Off (WATCH)`, async () => {
+  test(`${area}: same ungranted agent with boards is refused with flag Off (WATCH)`, async () => {
     const h = harness(area, { enforce: false });
+    assert.equal((await h.request()).statusCode, 404);
+    assert.equal(h.state.flagReads, 1);
+    assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.broadcasts, []);
+  });
+
+  test(`${area}: zero-board agent keeps its owner access with flag Off (WATCH)`, async () => {
+    const h = harness(area, { enforce: false });
+    h.projects.forEach(project => { project.members = []; });
     assert.equal((await h.request()).statusCode, 200);
     assert.equal(h.state.flagReads, 1);
     assert.equal(h.writes.length, 1);
@@ -239,12 +248,16 @@ test("save: Private task star stays personal and toggles without a comment", asy
   assert.equal(h.writes.length, 2);
 });
 
-test("save: Private task star enforces the authenticated agent and retains WATCH", async () => {
+test("save: Private task star enforces the authenticated agent in both scope modes", async () => {
   for (const enforce of [true, false]) {
     const h = harness("save", { enforce });
-    assert.equal((await h.request({ type: "Private", commentId: null })).statusCode, enforce ? 404 : 200);
-    assert.equal(h.writes.length, enforce ? 0 : 1);
+    assert.equal((await h.request({ type: "Private", commentId: null })).statusCode, 404);
+    assert.equal(h.writes.length, 0);
   }
+  const open = harness("save", { enforce: false });
+  open.projects.forEach(project => { project.members = []; });
+  assert.equal((await open.request({ type: "Private", commentId: null })).statusCode, 200);
+  assert.equal(open.writes.length, 1);
 });
 
 test("HTTP tagged-agent requests remain refused by the real proxy in WATCH and ENFORCE", async () => {

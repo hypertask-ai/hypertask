@@ -297,3 +297,73 @@ Deployment `dpl_D9bBLCjW12Kc514j3d6AsUM5yL3g`, commit `0b5475a22b`, was killed a
 Every production webpack compiler emits `[build-memory]` JSON at start, module optimization, asset optimization, completion, and every 15 seconds while compiling. Each row identifies the compiler and process. `sampledHeapPeakMiB` is the largest V8 heap sample, taken every second and at those hooks; brief peaks between samples can be missed. `processMaxRssMiB` is the process-wide operating-system RSS high-water mark, not V8 heap or aggregate container memory. Samples cannot run while JavaScript blocks the event loop. A killed worker has periodic rows but no completion row. Development builds do not install the reporter.
 
 The change remains unproven until hosted checks and a successful production build supply measurements. HYCI-245 requires a production peak at least 500 MiB below 3840 MiB and a full 24-hour failure-free window after deployment. Neither a passing fixture nor a green PR check proves those production outcomes.
+
+## Webpack cache off, advisory nudge off (2026-11-24, HTPR-8459)
+
+Ticket: https://app.hypertask.ai/detail/project-15/8459
+
+No production deployment had gone live since 2026-11-23. Every production build died with a Vercel
+Out of Memory event after peaking at about 6964 MiB on the 8192 MiB build machine. The last sections of
+this file had already spent every free lever on the process tree: one module build at a time, a 3840 MB
+heap cap, compiler workers, string interning, `cpus: 1`, sequential tracing, external server SDKs.
+
+The peak was not the compile. It was the cache store that runs after the compile. Each compiler runs in
+its own webpack process, and each of those processes reports its own high-water RSS in the
+`[build-memory]` rows. On this tree the server worker reported 4538 MiB at webpack `done`, then the same
+process kept growing to 6459 MiB while `compiler.close()` flushed the filesystem cache: 2.4 GB of server
+pack files and 1.5 GB of client pack files written after the last module compiled. The tree peak lands
+inside that flush, with the next compiler's worker already started. `maxMemoryGenerations = 0` (HYCI-220)
+stopped webpack keeping cache generations in RAM, but it does not remove the store itself.
+
+`config.cache = false` in the production webpack hook removes the store. The compiler keeps no cache, so
+there is nothing to serialize at the end.
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Build process-tree peak, cold, 7G cgroup | 6975 MiB (run 1), 6849 MiB (run 2) | 4400 MiB |
+| Server compiler worker peak | 6488 MiB | 3965 MiB |
+| Server worker growth after webpack `done` | 1921 MiB | 88 MiB |
+| Client compiler worker peak | 3696 MiB | 3447 MiB |
+| Parent `next-build` peak | 459 MiB | 2159 MiB |
+| webpack filesystem cache written per build | 3.9 GB | none |
+| `.next` on disk after the build | 4.1 GB | 311 MB |
+| Cold compile | 9.7 min | 7.2 min |
+| Cold build wall clock | 855 s | 727 s |
+| Client source maps | 487 | 487 |
+| Route table entries | 630 | 630 |
+| Build exit status | 1 | 0 |
+
+Peak RSS fell 2559 MiB (37%), which leaves about 3.8 GB of the 8192 MiB machine unused. Measured locally
+with Node 24.22.1 (CI's and Vercel's major), `npm run build` unchanged, `.next` deleted before every run,
+CI placeholder credentials from `ci-tests.yml`, and a sampler summing the RSS of every process in the
+`systemd-run` cgroup every second. These are process-tree sums on an 18-core shared host, not a Vercel
+cgroup reading, and PostHog's source-map upload is untested here because no credentials are available.
+
+The cost is the other half of the cache: a production build no longer reads a restored `.next/cache`, so
+every Vercel and CI production build is a cold compile. Both local runs are cold, so the table compares
+the cache's write cost only. The read benefit a warm Vercel build used to get is not measured, and it is
+why this change is worth revisiting if the compiler gets much faster than the cache write.
+
+`tests/build-memory-config.test.cjs` fails if the production webpack config keeps a filesystem cache
+again, or if `maxMemoryGenerations` is set instead of the cache being off. The 3840 MB heap cap,
+`NEXT_WEBPACK_PARALLELISM=1`, the `--webpack` builder and `experimental.cpus: 1` are unchanged.
+
+### The build also stopped on Next's advisory feed
+
+`next` 16.4.2 ships `experimental.agentUpgrade: "security"` by default. After a complete build it fetches
+npm advisories and, when one matches the installed version, throws `SecurityFatalError` with exit code 1:
+
+```
+> Build error occurred
+Error [SecurityFatalError]: Your version of Next.js is affected by a known security vulnerability.
+```
+
+Both baseline runs printed the full route table and finished `Collecting build traces` before that error,
+so a green local build still exits 1 and a Vercel deployment still fails. The matching advisory is
+GHSA-mfr8-8qww-v76h, "Information disclosure across root params when a `use cache` function is called
+through `unstable_cache()`" (16.3.0 to 16.4.4, moderate). The check reads a live registry feed, so whether
+a deployment succeeds depends on when it runs. `experimental.agentUpgrade: false` makes the build
+deterministic and the final run above exits 0.
+
+The advisory itself is an upgrade decision, not a build-memory one: the pinned Next version needs the
+security upgrade on its own ticket.

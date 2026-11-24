@@ -1,7 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const React = require("react");
+const { JSDOM } = require("jsdom");
+const { createRoot } = require("react-dom/client");
 const { loadModule } = require("./helpers/loadModule.cjs");
-
 const INTERNAL_TEAM_ID = "08f79efd-770e-4e32-9728-65e6d29ec893";
 const PRO_PRICE = "price_1QjJeDIhmcH60VcciHzZ3mTJ";
 
@@ -23,22 +25,16 @@ const savedPro = {
   ],
 };
 
-const FLAG = "htpr-7852-internal-team-saved-plan";
-const OWNER = 6;
+const FUTURE = () => new Date(Date.now() + 86_400_000);
+const canceledPro = {
+  activeSubscriptionPlanId: "sub_internal_pro",
+  subscriptionPlan: [
+    { subscriptionId: "sub_internal_pro", subscriptionStatus: "canceled", priceId: PRO_PRICE },
+  ],
+};
 
-function flagStub(enabled, seen = []) {
-  return {
-    FEATURE_FLAG_OWNER_USER_ID: OWNER,
-    isFeatureEnabled: async (key, userId) => {
-      seen.push([key, userId]);
-      return key === FLAG && enabled;
-    },
-  };
-}
-
-function loadPlanGate(teamRow, enabled = true, seen = []) {
+function loadPlanGate(teamRow) {
   return loadModule("src/app/api/ai/_lib/planGate.ts", {
-    "@/lib/flags": flagStub(enabled, seen),
     "@/lib/prisma": {
       default: {
         project: { findUnique: async () => ({ team: teamRow }) },
@@ -48,81 +44,37 @@ function loadPlanGate(teamRow, enabled = true, seen = []) {
   });
 }
 
-const FUTURE = () => new Date(Date.now() + 86_400_000);
-const canceledPro = {
-  activeSubscriptionPlanId: "sub_internal_pro",
-  subscriptionPlan: [
-    { subscriptionId: "sub_internal_pro", subscriptionStatus: "canceled", priceId: PRO_PRICE },
-  ],
-};
-
-function loadQuota(teams, enabled, seen = []) {
+function loadQuota(teams) {
   return loadModule("src/utils/controllers/projects/boardQuota.ts", {
     "@/lib/prisma": { default: { team: { findMany: async () => teams } } },
-    "@/lib/flags": {
-      FEATURE_FLAG_OWNER_USER_ID: OWNER,
-      isFeatureEnabled: async (key, userId) => {
-        seen.push([key, userId]);
-        return key === FLAG && enabled;
-      },
-    },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
   });
 }
 
-test("flag off: the internal team id still grants Pro in every plan resolution", async () => {
-  const team = internalTeam();
-  const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(team, false);
-  const { deriveCurrentBoardBilling, deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
-
-  assert.equal(storePlanIdForTeam(team), "Pro");
-  assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Pro");
-  assert.equal(await storePlanIdForProject(15, INTERNAL_TEAM_ID), "Pro");
-  assert.equal(deriveTeamBilling(team).storePlanId, "Pro");
-  assert.equal(deriveCurrentBoardBilling({ id: 15, teamId: INTERNAL_TEAM_ID, team }).storePlanId, "Pro");
-});
-
-test("flag off: a canceled saved plan on the internal team is still forced to Pro", async () => {
-  const team = internalTeam(canceledPro);
-  const { storePlanIdForProject } = loadPlanGate(team, false);
-
-  assert.equal(await storePlanIdForProject(15, INTERNAL_TEAM_ID), "Pro");
-});
-
-test("flag off: the internal team still counts as paid for board admission", async () => {
-  const { hasPaidPlan } = loadQuota([{ id: INTERNAL_TEAM_ID, compedUntil: null, subscriptionPlan: [] }], false);
-
-  assert.equal(await hasPaidPlan(1), true);
-});
-
-test("flag on: the internal team keeps Pro from its saved subscription", async () => {
+test("the internal team keeps Pro from its saved subscription", async () => {
   const team = internalTeam(savedPro);
-  const seen = [];
-  const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(team, true, seen);
+  const { storePlanIdForProject } = loadPlanGate(team);
   const { deriveCurrentBoardBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 
-  assert.equal(storePlanIdForTeam(team, true), "Pro");
   assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Pro");
   assert.equal(await storePlanIdForProject(15, INTERNAL_TEAM_ID), "Pro");
-  assert.deepEqual(seen[0], [FLAG, OWNER]);
   const billing = deriveCurrentBoardBilling({ id: 15, teamId: INTERNAL_TEAM_ID, team }, true);
   assert.equal(billing.storePlanId, "Pro");
   assert.equal(billing.billingInterval, "month");
 });
 
-test("flag on: the internal team keeps Pro from a comp", async () => {
+test("the internal team keeps Pro from a comp", async () => {
   const team = internalTeam({ compedUntil: FUTURE(), compedPlan: "Pro" });
-  const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(team, true);
+  const { storePlanIdForProject } = loadPlanGate(team);
 
-  assert.equal(storePlanIdForTeam(team, true), "Pro");
   assert.equal(await storePlanIdForProject(15, INTERNAL_TEAM_ID), "Pro");
 });
 
-test("flag on: the internal team id alone no longer grants Pro", async () => {
+test("the internal team id alone does not grant Pro", async () => {
   const team = internalTeam();
-  const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(team, true);
+  const { storePlanIdForProject } = loadPlanGate(team);
   const { deriveCurrentBoardBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 
-  assert.equal(storePlanIdForTeam(team, true), "Free");
   assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Free");
   assert.equal(await storePlanIdForProject(15, INTERNAL_TEAM_ID), "Free");
   assert.equal(
@@ -131,52 +83,96 @@ test("flag on: the internal team id alone no longer grants Pro", async () => {
   );
 });
 
-test("flag on: a canceled subscription on the internal team grants nothing", async () => {
+test("a canceled subscription on the internal team grants nothing", async () => {
   const team = internalTeam(canceledPro);
-  const { storePlanIdForTeam } = loadPlanGate(team, true);
+  const { storePlanIdForProject } = loadPlanGate(team);
 
-  assert.equal(storePlanIdForTeam(team, true), "Free");
+  assert.equal(await storePlanIdForProject(15, INTERNAL_TEAM_ID), "Free");
 });
 
-test("flag on: board admission follows the saved plan, comp and subscription still count", async () => {
+test("board admission follows the saved plan", async () => {
   const internal = { id: INTERNAL_TEAM_ID, compedUntil: null, subscriptionPlan: [] };
-  const seen = [];
 
-  assert.equal(await loadQuota([internal], true, seen).hasPaidPlan(1), false);
-  assert.ok(seen.some(([key, userId]) => key === FLAG && userId === OWNER));
-  assert.equal(await loadQuota([{ ...internal, compedUntil: FUTURE() }], true).hasPaidPlan(1), true);
+  assert.equal(await loadQuota([internal]).hasPaidPlan(1), false);
+  assert.equal(await loadQuota([{ ...internal, compedUntil: FUTURE() }]).hasPaidPlan(1), true);
   assert.equal(
-    await loadQuota([{ ...internal, subscriptionPlan: [{ subscriptionStatus: "active" }] }], true).hasPaidPlan(1),
+    await loadQuota([{ ...internal, subscriptionPlan: [{ subscriptionStatus: "active" }] }]).hasPaidPlan(1),
     true,
   );
 });
 
-test("other teams are unaffected by the flag in either state", async () => {
+test("other teams stay on their own saved plan", async () => {
   const other = { ...internalTeam(), id: "other-team" };
+  const { storePlanIdForProject } = loadPlanGate(other);
 
-  for (const enabled of [false, true]) {
-    const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(other, enabled);
-    assert.equal(storePlanIdForTeam(other, enabled), "Free");
-    assert.equal(await storePlanIdForProject(null, "other-team"), "Free");
-    assert.equal(
-      await loadQuota([{ id: "other-team", compedUntil: null, subscriptionPlan: [] }], enabled).hasPaidPlan(1),
-      false,
-    );
+  assert.equal(await storePlanIdForProject(null, "other-team"), "Free");
+  assert.equal(
+    await loadQuota([{ id: "other-team", compedUntil: null, subscriptionPlan: [] }]).hasPaidPlan(1),
+    false,
+  );
+});
+
+test("a missing internal team row does not fall back to Pro", async () => {
+  const { storePlanIdForProject } = loadPlanGate(null);
+
+  assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Free");
+});
+
+test("the open board billing chip uses the saved plan with no safety switch", async () => {
+  const atoms = {
+    currentUserAtom: Symbol("user"),
+    currentProjectAtom: Symbol("project"),
+    currentBoardBillingAtom: Symbol("billing"),
+  };
+  const state = { project: { id: 15, teamId: INTERNAL_TEAM_ID, team: internalTeam() } };
+  const seen = [];
+  const favoritesResult = { data: [] };
+  const ignore = () => {};
+  const recordBilling = (value) => {
+    if (seen.at(-1) !== value) seen.push(value);
+  };
+  const useGlobalProvider = loadModule("src/components/ProviderGlobal/useGlobalProvider.ts", {
+    "@/store": atoms,
+    "@/lib/state": {
+      useRecoilState: (atom) => [atom === atoms.currentProjectAtom ? state.project : null, ignore],
+      useSetRecoilState: (atom) => (atom === atoms.currentBoardBillingAtom ? recordBilling : ignore),
+    },
+    "@/hooks/MultiPages/useGetAllFavorites": { useGetAllFavorites: () => favoritesResult },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
+    "@/models/model": {},
+    "next/navigation": {
+      usePathname: () => "/project",
+      useSearchParams: () => new URLSearchParams("id=15"),
+    },
+  }).default;
+  const Shell = () => {
+    useGlobalProvider();
+    return React.createElement("div");
+  };
+  const globals = ["window", "document", "navigator", "IS_REACT_ACT_ENVIRONMENT"];
+  const previousGlobals = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
+  const dom = new JSDOM("<div id=\"root\"></div>", { url: "https://app.hypertask.ai/project?id=15" });
+  let reactRoot;
+  try {
+    Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+    Object.defineProperty(global, "navigator", { value: dom.window.navigator, configurable: true });
+    await React.act(async () => {
+      reactRoot = createRoot(document.getElementById("root"));
+      reactRoot.render(React.createElement(Shell));
+    });
+    assert.equal(seen.at(-1)?.storePlanId, "Free");
+    state.project = { id: 15, teamId: INTERNAL_TEAM_ID, team: internalTeam(savedPro) };
+    await React.act(async () => {
+      reactRoot.render(React.createElement(Shell));
+    });
+    assert.equal(seen.at(-1)?.storePlanId, "Pro");
+    assert.equal(seen.at(-1)?.billingInterval, "month");
+  } finally {
+    if (reactRoot) await React.act(async () => reactRoot.unmount());
+    dom.window.close();
+    for (const [name, descriptor] of previousGlobals) {
+      if (descriptor) Object.defineProperty(global, name, descriptor);
+      else delete global[name];
+    }
   }
-});
-
-test("a flag read that fails keeps the forced Pro", async () => {
-  const team = internalTeam();
-  const { storePlanIdForProject } = loadModule("src/app/api/ai/_lib/planGate.ts", {
-    "@/lib/flags": { isFeatureEnabled: async () => { throw new Error("flags unavailable"); } },
-    "@/lib/prisma": { default: { team: { findUnique: async () => team } } },
-  });
-
-  assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Pro");
-});
-
-test("the access-risk flag defaults to Owner + QA", () => {
-  const flag = loadModule("src/lib/flags/definitions/htpr-7852-internal-team-saved-plan.ts");
-  assert.equal(flag.default.defaultMode, "OWNER_AND_QA");
-  assert.equal(flag.default.releaseRisk.highRisk, "access");
 });

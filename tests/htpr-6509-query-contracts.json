@@ -474,6 +474,7 @@
         "teamId": null,
         "sorting_mode": null,
         "uniqueIdentifier": null,
+        "issuedUniqueIndex": null,
         "timeTrackingEnabled": null,
         "showTimeTotals": null,
         "stalenessEnabled": null,

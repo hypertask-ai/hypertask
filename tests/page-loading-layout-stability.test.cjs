@@ -57,6 +57,7 @@ function boardRender(pending) {
     GuestAuthLinks: noop,
     Header: controls,
     CycleBoardMeta: noop,
+    BlockedViewRule: noop,
     getActiveBoardViewId: noop,
     HomePage: () => React.createElement("div", { "data-board-content": true }, "Cached board"),
   }, "renderLandingSection")({

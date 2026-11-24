@@ -4,7 +4,7 @@
 
 - `demo-board` Demo board.
 - `demo-entry` Open `/demo` while signed out. The page shows "Creating your private demo board…", POSTs `/api/demo/guest`, and sends the browser to the returned board URL. A failed create shows the error and a Try again button.
-- `learn-board` **Verified-unreachable** while the keyboard shortcut tutorial is off (`KEYBOARD_SHORTCUT_TUTORIAL_ENABLED = false`): `src/proxy.ts` (`isKeyboardShortcutTutorialPath`) redirects `/learn` before the page renders. Signed out it 307s to `/login`; signed in it 307s to the previous board (`/project?id=<id>`). The `/learn` page's own 410 alert never shows. `POST /api/learn/board` answers 410 `The keyboard shortcuts tutorial is temporarily unavailable` even signed out (the 410 branch runs before the session check), never 401. Prerequisite to reach the page: the tutorial switched on in `src/lib/tutorial/keyboardShortcutTutorial.ts`.
+- `learn-board` **Verified-unreachable** while the keyboard shortcut tutorial is off (`KEYBOARD_SHORTCUT_TUTORIAL_ENABLED = false`): `src/proxy.ts` (`isKeyboardShortcutTutorialPath`) redirects `/learn` before the page renders. Signed out it 307s to `/login`; signed in it 307s to the previous board (`/project?id=<id>`). The `/learn` page's own 410 alert never shows. Signed-out `POST /api/learn/board` answers 401 `Sign in to start the tutorial`, which needs a cookie-free client (curl or the changed test). The verifier drives every request signed in as QA 985, so the one API check it can make here is the signed-in 410 `The keyboard shortcuts tutorial is temporarily unavailable`. Prerequisite to reach the page: the tutorial switched on in `src/lib/tutorial/keyboardShortcutTutorial.ts`.
 - `onboarding-wizard` A signed-in person opens `/onboarding`. `?resumeKey=connect-ai-screen` shows "Which AI will you drive Hypertask with?"; `?resumeKey=launch-screen` shows "You're all set." and Launch Hypertask (both verified live). A `companySize` query of Just me skips "Invite co-workers to your team". A new account starts at "Set up your workspace".
 - `tutorial-landing` **Verified-unreachable**, same prerequisite: the proxy sends every signed-in `/interactive-onboarding/*` request to the previous board, and a signed-out visitor to `/login`. No scene renders today.
 - `tutorial-inbox` **Verified-unreachable**, same prerequisite. When the tutorial is on, the sample inbox is below scene 17, and E at scene 13 only fires after `j j k k` (E before that only shakes the hint).
@@ -68,7 +68,7 @@ first-load code path as a fresh signed-out visit.
 test suite itself (see `e2e/smoke/README.md`), not a product bug; don't cite
 it as a demo-board fix.
 - `/learn` and `/interactive-onboarding/*` are redirected by the proxy while the keyboard shortcut tutorial is off; the pages' own copy (410 alert, scenes) is not reachable.
-- `/learn`'s API returns 410 to signed-out callers too, because the disabled branch runs before the session check.
+- `/learn`'s API returns 401 to signed-out callers, and a signed-in caller still receives 410 while the keyboard shortcut tutorial is off. The verifier always sends its QA session cookie, so a planned signed-out 401 step can only come back 410: plan the signed-in 410 and leave the 401 to the changed test.
 - `/interactive-onboarding/end` without `funnel_completed` is the "Well Done!" screen. The same path with `funnel_completed` is the team-setup screen. Check the query before judging the heading.
 - With the tutorial on, J, K, and E on the sample inbox apply at scene 13, and E needs `j j k k` first. A fresh load is scene 0, so those keys do nothing on first paint.
 - A signed-out visitor who is not in the funnel cannot stay on the interactive tutorial.
@@ -79,7 +79,8 @@ Screenshot the demo board immediately on load (no login prompt, sample tasks
 visible), and confirm no console errors about hydration mismatch. The HTPR-7983
 phone top bar and chat auto-open need `htpr-7983-free-mode-signup`; record them
 unreachable for a plain guest instead of screenshotting the wrong state. For
-`/learn`, record the 307 and the 410 API body. For `/onboarding`, capture the
+`/learn`, record the 307 and the signed-in 410 API body; the signed-out 401
+needs a cookie-free client and is proved by the changed test instead. For `/onboarding`, capture the
 heading. For `/interactive-onboarding/*`, record the redirect and the
 disabled-tutorial prerequisite.
 

@@ -228,6 +228,22 @@ test("basePlanCommand writes base-plan.json and signals needed only when a side 
   }
 });
 
+test("judge-ask asks nothing when the plan needs no drive, so a plan without evidence still settles", async () => {
+  const { judgeAskCommand, decide } = await load();
+  const fs = require("node:fs");
+  const work = mkdtempSync(join(tmpdir(), "judge-ask-nodrive-"));
+  fs.mkdirSync(join(work, "plan"), { recursive: true });
+  try {
+    const plan = planFor([], { bugfix: true, reachable: [], files: ["src/app/api/cron/search-index-drift/route.ts"] });
+    fs.writeFileSync(join(work, "plan", "plan.json"), JSON.stringify(plan));
+    const asked = await judgeAskCommand({ work, binding, picked: { model: "deepseek/deepseek-v4.1-flash" }, ask: () => { throw new Error("asked with no evidence"); } });
+    assert.equal(asked, null);
+    assert.equal(decide({ plan: { ...plan, reason: "no user path" }, evidence: null, binding, checksPassed: true, reproFirstPassed: true }).verdict, "PASS+NOTES");
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
 test("judge-ask records the model verdict so a judge-only side journey failure is re-driven on the base", async () => {
   const { judgeAskCommand, basePlanCommand, judgeJourneys } = await load();
   const fs = require("node:fs");

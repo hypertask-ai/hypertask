@@ -121,8 +121,17 @@ for (const area of areas) {
     assert.deepEqual(h.broadcasts, []);
     assert.ok(!h.queries.some(query => ["versions", "snapshot", "cycles"].includes(query.model)));
   });
-  test(`${area}: same ungranted internal agent remains allowed in WATCH`, async () => {
+  test(`${area}: same ungranted internal agent is refused in WATCH once it already has boards`, async () => {
     const h = harness({ enforce: false });
+    assert.equal((await h.request(area)).status, area === "defaults" ? 403 : 404);
+    assert.equal(h.state.flagReads, 1);
+    assert.deepEqual(h.writes, []);
+    assert.deepEqual(h.ranks, []);
+    assert.deepEqual(h.broadcasts, []);
+  });
+  test(`${area}: zero-board internal agent keeps its owner access in WATCH`, async () => {
+    const h = harness({ enforce: false });
+    h.projects.forEach(project => { project.members = []; });
     await allowed(h, area);
     assert.equal(h.state.flagReads, 1);
   });
@@ -198,14 +207,20 @@ test("field: subsequent project gate independently carries the authenticated age
   assert.deepEqual(h.writes, []);
 });
 
-test("defaults: recorded rank lookup independently carries ENFORCE scope when the earlier gate is bypassed", async () => {
+test("defaults: recorded rank lookup independently carries agent scope in both modes when the earlier gate is bypassed", async () => {
   for (const enforce of [true, false]) {
     const h = harness({ enforce, bypassProject: true });
     await allowed(h, "defaults");
     const query = h.queries.find(query => query.model === "task");
-    assert.equal(matches(h.task, query.where), !enforce);
-    assert.deepEqual(h.ranks, [[undefined, enforce ? undefined : h.task.ranking]]);
+    assert.equal(matches(h.task, query.where), false);
+    assert.deepEqual(h.ranks, [[undefined, undefined]]);
   }
+  const open = harness({ enforce: false, bypassProject: true });
+  open.projects.forEach(project => { project.members = []; });
+  await allowed(open, "defaults");
+  const query = open.queries.find(query => query.model === "task");
+  assert.equal(matches(open.task, query.where), true);
+  assert.deepEqual(open.ranks, [[undefined, open.task.ranking]]);
 });
 
 for (const position of ["top", "bottom"]) {
