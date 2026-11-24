@@ -1,10 +1,9 @@
 import { TeamStartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
-import { Carousel, CarouselItem, ModalHeader } from "reactstrap";
+import { Carousel, CarouselItem, ModalHeader , ModalBody, ModalFooter } from "reactstrap";
 
 import React, { useContext, useEffect, useMemo, useState } from "react";
-import { ModalBody, ModalFooter } from "reactstrap";
 import { testimonials } from "@/lib/constants/constants";
 import Image from "next/image";
 import { ITeam, IUser } from "@/models/model";
