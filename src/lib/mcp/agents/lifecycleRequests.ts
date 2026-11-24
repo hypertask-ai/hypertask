@@ -160,7 +160,9 @@ export async function handlePatchAgentRequest(
     )
   }
 
-  const agentId = rawAgentId.trim()
+  const requested = rawAgentId.trim()
+  if (requested === 'self' && !ctx.agentId) return notFound()
+  const agentId = requested === 'self' ? String(ctx.agentId) : requested
   if (!agentId) {
     return NextResponse.json(
       buildFieldError(

@@ -107,7 +107,7 @@ function harness(options = {}) {
     "@/lib/mcp/agents/lifecycle": {},
     "@/lib/mcp/auth": {
       checkMcpRateLimit: async () => null,
-      validateMcpAuth: async () => ({ user: { id: OWNER, email: "owner@example.test" }, agentId: AGENT, teamScope: null }),
+      validateMcpAuth: async () => ({ user: { id: OWNER, email: "owner@example.test" }, agentId: options.agentId === undefined ? AGENT : options.agentId, teamScope: null }),
       createMcpToken: () => "test-token",
       managementAgentTokenScope: (management) => management,
       agentTokenCredentialFields: () => ({ mcpTokenHash: "test-hash" }),
@@ -120,7 +120,7 @@ function harness(options = {}) {
   const updates = load("src/lib/mcp/agents/lifecycleRequests.ts", mocks);
   return {
     state,
-    patch: (body) => updates.handlePatchAgentRequest({ json: async () => body }, AGENT),
+    patch: (body, agentId = AGENT) => updates.handlePatchAgentRequest({ json: async () => body }, agentId),
   };
 }
 
@@ -239,4 +239,21 @@ test("self-remove stays refused and names project invite", async () => {
   const h = harness();
   await refused(await h.patch({ remove_project_ids: [1] }), 1);
   assert.deepEqual(h.state.members.map((row) => row.projectId), [1]);
+});
+
+test("an agent may address itself as self on the agents route", async () => {
+  const off = harness({ flag: false });
+  await refused(await off.patch({ add_project_ids: [2] }, "self"), 2);
+  assert.deepEqual(off.state.members.map((row) => row.projectId), [1]);
+
+  const on = harness();
+  const response = await on.patch({ add_project_ids: [2] }, "self");
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).agent, { id: AGENT, project_ids: [1, 2] });
+});
+
+test("self without an agent token is not found", async () => {
+  const h = harness({ agentId: null });
+  const response = await h.patch({ add_project_ids: [2] }, "self");
+  assert.equal(response.status, 404);
 });
