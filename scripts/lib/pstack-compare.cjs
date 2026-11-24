@@ -4,6 +4,7 @@ const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const RUN_URL = /^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/[0-9]+\/attempts\/[0-9]+$/;
 const PASS_VERDICTS = ["PASS", "PASS+NOTES"];
+const BASE_REDRIVE_LIMIT = 4;
 
 function sha256(text) {
   return createHash("sha256").update(String(text)).digest("hex");
@@ -63,15 +64,19 @@ function areaOf(journey) {
   return value.startsWith("area:") ? value.slice(5) : "";
 }
 
-function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnevaluated = "", bugfixProved = false } = {}) {
+function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnevaluated = "", bugfixProved = false, baseRedriveLimit = BASE_REDRIVE_LIMIT } = {}) {
   const list = (Array.isArray(journeys) ? journeys : []).map((item) => ({
     journey: String(item?.journey ?? ""),
     viewport: typeof item?.viewport === "string" ? item.viewport : "",
     head: classifyRun(item?.head, item?.plan),
+    base: classifyRun(item?.base, item?.plan),
+    hasBase: item?.base != null,
     run: item?.head ?? null,
   }));
   if (!list.length) return { verdict: "FAIL", notes: "no journey was planned" };
   const red = new Set((Array.isArray(redFeatures) ? redFeatures : []).map(String));
+  const limit = Number.isInteger(baseRedriveLimit) && baseRedriveLimit >= 0 ? baseRedriveLimit : BASE_REDRIVE_LIMIT;
+  const baseChecked = new Set();
   const problems = [];
   const notes = [];
   const unjudged = [];
@@ -79,11 +84,16 @@ function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnev
   const label = (item) => (item.viewport ? `${item.journey} [${item.viewport}]` : item.journey);
   for (const item of list) {
     const where = label(item);
+    const area = areaOf(item.journey);
     if (item.head.state === "unavailable") unrun.push(`${where}: the run did not finish`);
     else if (item.head.state === "unjudged") unjudged.push(where);
     else if (item.head.state === "ok") continue;
-    else if (red.has(areaOf(item.journey))) notes.push(`${where} is already red on production, so the nightly live pass owns it`);
-    else problems.push(`${where}: ${failureNote(item.run, item.head.failIndex)}`);
+    else if (red.has(area)) notes.push(`${where} is already red on production, so the nightly live pass owns it`);
+    else if (area && item.hasBase && (baseChecked.has(item.journey) || baseChecked.size < limit)) {
+      baseChecked.add(item.journey);
+      if (item.base.state === "failed") notes.push(`${where} also fails on production`);
+      else problems.push(`${where}: ${failureNote(item.run, item.head.failIndex)}`);
+    } else problems.push(`${where}: ${failureNote(item.run, item.head.failIndex)}`);
   }
   if (bugfix && !list.some((item) => item.journey === "change:repro")) {
     if (bugfixProved) notes.push("the bug fix has no user path, and repro-first shows a changed test failing on the old code");
@@ -149,6 +159,8 @@ function summaryMarkers({ comments, logins } = {}) {
 }
 
 module.exports = {
+  BASE_REDRIVE_LIMIT,
+  areaOf,
   baseMoved,
   buildMarker,
   classifyRun,

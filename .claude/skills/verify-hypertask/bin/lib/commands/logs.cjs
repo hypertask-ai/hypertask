@@ -2,12 +2,12 @@ const { existsSync, readFileSync } = require("node:fs");
 const path = require("node:path");
 const { fail, parseArgs, runDir } = require("../context.cjs");
 
-const usage = `ht-verify logs - read the run's dev or browser log
+const usage = `ht-verify logs - read the run's server or browser log
 
 Usage:
   ht-verify logs [--dev|--browser] [--lines 50] [--grep TEXT]
 
-  --dev       the Next dev server log (default).
+  --dev       the Next server log (default).
   --browser   the persistent session's console, page errors and failed requests.
   --lines     how many trailing lines. Default 50, maximum 500.
   --grep      only lines containing this text.

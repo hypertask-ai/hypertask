@@ -31,6 +31,6 @@ export function accountCategory(
   return "customer";
 }
 
-export function isSyntheticAccount(category: AccountCategory): boolean {
-  return category === "qa" || category === "guest";
+export function isSyntheticAccount(category: AccountCategory, probeIsSynthetic = true): boolean {
+  return category === "qa" || category === "guest" || (category === "probe" && probeIsSynthetic);
 }
