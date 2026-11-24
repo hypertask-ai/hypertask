@@ -10,6 +10,7 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { searchTaskDescription } from '@/lib/mcp/tasks/searchDescription'
 import prisma from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
 import { findReusedKeyCollisions, findTaskByIdentifier, type ReusedTicketKeyCollision, TaskIdentifierAmbiguityError, TICKET_KEY_PATTERN } from '@/lib/mcp/tasks/resolveTask'
@@ -368,6 +369,9 @@ export async function GET(request: NextRequest) {
       ? { taskId: aliasMatch.id, projectId: aliasMatch.projectId, targetProjectId }
       : null
     const aliasOffBoardScope = aliasOffBoard ? { OR: [{ projectId: aliasOffBoard.targetProjectId }, { id: aliasOffBoard.taskId }] } : null
+    const withAliasBoardScope = (and: Prisma.TaskWhereInput[] | Prisma.TaskWhereInput | undefined) => aliasOffBoardScope
+      ? [...(and == null ? [] : Array.isArray(and) ? and : [and]), aliasOffBoardScope]
+      : and
     if (aliasOffBoard) where.projectId = { in: [aliasOffBoard.targetProjectId, aliasOffBoard.projectId] }
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
@@ -378,7 +382,7 @@ export async function GET(request: NextRequest) {
       commentById = filtered.commentById
       const rankedResults = Boolean(parsed.text || filtered.commentMode)
       operatorPartial = parsed.text ? filtered.partial : false
-      where.AND = aliasOffBoardScope ? [...(filtered.where.AND ?? []), aliasOffBoardScope] : filtered.where.AND
+      where.AND = withAliasBoardScope(filtered.where.AND)
       if (parsed.filters.is) where.status = filtered.where.status
       if (rankedResults && !filtered.paged) where.id = { in: filtered.rankedIds }
       const total = await prisma.task.count({ where })
@@ -405,7 +409,7 @@ export async function GET(request: NextRequest) {
       operatorResult = { orderedTasks, total }
     }
     async function legacySearch(query: string) {
-    if (aliasOffBoardScope) where.AND = [...(where.AND ?? []), aliasOffBoardScope]
+    if (aliasOffBoardScope) where.AND = withAliasBoardScope(where.AND)
     const rawTurbopufferIds = await turbopufferSearchTaskIds({
       searchQuery: query,
       projectIds: accessibleProjectIds,
