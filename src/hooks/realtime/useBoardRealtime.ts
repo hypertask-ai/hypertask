@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   connectRealtimeClient,
+  localRealtimeOptedIn,
   releaseRealtimeClientIfIdle,
 } from "@/lib/realtime/client";
 import { projectPlanningQueryKey } from "@/lib/projectPlanning";
@@ -18,6 +19,15 @@ import { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEve
 export { createBoardRealtimeEventHandler } from "@/lib/realtime/boardRealtimeEventHandler";
 
 export const BOARD_RECONCILE_INTERVAL_MS = 10_000;
+export const BOARD_LOCAL_RECONCILE_INTERVAL_MS = 2_000;
+
+function boardReconcileIntervalMs(): number {
+  const hostname =
+    typeof window === "undefined" ? "" : (window.location?.hostname ?? "");
+  return localRealtimeOptedIn(hostname)
+    ? BOARD_LOCAL_RECONCILE_INTERVAL_MS
+    : BOARD_RECONCILE_INTERVAL_MS;
+}
 
 export function useBoardRealtime(
   projectId: number | null | undefined,
@@ -124,7 +134,7 @@ export function useBoardRealtime(
       if (cancelled || fallbackActive) return;
       fallbackActive = true;
       void connectAndSubscribe();
-      fallbackTimer = setInterval(runFallbackCycle, BOARD_RECONCILE_INTERVAL_MS);
+      fallbackTimer = setInterval(runFallbackCycle, boardReconcileIntervalMs());
     };
     const onVisibilityChange = () => runFallbackCycle();
     const onOnline = () => runFallbackCycle();

@@ -24,9 +24,9 @@ function bindingTarget(properties) {
   };
 }
 
-async function mountBoardRealtime(t, { realtime = false, subscribed = false, seeded = false } = {}) {
+async function mountBoardRealtime(t, { realtime = false, subscribed = false, seeded = false, url = "https://app.hypertask.ai/project?id=15", intervalMs = 10_000 } = {}) {
   const dom = new JSDOM("<div id='root'></div>", {
-    url: "https://app.hypertask.ai/project?id=15",
+    url,
     pretendToBeVisual: true,
   });
   const globals = ["window", "document", "navigator", "setInterval", "clearInterval", "IS_REACT_ACT_ENVIRONMENT"];
@@ -38,7 +38,7 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
   const timers = new Map();
   let timerStarts = 0;
   global.setInterval = (callback, delay) => {
-    assert.equal(delay, 10_000);
+    assert.equal(delay, intervalMs);
     const id = ++timerStarts;
     timers.set(id, callback);
     return id;
@@ -73,6 +73,16 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
         return realtime ? client : null;
       },
       releaseRealtimeClientIfIdle() {},
+      localRealtimeOptedIn(hostname) {
+        const loopback =
+          hostname === "127.0.0.1" || hostname === "localhost";
+        let loopbackBase = false;
+        try {
+          const base = new URL(process.env.NEXT_PUBLIC_BASEURL ?? "").hostname;
+          loopbackBase = base === "127.0.0.1" || base === "localhost";
+        } catch {}
+        return loopback && (process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME === "1" || loopbackBase);
+      },
     },
     "@/lib/realtime/shared": {
       BOARD_EVENT: "board:changed",
@@ -145,6 +155,60 @@ test("fallback startup reuses the initial board load and polls only on the inter
   assert.equal(board.scopedReconciles.length, 1, "one interval means one boardTasks reconcile");
   assert.equal(board.fullReconciles.length, 0, "fallback must not refetch getAll");
   assert.equal(board.planningRefetches.length, 1);
+});
+
+test("an opted-in local copy polls the fallback every two seconds", async (t) => {
+  const previous = process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
+  });
+  const board = await mountBoardRealtime(t, {
+    url: "http://127.0.0.1:3100/project?id=38",
+    intervalMs: 2_000,
+  });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
+});
+
+test("a loopback public base URL gives the local copy the two-second poll", async (t) => {
+  const previous = process.env.NEXT_PUBLIC_BASEURL;
+  process.env.NEXT_PUBLIC_BASEURL = "http://127.0.0.1:3100";
+  t.after(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_BASEURL;
+    else process.env.NEXT_PUBLIC_BASEURL = previous;
+  });
+  const board = await mountBoardRealtime(t, {
+    url: "http://127.0.0.1:3100/project?id=38",
+    intervalMs: 2_000,
+  });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
+});
+
+test("a default build keeps the ten-second fallback even on loopback", async (t) => {
+  const board = await mountBoardRealtime(t, {
+    url: "http://127.0.0.1:3100/project?id=38",
+  });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
+});
+
+test("the local build opt-in does not accelerate a non-loopback fallback", async (t) => {
+  const previous = process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
+  });
+  const board = await mountBoardRealtime(t);
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
 });
 
 test("rerendering preserves the subscription and every real event uses scoped reconciliation", async (t) => {
