@@ -107,38 +107,50 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
 
-  const modalTitleInput = page.locator('#title-input-modal')
-  const inlineInput = page.locator('#newTask textarea[aria-label="Title"]')
-  let createResponse: ReturnType<typeof page.waitForResponse>
   if (isPhone(page)) {
-    createResponse = page.waitForResponse(
+    const createResponse = page.waitForResponse(
       (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
       { timeout: 45_000 },
     )
     await page.getByRole('button', { name: 'Commands', exact: true }).tap(); await page.getByRole('tab', { name: 'New Task' }).tap()
-    const writer = page.locator('[aria-label="Describe the task"]').first(); await writer.tap(); await writer.fill(title); await page.locator('[data-compose-task-writer] [aria-label="Create task"], [data-compose-task-writer] [aria-label="Send message"]').first().tap()
-  } else {
-    await expect(async () => {
-      await page.locator('.create-new-task-button').first().click()
-      await expect(modalTitleInput.or(inlineInput)).toBeVisible({ timeout: 2_000 })
-    }, 'the + column button never opened a create-task form').toPass({ timeout: 15_000 })
-
-    createResponse = page.waitForResponse(
-      (res) => {
-        const pathname = new URL(res.url()).pathname
-        return res.request().method() === 'POST' && (pathname === '/api/tasks/create' || pathname === '/api/tasks/createGlobally')
-      },
-      { timeout: 15_000 },
-    )
-    if (await modalTitleInput.isVisible()) {
-      await modalTitleInput.fill(title)
-      const saveAndClose = page.locator('span', { hasText: /^Save & close/ }).first()
-      const save = (await saveAndClose.isVisible()) ? saveAndClose : page.locator('span', { hasText: /^Save$/ }).first()
-      await save.click()
-    } else {
-      await inlineInput.fill(title)
-      await inlineInput.press('Enter')
+    const writer = page.locator('[aria-label="Describe the task"]').first(); await writer.tap(); await writer.fill(title)
+    await page.locator('[data-compose-task-writer] [aria-label="Create task"], [data-compose-task-writer] [aria-label="Send message"]').first().tap()
+    const created = await (await createResponse).json(), createdId = (created.newTask?.newTask ?? created.newTask ?? created)?.id; if (createdId) createdTaskIds.push(createdId)
+    const taskDetailTitle = page.locator('#title-input'), boardCard = page.locator(`text=${title}`).first()
+    await expect.poll(
+      async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()),
+      { message: 'created task did not appear after save', timeout: 25_000 },
+    ).toBe(true)
+    if (await taskDetailTitle.isVisible()) {
+      await expect(taskDetailTitle, 'created task did not open after save').toHaveValue(title, { timeout: 10_000 })
+      await page.reload()
+      await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 }); return
     }
+    await expect(boardCard, 'task did not persist after reload').toBeVisible({ timeout: 10_000 }); return
+  }
+
+  const modalTitleInput = page.locator('#title-input-modal')
+  const inlineInput = page.locator('#newTask textarea[aria-label="Title"]')
+  await expect(async () => {
+    await page.locator('.create-new-task-button').first().click()
+    await expect(modalTitleInput.or(inlineInput)).toBeVisible({ timeout: 2_000 })
+  }, 'the + column button never opened a create-task form').toPass({ timeout: 15_000 })
+
+  const createResponse = page.waitForResponse(
+    (res) => {
+      const pathname = new URL(res.url()).pathname
+      return res.request().method() === 'POST' && (pathname === '/api/tasks/create' || pathname === '/api/tasks/createGlobally')
+    },
+    { timeout: 15_000 },
+  )
+  if (await modalTitleInput.isVisible()) {
+    await modalTitleInput.fill(title)
+    const saveAndClose = page.locator('span', { hasText: /^Save & close/ }).first()
+    const save = (await saveAndClose.isVisible()) ? saveAndClose : page.locator('span', { hasText: /^Save$/ }).first()
+    await save.click()
+  } else {
+    await inlineInput.fill(title)
+    await inlineInput.press('Enter')
   }
 
   const response = await createResponse
@@ -147,18 +159,16 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   if (createdId) createdTaskIds.push(createdId)
 
   if ((page.viewportSize()?.width ?? 1280) < 768) {
-    const taskDetailTitle = page.locator('#title-input')
-    const boardCard = page.locator(`text=${title}`).first()
+    const taskDetailTitle = page.locator('#title-input'), boardCard = page.locator(`text=${title}`).first()
     await expect.poll(
       async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()),
-      { message: 'created task did not appear after save', timeout: 25_000 },
+      { message: 'created task did not appear after save', timeout: 10_000 },
     ).toBe(true)
 
     if (await taskDetailTitle.isVisible()) {
-      const savedTitle = await taskDetailTitle.inputValue()
-      expect(savedTitle.length, 'created task did not open after save').toBeGreaterThan(0)
+      await expect(taskDetailTitle, 'created task did not open after save').toHaveValue(title)
       await page.reload()
-      await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(savedTitle, { timeout: 10_000 })
+      await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 })
       return
     }
   }
