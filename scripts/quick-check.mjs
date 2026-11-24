@@ -243,10 +243,17 @@ if (!typeTargets.length && !fullTypecheck) {
     configPath = join(typeDirectory, "full.json");
     cachePath = fullTypeCache;
   }
-  const include = [
+  const declarations = split(git(root, ["ls-files", "-z", "--", "*.d.ts"]));
+  const augmentations = split(git(root, [
+    "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
+    "--", "src/**/*.ts", "src/**/*.tsx",
+  ]));
+  const include = [...new Set([
     ...(existsSync(join(root, "next-env.d.ts")) ? ["next-env.d.ts"] : []),
+    ...declarations,
+    ...augmentations,
     ...typeTargets,
-  ].map((file) => relative(typeDirectory, join(root, file)));
+  ])].map((file) => relative(typeDirectory, join(root, file)));
   writeFileSync(
     configPath,
     `${JSON.stringify(

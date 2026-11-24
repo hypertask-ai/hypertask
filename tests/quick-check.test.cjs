@@ -95,6 +95,23 @@ test("a clean change lints the changed file and then checks types", () => {
   assert.match(result.stdout, /quick check: format, lint and types passed in \d+\.\d+s/);
 });
 
+test("partial type checks retain project declarations and module augmentations", () => {
+  const repository = makeRepository({
+    "tsconfig.json": '{ "compilerOptions": { "strict": true, "noEmit": true } }\n',
+    "src/library.d.ts": 'declare module "library" { export interface Commands {} }\n',
+    "src/extension.ts": 'import "library";\ndeclare module "library" { interface Commands { create(): string } }\n',
+    "src/one.ts": 'import type { Commands } from "library"; export const run = (commands: Commands) => commands.create();\n',
+  });
+  commit(repository, "src/one.ts", 'import type { Commands } from "library"; export const run = (commands: Commands): string => commands.create();\n');
+  const stubs = makeStubs();
+  writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${process.execPath}" "${require.resolve("typescript/bin/tsc")}" "$@"\n`);
+  const result = run(repository, stubs);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const config = JSON.parse(readFileSync(path.join(repository, ".cache/tsc/quick-check.json"), "utf8"));
+  assert.deepEqual(config.include.sort(), ["../../src/extension.ts", "../../src/library.d.ts", "../../src/one.ts"]);
+});
+
 test("a lint error stops the push", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one = 11;\n");
