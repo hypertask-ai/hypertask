@@ -12,8 +12,8 @@ const buttonClassName =
   "mt-6 inline-flex min-h-10 items-center justify-center rounded-[4px] bg-hypertasks-purple px-4 py-2 text-content font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selected-item-border disabled:opacity-60";
 
 export default function SignOutScreen({ hasSession }: { hasSession: boolean }) {
-  const { handleHardReset } = useSignout(undefined, { redirectTo: null });
-  const [status, setStatus] = useState<Status>(hasSession ? "signing-out" : "signed-out");
+  const { handleHardReset } = useSignout(undefined, { redirectTo: null, hasSession });
+  const [status, setStatus] = useState<Status>("signing-out");
   const [starting, setStarting] = useState(false);
   const started = useRef(false);
 
@@ -23,10 +23,10 @@ export default function SignOutScreen({ hasSession }: { hasSession: boolean }) {
   };
 
   useEffect(() => {
-    if (!hasSession || started.current) return;
+    if (started.current) return;
     started.current = true;
     signOut();
-  }, [hasSession]);
+  }, []);
 
   const signInAgain = async () => {
     setStarting(true);

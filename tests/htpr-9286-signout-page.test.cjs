@@ -88,8 +88,8 @@ test("opening the page signs this browser out once and then offers Sign in again
     const s = screen({ hasSession });
     try {
       await s.mountScreen();
-      assert.equal(s.events.signouts, hasSession ? 1 : 0);
-      if (hasSession) assert.ok(s.events.options.every((options) => options.redirectTo === null));
+      assert.equal(s.events.signouts, 1);
+      assert.ok(s.events.options.every((options) => options.redirectTo === null && options.hasSession === hasSession));
       assert.ok(s.text().includes("You are signed out"));
       assert.deepEqual(s.buttons().map((button) => button.textContent), ["Sign in again"]);
     } finally { s.close(); }
@@ -115,6 +115,17 @@ test("Sign in again opens Google's account chooser, or the login page when Googl
       }
     } finally { s.close(); }
   }
+});
+
+test("a browser whose session is already gone still clears itself before offering Sign in again", async () => {
+  const s = screen({ hasSession: false });
+  try {
+    await s.mountScreen();
+    assert.equal(s.events.signouts, 1);
+    assert.deepEqual(s.events.options, [{ redirectTo: null, hasSession: false }]);
+    assert.ok(s.text().includes("You are signed out"));
+    assert.deepEqual(s.buttons().map((button) => button.textContent), ["Sign in again"]);
+  } finally { s.close(); }
 });
 
 test("a failed sign-out stays on the page until Try again succeeds", async () => {
@@ -163,6 +174,46 @@ test("the shared sign-out leaves for login unless this page asks it to stay", as
       assert.equal(await reset(), true);
       assert.deepEqual(locations, redirectTo === null ? [] : ["/login"]);
       assert.deepEqual(toasts, redirectTo === null ? [] : ["Signed out successfully!"]);
+    } finally {
+      global.window = oldWindow;
+      global.localStorage = oldStorage;
+      view.close();
+    }
+  }
+});
+
+test("an absent server session is already signed out, and the browser is still cleared", async () => {
+  for (const hasSession of [true, false]) {
+    const view = mount();
+    const oldStorage = global.localStorage;
+    const oldWindow = global.window;
+    const serverCalls = [];
+    let storageCleared = false;
+    global.localStorage = { clear: () => { storageCleared = true; } };
+    global.window = {
+      document: oldWindow.document,
+      location: { get href() { return "https://app.hypertask.ai/signout"; }, set href() { throw new Error("this page must not navigate"); } },
+    };
+    try {
+      const load = loader({
+        "react-hot-toast": { default: Object.assign(() => {}, { error: () => {} }) },
+        "@/lib/state": { useResetRecoilState: () => () => {} },
+        "@tanstack/react-query": { useQueryClient: () => ({ clear: () => {} }) },
+        "@/hooks/General/useFcmToken": { default: () => ({}) },
+        axios: { default: { delete: async () => {} } },
+        "@/lib/constants/utm": { ALL_UTM_COOKIE_NAMES: [] }, "@/store": {},
+        "@/lib/localReadModels/clear": { clearAllLocalReadModels: async () => true },
+        "@/lib/auth/accounts": { signOutAllAccounts: async () => { serverCalls.push(hasSession); return true; } },
+      });
+      let reset;
+      function Probe() {
+        reset = load("src/hooks/MultiPages/HTC/useSignout.ts").useSignout(undefined, { redirectTo: null, hasSession }).handleHardReset;
+        return null;
+      }
+      await view.render(React.createElement(Probe));
+      assert.equal(await reset(), true);
+      assert.deepEqual(serverCalls, hasSession ? [true] : []);
+      assert.equal(storageCleared, true);
     } finally {
       global.window = oldWindow;
       global.localStorage = oldStorage;

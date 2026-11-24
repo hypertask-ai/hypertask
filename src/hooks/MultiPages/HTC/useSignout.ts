@@ -9,9 +9,10 @@ import { signOutAllAccounts } from "@/lib/auth/accounts";
 
 export const useSignout = (
   _appHandler?: any,
-  options?: { redirectTo?: string | null },
+  options?: { redirectTo?: string | null; hasSession?: boolean },
 ) => {
   const redirectTo = options?.redirectTo === undefined ? "/login" : options.redirectTo;
+  const revokeServerSession = options?.hasSession ?? true;
   const { fcmToken } = useFcmToken();
   const queryClient = useQueryClient();
   const resetAIChatInterface = useResetRecoilState(showAIChatInterfaceAtom);
@@ -24,10 +25,12 @@ export const useSignout = (
       }
     }
 
-    const signedOut = await signOutAllAccounts();
-    if (!signedOut) {
-      toast.error("Could not sign out. Please try again.");
-      return false;
+    if (revokeServerSession) {
+      const signedOut = await signOutAllAccounts();
+      if (!signedOut) {
+        toast.error("Could not sign out. Please try again.");
+        return false;
+      }
     }
     queryClient.clear();
 
