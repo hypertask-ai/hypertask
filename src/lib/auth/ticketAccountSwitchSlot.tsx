@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { signedInUserId, ticketAccountSwitchFlagOn } from "@/lib/auth/ticketDetailLocator";
+import toast from "react-hot-toast";
+import {
+  signedInUserId,
+  syncSwitchedAccountTabs,
+  ticketAccountSwitchFlagOn,
+  ticketAccountSwitchLanded,
+} from "@/lib/auth/ticketDetailLocator";
 
 export function TicketAccountSwitchSlot() {
   const queryClient = useQueryClient();
@@ -29,5 +35,9 @@ export function TicketAccountSwitchSlot() {
       cancelled = true;
     };
   }, [enabled]);
+  useEffect(() => {
+    if (!enabled && !ticketAccountSwitchLanded()) return;
+    return syncSwitchedAccountTabs(userId, (message) => toast(message));
+  }, [enabled, userId]);
   return enabled && Probe ? <Probe /> : null;
 }

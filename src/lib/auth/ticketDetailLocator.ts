@@ -119,6 +119,13 @@ function accountLabelFromCookie(): string | null {
   }
 }
 
+export function ticketAccountSwitchLanded(): boolean {
+  const saved = ticketSwitchStorage()?.getItem(SWITCHED_ACCOUNT_LABEL) ?? null;
+  const marked = typeof document !== "undefined"
+    && document.cookie.split("; ").some((part) => part.startsWith(`${TICKET_ACCOUNT_SWITCHED}=`));
+  return Boolean(saved || marked);
+}
+
 export function consumeAccountSwitchNotice(): string | null {
   const storage = ticketSwitchStorage();
   const saved = storage?.getItem(SWITCHED_ACCOUNT_LABEL) ?? null;

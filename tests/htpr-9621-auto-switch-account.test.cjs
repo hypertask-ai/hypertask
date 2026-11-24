@@ -580,10 +580,8 @@ test("the flag provider asks only while that flag is on", () => {
   assert.equal(slot.includes("return enabled && Probe ? <Probe /> : null;"), true);
   assert.equal(probe.includes("if (!ticketAccountSwitchFlagOn(flags))"), true);
   assert.equal(probe.includes("ticketAccountSwitchFlagOn"), true);
-  assert.equal(
-    probe.indexOf("syncSwitchedAccountTabs(") > probe.indexOf("if (!ticketAccountSwitchFlagOn(flags))"),
-    true,
-  );
+  assert.equal(slot.includes("syncSwitchedAccountTabs(userId"), true);
+  assert.equal(slot.includes("if (!enabled && !ticketAccountSwitchLanded()) return;"), true);
 });
 
 test("with the flag off neither the slot nor the tab sync runs", () => {
@@ -598,10 +596,8 @@ test("with the flag off neither the slot nor the tab sync runs", () => {
   assert.equal(ticketAccountSwitchFlagOn({ [key]: true }), true);
   assert.equal(state.includes("return enabled && Probe ? <Probe /> : null;"), true);
   assert.equal(state.includes("if (!enabled) return;"), true);
-  assert.equal(
-    probe.indexOf("syncSwitchedAccountTabs(") > probe.indexOf("if (!ticketAccountSwitchFlagOn(flags))"),
-    true,
-  );
+  assert.equal(state.includes("if (!enabled && !ticketAccountSwitchLanded()) return;"), true);
+  assert.equal(state.indexOf("syncSwitchedAccountTabs(userId") > state.indexOf("if (!enabled && !ticketAccountSwitchLanded()) return;"), true);
 });
 
 test("a cross-origin post returns to the ticket without switching", async () => {
@@ -980,10 +976,12 @@ test("the toast names the account that was switched to and other tabs reload", (
   };
   try {
     const locator = load("src/lib/auth/ticketDetailLocator.ts");
+    assert.equal(locator.ticketAccountSwitchLanded(), false);
     assert.equal(locator.consumeAccountSwitchNotice(), null);
     const stopOldTab = locator.syncSwitchedAccountTabs(WRONG, (message) => notices.push(message));
     assert.deepEqual(notices, []);
     locator.rememberSwitchedAccount("Ada Owner", OWNER);
+    assert.equal(locator.ticketAccountSwitchLanded(), true);
     const stopNewTab = locator.syncSwitchedAccountTabs(OWNER, (message) => notices.push(message));
     assert.deepEqual(notices, ["Switched to Ada Owner"]);
     assert.equal(local.get("ht-active-account"), String(OWNER));
@@ -1007,6 +1005,7 @@ test("the toast names the account that was switched to and other tabs reload", (
     listeners.at(-1)[1]({ key: "ht-active-account", newValue: String(MEMBER) });
     assert.deepEqual(events, ["reload"]);
     assert.equal(cookie.includes("ticket-account-switched=1"), false);
+    assert.equal(locator.ticketAccountSwitchLanded(), false);
   } finally {
     global.window = previousWindow;
     global.document = previousDocument;

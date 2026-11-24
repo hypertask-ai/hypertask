@@ -4,11 +4,9 @@ import { useContext, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { QueryClientContext } from "@tanstack/react-query";
 import { useStore } from "jotai";
-import toast from "react-hot-toast";
 import {
   signedInUserId,
   submitTicketAccountSwitch,
-  syncSwitchedAccountTabs,
   ticketAccountSwitchFlagOn,
 } from "@/lib/auth/ticketDetailLocator";
 
@@ -16,29 +14,6 @@ export function TicketAccountSwitchProbe() {
   const pathname = usePathname() ?? "";
   const client = useContext(QueryClientContext);
   const store = useStore();
-  useEffect(() => {
-    if (!client) return;
-    const flagsClient = client;
-    let stopSync: (() => void) | undefined;
-    const read = () => {
-      const userId = signedInUserId();
-      const flags = userId ? flagsClient.getQueryData<Record<string, boolean>>(["feature-flags", userId]) : undefined;
-      if (!ticketAccountSwitchFlagOn(flags)) {
-        stopSync?.();
-        stopSync = undefined;
-        return;
-      }
-      stopSync ??= syncSwitchedAccountTabs(userId, (message) => {
-        toast(message);
-      });
-    };
-    read();
-    const unsubscribe = flagsClient.getQueryCache().subscribe(read);
-    return () => {
-      unsubscribe();
-      stopSync?.();
-    };
-  }, [pathname, client]);
   useEffect(() => {
     if (!client) return;
     const flagsClient = client;
