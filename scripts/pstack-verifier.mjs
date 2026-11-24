@@ -1594,6 +1594,7 @@ function readWrittenEvidence(work, binding) {
 }
 export async function judgeAskCommand({ work = workDir(), binding = bindingNow(), ask = askVerifier, evidence = null, picked = null } = {}) {
   const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
+  if (!driveNeeded(plan)) return null;
   const head = evidence ?? readWrittenEvidence(work, binding);
   const judge = picked ?? pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   let asked = 0;

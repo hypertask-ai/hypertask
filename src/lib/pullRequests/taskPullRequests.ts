@@ -88,6 +88,14 @@ interface LinkTaskPullRequestInput {
   db?: typeof prisma;
 }
 
+interface UnlinkTaskPullRequestsInput {
+  taskId: number;
+  userId: number;
+  agentId?: string | null;
+  teamScope?: AgentTokenTeamScope | null;
+  db?: typeof prisma;
+}
+
 const pullRequestSelect = {
   id: true,
   repositoryOwner: true,
@@ -596,6 +604,116 @@ export async function linkTaskPullRequest({
     }
     throw error;
   }
+}
+
+export async function unlinkTaskPullRequests({
+  taskId,
+  userId,
+  agentId = null,
+  teamScope,
+  db = prisma,
+}: UnlinkTaskPullRequestsInput): Promise<{ removed: number }> {
+  return db.$transaction(async (transaction) => {
+    if (teamScope != null) await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`;
+    const task = await transaction.task.findFirst({
+      where: {
+        id: taskId,
+        status: { not: "Deleted" },
+        project: taskWriteAccessWhere(userId, agentId, teamScope),
+      },
+      select: { id: true, updatedByUserIds: true },
+    });
+    if (!task) {
+      throw new PullRequestLinkError(
+        "Task not found or access denied",
+        404,
+        "task_not_found",
+      );
+    }
+
+    const [user, agent] = await Promise.all([
+      transaction.user.findUnique({
+        where: { id: userId },
+        select: { id: true, displayName: true, photoURL: true, email: true },
+      }),
+      agentId
+        ? transaction.agent.findFirst({
+            where: { id: agentId, userId, revokedAt: null },
+            select: { id: true, userId: true, displayName: true, photoURL: true },
+          })
+        : null,
+    ]);
+    if (!user || (agentId && !agent)) {
+      throw new PullRequestLinkError("Unauthorized", 401, "unauthorized");
+    }
+
+    await assertAgentAssignmentChangeAllowed(
+      transaction,
+      taskId,
+      agentId,
+      userId,
+      { allowHumanOverride: !agentId },
+    );
+
+    const links = await transaction.taskPullRequest.findMany({
+      where: { taskId },
+      select: {
+        repositoryOwner: true,
+        repositoryName: true,
+        number: true,
+        url: true,
+        title: true,
+        lifecycle: true,
+        checkState: true,
+      },
+    });
+    if (links.length === 0) return { removed: 0 };
+
+    if (!agentId) {
+      await cancelAgentMutationLeaseForHumanOverride(transaction, taskId, userId);
+    }
+
+    await transaction.taskPullRequest.deleteMany({ where: { taskId } });
+    for (const link of links) {
+      const activity = sanitizeAgentCredentials({
+        type: "TaskPullRequest",
+        data: {
+          fromUserId: userId,
+          fromUser: user,
+          fromAgent: agent,
+          action: "unlinked",
+          pullRequest: {
+            url: link.url,
+            title: link.title,
+            number: link.number,
+            repository: `${link.repositoryOwner}/${link.repositoryName}`,
+            displayState: derivePullRequestDisplayState(
+              link.lifecycle as PullRequestLifecycle,
+              link.checkState as PullRequestCheckState,
+            ),
+          },
+        },
+      });
+      await transaction.comment.create({
+        data: {
+          text: "",
+          taskId,
+          agentId: agent?.id ?? null,
+          activity: activity as Prisma.InputJsonValue,
+        },
+      });
+    }
+    await transaction.task.update({
+      where: { id: taskId },
+      data: {
+        updatedAt: new Date(),
+        ...(!task.updatedByUserIds.includes(userId)
+          ? { updatedByUserIds: { push: userId } }
+          : {}),
+      },
+    });
+    return { removed: links.length };
+  });
 }
 
 export { pullRequestSelect };

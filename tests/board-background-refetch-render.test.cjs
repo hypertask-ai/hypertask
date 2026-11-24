@@ -130,6 +130,7 @@ const moduleMocks = {
     BUILTIN_VIEW_IDS: { blockedByMe: "builtin:blocked-by-me" },
     getActiveBoardViewId: () => "default", isBuiltinViewId: () => false,
     buildBuiltinViewContext: () => ({}), getBuiltinView: () => null,
+    blockedViewRule: () => null, builtinViewIdFromViewParam: () => undefined,
   },
   "@/lib/boardDocumentTitle": { buildBoardDocumentTitle: (project) => project.title },
   "@/utils/api/Homepage": { isBoardPayloadHydrated: () => true },
@@ -138,6 +139,7 @@ const moduleMocks = {
     "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/hooks/useFlag": { useFlag: () => layoutFlagsEnabled, useFlagReady: () => true, useFlagLoaded: () => true },
+  "@/lib/flags/definitions/htpr-9361-blocked-view-done": { HTPR_9361_BLOCKED_VIEW_DONE_FLAG: "htpr-9361-blocked-view-done" },
 
   "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailLocation: () => undefined },
   "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },

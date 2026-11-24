@@ -42,6 +42,8 @@ function createComponent(enabled, apple = true, setShowShortcuts = () => {}) {
     "lucide-react": require("lucide-react"),
     "@/lib/flags/keys": keys,
     "@/lib/flags/definitions/htpr-8929-column-select-all": jiti(path.join(root, "src/lib/flags/definitions/htpr-8929-column-select-all.ts")),
+    "@/lib/flags/definitions/htpr-9078-sidebar-chat-shortcuts": { HTPR_9078_SIDEBAR_CHAT_SHORTCUTS_FLAG: "htpr-9078-sidebar-chat-shortcuts" },
+    "@/lib/keyboard/sidebarChatTyping": { shortcutsPanelRight: () => undefined },
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
     "@/lib/state": { useRecoilValue: () => false, useRecoilState: () => [true, setShowShortcuts] },
     "@/store": { appShellRailAtom: {}, showShortcutsAtom: {} },
