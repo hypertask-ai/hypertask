@@ -4,8 +4,8 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
 const { createJiti } = require("jiti");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const helper = path.join(root, "src/lib/flags/ensureFlagIndex.ts");
@@ -74,13 +74,6 @@ test("production startup leaves a missing flag list untouched", (t) => {
 
 test("the flag list builder can be evaluated by the CommonJS test loader", (t) => {
   const dir = fixture(t);
-  const javascript = ts.transpileModule(fs.readFileSync(helper, "utf8"), {
-    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  assert.equal(javascript.includes("import.meta"), false);
-  assert.equal(javascript.includes("exports"), false);
-  withFlagRoot(dir, undefined, () => {
-    new Function("module", "exports", "require", javascript)({ exports: {} }, {}, require);
-  });
+  withFlagRoot(dir, undefined, () => loadModule(helper));
   assert.equal(fs.existsSync(path.join(dir, "src/lib/flags/definitions/index.generated.ts")), true);
 });
