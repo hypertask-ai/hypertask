@@ -11,6 +11,8 @@ const SHARED_DIRS = [
   "src/pages/api/",
   "src/styles/",
   "src/app/",
+  "scripts/",
+  "tests/",
 ];
 const GENERIC_BASENAMES = new Set([
   "page.tsx",
@@ -60,7 +62,7 @@ function apiPathOf(file) {
 function pageScore(page, { files, flagKeys, sharedDirs }) {
   let best = 0;
   for (const file of files) {
-    if (TEST_PATH.test(file)) continue;
+    if (TEST_PATH.test(file) || file.startsWith("scripts/")) continue;
     const base = file.slice(file.lastIndexOf("/") + 1);
     const flagFile = FLAG_FILE.exec(file);
     const dir = file.slice(0, file.lastIndexOf("/") + 1);

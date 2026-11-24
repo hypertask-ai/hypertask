@@ -45,8 +45,19 @@ jobs:
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with: { name: "pstack-request-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/request" }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: valentinyeo/token-ladder, ref: deb4fa6c0fd1d47576804538242a1e7f231d21dd, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - id: plan
-        env: { GH_TOKEN: "${{ github.token }}", OPENROUTER_EVAL_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}", PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}"
+          HEAD_SHA: "${{ needs.resolve.outputs.sha }}"
+          LADDER_CALL_BIN: "${{ github.workspace }}/token-ladder/ci/ladder-call"
+          LADDER_CALL_ROOT: "${{ github.workspace }}/token-ladder"
+          AI_GATEWAY_API_KEY: "${{ secrets.AI_GATEWAY_API_KEY }}"
+          OPENCODE_API_KEY: "${{ secrets.OPENCODE_API_KEY }}"
+          DEEPSEEK_API_KEY: "${{ secrets.DEEPSEEK_API_KEY }}"
+          OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}"
         run: node scripts/pstack-verifier.mjs plan
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: "pstack-plan-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/plan" }
@@ -54,7 +65,7 @@ jobs:
     needs: [resolve, plan]
     if: needs.resolve.outputs.stop != 'true' && needs.plan.result == 'success' && needs.plan.outputs.empty != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     permissions: { contents: read, packages: read }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -79,8 +90,8 @@ jobs:
     needs: [resolve, plan, drive]
     if: always() && needs.resolve.outputs.stop != 'true' && needs.plan.result == 'success' && (needs.drive.result == 'success' || needs.drive.result == 'failure' || needs.drive.result == 'skipped')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions: { contents: read, checks: read, statuses: read, actions: read }
+    timeout-minutes: 45
+    permissions: { contents: read, packages: read, checks: read, statuses: read, actions: read }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
@@ -89,7 +100,52 @@ jobs:
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         continue-on-error: true
         with: { name: "pstack-evidence-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/evidence" }
-      - env: { GH_TOKEN: "${{ github.token }}", OPENROUTER_EVAL_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}", PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}", HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: valentinyeo/token-ladder, ref: deb4fa6c0fd1d47576804538242a1e7f231d21dd, path: token-ladder, fetch-depth: 1, persist-credentials: false }
+      - name: Ask the model about the head journeys
+        env:
+          GH_TOKEN: "${{ github.token }}"
+          PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}"
+          HEAD_SHA: "${{ needs.resolve.outputs.sha }}"
+          LADDER_CALL_BIN: "${{ github.workspace }}/token-ladder/ci/ladder-call"
+          LADDER_CALL_ROOT: "${{ github.workspace }}/token-ladder"
+          AI_GATEWAY_API_KEY: "${{ secrets.AI_GATEWAY_API_KEY }}"
+          OPENCODE_API_KEY: "${{ secrets.OPENCODE_API_KEY }}"
+          DEEPSEEK_API_KEY: "${{ secrets.DEEPSEEK_API_KEY }}"
+          OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}"
+        run: node scripts/pstack-verifier.mjs judge-ask
+      - id: base-plan
+        env: { HEAD_SHA: "${{ needs.resolve.outputs.sha }}" }
+        run: node scripts/pstack-verifier.mjs base-plan
+      - if: steps.base-plan.outputs.needed == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: "${{ github.repository }}", ref: "${{ needs.resolve.outputs.base }}", path: candidate-base, fetch-depth: 1, persist-credentials: false }
+      - if: steps.base-plan.outputs.needed == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: "^24.22.1", check-latest: true }
+      - if: steps.base-plan.outputs.needed == 'true'
+        run: npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+      - if: steps.base-plan.outputs.needed == 'true'
+        run: npx prisma generate
+      - if: steps.base-plan.outputs.needed == 'true'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: set -o pipefail; printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - if: steps.base-plan.outputs.needed == 'true'
+        continue-on-error: true
+        env: { HEAD_SHA: "${{ needs.resolve.outputs.sha }}", CORE_SMOKE_TRUSTED_DEPENDENCIES: "true", PSTACK_PLAN_FILE: "${{ runner.temp }}/pstack-verifier/plan/base-plan.json" }
+        run: |
+          bash scripts/pstack-verifier-job.sh "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/candidate-base" "${{ runner.temp }}/pstack-verifier-base"
+          cp "${{ runner.temp }}/pstack-verifier-base/evidence/evidence.json" "${{ runner.temp }}/pstack-verifier/evidence/base-evidence.json"
+      - env:
+          GH_TOKEN: "${{ github.token }}"
+          PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}"
+          HEAD_SHA: "${{ needs.resolve.outputs.sha }}"
+          LADDER_CALL_BIN: "${{ github.workspace }}/token-ladder/ci/ladder-call"
+          LADDER_CALL_ROOT: "${{ github.workspace }}/token-ladder"
+          AI_GATEWAY_API_KEY: "${{ secrets.AI_GATEWAY_API_KEY }}"
+          OPENCODE_API_KEY: "${{ secrets.OPENCODE_API_KEY }}"
+          DEEPSEEK_API_KEY: "${{ secrets.DEEPSEEK_API_KEY }}"
+          OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}"
         run: node scripts/pstack-verifier.mjs judge
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with: { name: "pstack-verdict-${{ github.run_id }}-${{ github.run_attempt }}", retention-days: 7, if-no-files-found: error, path: "${{ runner.temp }}/pstack-verifier/verdict" }

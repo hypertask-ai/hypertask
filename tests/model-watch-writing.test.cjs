@@ -153,3 +153,23 @@ test("watcher reports the board refusal text instead of a bare status code", asy
     /HTTP 400: description: Problem is missing/,
   );
 });
+
+test("watcher tells an update to replace the old model everywhere", () => {
+  const finding = { kind: "new-version", provider: "openai", model: "openai/gpt-5.5", modelClass: "gpt-5", current: ["gpt-5.4"], inputPerMillion: 2, action: "ship automatically", reason: "newer version in an existing class" };
+  const body = ticketFor(finding).description;
+  assert.match(body, /Replace the old model everywhere, not only in the pickers\./);
+  assert.match(body, /Move saved picks to the new model\./);
+  assert.match(body, /A live chat answer uses the new model\. No picker keeps the old model\./);
+  assert.doesNotMatch(body, /backup/i);
+  assert.doesNotMatch(body, /Replace the old model in every picker\./);
+});
+
+test("watcher tells a removal to check a remaining model, not the removed one", () => {
+  const finding = { kind: "stale", provider: "anthropic", model: "anthropic/claude-haiku-4.5", modelClass: "claude-haiku", current: ["claude-haiku-5-5"], inputPerMillion: null, action: "remove stale entry; migrate saved picks to the current model of its class", reason: "superseded by claude-haiku-5-5" };
+  const body = ticketFor(finding).description;
+  assert.match(body, /Remove the old model from every picker\./);
+  assert.match(body, /Move saved picks to the model that stays in its class\./);
+  assert.match(body, /A remaining model of the class answers in a live chat\./);
+  assert.doesNotMatch(body, /A live chat answer uses the new model\./);
+  assert.doesNotMatch(body, /Replace the old model everywhere/);
+});

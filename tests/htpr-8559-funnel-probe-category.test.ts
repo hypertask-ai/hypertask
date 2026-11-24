@@ -5,6 +5,7 @@ import { activationHarness } from "./helpers/activation-harness";
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 const sharedFlag = "htpr-7292-shared-account-category";
+const probeFlag = "htpr-9533-probe-synthetic";
 const PROBE = 124;
 const CUSTOMER = 123;
 const probeEmails = [
@@ -55,11 +56,16 @@ test("guest and QA identities take precedence over probe, which precedes interna
   }
 });
 
-test("probe is not synthetic and QA and guest suppression stays intact", () => {
+test("probe is synthetic and QA, guest, customer, and internal stay classified", () => {
   const { isSyntheticAccount } = harness().load("src/lib/telemetry/accountCategory.ts");
-  assert.equal(isSyntheticAccount("probe"), false);
+  assert.equal(isSyntheticAccount("probe"), true);
+  assert.equal(isSyntheticAccount("probe", false), false);
   assert.equal(isSyntheticAccount("qa"), true);
+  assert.equal(isSyntheticAccount("qa", false), true);
   assert.equal(isSyntheticAccount("guest"), true);
+  assert.equal(isSyntheticAccount("guest", false), true);
+  assert.equal(isSyntheticAccount("customer"), false);
+  assert.equal(isSyntheticAccount("internal"), false);
 });
 
 test("occurrences attach probe and still send customer events", async () => {
@@ -76,15 +82,49 @@ test("occurrences attach probe and still send customer events", async () => {
   }
 });
 
-test("probe users remain activation eligible and their activation events fire as probe", async () => {
+test("probe activation stays out and a customer activation still lands as customer", async () => {
   const h = harness();
+  h.users.set(985, { id: 985, uid: "real_985", email: "qa@example.test" });
+  h.users.set(44, { id: 44, uid: "guest_x", email: "guest@example.test" });
+  h.users.set(6, { id: 6, uid: "real_6", email: "owner@example.test" });
+  h.users.set(125, { id: 125, uid: "real_125", email: "daily@funnel-probe.hypertask.app.evil.com" });
   const { isActivationEligible } = h.load("src/lib/telemetry/activationAnalytics.ts");
-  assert.equal(await isActivationEligible(PROBE), true);
+  assert.equal(await isActivationEligible(PROBE), false);
+  assert.equal(await isActivationEligible(985), false);
+  assert.equal(await isActivationEligible(44), false);
+  assert.equal(await isActivationEligible(CUSTOMER), true);
+  assert.equal(await isActivationEligible(6), true);
+  assert.equal(await isActivationEligible(125), true);
   h.capture.activation(PROBE, "board_created", "15", { source: "manual" });
+  h.capture.activation(CUSTOMER, "board_created", "16", { source: "manual" });
   await h.drain();
   assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].distinctId, String(CUSTOMER));
   assert.equal(h.captures[0].event, "board_created");
-  assert.equal(h.captures[0].properties.account_category, "probe");
+  assert.equal(h.captures[0].properties.account_category, "customer");
+  assert.equal(h.captures[0].properties.source, "manual");
+});
+
+test("turning the probe flag off lets probe activation through and still keeps qa and guest out", async () => {
+  const h = harness();
+  h.setFlagEnabled(probeFlag, false);
+  h.users.set(985, { id: 985, uid: "real_985", email: "qa@example.test" });
+  h.users.set(44, { id: 44, uid: "guest_x", email: "guest@example.test" });
+  const { isActivationEligible } = h.load("src/lib/telemetry/activationAnalytics.ts");
+  assert.equal(await isActivationEligible(PROBE), true);
+  assert.equal(await isActivationEligible(985), false);
+  assert.equal(await isActivationEligible(44), false);
+  assert.equal(await isActivationEligible(CUSTOMER), true);
+  h.capture.activation(PROBE, "board_created", "15", { source: "manual" });
+  h.capture.activation(CUSTOMER, "board_created", "16", { source: "manual" });
+  await h.drain();
+  assert.equal(h.captures.length, 2);
+  const probeCapture = h.captures.find((capture) => capture.distinctId === String(PROBE));
+  const customerCapture = h.captures.find((capture) => capture.distinctId === String(CUSTOMER));
+  assert.equal(probeCapture.event, "board_created");
+  assert.equal(probeCapture.properties.account_category, "probe");
+  assert.equal(customerCapture.event, "board_created");
+  assert.equal(customerCapture.properties.account_category, "customer");
 });
 
 test("the shared-category flag off preserves legacy behavior", async () => {
