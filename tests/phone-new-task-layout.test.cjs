@@ -146,6 +146,35 @@ test("visual viewport offsets keep the sheet on the visible area", () => {
 });
 
 
+test("tall phone sheets keep editor content inside the description card", () => {
+  const flagFile = "src/lib/flags/definitions/htpr-9440-phone-sheet-editor-card.ts";
+  assert.equal(
+    fs.existsSync(path.join(root, flagFile)),
+    true,
+    "tall phone editor is not contained in the card",
+  );
+  const definition = load(flagFile).default;
+  assert.equal(definition.key, "htpr-9440-phone-sheet-editor-card");
+  assert.equal(definition.kind, "bugfix");
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.match(modal, /useFlag\(HTPR_9440_PHONE_SHEET_EDITOR_CARD_FLAG\)/);
+  assert.match(
+    modal,
+    /data-phone-sheet-editor-card=\{phoneLayout && phoneSheetEditorCard \? "on" : undefined\}/,
+  );
+  const editor = sheetRule(
+    "#createTaskModal[data-phone-new-task-sheet][data-phone-sheet-editor-card] [data-phone-new-task-card] #create-task-tiptap-description",
+  );
+  assert.match(editor, /flex:\s*1 1 0%/);
+  assert.match(editor, /min-height:\s*0/);
+  assert.match(editor, /overflow:\s*hidden/);
+  const content = sheetRule(
+    "#createTaskModal[data-phone-new-task-sheet][data-phone-sheet-editor-card] [data-phone-new-task-card] .ProseMirror",
+  );
+  assert.match(content, /min-height:\s*0/);
+  assert.match(content, /overflow-y:\s*auto/);
+});
+
 test("short sheet sizing overrides shared inline flex and layered important padding", () => {
   const thread = sheetRule(
     '#createTaskModal[data-phone-new-task-sheet][data-phone-new-task-short] [data-testid="ticket-thread"] {',
@@ -253,6 +282,95 @@ test("phone sheets keep the dictation row inside the card and scroll long drafts
     const withPhoneStyles = await flagOffLayout();
     await page.locator("#phone-styles").evaluate((style) => style.remove());
     assert.deepEqual(await flagOffLayout(), withPhoneStyles);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("a tall viewport scrolls description text inside the card", {
+  skip: !fs.existsSync(chromium.executablePath()),
+}, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const phoneStyles = globals.slice(
+      globals.indexOf("#createTaskModal[data-phone-new-task-sheet] {"),
+      globals.indexOf("\n.item {"),
+    );
+    await page.setContent(`
+      <style>
+        @layer utilities {
+          .editor-size { min-height: 42svh; max-height: 60svh; overflow-y: auto; }
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; }
+        .properties { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+        .properties > div { height: 240px; }
+        .attachment-upload-container { height: 60px; }
+        [data-phone-new-task-card] { padding: 10px; }
+        .ProseMirror p { margin: 0; min-height: 24px; }
+      </style>
+      <style id="phone-styles">${phoneStyles}</style>
+      <div id="createTaskModal" data-phone-new-task-sheet="on" data-phone-sheet-editor-card="on">
+        <div class="modal-content"><div id="body">
+          <header style="flex:0 0 140px"></header>
+          <div id="taskInfo_comments_description_container" style="flex:1">
+            <div class="properties"><div></div></div>
+            <div data-testid="ticket-thread" style="flex:1">
+              <div data-phone-new-task-card="on">
+                <div id="main-wrapper-create-task-create-task-tiptap-description">
+                  <div hidden></div>
+                  <div>
+                    <div id="create-task-tiptap-description">
+                      <div id="create-task-tiptap-description" class="editor-size">
+                        <div class="ProseMirror" contenteditable="true"></div>
+                      </div>
+                    </div>
+                    <div class="attachment-upload-container"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+    `);
+    for (const draft of ["", "<p>Line of the draft</p>".repeat(80)]) {
+      await page.locator(".ProseMirror").evaluate((editor, html) => {
+        editor.innerHTML = html;
+      }, draft);
+      for (const viewport of [
+        { layoutHeight: 844, visibleHeight: 844, bottomInset: 0 },
+        { layoutHeight: 1180, visibleHeight: 1180, bottomInset: 0 },
+        { layoutHeight: 932, visibleHeight: 500, bottomInset: 344 },
+      ]) {
+        await page.setViewportSize({ width: 390, height: viewport.layoutHeight });
+        const offsets = phoneNewTaskViewportOffsets(viewport);
+        await page.locator("#createTaskModal").evaluate((sheet, { offsets, short }) => {
+          sheet.style.setProperty("--phone-new-task-viewport-top", offsets.top);
+          sheet.style.setProperty("--phone-new-task-keyboard", offsets.keyboard);
+          sheet.toggleAttribute("data-phone-new-task-short", short);
+        }, { offsets, short: phoneNewTaskShortSheet(viewport) });
+        const rects = await page.locator("#createTaskModal").evaluate((sheet) => {
+          const rect = (selector) => sheet.querySelector(selector).getBoundingClientRect().toJSON();
+          const content = sheet.querySelector(".ProseMirror");
+          content.scrollTop = content.scrollHeight;
+          return {
+            sheet: sheet.getBoundingClientRect().toJSON(),
+            card: rect("[data-phone-new-task-card]"),
+            row: rect(".attachment-upload-container"),
+            content: rect(".ProseMirror"),
+            contentScrollTop: content.scrollTop,
+          };
+        });
+        assert.equal(rects.sheet.height, viewport.visibleHeight);
+        assert.ok(rects.content.top >= rects.card.top, JSON.stringify(rects));
+        assert.ok(rects.content.bottom <= rects.card.bottom, JSON.stringify(rects));
+        assert.ok(rects.content.bottom <= rects.row.top + 1, JSON.stringify(rects));
+        assert.ok(rects.row.bottom <= rects.card.bottom, JSON.stringify(rects));
+        if (draft) assert.ok(rects.contentScrollTop > 0, JSON.stringify(rects));
+      }
+    }
   } finally {
     await browser.close();
   }

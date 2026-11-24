@@ -5,12 +5,14 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import UserAvatar from "@/components/Common/UserAvatar";
 import { IoIosClose } from "react-icons/io";
 import { MdAdd, MdCheckCircle } from "react-icons/md";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useFlag } from "@/hooks/useFlag";
 import {
   listAccounts,
   getActiveAccountId,
@@ -19,6 +21,9 @@ import {
   addAccount,
   SwitchAccount,
 } from "@/lib/auth/accounts";
+import { authClient } from "@/lib/auth/betterAuthClient";
+import { forgetTicketAccountSwitch, openSwitchedTicketAccount, rememberSwitchedAccount, ticketAccountSwitchStays } from "@/lib/auth/ticketDetailLocator";
+import { HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG } from "@/lib/flags/definitions/htpr-9621-auto-switch-account";
 
 interface ISwitchAccountModal {
   closeHandler: () => void;
@@ -26,6 +31,7 @@ interface ISwitchAccountModal {
 
 const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => {
   const isMbl = useContext(MobileViewContext);
+  const keepTicket = useFlag(HTPR_9621_AUTO_SWITCH_ACCOUNT_FLAG);
   const [accounts, setAccounts] = useState<SwitchAccount[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,17 +62,41 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
     [accounts],
   );
 
+  const switchingRef = useRef(false);
+  const dismiss = useCallback(() => {
+    if (keepTicket && !switchingRef.current) forgetTicketAccountSwitch();
+    closeHandler();
+  }, [closeHandler, keepTicket]);
+
   const handleSwitch = useCallback(
     async (account: SwitchAccount) => {
       if (account.id === activeId || !account.sessionToken) {
-        closeHandler();
+        dismiss();
         return;
       }
 
       setError(null);
       setSwitchingToken(account.sessionToken);
-      const switched = await switchAccount(account.sessionToken);
-      if (switched) return;
+      switchingRef.current = true;
+      const stay = keepTicket && ticketAccountSwitchStays();
+      let switched = false;
+      if (stay) {
+        try {
+          const response = await authClient.multiSession.setActive({ sessionToken: account.sessionToken });
+          switched = !response?.error;
+        } catch {
+          switched = false;
+        }
+        if (!switched) forgetTicketAccountSwitch();
+      } else {
+        switched = await switchAccount(account.sessionToken);
+      }
+      if (switched) {
+        rememberSwitchedAccount(account.name ?? account.email ?? "Account", account.id);
+        if (stay) openSwitchedTicketAccount();
+        return;
+      }
+      switchingRef.current = false;
 
       setError(
         "Couldn’t switch accounts. That session may have expired. The account list has been refreshed.",
@@ -74,7 +104,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       await refreshAccounts();
       setSwitchingToken(null);
     },
-    [activeId, closeHandler, refreshAccounts],
+    [activeId, dismiss, keepTicket, refreshAccounts],
   );
 
   useEffect(() => {
@@ -109,7 +139,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
       show={true}
       isOpen={true}
       id="switch-account-modal"
-      toggle={closeHandler}
+      toggle={dismiss}
       shouldCloseOnClickOutside={true}
       contentClassName="h-full"
       fullScreen={isMbl}
@@ -119,7 +149,7 @@ const SwitchAccountModal: React.FC<ISwitchAccountModal> = ({ closeHandler }) => 
         <div className="flex justify-between items-center w-full">
           <span>Switch account</span>
           <IoIosClose
-            onClick={closeHandler}
+            onClick={dismiss}
             className="cursor-pointer"
             size={25}
           />

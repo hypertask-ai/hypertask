@@ -45,10 +45,21 @@ export async function assertColumnsStayVisible(
   columnSelector: string,
   durationMs: number,
   readinessTimeoutMs = 20_000,
+  boardId?: number,
 ): Promise<void> {
   const columns = page.locator(columnSelector)
-  const tasksHydrated = page.locator(TASKS_HYDRATED_SELECTOR)
+  const tasksHydrated = page.locator(
+    boardId == null
+      ? TASKS_HYDRATED_SELECTOR
+      : `[data-board-id="${boardId}"]${TASKS_HYDRATED_SELECTOR}`,
+  )
   const hiddenEmptyState = page.getByRole('heading', { name: HIDDEN_EMPTY_COLUMNS_HEADING }).first()
+  const boardLabel = boardId == null ? 'board' : `board ${boardId}`
+
+  const boardStillShowing = async () => {
+    if (boardId == null) return
+    expect(await tasksHydrated.count(), `${boardLabel} left the screen`).toBe(1)
+  }
 
   let hydratedColumnCount = 0
   let isIntentionalEmptyBoard = false
@@ -62,7 +73,7 @@ export async function assertColumnsStayVisible(
       return hydratedColumnCount > 0 || isIntentionalEmptyBoard
     },
     {
-      message: `board did not render "${columnSelector}" columns or its intentional empty state`,
+      message: `${boardLabel} did not render "${columnSelector}" columns or its intentional empty state`,
       timeout: readinessTimeoutMs,
     },
   ).toBe(true)
@@ -70,6 +81,7 @@ export async function assertColumnsStayVisible(
   if (isIntentionalEmptyBoard) {
     const emptyStateDeadline = Date.now() + durationMs
     while (Date.now() < emptyStateDeadline) {
+      await boardStillShowing()
       expect(await columns.count(), 'hidden empty board unexpectedly rendered columns').toBe(0)
       expect(await hiddenEmptyState.isVisible(), 'hidden empty board lost its empty state').toBe(true)
       await page.waitForTimeout(Math.min(250, Math.max(0, emptyStateDeadline - Date.now())))
@@ -82,6 +94,7 @@ export async function assertColumnsStayVisible(
 
   const deadline = Date.now() + durationMs
   while (Date.now() < deadline) {
+    await boardStillShowing()
     const count = await columns.count()
     expect(count, `board lost columns (had ${initialCount}, now ${count})`).toBeGreaterThanOrEqual(initialCount)
     if (count > 0) {
