@@ -126,6 +126,7 @@ export function findViolations(screen: string, theme: string, m: MobileScreenMet
   for (const p of m.purple) { const id = p.stableId || `purple:${p.label}`; if (!p.ai && !seenPurple.has(id)) { seenPurple.add(id); out.push({ id, screen, theme, rule: 'purple-non-ai', element: p.label, measured: p.hits.join(', ') }) } }
   for (const rd of m.radii ?? []) out.push({ id: rd.stableId || `radius:${rd.label}`, screen, theme, rule: 'radius', element: rd.label, measured: `${rd.radius.replace(/3\.35544e\+07px/gi, '999px')} (not in {0,2,4}px)` })
   for (const c of m.clips ?? []) out.push({ id: c.stableId || `clip:${c.label}`, screen, theme, rule: 'overflow-x', element: c.label, measured: `clipped (${c.scrollW}px > ${c.clientW}px)` })
+  const occ = new Map<string, number>(); for (const v of out) { const k = `${v.rule}|${v.id}`, n = (occ.get(k) ?? 0) + 1; occ.set(k, n); if (n > 1) v.id = `${v.id}~${n}` }
   return out
 }
 export function evaluateMobileDesign(screen: string, theme: string, metrics: MobileScreenMetrics, baseline: MobileDesignBaseline | null, strict = false) {

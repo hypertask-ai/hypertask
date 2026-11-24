@@ -32,6 +32,7 @@ test('mobile design ratchet compares stable violation identities and catches sub
   assert.ok(passive.failures.some((f) => f.includes('rule=radius') && f.includes('Card surface')), passive.failures.join('\n'))
   assert.ok(passive.failures.some((f) => f.includes('rule=overflow-x') && f.includes('Row label')), passive.failures.join('\n'))
   assert.ok(!passive.failures.some((f) => f.includes('rule=tap-target')), 'a compliant tap target must not be flagged')
+  assert.deepEqual(mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [el({ key: 'r:1', stableId: 'button[aria=Delete]', label: 'Delete', w: 20, h: 20 }), el({ key: 'r:2', stableId: 'button[aria=Delete]', label: 'Delete', w: 20, h: 20 })] }), null, true).idsByRule['tap-target'], ['button[aria=Delete]', 'button[aria=Delete]~2'])
 })
 test('mobile-verify workflow follows CI contract and gates on prod-health-gate', async () => {
   const wf = yaml.load(readFileSync(path.join(root, '.github/workflows/mobile-verify.yml'), 'utf8')), steps = wf.jobs['mobile-verify'].steps, gateStep = steps.find((s) => s.id === 'gate'), pwStep = steps.find((s) => /playwright test/.test(s.run || ''))

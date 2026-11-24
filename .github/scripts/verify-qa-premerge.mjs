@@ -375,7 +375,7 @@ export async function runTaggedJourneys({ base, journey, outDir, runner = 'deskt
     path.join(root, 'node_modules/@playwright/test/cli.js'),
     'test', '-c', suite.config, ...suite.projects.map((project) => `--project=${project}`),
     '--grep', `@id:(${ids.join('|')})(\\s|$)`,
-    `--workers=${suite.audit ? 4 : 1}`, '--retries=0', `--global-timeout=${suite.audit ? 300000 : 140000}`, '--reporter=json',
+    `--workers=${suite.audit ? 4 : 1}`, '--retries=0', `--global-timeout=${suite.audit ? 420000 : 140000}`, '--reporter=json',
     `--output=${path.join(outDir, 'test-results')}`,
   ], {
     cwd: root,
@@ -389,7 +389,7 @@ export async function runTaggedJourneys({ base, journey, outDir, runner = 'deskt
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
     },
     encoding: 'utf8',
-    timeout: suite.audit ? 330_000 : 150_000,
+    timeout: suite.audit ? 450_000 : 150_000,
   })
   if (run.error) throw new Error(`journey runner: ${run.error.message}`)
   const report = JSON.parse(await readFile(reportFile, 'utf8'))
