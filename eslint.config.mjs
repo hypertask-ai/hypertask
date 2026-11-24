@@ -77,6 +77,8 @@ export default defineConfig([
       "src/app/signout/page.tsx",
       // Server root layout reads feature flags during SSR.
       "src/app/layout.tsx",
+      // HTPR-9546: server component; resolves the public share footer layout flag.
+      "src/app/share/page.tsx",
     ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.

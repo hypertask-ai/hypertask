@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const {
+  BASE_REDRIVE_LIMIT,
   baseMoved,
   buildMarker,
   classifyRun,
@@ -222,4 +223,77 @@ test("a bug fix with no repro passes on notes once repro-first proves it", () =>
   const red = decideHeadOnly({ journeys: [{ journey: "area:inbox", head: okRun({ steps: [{ ok: false }] }) }], bugfix: true, bugfixProved: true });
   assert.equal(red.verdict, "FAIL");
   assert.match(red.notes, /area:inbox: failed at step 1/);
+});
+
+test("a side journey that fails on both PR head and production passes with notes", () => {
+  const headFail = okRun({ expects: [{ expect: { text: "CI runner placement policy" }, ok: false }] });
+  const baseFail = okRun({ steps: [{ action: { op: "goto", path: "/project?id=1" }, ok: false }] });
+  const result = decideHeadOnly({
+    journeys: [
+      okHead({ journey: "change:primary" }),
+      { journey: "area:ci-runner-policy", head: headFail, base: baseFail },
+    ],
+  });
+  assert.equal(result.verdict, "PASS+NOTES");
+  assert.match(result.notes, /area:ci-runner-policy also fails on production/);
+  assert.doesNotMatch(result.notes, /failed at step/);
+});
+
+test("a side journey that fails on PR head only still fails", () => {
+  const headFail = okRun({ expects: [{ expect: { text: "Inbox" }, ok: false }] });
+  const result = decideHeadOnly({
+    journeys: [
+      okHead({ journey: "change:primary" }),
+      { journey: "area:inbox", head: headFail, base: okRun() },
+    ],
+  });
+  assert.equal(result.verdict, "FAIL");
+  assert.match(result.notes, /area:inbox: failed at step 2/);
+  assert.doesNotMatch(result.notes, /also fails on production/);
+  const downBase = decideHeadOnly({
+    journeys: [{ journey: "area:inbox", head: headFail, base: { preview: "down" } }],
+  });
+  assert.equal(downBase.verdict, "FAIL");
+  assert.match(downBase.notes, /area:inbox: failed at step 2/);
+});
+
+test("a failing change journey blocks regardless of production base", () => {
+  const failed = okRun({ steps: [{ ok: false }] });
+  const primary = decideHeadOnly({ journeys: [{ journey: "change:primary", head: failed, base: failed }] });
+  assert.equal(primary.verdict, "FAIL");
+  assert.match(primary.notes, /change:primary: failed at step 1/);
+  assert.doesNotMatch(primary.notes, /also fails on production/);
+  const repro = decideHeadOnly({ journeys: [{ journey: "change:repro", head: failed, base: failed }], bugfix: true });
+  assert.equal(repro.verdict, "FAIL");
+  assert.match(repro.notes, /change:repro: failed at step 1/);
+});
+
+test("at most four failed side journeys are excused against production and the rest stay problems", () => {
+  assert.equal(BASE_REDRIVE_LIMIT, 4);
+  const failed = okRun({ steps: [{ ok: false }] });
+  const five = Array.from({ length: 5 }, (_, index) => ({ journey: `area:p${index + 1}`, head: failed, base: failed }));
+  const capped = decideHeadOnly({ journeys: five });
+  assert.equal(capped.verdict, "FAIL");
+  assert.match(capped.notes, /area:p5: failed at step 1/);
+  for (let index = 1; index <= 4; index += 1) assert.match(capped.notes, new RegExp(`area:p${index} also fails on production`));
+  const four = decideHeadOnly({ journeys: five.slice(0, 4) });
+  assert.equal(four.verdict, "PASS+NOTES");
+  assert.doesNotMatch(four.notes, /failed at step/);
+  const withRegression = decideHeadOnly({
+    journeys: [
+      { journey: "area:p1", head: failed, base: okRun() },
+      ...five.slice(1),
+    ],
+  });
+  assert.equal(withRegression.verdict, "FAIL");
+  assert.match(withRegression.notes, /area:p1: failed at step 1/);
+  assert.match(withRegression.notes, /area:p5: failed at step 1/);
+  const twoViewports = [
+    { journey: "area:p1", viewport: "desktop", head: failed, base: failed },
+    { journey: "area:p1", viewport: "phone", head: failed, base: okRun() },
+  ];
+  const phoneRegression = decideHeadOnly({ journeys: twoViewports });
+  assert.equal(phoneRegression.verdict, "FAIL");
+  assert.match(phoneRegression.notes, /area:p1 \[phone\]: failed at step 1/);
+  assert.match(phoneRegression.notes, /area:p1 \[desktop\] also fails on production/);
 });

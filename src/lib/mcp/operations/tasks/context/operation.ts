@@ -21,6 +21,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
+import { nameMovedTicketKeys } from '@/lib/mcp/tasks/previousTicketNumbers';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
@@ -232,7 +233,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope);
+    const [mappedTask] = await nameMovedTicketKeys(ctx.user.id, [
+      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope),
+    ]);
     const comments = recentComments.reverse().map((comment) => {
       const agent = mapVisibleMcpAgent(comment.agent, ctx.user.id, projectId);
       const agentDisplayName = resolvePublicAgentDisplayName({
@@ -312,6 +315,7 @@ export async function GET(request: NextRequest) {
       task: {
         id: mappedTask.id,
         ticketNumber: mappedTask.ticketNumber,
+        ...(mappedTask.previousTicketNumbers ? { previousTicketNumbers: mappedTask.previousTicketNumbers } : {}),
         title: mappedTask.title,
         description: mappedTask.description,
         section: mappedTask.section,

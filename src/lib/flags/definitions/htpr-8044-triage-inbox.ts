@@ -7,7 +7,7 @@ export default {
   kind: "feature",
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-26",
-  description: "Ctrl+K Triage inbox opens AI chat with whole-inbox review, one exact batch approval and undo instructions. Requires safe inbox batch tools.",
+  description: "Ctrl+K Triage inbox, then Enter in the palette field, opens AI chat with whole-inbox review, one exact batch approval and undo instructions. Requires safe inbox batch tools.",
   releaseRisk: {
     risk: "small",
     reason: "Reuses existing commands, chat and reversible inbox archives. Hidden unless safe batch tools are enabled; Off removes only this shortcut.",
