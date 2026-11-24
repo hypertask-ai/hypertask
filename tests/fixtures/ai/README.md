@@ -4,7 +4,7 @@ No golden LLM tasks file for https://app.hypertask.ai/detail/project-15/6804 exi
 
 `recorded-turns.json` contains deterministic mocked model turns, not production transcripts. The harness runs bounded agent loops against current chat and MCP input schemas, supplies isolated tool results, checks arguments and tool order, and reports retries and token counts. It never executes production tools. Offline replay tests contracts, not model quality; the recorded contract rejects stale chat prompts or tool schemas.
 
-Run offline with `node scripts/ai-eval.cjs`. CI pins `AI_EVAL_LIVE=0` and a zero wrong-tool threshold. To evaluate live tool selection explicitly, set `AI_EVAL_LIVE=1` and provide `ANTHROPIC_API_KEY` in the environment. Live mode uses only synthetic tasks and tool results, and does not persist prompt, reply or tool argument bodies.
+Run offline with `node scripts/ai-eval.cjs`. Default `AI_EVAL_LIVE=0` and a zero wrong-tool threshold. To evaluate live tool selection explicitly, set `AI_EVAL_LIVE=1` and provide `ANTHROPIC_API_KEY` in the environment. Live mode uses only synthetic tasks and tool results, and does not persist prompt, reply or tool argument bodies.
 
 When changing a prompt, bump its registry version and review the prompt baseline. When tool schemas or the chat prompt change, review live eval results before refreshing `recorded-contract.json` using the exported `recordedContract({ chat: chatTools(), mcp: mcpTools() })` helper. Do not silently refresh hashes to bypass a failing eval.
 
