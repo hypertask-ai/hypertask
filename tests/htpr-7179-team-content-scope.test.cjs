@@ -225,7 +225,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       assert.equal((await resolver.findTaskByIdentifier(f.user, { task_id: 150 }, f.agent.id, {}, teamScope)).id, 150);
       assert.equal(await resolver.findTaskByIdentifier(f.user, { task_id: 250 }, f.agent.id, {}, teamScope), null);
       f.projects.find(p => p.id === 16).members = f.projects.find(p => p.id === 16).members.filter(m => !m.agentId);
-      assert.equal(Boolean(await resolver.findTaskByIdentifier(f.user, { task_id: 160 }, f.agent.id, undefined, teamScope)), mode !== 'ENFORCE');
+      assert.equal(await resolver.findTaskByIdentifier(f.user, { task_id: 160 }, f.agent.id, undefined, teamScope), null);
       assert.equal(await resolver.findTaskByIdentifier(f.user, { task_id: 170 }, f.agent.id, undefined, teamScope), null);
     });
   });

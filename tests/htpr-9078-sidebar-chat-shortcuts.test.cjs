@@ -1,14 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
-const ts = require("typescript");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-9078-sidebar-chat-shortcuts";
 const typing = loadModule("src/lib/keyboard/sidebarChatTyping.ts");
 const flag = loadModule("src/lib/flags/definitions/htpr-9078-sidebar-chat-shortcuts.ts");
@@ -109,14 +105,57 @@ test("a purpose-opened shortcuts list sits beside the open chat", () => {
   assert.equal(typing.shortcutsPanelRight(false), undefined);
 });
 
+function chain() {
+  return { configure: () => ({}), extend: () => ({}), create: () => ({}) };
+}
+
+function editorPropsForChat() {
+  const writingAssistance = { attributes: { "data-writing-assistance": "on" }, handleKeyDown: () => false };
+  let options;
+  const stubs = {
+    react: { useRef: (initial) => ({ current: initial }), useEffect: () => {}, useContext: () => false },
+    "next/navigation": { usePathname: () => "/project" },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_6906_AUTOCAP_UNDO_FLAG: "htpr-6906-autocap-undo", LOCAL_WRITING_ASSISTANCE_FLAG: "local-writing-assistance" },
+    "@/lib/flags/definitions/htpr-5908-retype-lowercase": { HTPR_5908_RETYPE_LOWERCASE_FLAG: "htpr-5908-retype-lowercase" },
+    "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
+    "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer": { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" },
+    "@/lib/contexts/mobileContext": { MobileViewContext: {} },
+    "@/components/RTE/Components/AI_Chat/MentionData": { createMentionData: () => ({}) },
+    "@/components/RTE/Extensions/LinkableMention": { LinkableMention: chain() },
+    "@/components/RTE/Extensions/SlashCommands/SlashCommands": { __esModule: true, default: () => ({}) },
+    "@/components/RTE/Extensions/SafeSplitBlock": { SafeSplitBlock: {} },
+    "@/components/RTE/writingAssistance": { writingAssistanceEditorProps: writingAssistance, LocalWritingAssistance: chain() },
+    "@/styles/tiptap.module.scss": { __esModule: true, default: {} },
+    "@tiptap/react": {
+      Extension: { create: (options) => options },
+      useEditor: (received) => {
+        options = received;
+        return { isDestroyed: false, state: { tr: {} }, view: { dispatch: () => {} } };
+      },
+    },
+    "@tiptap/extension-highlight": { __esModule: true, default: chain() },
+    "@tiptap/extension-ordered-list": { __esModule: true, default: chain() },
+    "@tiptap/extension-task-item": { __esModule: true, default: chain() },
+    "@tiptap/extension-task-list": { __esModule: true, default: chain() },
+    "@tiptap/extension-underline": { __esModule: true, default: chain() },
+    "@tiptap/extension-gapcursor": { __esModule: true, default: {} },
+    "@tiptap/extension-placeholder": { __esModule: true, default: chain() },
+    "@tiptap/starter-kit": { __esModule: true, default: chain() },
+  };
+  loadModule("src/hooks/MultiPages/AIChat/useAiTiptap.ts", stubs).default({ contextCallback: () => {} });
+  return { options, writingAssistance };
+}
+
 test("the chat composer answers to the name Message and keeps its writing assistance", () => {
-  const source = fs.readFileSync(path.join(root, "src/hooks/MultiPages/AIChat/useAiTiptap.ts"), "utf8");
-  assert.match(source, /editorProps: \{\s*\.\.\.writingAssistanceEditorProps,/);
-  assert.match(source, /attributes: \{ \.\.\.writingAssistanceEditorProps\.attributes, "aria-label": "Message" \},/);
+  const { options, writingAssistance } = editorPropsForChat();
+  assert.equal(options.editorProps.attributes["aria-label"], "Message");
+  assert.deepEqual(options.editorProps.attributes, { "data-writing-assistance": "on", "aria-label": "Message" });
+  assert.equal(options.editorProps.handleKeyDown, writingAssistance.handleKeyDown);
 });
 
 test("the phone chat button is named Open AI chat like the desktop one", () => {
-  const MobileTabBar = loadComponent("src/components/Global/MobileTabBar.tsx", {
+  const MobileTabBar = loadModule("src/components/Global/MobileTabBar.tsx", {
     react: React,
     "next/link": { __esModule: true, default: ({ href, children }) => React.createElement("a", { href }, children) },
     "next/navigation": { usePathname: () => "/project" },
@@ -136,7 +175,7 @@ test("the phone chat button is named Open AI chat like the desktop one", () => {
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
     "./mobileShellVisibility": loadModule("src/components/Global/mobileShellVisibility.ts"),
     "./mobileDockHeight": { clearMobileDockHeight() {}, publishMobileDockHeight() {}, releaseMobileDockHeight() {} },
-  });
+  }).default;
   const html = renderToStaticMarkup(React.createElement(MobileTabBar, { currentUserId: 985 }));
   const doc = new JSDOM(html).window.document;
   const chat = doc.querySelector('nav[aria-label="Primary navigation"] button[aria-label="Open AI chat"]');
@@ -144,27 +183,13 @@ test("the phone chat button is named Open AI chat like the desktop one", () => {
   assert.equal(chat.getAttribute("aria-pressed"), "false");
 });
 
-function loadComponent(file, dependencies) {
-  const source = fs.readFileSync(path.join(root, file), "utf8");
-  const js = ts.transpileModule(source, {
-    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const exports = {};
-  new Function("require", "exports", js)((name) => {
-    if (name === "react/jsx-runtime") return require(name);
-    assert.ok(name in dependencies, `Unexpected dependency ${name}`);
-    return dependencies[name];
-  }, exports);
-  return exports.default;
-}
-
 test("the shortcuts panel keeps the chat width only while the fix is on", () => {
-  const BackDrop = loadComponent("src/components/sidebars/BackDropContainer.tsx", {
+  const BackDrop = loadModule("src/components/sidebars/BackDropContainer.tsx", {
     react: React,
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-  });
+  }).default;
   const render = (enabled) => {
-    const Component = loadComponent("src/components/sidebars/keyboardShortcuts.tsx", {
+    const Component = loadModule("src/components/sidebars/keyboardShortcuts.tsx", {
       react: React,
       "lucide-react": require("lucide-react"),
       "@/lib/flags/keys": {
@@ -186,7 +211,7 @@ test("the shortcuts panel keeps the chat width only while the fix is on", () => 
         INPUT_ID_CONSTANTS: { KeyboardShortcuts: "shortcuts-search" },
       },
       "@/lib/constants/shortcuts": { getKeyboardShortcuts: () => [] },
-    });
+    }).default;
     return new JSDOM(renderToStaticMarkup(React.createElement(Component))).window.document.getElementById("shortcuts-help");
   };
   const on = render(true);
