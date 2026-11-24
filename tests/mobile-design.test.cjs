@@ -1,7 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict'), { readFileSync } = require('node:fs'), path = require('node:path'), yaml = require('js-yaml')
 const root = path.resolve(__dirname, '..'), mod = require('./helpers/loadModule.cjs').loadModule(path.join(root, 'e2e/smoke/lib/mobile-design.ts'))
 const baseline = JSON.parse(readFileSync(path.join(root, 'e2e/smoke/__snapshots__/mobile-design.baseline.json'), 'utf8'))
-const el = (o = {}) => ({ key: 'div:0>button:0', tag: 'button', role: 'button', label: 'Action', cls: '', w: 48, h: 48, x: 16, y: 16, disabled: false, interactive: true, display: 'inline-block', textField: false, contenteditable: false, fontSize: null, radius: '4px', radiusBad: false, visibleSurface: true, roundMarker: false, outsideX: false, inHScroller: false, clippedByAncestor: false, textClipped: false, ellipsis: false, scrollW: 48, clientW: 48, ...o })
+const el = (o = {}) => ({ key: 'div:0>button:0', tag: 'button', role: 'button', label: 'Action', cls: '', w: 48, h: 48, x: 16, y: 16, disabled: false, interactive: true, display: 'inline-block', textField: false, contenteditable: false, fontSize: null, radius: '4px', radiusBad: false, visibleSurface: true, roundMarker: false, outsideX: false, inHScroller: false, clippedByAncestor: false, textClipped: false, ellipsis: false, proseLink: false, scrollW: 48, clientW: 48, ...o })
 const m = (o = {}) => ({ coarsePointer: true, docOverflowX: 0, elements: [], textFields: [], purple: [], radii: [], clips: [], ...o })
 test('every mobile design rule fails on a real defect naming screen, element, and rule', () => {
   const cases = [
@@ -13,6 +13,7 @@ test('every mobile design rule fails on a real defect naming screen, element, an
     ['mic-action', 'commands-new-task', m({ textFields: [{ key: 'textarea:0', label: 'Describe the task', kind: 'multiline', disabled: false, x: 16, y: 80, w: 300, h: 80, micFound: true, micLabel: 'Start dictation', micW: 18, micH: 32, micBgAlpha: 0, micRightBound: true, micIsPrimaryRight: false }] }), 'Start dictation'],
     ['mic-action', 'search', m({ textFields: [{ key: 'input:0', label: 'Search tasks', kind: 'search', disabled: false, x: 16, y: 80, w: 300, h: 40, micFound: false, micLabel: '', micW: 0, micH: 0, micBgAlpha: 0, micRightBound: false, micIsPrimaryRight: false }] }), 'Search tasks'],
     ['tap-target', 'task-detail', m({ elements: [el({ tag: 'a', role: '', label: 'Tiny link', display: 'inline-block', w: 10, h: 10 })] }), 'Tiny link'],
+    ['tap-target', 'inbox', m({ elements: [el({ tag: 'a', role: '', label: 'Icon link', display: 'inline', w: 16, h: 16, proseLink: false })] }), 'Icon link'],
     ['radius', 'board-kanban', m({ radii: [{ stableId: 'div[aria=Card surface]', label: 'Card surface', radius: '8px' }] }), 'Card surface'],
     ['overflow-x', 'board-table', m({ clips: [{ stableId: 'div[aria=Row label]', label: 'Row label', scrollW: 240, clientW: 160 }] }), 'Row label'],
   ]
@@ -27,7 +28,9 @@ test('mobile design ratchet compares stable violation identities and catches sub
   assert.equal(res.failures.length, 1); assert.match(res.failures[0], /board-kanban.*rule=tap-target.*New tiny icon/)
   for (const [tag, attrs, exp] of [['select', {}, false], ['button', { role: 'combobox' }, false], ['input', { type: 'checkbox' }, false], ['input', { type: 'text' }, true], ['input', { type: 'search' }, true], ['textarea', {}, true], ['div', { contenteditable: 'true' }, true], ['div', { role: 'textbox' }, true]]) assert.equal(mod.classifyTextField(tag, attrs).is, exp, tag)
   for (const screen of mod.MOBILE_SCREENS) assert.ok(screen.ready, `${screen.id} has no readiness landmark`)
-  assert.deepEqual(mod.evaluateMobileDesign('inbox', 'porcelain', m({ elements: [el({ label: 'Card surface', interactive: false, w: 120, h: 20 }), el({ tag: 'a', role: '', label: 'inline prose link', display: 'inline', w: 60, h: 20 })] }), null, true).failures, [])
+  assert.deepEqual(mod.evaluateMobileDesign('inbox', 'porcelain', m({ elements: [el({ label: 'Card surface', interactive: false, w: 120, h: 20 }), el({ tag: 'a', role: '', label: 'inline prose link', display: 'inline', w: 60, h: 20, proseLink: true })] }), null, true).failures, [])
+  const dupes = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ radii: [{ key: 'a', label: 'Card', radius: '8px' }, { key: 'b', label: 'Card', radius: '8px' }], clips: [{ key: 'c', label: 'Row', scrollW: 200, clientW: 100 }, { key: 'd', label: 'Row', scrollW: 200, clientW: 100 }], purple: [{ key: 'p1', label: 'Chip', hits: ['bg rgb(168, 85, 247)'], ai: false }, { key: 'p2', label: 'Chip', hits: ['bg rgb(168, 85, 247)'], ai: false }] }), null, true)
+  assert.deepEqual(dupes.idsByRule['radius'], ['radius:Card', 'radius:Card~2']); assert.deepEqual(dupes.idsByRule['overflow-x'], ['clip:Row', 'clip:Row~2']); assert.deepEqual(dupes.idsByRule['purple-non-ai'], ['purple:Chip', 'purple:Chip~2'])
   const passive = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [el({ label: 'Tap target' })], radii: [{ label: 'Card surface', radius: '8px' }], clips: [{ label: 'Row label', scrollW: 240, clientW: 160 }] }), null, true)
   assert.ok(passive.failures.some((f) => f.includes('rule=radius') && f.includes('Card surface')), passive.failures.join('\n'))
   assert.ok(passive.failures.some((f) => f.includes('rule=overflow-x') && f.includes('Row label')), passive.failures.join('\n'))

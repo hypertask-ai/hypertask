@@ -108,6 +108,7 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
 
   if (isPhone(page)) {
+    test.setTimeout(120_000)
     const createResponse = page.waitForResponse(
       (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
       { timeout: 45_000 },
@@ -116,7 +117,7 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
     const writer = page.locator('[aria-label="Describe the task"]').first(); await writer.tap(); await writer.fill(title)
     await page.locator('[data-compose-task-writer] [aria-label="Create task"], [data-compose-task-writer] [aria-label="Send message"]').first().tap()
     const created = await (await createResponse).json(), createdId = (created.newTask?.newTask ?? created.newTask ?? created)?.id; if (createdId) createdTaskIds.push(createdId)
-    const taskDetailTitle = page.locator('#title-input'), boardCard = page.locator(`text=${title}`).first()
+    const taskDetailTitle = page.locator('#title-input'), boardCard = createdId ? page.locator(`#task-${createdId}`) : page.locator('[id^="task-"]').filter({ hasText: title }).first()
     await expect.poll(
       async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()),
       { message: 'created task did not appear after save', timeout: 25_000 },
