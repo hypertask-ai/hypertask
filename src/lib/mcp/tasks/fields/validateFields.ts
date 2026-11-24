@@ -6,9 +6,11 @@ import { buildFieldError } from "@/lib/mcp/fieldError";
 import { parseContractFieldsInput, type ContractFieldUpdates } from "@/lib/mcp/tasks/contractFields";
 import { hasSingleTaskUpdate } from "@/lib/mcp/tasks/updateFields";
 import { parseGithubPullRequestUrl } from "@/lib/pullRequests/githubPullRequests";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9276_UNLINK_PULL_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-9276-unlink-pull-request";
 import type { UpdateTaskBody } from './types';
 
-export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryRun: boolean) {
+export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryRun: boolean, userId?: number) {
     if (requestBody.expected_section_id !== undefined || requestBody.expected_updated_at !== undefined) {
         const allowed = new Set(['task_id', 'project_id', 'ticket_number', 'unique_index', 'sectionId', 'expected_section_id', 'expected_updated_at', 'dry_run']);
         if (typeof requestBody.expected_section_id !== 'number' || !Number.isSafeInteger(requestBody.expected_section_id) || requestBody.expected_section_id <= 0 || requestBody.expected_section_id > 2147483647 ||
@@ -102,6 +104,9 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
     const hasDescriptionUpdate = requestBody.description !== undefined;
     const hasTextOrParentUpdate = hasSingleTaskUpdate(requestBody);
     const hasPullRequestUpdate = requestBody.pull_request_url !== undefined;
+    const clearingPullRequest = hasPullRequestUpdate &&
+        (requestBody.pull_request_url === null ||
+            (typeof requestBody.pull_request_url === 'string' && requestBody.pull_request_url.trim().length === 0));
     const hasContractFieldUpdate =
         requestBody.risk_level !== undefined ||
         requestBody.acceptance_criteria !== undefined ||
@@ -171,10 +176,12 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         )
     }
 
-    const parsedPullRequest = hasPullRequestUpdate
+    const clearPullRequest = clearingPullRequest && userId !== undefined &&
+        await isFeatureEnabled(HTPR_9276_UNLINK_PULL_REQUEST_FLAG, userId);
+    const parsedPullRequest = hasPullRequestUpdate && !clearPullRequest
         ? parseGithubPullRequestUrl(requestBody.pull_request_url)
         : null;
-    if (hasPullRequestUpdate && !parsedPullRequest) {
+    if (hasPullRequestUpdate && !clearPullRequest && !parsedPullRequest) {
         return NextResponse.json(
             {
                 ...buildFieldError(
@@ -213,5 +220,5 @@ export async function validateTaskUpdateFields(requestBody: UpdateTaskBody, dryR
         }
     }
 
-    return { assigneeUserIds, hasLabels, hasLabelMutation, hasDueDate, hasAssigneeField, hasDescriptionUpdate, hasTextOrParentUpdate, hasPullRequestUpdate, hasContractFieldUpdate, contractFieldUpdates, parsedPullRequest };
+    return { assigneeUserIds, hasLabels, hasLabelMutation, hasDueDate, hasAssigneeField, hasDescriptionUpdate, hasTextOrParentUpdate, hasPullRequestUpdate, hasContractFieldUpdate, contractFieldUpdates, parsedPullRequest, clearPullRequest };
 }

@@ -27,6 +27,7 @@ import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tas
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
+import { previousTicketNumbersFor, withPreviousTicketNumbers } from '@/lib/mcp/tasks/previousTicketNumbers'
 import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG, HTPR_9393_ARCHIVED_BOARD_TASK_LIST_FLAG } from '@/lib/flags/keys'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
@@ -83,6 +84,7 @@ export interface TaskListItem {
   blockerCommentId?: number | null
   waitingOnUserId?: number | null
   ticketNumber?: string
+  previousTicketNumbers?: string[]
   title: string
   description: string
   section: string
@@ -382,6 +384,7 @@ export async function GET(request: NextRequest) {
         }
 
         const attachmentDownloadHints = await isFeatureEnabled(HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG, user.id).catch(() => false)
+        const previousTicketNumbers = await previousTicketNumbersFor(user.id, tasks)
         const commentCounts = await userCommentCountsByTaskId(tasks.map(task => task.id))
         const mapTask = async (task: (typeof tasks)[number]) => {
           const pullRequests = task.pullRequests?.length
@@ -394,7 +397,7 @@ export async function GET(request: NextRequest) {
             ctx.teamScope,
           ), attachmentDownloadHints)
           const mapped = {
-            ...detail,
+            ...withPreviousTicketNumbers(detail, previousTicketNumbers),
             skill_context: await getMcpSkillContext(ctx, task.projectId, [
               detail.title, detail.description, ...(task.comments ?? []).map(comment => comment.text),
             ]),
@@ -831,6 +834,7 @@ export async function GET(request: NextRequest) {
     const tasksWithBlockers = await attachOpenBlockingTasks(
       tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
     )
+    const previousTicketNumbers = await previousTicketNumbersFor(user.id, tasks)
 
     const taskList: TaskListItem[] = tasksWithBlockers.map(task => {
       recordAgentBoardScopeMiss(task.projectId, "read");
@@ -883,7 +887,7 @@ export async function GET(request: NextRequest) {
         permanentlyDeleteAt: task.permanentlyDeleteAt?.toISOString() || null,
         ...(agent ? { agent } : {}),
       }
-    })
+    }).map((task) => withPreviousTicketNumbers(task, previousTicketNumbers))
 
     const presentedTasks = taskList.map((task) => withTaskPresentation(task))
     const projectedTasks = listQuery?.fields.length
