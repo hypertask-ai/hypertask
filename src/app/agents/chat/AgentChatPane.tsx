@@ -425,9 +425,21 @@ export function AgentChatPane({
     </section>
   ) : (
     <section className="flex flex-1 items-center justify-center">
-      <p className="text-dense text-text-light-gray">
-        Select an agent to start chatting.
-      </p>
+      <div className="flex flex-col items-center gap-2">
+        <p className="text-dense text-text-light-gray">
+          Select an agent to start chatting.
+        </p>
+        {!embedded && (
+          <button
+            type="button"
+            onClick={backToRoster}
+            className="inline-flex items-center gap-1 border-0 bg-transparent p-0 text-dense text-text-light-gray transition-colors hover:text-white-black"
+          >
+            <ChevronLeft size={14} strokeWidth={1.75} />
+            Back to agents
+          </button>
+        )}
+      </div>
     </section>
   );
 
