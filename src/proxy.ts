@@ -92,6 +92,10 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
     return NextResponse.next();
   }
 
+  if (currentPath === '/signout') {
+    return NextResponse.next();
+  }
+
   if (
     currentPath === '/oauth/token' ||
     currentPath === '/oauth/register' ||
