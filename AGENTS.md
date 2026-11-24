@@ -1,11 +1,10 @@
 # Hypertask agent map
 
 Start with `/ship` and [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
-House rules stay in the shared, person-level source.
+House rules live in the shared source.
 Load each skill when its step starts.
 Read the relevant reference section before acting.
-Paths in reference commands are repository-relative.
-Board 15: https://app.hypertask.ai/project?id=15
+Reference command paths are repo-relative.
 
 [HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) have separate role references. Shared house rules remain authoritative.
 
@@ -24,12 +23,13 @@ Board 15: https://app.hypertask.ai/project?id=15
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
 
 ## Read X when Y
 
-Read linked sections on demand, not every reference.
+Read linked sections on demand.
 
 | When | Read |
 |---|---|
