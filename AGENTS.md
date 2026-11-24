@@ -5,7 +5,7 @@ House rules live in the shared source.
 Load each skill when its step starts.
 Read the relevant reference section before acting.
 Reference command paths are repo-relative.
-Board 15: https://app.hypertask.ai/project?id=15
+Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
 
 [HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) have separate role references. Shared house rules remain authoritative.
 
