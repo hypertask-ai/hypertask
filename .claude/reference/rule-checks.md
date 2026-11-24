@@ -13,6 +13,7 @@ or when a row names a check file that is not in the repository.
 | Claim before investigating or coding. Respect active claims. | `.claude/skills/ship/scripts/ship-claim.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Add only your agent. Preserve human assignees. | nothing yet |
 | Branch from `origin/production`; target `production`. | nothing yet |
+| Name the pull request author family: a bare `Author-Model:` line, or a matching commit trailer. | `scripts/pstack-verifier.mjs`, `tests/pstack-verifier.test.cjs` |
 | One ticket, one PR. Leave auto-merge off. | `.github/scripts/pr-title.cjs` binds this pull request only. `.claude/skills/fix-bug/scripts/open-pr.sh` refuses a second open PR for the same runner, tested by `tests/open-pr-script.test.cjs`. Auto-merge is nothing yet |
 | Never stash or discard another session's changes. | nothing yet |
 | Never use the archived `hypertask-ai/hypertasks` repository. | nothing yet |
