@@ -18,6 +18,7 @@ function matches(row, where) {
     return row[k] === v;
   });
 }
+let turbopufferIds = [];
 function harness({ visibleProjects = [2060, 13734], tasks = [movedTask], aliases } = {}) {
   aliases ??= [{ id: 1, projectId: 2060, uniqueIndex: 3148, ticketNumber: "SOFT-3148", taskId: 5000, createdAt: new Date("2026-11-22T00:00:00Z"), task: movedTask }];
   const projects = [{ id: 2060, uniqueIdentifier: "SOFT", status: "Normal", issuedUniqueIndex: 0 }, { id: 13734, uniqueIdentifier: "DEST", status: "Normal", issuedUniqueIndex: 0 }];
@@ -41,7 +42,7 @@ function harness({ visibleProjects = [2060, 13734], tasks = [movedTask], aliases
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) }, "@/lib/pullRequests/taskPullRequests": { refreshTaskPullRequests: async (_id, prs) => prs ?? [] },
     "@/lib/pullRequests/githubPullRequests": { derivePullRequestDisplayState: () => "open", parseGithubPullRequestUrl: () => null }, "@/lib/mcp/tasks/extractPrLinks": { extractPrLinks: () => [] },
     "@/lib/mcp/tasks/relatedTaskContext": { relatedTaskContextSelect: () => ({}), mapRelatedTaskContext: async (t) => t, loadTaskAgentActivities: async () => [] },
-    "@/utils/controllers/search/document": { turbopufferSearchTaskIds: async () => [] }, "@/lib/search/serverOperators": { parseSearchWithChipNames: async (q) => ({ text: q, filters: {} }) },
+    "@/utils/controllers/search/document": { turbopufferSearchTaskIds: async () => turbopufferIds }, "@/lib/search/serverOperators": { parseSearchWithChipNames: async (q) => ({ text: q, filters: {} }) },
     "@/lib/search/rankedWhere": {}, "@/lib/mcp/tasks/updateTask": {}, "@/utils/controllers/getMemberAndOwnerForBoard": {}, "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@vercel/functions": { waitUntil: () => {} }, "@/lib/realtime/server": {}, "@/lib/cycles": { CYCLE_WINDOW_SIZE: 3 },
   };
@@ -49,7 +50,7 @@ function harness({ visibleProjects = [2060, 13734], tasks = [movedTask], aliases
   stubs["@/lib/mcp/tasks/resolveTask"] = resolver;
   stubs["@/utils/controllers/taskDetail/load"] = loadModule("src/utils/controllers/taskDetail/load.ts", stubs);
   const page = loadModule("src/app/detail/[...slug]/page.tsx", { ...stubs, "./TaskDetailComp": {}, "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 6 }) }, "next/navigation": { redirect: (u) => { throw new Error(`REDIRECT ${u}`); } }, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {}, "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) }, "@/utils/controllers/tasks/markRead": {}, "@/utils/controllers/comments/readReceipts": {}, "@/lib/agentRuns/service": {}, "@/app/api/ai/_lib/taskSummaryFreshness": {}, "../../unauthorized/page": { default: "Unauthorized" } }).default;
-  return { prisma, resolver, page, req: (q) => ({ nextUrl: { searchParams: new URLSearchParams(q) } }), getTask: loadModule("src/utils/controllers/tasks/getTask.ts", stubs).default, mcpGet: loadModule("src/lib/mcp/operations/tasks/operation.ts", stubs).GET, mcpSearch: loadModule("src/lib/mcp/operations/tasks/search/operation.ts", stubs).GET, mcpContext: loadModule("src/lib/mcp/operations/tasks/context/operation.ts", stubs).GET, batch: loadModule("src/lib/mcp/tasks/batchTasks.ts", stubs).handleBatchBody, findTasks: loadModule("src/lib/mcp/tasks/fields/findTasks.ts", stubs).findTasksByIdentifier, nextIndex: loadModule("src/utils/controllers/tasks/getNextUniqueTaskIndex.ts", stubs).getNextUniqueTaskIndex, taskParser: loadModule("src/lib/mcp-server/utils/task-parser.ts", {}) };
+  return { prisma, setTurbopufferIds: (ids) => { turbopufferIds = ids }, resolver, page, req: (q) => ({ nextUrl: { searchParams: new URLSearchParams(q) } }), getTask: loadModule("src/utils/controllers/tasks/getTask.ts", stubs).default, mcpGet: loadModule("src/lib/mcp/operations/tasks/operation.ts", stubs).GET, mcpSearch: loadModule("src/lib/mcp/operations/tasks/search/operation.ts", stubs).GET, mcpContext: loadModule("src/lib/mcp/operations/tasks/context/operation.ts", stubs).GET, batch: loadModule("src/lib/mcp/tasks/batchTasks.ts", stubs).handleBatchBody, findTasks: loadModule("src/lib/mcp/tasks/fields/findTasks.ts", stubs).findTasksByIdentifier, nextIndex: loadModule("src/utils/controllers/tasks/getNextUniqueTaskIndex.ts", stubs).getNextUniqueTaskIndex, taskParser: loadModule("src/lib/mcp-server/utils/task-parser.ts", {}) };
 }
 test("old key and old board+number resolve on every path and refuse inaccessible destination boards", async () => {
   const ok = harness({ visibleProjects: [2060, 13734] }), no = harness({ visibleProjects: [2060] }), ctx = { user: { id: 6, email: "u@t.io" }, agentId: null, teamScope: null };
@@ -63,17 +64,25 @@ test("old key and old board+number resolve on every path and refuse inaccessible
   assert.equal((await no.page({ params: Promise.resolve({ slug: ["project-2060", "3148"] }), searchParams: Promise.resolve({}) })).type, "Unauthorized");
   assert.deepEqual([(await ok.resolver.findTaskByStringIdentifier({ id: 6 }, "https://app.hypertask.ai/detail/project-2060/3148")).id, (await ok.resolver.findTaskByStringIdentifier({ id: 6 }, "SOFT-3148")).id, await ok.resolver.resolveTaskIdOnly({ ticket_number: "SOFT-3148" }), await ok.resolver.resolveTaskIdOnly({ project_id: 2060, unique_index: 3148 }), ok.taskParser.parseTaskReference("MY_BOARD-3148").ticketNumber], [5000, 5000, 5000, 5000, "MY_BOARD-3148"]);
 });
+test("search scoped to the source board keeps only the alias hit from the destination board", async () => {
+  const decoy = { ...movedTask, id: 7000, uniqueIndex: 41, ticketNumber: "DEST-41", title: "SOFT-3148 follow-up", description: "SOFT-3148" };
+  const scoped = harness({ visibleProjects: [2060, 13734], tasks: [movedTask, decoy] });
+  scoped.setTurbopufferIds([7000]);
+  const res = await scoped.mcpSearch(scoped.req({ q: "SOFT-3148", project_id: "2060" }));
+  assert.deepEqual([res.body.tasks.map((t) => t.id), res.body.total], [[5000], 1]);
+});
 test("fresh number after move, live-wins collision notice with access check, and dry-run backfill", async () => {
   const fresh = harness({ tasks: [movedTask] }), col = harness({ visibleProjects: [2060, 13734], tasks: [movedTask, reusedLive] });
   assert.equal(await fresh.nextIndex(2060, fresh.prisma), 3149);
   const getRes = await col.mcpGet(col.req({ ticket_number: "SOFT-3148" }));
   assert.deepEqual([getRes.body.tasks[0].id, getRes.body.reusedKeyCollisions[0].movedTaskId, (await col.getTask("project-2060", "3148", { id: 6 })).json.reusedKeyCollision.movedTaskId, (await harness({ visibleProjects: [2060], tasks: [movedTask, reusedLive] }).mcpGet(col.req({ ticket_number: "SOFT-3148" }))).body.reusedKeyCollisions], [6000, 5000, 5000, undefined]);
-  const { run } = await import("../scripts/htpr-9634-backfill-move-aliases.mjs"), queries = [];
-  const moved = { taskId: 5000, fromProjectId: 2060, fromPrefix: "SOFT", commentText: "" };
+  const { run, gapsWithoutMapping } = await import("../scripts/htpr-9634-backfill-move-aliases.mjs"), queries = [];
+  const moved = { taskId: 5000, fromProjectId: 2060, fromPrefix: "SOFT", currentTicketNumber: "DEST-12" };
   const db = { query: async (sql, params) => { queries.push({ sql, params }); if (sql.includes("WHERE (a.\"ticketNumber\"")) return { rows: [{ id: 1 }] }; if (sql.includes("TaskMove")) return { rows: [moved] }; return { rows: [], rowCount: 1 }; } };
   const mapping = [{ projectId: 2060, uniqueIndex: 3148, ticketNumber: "SOFT-3148", taskId: 5000 }];
   assert.deepEqual(
-    [await run(db, {}, () => {}), queries.length, await run(db, { apply: true, mapping }, () => {}), await run({ query: async (sql) => (sql.includes("TaskMove") ? { rows: [{ ...moved, commentText: "Moved SOFT-3148" }] } : { rows: [], rowCount: 1 }) }, {}, () => {})],
-    [{ blanks: 1, moveGaps: 1, needsMapping: 1, candidates: 0, updated: 0, inserted: 0 }, 2, { blanks: 1, moveGaps: 1, needsMapping: 1, candidates: 1, updated: 1, inserted: 1 }, { blanks: 0, moveGaps: 1, needsMapping: 0, candidates: 1, updated: 0, inserted: 0 }],
+    [await run(db, {}, () => {}), queries.length, await run(db, { apply: true, mapping }, () => {}), await run(db, { mapping }, () => {}), gapsWithoutMapping([moved], [{ ...mapping[0], taskId: 9999 }]).length],
+    [{ blanks: 1, moveGaps: 1, needsMapping: 1, candidates: 0, updated: 0, inserted: 0 }, 2, { blanks: 1, moveGaps: 1, needsMapping: 0, candidates: 1, updated: 1, inserted: 1 }, { blanks: 1, moveGaps: 1, needsMapping: 0, candidates: 1, updated: 0, inserted: 0 }, 1],
   );
+  assert.match((await import("../scripts/htpr-9634-backfill-move-aliases.mjs")).describeGap(moved), /task 5000 left board 2060 \(SOFT\).*never persisted.*--mapping/);
 });

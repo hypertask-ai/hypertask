@@ -361,12 +361,14 @@ export async function GET(request: NextRequest) {
     if (TICKET_KEY_PATTERN?.test(lookupKey) && typeof findTaskByIdentifier === 'function') {
       try {
         const resolved = await findTaskByIdentifier(user, { ticket_number: lookupKey, ...(targetProjectId != null ? { project_id: targetProjectId } : {}) }, ctx.agentId, undefined, ctx.teamScope)
-        if (resolved && accessibleProjectIds.includes(resolved.projectId)) {
-          aliasMatch = resolved
-          if (targetProjectId != null && resolved.projectId !== targetProjectId) where.projectId = { in: [targetProjectId, resolved.projectId] }
-        }
+        if (resolved && accessibleProjectIds.includes(resolved.projectId)) aliasMatch = resolved
       } catch (error) { if (!(error instanceof TaskIdentifierAmbiguityError)) throw error }
     }
+    const aliasOffBoard = aliasMatch && targetProjectId != null && aliasMatch.projectId !== targetProjectId
+      ? { taskId: aliasMatch.id, projectId: aliasMatch.projectId, targetProjectId }
+      : null
+    const aliasOffBoardScope = aliasOffBoard ? { OR: [{ projectId: aliasOffBoard.targetProjectId }, { id: aliasOffBoard.taskId }] } : null
+    if (aliasOffBoard) where.projectId = { in: [aliasOffBoard.targetProjectId, aliasOffBoard.projectId] }
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
         { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
@@ -376,7 +378,7 @@ export async function GET(request: NextRequest) {
       commentById = filtered.commentById
       const rankedResults = Boolean(parsed.text || filtered.commentMode)
       operatorPartial = parsed.text ? filtered.partial : false
-      where.AND = filtered.where.AND
+      where.AND = aliasOffBoardScope ? [...(filtered.where.AND ?? []), aliasOffBoardScope] : filtered.where.AND
       if (parsed.filters.is) where.status = filtered.where.status
       if (rankedResults && !filtered.paged) where.id = { in: filtered.rankedIds }
       const total = await prisma.task.count({ where })
@@ -403,6 +405,7 @@ export async function GET(request: NextRequest) {
       operatorResult = { orderedTasks, total }
     }
     async function legacySearch(query: string) {
+    if (aliasOffBoardScope) where.AND = [...(where.AND ?? []), aliasOffBoardScope]
     const rawTurbopufferIds = await turbopufferSearchTaskIds({
       searchQuery: query,
       projectIds: accessibleProjectIds,
