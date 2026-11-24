@@ -214,8 +214,14 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
     source("src/app/inbox/Inbox.tsx"),
   ]);
 
-  assert.match(client, /browser\.location\.hostname === "127\.0\.0\.1"/);
-  assert.match(client, /browser\.location\.hostname === "localhost"/);
+  assert.match(
+    client,
+    /function loopbackHost\(hostname: string\): boolean \{[\s\S]{0,120}hostname === "127\.0\.0\.1" \|\| hostname === "localhost"/,
+  );
+  assert.match(
+    client,
+    /const localSmokeOrigin = loopbackHost\(browser\.location\.hostname\);/,
+  );
   assert.match(
     client,
     /localSmokeOrigin &&[\s\S]{0,80}localSmokePreference === "on" \|\| localStackRealtime()/,
