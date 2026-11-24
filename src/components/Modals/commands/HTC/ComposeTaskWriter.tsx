@@ -477,7 +477,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }
       const taskPath = `/detail/project-${projectId}/${task.uniqueIndex}`;
       setNewTicketPath(taskPath);
-      if (!openSavedComposeTask(fastComposeOpen, () => openCachedTaskDetail({
+      if (!openSavedComposeTask(fastComposeOpen && !window.location.pathname.startsWith("/chat"), () => openCachedTaskDetail({
         queryClient,
         accountId: user.id,
         projectId,

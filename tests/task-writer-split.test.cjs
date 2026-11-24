@@ -326,7 +326,7 @@ test("a saved Ctrl+J task opens from the copy already in hand when the fast open
   const note = "<p>Retry failed checkout payments.</p>";
   const task = { id: 9300, projectId: 15, uniqueIndex: 9300, title: "Retry checkout", status: "Normal", ticketNumber: "HTPR-9300", description_: { content: note }, sectionId: 1 };
   const project = { id: 15, uniqueIdentifier: "HTPR" };
-  async function run({ fastComposeOpen, cacheHit }) {
+  async function run({ fastComposeOpen, cacheHit, pathname = "/project" }) {
     const navigations = [];
     const cacheOpens = [];
     const context = {
@@ -334,7 +334,7 @@ test("a saved Ctrl+J task opens from the copy already in hand when the fast open
       text: "Retry failed checkout payments.", textHeldUntilBoardsLoad: { current: null },
       setWritingHeight() {}, showProgress: false, composer: { current: null }, setWriting() {}, setStage() {}, onBusyChange() {},
       setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null },
-      window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } },
+      window: { location: { pathname, href: "https://app.hypertask.ai/project?id=15" } },
       newTaskWindow: true, destinationProject: project, inView: null, targetBoardId: 15, user: { id: 985 }, currentProject: project,
       mounted: { current: true },
       createComposedTask: async () => ({ task, writerFailed: false, tasks: [task], failedTitles: [] }),
@@ -362,4 +362,7 @@ test("a saved Ctrl+J task opens from the copy already in hand when the fast open
   const miss = await run({ fastComposeOpen: true, cacheHit: false });
   assert.deepEqual(miss.navigations, ["/detail/project-15/9300"]);
   assert.equal(miss.cacheOpens.length, 1);
+  const chat = await run({ fastComposeOpen: true, cacheHit: true, pathname: "/chat/01a20ea6" });
+  assert.deepEqual(chat.navigations, ["/detail/project-15/9300"]);
+  assert.deepEqual(chat.cacheOpens, []);
 });
