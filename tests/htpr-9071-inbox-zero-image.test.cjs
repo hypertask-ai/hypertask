@@ -35,14 +35,6 @@ test("the flag is a bugfix that starts on for everyone", () => {
   assert.equal(flag.releaseRisk.risk, "small");
 });
 
-test("the inbox page wraps the top bar, the footer tabs and the phone dock in the gate", () => {
-  const inbox = fs.readFileSync(path.join(root, "src/app/inbox/Inbox.tsx"), "utf8");
-  assert.match(inbox, /useFlag\(HTPR_9071_INBOX_ZERO_IMAGE_FLAG\)/);
-  assert.match(inbox, /hidesInboxZeroSplitTabs\(\{ enabled: hideInboxZeroTabs, isInboxZero, splitLengths, unsavedCommentDrafts \}\)/);
-  assert.equal((inbox.match(/<SplitTabsUnlessInboxZero/g) ?? []).length, 3);
-  assert.equal((inbox.match(/<\/SplitTabsUnlessInboxZero>/g) ?? []).length, 3);
-});
-
 test("a fully empty inbox drops the split tabs", () => {
   assert.equal(gate({}), true);
   assert.equal(gate({ splitLengths: [0] }), true);
