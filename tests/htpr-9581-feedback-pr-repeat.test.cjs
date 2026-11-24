@@ -125,6 +125,27 @@ test('flag is a bug fix on for everyone', () => {
   assert.match(source, /defaultMode:\s*["']EVERYONE["']/)
 })
 
+const documentedBody = {
+  surface: 'cli',
+  tool: 'git-commit',
+  errorCode: 'co-authored-by-injected',
+  category: 'other',
+  note: 'Cursor session appended Co-authored-by trailer to bot commits; check-commit-identities failed on PR 1188.',
+}
+
+test('the documented repro body is a surface the schema allows and the second call joins', async () => {
+  const f = setup()
+  const { aiFeedbackSchema } = f.load('src/lib/aiFeedback/input.ts')
+  assert.equal(aiFeedbackSchema.safeParse({ ...documentedBody, surface: 'board' }).success, false)
+  const first = await f.fileAiFeedback(aiFeedbackSchema.parse(documentedBody), 6, { origin: 'agent', agentName: 'Runner' })
+  const second = await f.fileAiFeedback(aiFeedbackSchema.parse({ ...documentedBody, note: documentedBody.note.replace('1188', '1200') }), 6, { origin: 'agent', agentName: 'Runner' })
+  assert.equal(first.success, true)
+  assert.equal(second.success, true)
+  assert.equal(second.deduped, true)
+  assert.equal(second.ticketNumber, first.ticketNumber)
+  assert.equal(f.created.length, 1)
+})
+
 test('a repeat that names another pull request joins the open ticket and the description still has no error code', async () => {
   const f = setup()
   const first = await f.fileAiFeedback(report, 6, { origin: 'agent', agentName: 'Runner' })
