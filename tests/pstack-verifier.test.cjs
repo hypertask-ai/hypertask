@@ -1212,10 +1212,6 @@ const driveAuth = async (actions, respond = () => ({ status: 200, text: "{}" }))
   });
   return { parsed, sent, result, ok: result.steps.map((step) => step.ok) };
 };
-const agentOnly = (authorization) => authorization === "Bearer seeded-agent"
-  ? { status: 200, text: "{}" }
-  : { status: 403, text: "Task mutation leases require an agent token" };
-
 for (const run of ["45173881467", "45154622521"]) {
   test(`planner replay ${run} drops expectations copied from the prompt example`, async () => {
     const { parsePlan, buildPrompt } = await load();
@@ -1272,20 +1268,40 @@ test("the drive sends the user token first and keeps it when the call answers", 
   assert.deepEqual(ok, [true, true, true, true]);
 });
 
-test("a refusal to the user token is retried once with the agent token", async () => {
-  const { sent, ok } = await driveAuth([
-    ["PATCH", "/api/mcp/flags"],
-    ["POST", "/api/mcp/flags/reviews"],
-    ["POST", "/api/mcp/manager-leases"],
-    ["POST", "/api/mcp/agents/board-access-requests"],
-    ["GET", "/api/mcp/agents/board-access-requests/{id}"],
-    ["POST", "/api/mcp/agents/{id}"],
-    ["GET", "/api/mcp/agents/runs/{task}"],
-    ["POST", "/api/mcp/agents/runs/{task}/stop"],
-    ["POST", "/api/mcp/agents/runtime-heartbeat"],
-  ].map(([method, path]) => apiAction(method, path)), agentOnly);
-  assert.deepEqual(sent, Array.from({ length: 9 }, () => ["Bearer seeded-user", "Bearer seeded-agent"]).flat());
-  assert.deepEqual(ok, Array.from({ length: 9 }, () => true));
+const agentRoutes = [
+  "/api/mcp/flags",
+  "/api/mcp/flags/reviews",
+  "/api/mcp/manager-leases",
+  "/api/mcp/agents/board-access-requests",
+  "/api/mcp/agents/board-access-requests/[requestId]",
+  "/api/mcp/agents/[agentId]",
+  "/api/mcp/agents/runs/[id]",
+  "/api/mcp/agents/runs/[id]/stop",
+  "/api/mcp/agents/runtime-heartbeat",
+];
+
+test("no route refusing a non-agent caller is missing from the derived set", async () => {
+  const { agentOnlyRoutes } = await load();
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const derived = agentOnlyRoutes();
+  for (const route of agentRoutes) assert.equal(derived.includes(route), true, route);
+  const root = path.join(__dirname, "../src/app/api/mcp");
+  const caller = /requires? an agent token|agent token is required|authenticateAgentRunRequest|@\/lib\/flags\/agentAuthorization/;
+  for (const file of fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && caller.test(fs.readFileSync(path.join(root, file), "utf8")))) {
+    assert.equal(derived.includes(`/api/mcp/${file.slice(0, -"/route.ts".length)}`), true, file);
+  }
+  for (const route of ["/api/mcp/inbox/list", "/api/mcp/tasks/evidence", "/api/mcp/time/delete", "/api/mcp/assignees/assign"]) assert.equal(derived.includes(route), false, route);
+});
+
+test("a generic refusal on an agent-only route is retried and elsewhere it is not", async () => {
+  const refused = (authorization) => authorization === "Bearer seeded-agent" ? { status: 200, text: "{}" } : { status: 403, text: "Forbidden" };
+  const retried = await driveAuth([apiAction("PATCH", "/api/mcp/flags"), apiAction("POST", "/api/mcp/manager-leases")], refused);
+  assert.deepEqual(retried.sent, ["Bearer seeded-user", "Bearer seeded-agent", "Bearer seeded-user", "Bearer seeded-agent"]);
+  assert.deepEqual(retried.ok, [true, true]);
+  const kept = await driveAuth([apiAction("GET", "/api/mcp/inbox/list"), apiAction("POST", "/api/mcp/tasks/{task}")], () => ({ status: 403, text: "Forbidden" }));
+  assert.deepEqual(kept.sent, ["Bearer seeded-user", "Bearer seeded-user"]);
+  assert.deepEqual(kept.ok, [false, false]);
 });
 
 test("a plan that expects a refusal keeps the user token and is not retried", async () => {

@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createSign, randomBytes } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -81,6 +81,172 @@ function apiBody(value) {
   try { body = JSON.parse(value); } catch { throw new Error("body is not allowed"); }
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("body is not allowed");
   return body;
+}
+const API_ROUTE_ROOT = new URL("../src/app/api/", import.meta.url);
+const MCP_ROUTE_ROOT = "/api/mcp/";
+const AGENT_ONLY_CACHE = new Map();
+const AGENT_TOKEN_REFUSAL = /error:\s*["'`][^"'`]*\bagent token\b[^"'`]*["'`]/i;
+const AGENT_IDENTITY_DENIAL = /!\s*(?:[A-Za-z_$][\w$]*\??\.)+agentId\b|\b[A-Za-z_$][\w$]*\??\.source\s*!==\s*["'`]agent["'`]/;
+const AGENT_REFUSAL_STATUS = /\b(?:401|403)\b/;
+const AGENT_REFUSAL_WORDING = /\bagent token\b|agent_bearer_required/i;
+const AUTHORIZATION_HEADER = /headers\.(?:has|get)\(\s*["'`]Authorization/;
+const QUERY_GATE = /searchParams|\bparams\s*\.\s*get\s*\(/;
+const CODE_WORD = /[A-Za-z_$][\w$]*/g;
+const MODULE_SUFFIXES = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
+const IMPORT_LIST = /import\s+(?:[A-Za-z_$][\w$]*\s*,?\s*)?(?:\{([^}]*)\})?\s*from\s*["']([^"']+)["']/g;
+const EXPORT_LIST = /export\s+\{([^}]*)\}\s+from\s*["']([^"']+)["']/g;
+function routePattern(route) {
+  return new RegExp(`^${route.split("/").map((part) => part.startsWith("[") ? "[^/]+" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/")}$`);
+}
+function braceBlock(source, start) {
+  let depth = 0;
+  for (let at = start; at < source.length; at++) {
+    if (source[at] === "{") depth++;
+    else if (source[at] === "}" && !--depth) return source.slice(start, at + 1);
+  }
+  return "";
+}
+function bodyStart(source, from) {
+  let at = from;
+  while (at < source.length && /\s/.test(source[at])) at++;
+  if (source[at] !== ":") return source.indexOf("{", from);
+  let angle = 0;
+  for (at++; at < source.length && at < from + 600; at++) {
+    if (source[at] === "<") angle++;
+    else if (source[at] === ">" && source[at - 1] !== "=" && angle > 0) angle--;
+    else if (source[at] === "{" && !angle) return at;
+  }
+  return source.indexOf("{", from);
+}
+function callableBody(source, at) {
+  const declaration = /(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*(?:<[^>]*>)?\s*\(/g;
+  const arrow = /=>\s*\{/g;
+  declaration.lastIndex = at;
+  arrow.lastIndex = at;
+  const fn = declaration.exec(source), fat = arrow.exec(source);
+  if (fn && (!fat || fn.index < fat.index)) {
+    let depth = 0, close = fn.index + fn[0].length - 1;
+    while (close < source.length && (source[close] !== ")" || --depth)) if (source[close++] === "(") depth++;
+    return braceBlock(source, bodyStart(source, close + 1));
+  }
+  return fat ? braceBlock(source, fat.index + fat[0].length - 1) : "";
+}
+function functionBodies(source) {
+  const bodies = new Map();
+  for (const pattern of [/(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g, /(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=/g]) {
+    const found = new RegExp(pattern.source, "g");
+    let hit;
+    while ((hit = found.exec(source))) {
+      const body = callableBody(source, hit.index);
+      if (body && !bodies.has(hit[1])) bodies.set(hit[1], body);
+    }
+  }
+  return bodies;
+}
+function agentGuardKind(body) {
+  const queryGated = (index) => QUERY_GATE.test(body.slice(Math.max(0, index - 320), index));
+  const refusal = new RegExp(AGENT_TOKEN_REFUSAL.source, "gi");
+  let hit;
+  while ((hit = refusal.exec(body))) {
+    if (!queryGated(hit.index) && AGENT_REFUSAL_STATUS.test(body.slice(hit.index, hit.index + 260))) return "credential";
+  }
+  const denial = new RegExp(AGENT_IDENTITY_DENIAL.source, "g");
+  while ((hit = denial.exec(body))) {
+    if (queryGated(hit.index)) continue;
+    const site = body.slice(hit.index, hit.index + 320);
+    if (AGENT_REFUSAL_STATUS.test(site) && (AGENT_REFUSAL_WORDING.test(site) || /\bmanagement\b/.test(site))) return "credential";
+    if (/\breturn null\b/.test(site) && AUTHORIZATION_HEADER.test(body)) return "principal";
+  }
+  return "";
+}
+function moduleUrl(spec, srcRoot) {
+  if (!spec.startsWith("@/")) return null;
+  for (const suffix of MODULE_SUFFIXES) {
+    const candidate = new URL(spec.slice(2) + suffix, srcRoot);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+function namedImports(source) {
+  const names = [];
+  for (const [pattern, exported] of [[IMPORT_LIST, false], [EXPORT_LIST, true]]) {
+    const found = new RegExp(pattern.source, "g");
+    let hit;
+    while ((hit = found.exec(source))) {
+      if (!hit[1]) continue;
+      for (const part of hit[1].split(",")) {
+        const sides = part.trim().replace(/^type\s+/, "").split(/\s+as\s+/);
+        if (sides[0]) names.push({ name: sides[0].trim(), local: (sides[1] ?? sides[0]).trim(), spec: hit[2], exported });
+      }
+    }
+  }
+  return names;
+}
+function moduleInfo(url, cache) {
+  if (!cache.has(url.href)) {
+    let info = null;
+    try {
+      const source = readFileSync(url, "utf8");
+      const bodies = functionBodies(source);
+      info = { source, bodies, guards: new Set([...bodies].filter(([, body]) => agentGuardKind(body)).map(([name]) => name)) };
+    } catch { info = null; }
+    cache.set(url.href, info);
+  }
+  return cache.get(url.href);
+}
+function textReachesGuard(text, info, url, srcRoot, cache, depth, seen) {
+  if (!text) return false;
+  if (agentGuardKind(text)) return true;
+  const called = new Set(text.match(CODE_WORD) ?? []);
+  for (const item of namedImports(info.source)) {
+    const target = called.has(item.local) ? moduleUrl(item.spec, srcRoot) : null;
+    if (target && reachesAgentGuard(target, item.name, srcRoot, cache, depth + 1, seen)) return true;
+  }
+  for (const other of info.bodies.keys()) if (called.has(other) && reachesAgentGuard(url, other, srcRoot, cache, depth + 1, seen)) return true;
+  return false;
+}
+function reachesAgentGuard(url, name, srcRoot, cache, depth, seen) {
+  const key = `${url.href}#${name}`;
+  if (depth > 6 || seen.has(key)) return false;
+  seen.add(key);
+  const info = moduleInfo(url, cache);
+  if (!info) return false;
+  if (info.guards.has(name)) return true;
+  return textReachesGuard(info.bodies.get(name) ?? "", info, url, srcRoot, cache, depth, seen);
+}
+function routeRefusesNonAgentCalls(routeUrl, srcRoot, cache) {
+  const info = moduleInfo(routeUrl, cache);
+  if (!info) return false;
+  if (agentGuardKind(info.source)) return true;
+  const called = new Set(info.source.match(CODE_WORD) ?? []);
+  for (const item of namedImports(info.source)) {
+    const target = moduleUrl(item.spec, srcRoot);
+    if (target && (item.exported || called.has(item.local)) && reachesAgentGuard(target, item.name, srcRoot, cache, 0, new Set())) return true;
+  }
+  for (const name of info.bodies.keys()) if (reachesAgentGuard(routeUrl, name, srcRoot, cache, 0, new Set())) return true;
+  return false;
+}
+export function agentOnlyRoutes(root = API_ROUTE_ROOT) {
+  const href = new URL(root).href;
+  const url = new URL(href.endsWith("/") ? href : `${href}/`);
+  if (!AGENT_ONLY_CACHE.has(url.href)) {
+    const srcRoot = new URL("../../", url);
+    const cache = new Map();
+    AGENT_ONLY_CACHE.set(url.href, readdirSync(url, { recursive: true })
+      .map(String)
+      .filter((file) => file.endsWith("/route.ts") && new URL(file, url).pathname.includes(MCP_ROUTE_ROOT))
+      .filter((file) => routeRefusesNonAgentCalls(new URL(file, url), srcRoot, cache))
+      .map((file) => `/api/${file.slice(0, -"/route.ts".length)}`));
+  }
+  return AGENT_ONLY_CACHE.get(url.href).slice();
+}
+const AGENT_ONLY_API = agentOnlyRoutes().map(routePattern);
+export function agentOnlyPath(apiPath) {
+  if (typeof apiPath !== "string" || !apiPath.startsWith("/") || apiPath.startsWith("//")) return false;
+  try {
+    const pathname = new URL(apiPath, "http://localhost").pathname;
+    return AGENT_ONLY_API.some((route) => route.test(pathname));
+  } catch { return false; }
 }
 function actionAuth(action) {
   const auth = action.auth == null ? "" : String(action.auth).trim().toLowerCase();
@@ -877,8 +1043,8 @@ async function perform(page, action, base, projectId, navigations, taskId, beare
   if (action.op === "api") return callApi(page, action, base, projectId, taskId, bearer, archivedProjectId, agentBearer);
   throw new Error("not actionable");
 }
-function agentRetryAllowed(action, status, agentBearer) {
-  return Boolean(agentBearer) && action.auth == null && action.expectStatus !== 401 && action.expectStatus !== 403 && (status === 401 || status === 403);
+function agentRetryAllowed(action, status, raw, pathname, agentBearer) {
+  return Boolean(agentBearer) && action.auth == null && action.expectStatus !== 401 && action.expectStatus !== 403 && (status === 401 || status === 403) && (/agent token/i.test(raw) || agentOnlyPath(pathname));
 }
 async function callApi(page, action, base, projectId, taskId, bearer, archivedProjectId, agentBearer) {
   const target = fillApiPath(action.path, projectId, taskId, base);
@@ -894,7 +1060,7 @@ async function callApi(page, action, base, projectId, taskId, bearer, archivedPr
   };
   const sentToken = action.auth === "agent" ? agentBearer : mcp ? bearer : "";
   let { status, raw } = await send(sentToken);
-  if (mcp && agentRetryAllowed(action, status, agentBearer) && sentToken !== agentBearer) ({ status, raw } = await send(agentBearer));
+  if (mcp && agentRetryAllowed(action, status, raw, target.pathname, agentBearer) && sentToken !== agentBearer) ({ status, raw } = await send(agentBearer));
   if (status !== action.expectStatus) throw new Error(`api status ${status}`);
   if (!raw.includes(action.expectText)) throw new Error("response text missing");
   const at = raw.indexOf(action.expectText);
