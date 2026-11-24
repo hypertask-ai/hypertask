@@ -100,16 +100,16 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
   const first = await sample(), elMap = new Map<string, MeasuredElement>(), tfMap = new Map<string, MeasuredTextField>(), pMap = new Map<string, MeasuredPurple>(), rList: MobileScreenMetrics['radii'] = [], cList: MobileScreenMetrics['clips'] = [], elSigs = new Set<string>(), tfSigs = new Set<string>(), rSigs = new Set<string>(), cSigs = new Set<string>()
   const merge = (s: MobileScreenMetrics) => { for (const e of s.elements) { const sg = elSig(e); if (!elMap.has(e.key) && !elSigs.has(sg)) { elMap.set(e.key, e); elSigs.add(sg) } } for (const t of s.textFields) { const sg = tfSig(t); if (!tfMap.has(t.key) && !tfSigs.has(sg)) { tfMap.set(t.key, t); tfSigs.add(sg) } } for (const p of s.purple) if (!pMap.has(p.key)) pMap.set(p.key, p); for (const r of s.radii) { const sg = `${r.key || ''}|${r.stableId || r.label}|${r.radius}`; if (!rSigs.has(sg)) { rSigs.add(sg); rList.push(r) } } for (const c of s.clips) { const sg = `${c.key || ''}|${c.stableId || c.label}|${c.scrollW}x${c.clientW}`; if (!cSigs.has(sg)) { cSigs.add(sg); cList.push(c) } } }
   merge(first); let maxOverflow = first.docOverflowX
+  const scrollTargets = () => page.evaluate(() => (([document.scrollingElement, ...Array.from(document.querySelectorAll('*'))] as Array<Element | null>).filter((e): e is HTMLElement => e instanceof HTMLElement && ['auto', 'scroll'].includes(getComputedStyle(e).overflowY) && e.scrollHeight - e.clientHeight > 40)).length)
   const scrollStep = (index: number, frac: number) => page.evaluate(({ i, f }: { i: number; f: number }) => {
     const sc = ([document.scrollingElement, ...Array.from(document.querySelectorAll('*'))] as Array<Element | null>).filter((e): e is HTMLElement => e instanceof HTMLElement && ['auto', 'scroll'].includes(getComputedStyle(e).overflowY) && e.scrollHeight - e.clientHeight > 40)[i]
     if (!sc) return null
-    const before = sc.scrollTop; if (f > 0) sc.scrollTop = Math.min(sc.scrollHeight - sc.clientHeight, Math.round(sc.clientHeight * 0.8 * f))
+    const before = sc.scrollTop; if (f > 0) sc.scrollTop = Math.min(sc.scrollHeight - sc.clientHeight, Math.round(sc.clientHeight * 0.9 * f))
     return { moved: Math.abs(sc.scrollTop - before) > 2 }
   }, { i: index, f: frac })
-  let samples = 0
-  for (let index = 0; index < 12 && samples < 48; index++) {
-    if (!(await scrollStep(index, 0))) break
-    for (let frac = 1; samples < 48; frac++) {
+  const scrollers = await scrollTargets(); let samples = 0
+  for (let index = 0; index < scrollers && samples < 24; index++) {
+    for (let frac = 1; samples < 24; frac++) {
       const step = await scrollStep(index, frac); if (!step?.moved) break
       await page.waitForTimeout(150); const next = await sample(); maxOverflow = Math.max(maxOverflow, next.docOverflowX); merge(next); samples++
     }
