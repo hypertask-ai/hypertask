@@ -8,7 +8,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { ReadOnlySection } from "./section";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { useRouter } from "next/navigation";
-import { GuestInviteBar } from "@/components/PageComponents/TaskDetail/SharedTask/Footer/Footer";
 
 const ReadOnlyKanban = ({ project, inviteKey }: { project: IProject, inviteKey: string }) => {
   const [__, setRecoilCurrentProject] = useRecoilState(currentProjectAtom);
@@ -86,7 +85,7 @@ const ReadOnlyKanban = ({ project, inviteKey }: { project: IProject, inviteKey: 
         <div
           ref={kanbanContainerRef}
           id="kanban-sections-container"
-          className={`bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center ${_mbl ? "pb-32" : ""}`}
+          className="bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center"
         >
           <div
             id="sectionsContainer"
@@ -113,14 +112,6 @@ const ReadOnlyKanban = ({ project, inviteKey }: { project: IProject, inviteKey: 
             ))}
           </div>
         </div>
-        {_mbl && (
-          <div
-            translate="no"
-            className="fixed inset-x-0 bottom-0 z-[5001] flex items-center justify-center border-t-[1px] border-t-black bg-containerBackground py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]"
-          >
-            <GuestInviteBar onAction={routeToInvitePage} />
-          </div>
-        )}
       </div>
     </>
   );

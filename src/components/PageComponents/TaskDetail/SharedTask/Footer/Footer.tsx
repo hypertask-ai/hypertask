@@ -32,9 +32,9 @@ export const GuestInviteBar = ({
           : "flex items-center gap-2"
       }
     >
-      <p className="text-content text-[#8E9093]">{GUEST_INVITE_MESSAGE}</p>
+      <p className="text-content text-text-light-gray">{GUEST_INVITE_MESSAGE}</p>
       <div
-        className="flex shrink-0 items-center justify-center whitespace-nowrap border-2 border-border-active-modal-element rounded cursor-pointer text-content bg-inherit hover:bg-active-modal-element px-2 py-1 font-medium text-[#8E9093] hover:text-white"
+        className="flex shrink-0 items-center justify-center whitespace-nowrap border-2 border-border-active-modal-element rounded cursor-pointer text-content bg-inherit hover:bg-active-modal-element px-2 py-1 font-medium text-text-light-gray hover:text-white"
         onClick={onAction}
       >
         {GUEST_INVITE_ACTION}

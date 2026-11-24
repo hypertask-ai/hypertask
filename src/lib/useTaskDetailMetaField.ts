@@ -17,7 +17,7 @@ export function useTaskDetailMetaField(field: keyof TaskDetailMeta, queryKey: an
       return meta[field];
     } : queryFn,
     initialData: dedupe ? (field === "priority" || field === "estimate" ? initialData : undefined) : initialData ?? (field === "priority" ? null : []),
-    enabled: dedupe && !!taskId,
+    ...(dedupe ? { enabled: !!taskId } : {}),
     ...(dedupe ? { placeholderData: field === "labels" || field === "followers" ? [] : undefined, refetchOnMount: shouldRefetchDetailOnMount } : {}),
     ...(hydrated ? {} : { queryKey: [...queryKey, "hydrating"], enabled: false }),
   });
