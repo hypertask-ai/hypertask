@@ -84,7 +84,7 @@ for (const identifiers of [
     assert.equal(result.navigation_emitted, true);
     assert.deepEqual(h.events, [{ event: "open_task", data: { projectId: 15, uniqueIndex: 7755 } }]);
     assert.deepEqual(h.queries[0].where.project, h.access);
-    assert.deepEqual(h.flags, [[flag, user.id]]);
+    assert.deepEqual(h.flags, [[flag, user.id], ["htpr-9542-moved-ticket-old-key", user.id]]);
     const client = await consume([
       ...h.events,
       { event: "content", data: { content: "Opened: HTPR-7755" } },
@@ -124,7 +124,7 @@ for (const enabled of [true, false]) {
     assert.deepEqual(result.tasks, [task]);
     assert.equal(Object.hasOwn(result, "navigation_emitted"), false);
     assert.deepEqual(h.events, []);
-    assert.deepEqual(h.flags, []);
+    assert.deepEqual(h.flags, [["htpr-9542-moved-ticket-old-key", user.id]]);
   });
 }
 

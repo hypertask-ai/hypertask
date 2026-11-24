@@ -14,6 +14,8 @@ import {
 } from "@/utils/controllers/tasks/getSharedTask";
 import SharedTaskDetailComp from "./SharedTaskDetailComp";
 import SharedTaskPageFooter from "@/components/PageComponents/TaskDetail/SharedTask/Footer/Footer";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9546-share-footer-layout";
 import { IUser } from "@/models/model";
 
 export async function generateMetadata(props: any): Promise<Metadata> {
@@ -88,6 +90,11 @@ export default async function Page(
     }
   }
 
+  const stackedFooter = await isFeatureEnabled(
+    HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG,
+    user?.id ?? 0
+  );
+
   if (sharedTask.shareType === "Domain") {
     return (
       <SharedTaskPageFooter
@@ -96,6 +103,7 @@ export default async function Page(
         sharedUserEmail={sharedTask.user.email}
         checkBoardMember={checkBoardMember}
         user={user}
+        stackedOnPhone={stackedFooter}
       >
         <main translate="no" />
       </SharedTaskPageFooter>
@@ -115,6 +123,7 @@ export default async function Page(
         sharedUserEmail={sharedTask.user.email}
         checkBoardMember={checkBoardMember}
         user={user}
+        stackedOnPhone={stackedFooter}
       >
         <main translate="no">
           <Suspense fallback={<>Loading...</>}>
