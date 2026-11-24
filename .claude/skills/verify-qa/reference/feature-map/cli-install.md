@@ -7,8 +7,8 @@
 
 ## How to get to it (user POV)
 
-- Settings, Connect, CLI: `https://app.hypertask.ai/settings/cli` (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`).
-- Command menu "Install CLI" opens `CliInstallModal` (`#cliInstallModal`).
+- Open `https://app.hypertask.ai/settings/cli` by URL (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`). The page has no `Install CLI` button. It shows the Install card with the install command, the Sign In card with the login command, and the `Read the CLI docs` link.
+- `Install CLI` is a Ctrl+K command-menu row only. Press Ctrl+K, type `install cli`, press Enter, and `CliInstallModal` (`#cliInstallModal`) opens with the title `Hypertask CLI`. A click on `Install CLI` anywhere on `/settings/cli` has no target.
 - Onboarding "connect your agent" step email and the guest demo board's CLI task (`completeOnboardingStep.ts`, `guestSeedTasks.ts`) print the same install command, but the onboarding text still tells the reader bare `hypertask login` does not sign in and prescribes `hypertask login --token <agent token>`. The Settings page and the modal both say `hypertask login` opens the browser to authorize; that is the shipped path today.
 - `https://app.hypertask.ai/llms.txt` for AI agents: `curl -fsSL https://hypertask.ai/install | sh`, then `hypertask login`, plus the PowerShell line.
 - After install the CLI signs in with `hypertask login` (browser authorize) or `hypertask login --token <agent token>` for agents; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).

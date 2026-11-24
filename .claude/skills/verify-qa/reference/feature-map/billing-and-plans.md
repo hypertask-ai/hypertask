@@ -20,7 +20,8 @@
 
 ## How to get to it (user POV)
 
-- Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`). A read-only check of this page is: open it, read the `Billing` heading and the `Plan` row, and take a shot. The heading and the `Plan` row show at 1440x900 and at 390x844 alike.
+- Open `/settings/billing` by URL. Inside the settings shell Billing is a row under the `Team` tab, so a `Billing` click before the `Team` click does nothing; the URL is the reliable path. A read-only check of this page is: open the URL, read the `Billing` heading and the `Plan`, `Seats`, `Billing cycle`, `Renewal`, `Next invoice` and `Invoice total` rows, and take a shot. All of those show at 1440x900 and at 390x844 alike.
+- The seeded QA team is Free and not comped, so on that account `Billing cycle`, `Renewal`, `Next invoice` and `Invoice total` read `Free Plan` with `htpr-9529-comped-pro-billing` on or off. With the flag on, the same four rows read `Complimentary` for a comped team: the Pro and Comped team and the BYOK team in the table below, and the internal team named in `src/lib/internalCompTeams.ts`. Seeing `Complimentary` needs that comped account; the Free seed shows `Free Plan` either way.
 - Plans is its own sidebar entry at `/settings/plans`, not the Manage subscription row. On phone the settings sidebar is hidden, so open `/settings/plans` by URL. `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
 - `Manage` on the Manage subscription row and Update under Billing > Payment both open the Stripe customer portal and leave the app, so a read-only check presses neither. The portal card is titled **Payment**
   and its row shows the saved card (`src/components/Modals/Settings/BillingSection.tsx:401-413`).
