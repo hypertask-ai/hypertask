@@ -282,7 +282,7 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
     : DEFAULT_FEATURE_FLAG_MODE);
 }
 
-const flagModeLookups = new Map<"agent" | "human", { generation: number; promise: Promise<RawFlagMode[] | null> }>();
+const flagModeLookups = new Map<"agent" | "cli" | "human", { generation: number; promise: Promise<RawFlagMode[] | null> }>();
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const {
@@ -292,6 +292,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
     FLAG_SNAPSHOT_MAX_AGE_MS,
     flagCacheCommand,
     flagCacheGeneration,
+    flagCacheSkipsUpstash,
     flagModeScope,
     readProcessFlagCache,
     storeProcessFlagCache,
@@ -306,7 +307,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const startedAt = Date.now();
   const read = async (): Promise<RawFlagMode[] | null> => {
     try {
-      if (audience === "agent") {
+      if (flagCacheSkipsUpstash(audience)) {
         const rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
         const mode = rows.find(({ key }) => key === HTPR_7042_NEON_WORK_AVOIDANCE_FLAG)?.mode
           ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);

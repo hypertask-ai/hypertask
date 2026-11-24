@@ -16,6 +16,7 @@ function load(file, mocks) {
   } }).outputText;
   new Function("require", "module", "exports", js)((name) => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if (name === "@/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches") return { HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG: "htpr-9245-chat-waits-for-saved-switches" };
     assert.ok(name.startsWith("react"), `unmocked dependency: ${name}`);
     return require(name);
   }, loadedModule, loadedModule.exports);

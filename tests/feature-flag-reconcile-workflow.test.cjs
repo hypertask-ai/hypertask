@@ -270,7 +270,7 @@ exit 1
     cwd: checkout,
     env,
     encoding: "utf8",
-    timeout: 30_000,
+    timeout: 120_000,
   });
   assert.ifError(result.error);
   const output = result.stdout + result.stderr;

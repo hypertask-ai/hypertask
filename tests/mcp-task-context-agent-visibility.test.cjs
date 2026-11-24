@@ -89,6 +89,9 @@ function loadRoute(comments) {
 
       isFeatureEnabled: async () => false,
     },
+    "@/lib/mcp/tasks/previousTicketNumbers": {
+      nameMovedTicketKeys: async (_userId, tasks) => tasks,
+    },
     "@/lib/flags/definitions/htpr-8896-skip-taken-work": {
       HTPR_8896_SKIP_TAKEN_WORK_FLAG: "htpr-8896-skip-taken-work",
     },

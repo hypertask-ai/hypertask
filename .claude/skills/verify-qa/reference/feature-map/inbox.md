@@ -257,8 +257,9 @@ Flag off retains the previous global checkbox behavior.
 ### AI inbox triage command
 
 With `htpr-8044-triage-inbox` and `htpr-8045-inbox-batches` on, press
-Ctrl+K, search **Triage inbox**, then select it. A fresh full-screen human chat opens
+Ctrl+K, search **Triage inbox**, then press Enter in the palette field. A fresh full-screen human chat opens
 with the triage request; an agent-selected conversation is never reused. No new panel or archive engine is involved.
+Enter from the palette field must never open the highlighted inbox ticket; a click on the row also opens the chat.
 
 Use a clean QA chat composer. Seed more than 100 QA-only notifications,
 including pure agent updates and a question/reminder that must stay. Require
