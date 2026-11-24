@@ -11,16 +11,17 @@ export function extractLegacyKey(row) {
 }
 export async function run(db, { apply = false, mapping = [] } = {}, log = console.log) {
   const blanks = (await db.query(BLANK_ALIAS_SQL)).rows, moveGaps = (await db.query(MOVE_ACTIVITY_GAPS_SQL)).rows;
-  const candidates = [...moveGaps.map(extractLegacyKey).filter(Boolean), ...mapping];
-  log(`${blanks.length} blank aliases; ${moveGaps.length} move gaps; ${candidates.length} inserts ready`);
-  if (!apply) { log("dry run; pass --apply to write"); return { blanks: blanks.length, moveGaps: moveGaps.length, candidates: candidates.length, updated: 0, inserted: 0 }; }
+  const derived = moveGaps.map(extractLegacyKey).filter(Boolean), candidates = [...derived, ...mapping];
+  const needsMapping = moveGaps.length - derived.length;
+  log(`${blanks.length} blank aliases; ${moveGaps.length} move gaps; ${needsMapping} gaps have no recorded key and need --mapping; ${candidates.length} inserts ready`);
+  if (!apply) { log("dry run; pass --apply to write"); return { blanks: blanks.length, moveGaps: moveGaps.length, needsMapping, candidates: candidates.length, updated: 0, inserted: 0 }; }
   await db.query("BEGIN");
   try {
     const updated = blanks.length ? (await db.query(FILL_BLANK_ALIAS_SQL)).rowCount ?? 0 : 0;
     let inserted = 0;
     for (const r of candidates) inserted += (await db.query(INSERT_ALIAS_SQL, [r.projectId, r.uniqueIndex, r.ticketNumber, r.taskId])).rowCount ?? 0;
     await db.query("COMMIT");
-    return { blanks: blanks.length, moveGaps: moveGaps.length, candidates: candidates.length, updated, inserted };
+    return { blanks: blanks.length, moveGaps: moveGaps.length, needsMapping, candidates: candidates.length, updated, inserted };
   } catch (error) { await db.query("ROLLBACK"); throw error; }
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

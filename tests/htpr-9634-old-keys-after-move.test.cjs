@@ -69,6 +69,11 @@ test("fresh number after move, live-wins collision notice with access check, and
   const getRes = await col.mcpGet(col.req({ ticket_number: "SOFT-3148" }));
   assert.deepEqual([getRes.body.tasks[0].id, getRes.body.reusedKeyCollisions[0].movedTaskId, (await col.getTask("project-2060", "3148", { id: 6 })).json.reusedKeyCollision.movedTaskId, (await harness({ visibleProjects: [2060], tasks: [movedTask, reusedLive] }).mcpGet(col.req({ ticket_number: "SOFT-3148" }))).body.reusedKeyCollisions], [6000, 5000, 5000, undefined]);
   const { run } = await import("../scripts/htpr-9634-backfill-move-aliases.mjs"), queries = [];
-  const db = { query: async (sql, params) => { queries.push({ sql, params }); if (sql.includes("WHERE (a.\"ticketNumber\"")) return { rows: [{ id: 1 }] }; if (sql.includes("TaskMove")) return { rows: [{ taskId: 5000, fromProjectId: 2060, fromPrefix: "SOFT", commentText: "Moved SOFT-3148" }] }; return { rows: [], rowCount: 1 }; } };
-  assert.deepEqual([await run(db, {}, () => {}), queries.length, await run(db, { apply: true }, () => {})], [{ blanks: 1, moveGaps: 1, candidates: 1, updated: 0, inserted: 0 }, 2, { blanks: 1, moveGaps: 1, candidates: 1, updated: 1, inserted: 1 }]);
+  const moved = { taskId: 5000, fromProjectId: 2060, fromPrefix: "SOFT", commentText: "" };
+  const db = { query: async (sql, params) => { queries.push({ sql, params }); if (sql.includes("WHERE (a.\"ticketNumber\"")) return { rows: [{ id: 1 }] }; if (sql.includes("TaskMove")) return { rows: [moved] }; return { rows: [], rowCount: 1 }; } };
+  const mapping = [{ projectId: 2060, uniqueIndex: 3148, ticketNumber: "SOFT-3148", taskId: 5000 }];
+  assert.deepEqual(
+    [await run(db, {}, () => {}), queries.length, await run(db, { apply: true, mapping }, () => {}), await run({ query: async (sql) => (sql.includes("TaskMove") ? { rows: [{ ...moved, commentText: "Moved SOFT-3148" }] } : { rows: [], rowCount: 1 }) }, {}, () => {})],
+    [{ blanks: 1, moveGaps: 1, needsMapping: 1, candidates: 0, updated: 0, inserted: 0 }, 2, { blanks: 1, moveGaps: 1, needsMapping: 1, candidates: 1, updated: 1, inserted: 1 }, { blanks: 0, moveGaps: 1, needsMapping: 0, candidates: 1, updated: 0, inserted: 0 }],
+  );
 });
