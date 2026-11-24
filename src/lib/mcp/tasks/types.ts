@@ -19,6 +19,7 @@ export interface TaskDetail {
     waitingOnAgent?: { id: string; displayName: string | null; photoURL: string | null } | null;
     waitingOnSetAt?: string | null;
     ticketNumber?: string;
+    previousTicketNumbers?: string[];
     title: string;
     description: string;
     descriptionJson?: unknown;
