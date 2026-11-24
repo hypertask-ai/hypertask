@@ -31,6 +31,22 @@ function loadMove({
   const membership = onBoard
     ? { projectId: FOREIGN_BOARD, agentId: "agent-a", status: membershipStatus, revokedAt: null }
     : null;
+  const boardMatches = (where = {}) => {
+    if (typeof where.id === "number" && where.id !== FOREIGN_BOARD) return false;
+    if (Array.isArray(where.id?.in) && !where.id.in.includes(FOREIGN_BOARD)) return false;
+    if (Array.isArray(where.status?.in) && !where.status.in.includes(projectStatus)) return false;
+    if (where.AND && !where.AND.every(boardMatches)) return false;
+    if (where.OR && !where.OR.some(boardMatches)) return false;
+    if (where.members?.some) {
+      const some = where.members.some;
+      return Boolean(
+        membership &&
+        membership.revokedAt == null &&
+        (some.agentId == null || some.agentId === membership.agentId),
+      );
+    }
+    return true;
+  };
   const route = load("src/lib/mcp/operations/tasks/move/operation.ts", {
     "next/server": { NextResponse, NextRequest: class {} },
     "@/lib/planLimits": {
@@ -59,12 +75,7 @@ function loadMove({
         },
         project: {
           findFirst: async ({ where } = {}) => {
-            if (!projectExists) return null;
-            for (const condition of [where, ...(where?.AND ?? [])]) {
-              if (typeof condition.id === "number" && condition.id !== FOREIGN_BOARD) return null;
-              if (Array.isArray(condition.id?.in) && !condition.id.in.includes(FOREIGN_BOARD)) return null;
-              if (Array.isArray(condition.status?.in) && !condition.status.in.includes(projectStatus)) return null;
-            }
+            if (!projectExists || !boardMatches(where)) return null;
             return { id: FOREIGN_BOARD, status: projectStatus };
           },
         },
@@ -186,6 +197,19 @@ test("a board the requester cannot see is refused without the membership message
   assert.equal(calls.access, 1);
   assert.deepEqual(calls.boardAccess, []);
   assert.deepEqual(calls.flags, []);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("an invited membership still blocks a move onto a board the requester cannot see", async () => {
+  const { status, body, calls } = await move({
+    requesterSeesBoard: false,
+    onBoard: true,
+    membershipStatus: "Invited",
+    guidance: true,
+  });
+  assert.equal(status, 403);
+  assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
+  assert.equal(calls.access, 0);
   assert.deepEqual(calls.moved, []);
 });
 

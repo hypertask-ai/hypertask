@@ -235,7 +235,16 @@ export async function POST(request: NextRequest) {
             where: {
               AND: [
                 { id: target_project_id, status: { in: ["Normal", "Archive"] } },
-                projectContentAccessWhere(user.id),
+                {
+                  OR: [
+                    projectContentAccessWhere(user.id),
+                    {
+                      members: {
+                        some: { agentId: ctx.agentId, agent: { userId: user.id, revokedAt: null } },
+                      },
+                    },
+                  ],
+                },
               ],
             },
             select: { id: true },
