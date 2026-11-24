@@ -213,6 +213,9 @@ function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents =
     if (request === '@/lib/mcp/listParams') {
       return listParams
     }
+    if (request === '@/lib/mcp/tasks/previousTicketNumbers') {
+      return { nameMovedTicketKeys: async (_userId, tasks) => tasks }
+    }
     throw new Error(`Unexpected import: ${request}`)
   }
 

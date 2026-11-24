@@ -11,6 +11,8 @@ const { validateTaskUpdateFields } = load('src/lib/mcp/tasks/fields/validateFiel
   '@/lib/mcp/tasks/contractFields': {},
   '@/lib/mcp/tasks/updateFields': { hasSingleTaskUpdate: () => false },
   '@/lib/pullRequests/githubPullRequests': {},
+  '@/lib/flags': { isFeatureEnabled: async () => false },
+  '@/lib/flags/definitions/htpr-9276-unlink-pull-request': { HTPR_9276_UNLINK_PULL_REQUEST_FLAG: 'htpr-9276-unlink-pull-request' },
 });
 const body = { ticket_number: 'YPER4-894', sectionId: 30,
   expected_section_id: 20, expected_updated_at: '2026-10-28T10:00:00.000Z' };

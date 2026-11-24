@@ -9,7 +9,9 @@
 #                                closed as outdated, and the ticket carries a comment opening "Resolved without a change:" that
 #                                links that PR. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
-#                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
+#                                with evidence (an https URL or a <pre>/<code> block) and a Control: line naming a search or a drive that found
+#                                the fault on a known bad build. The search or the drive is what found it, and the bad build is where that happened. The thing found is the fault, an error, a match, a hit, or the same kind of defect.
+#                                A zero result does not count, and neither does a denial such as "not found" or "never found". No open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     test click removed for every PR (hookless sessions)
@@ -23,7 +25,7 @@
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
-#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
+#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge, including a Leftovers line
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       only this session's recorded branches and worktrees are gone
 #   ship-check move <T> <section> [project] [destination]  enforce completion before a board section write
@@ -317,19 +319,36 @@ nochange_origin_branches() {
 # "Resolved without a change:" and carries evidence in that same comment: an https URL, or a <pre>/<code>
 # block whose visible inner text is not blank. Returns 2 when the comments cannot be read.
 resolution_comment() {
-  local t=$1 repo=${2:-} pr=${3:-} cmts
+  local t=$1 repo=${2:-} pr=${3:-} control=${4:-} cmts
   cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || return 2
-  jq -e --arg repo "$repo" --arg pr "$pr" '
+  jq -e --arg repo "$repo" --arg pr "$pr" --arg control "$control" '
+    def visible:
+      gsub("(?i)</p>|<br[[:space:]]*/?>|</li>|</div>|</h[1-6]>|</pre>|</code>"; "\n")
+      | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; " ");
+    def control_ok:
+      [ visible | scan("(?im)^[ \\t]*control:[ \\t]*(.*)$") | .[0] | select(test("\\S")) ] as $lines
+      | ($lines | length) > 0
+      and any($lines[];
+          test("(?i)\\b(search|drive)\\b(?:[ \\t]+[A-Za-z0-9][A-Za-z0-9._:-]*){0,12}[ \\t]+found\\b(?:[ \\t]+(?:the|a|an|this|that|same|old|known|reported|original|exact|failing|broken|thrown|missing|wrong|expected|[1-9][0-9]*|one|two|three|four|five|six|seven|eight|nine|ten|several|many|some))*[ \\t]+(faults?|errors?|matches?|hits?|defects?|bugs?|failures?|exceptions?|regressions?)\\b(?:[ \\t]+[A-Za-z0-9][A-Za-z0-9._:-]*){0,12}[ \\t]+(?:on|in|at|from|during)[ \\t]+(?:the[ \\t]+)?(?:(?:known[ \\t-]+bad|bad|previous|prior|old|earlier)[ \\t]+build\\b|build[ \\t]+before\\b|build[ \\t]+[A-Za-z0-9][A-Za-z0-9._:-]*[0-9][A-Za-z0-9._:-]*)")
+          and (test("(?i)\\bfound[ \\t]+(0|zero|no|none|nothing)\\b") | not)
+          and (test("(?i)\\b(0|zero)[ \\t]+(old[ \\t]+)?(errors?|faults?|hits?|matches?)\\b") | not)
+          and (test("(?i)\\b(?:not|never|hasn.t|haven.t|hadn.t|isn.t|aren.t|wasn.t|weren.t|didn.t|cannot|can.t|couldn.t)(?:[ \\t]+\\w+){0,1}[ \\t]+f(?:ound|ind)\\b") | not)
+          and (test("(?i)\\bno[ \\t]+(fault|error|errors|match|matches|hit|hits)\\b") | not));
     ($repo | gsub("\\."; "\\.")) as $r
     | .comments | any(.[]; (.text // "") as $x
       | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
       and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
         or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
              | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0))
+      and ($control == "" or ($x | control_ok))
       and ($pr == "" or ($x | test("github\\.com/" + $r + "/pull/" + $pr + "([^0-9]|$)"))))' >/dev/null <<<"$cmts"
 }
 
 resolution_comment_reason() {
+  if [ -n "${2:-}" ]; then
+    echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output) and a Control line naming a search or a drive that found the fault on a known bad build"
+    return
+  fi
   echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"
 }
 
@@ -339,9 +358,9 @@ nochange_verify() {
   if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
     echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
   fi
-  resolution_comment "$t"; rc=$?
+  resolution_comment "$t" "" "" control; rc=$?
   [ "$rc" = 2 ] && { echo "cannot read comments of $t"; return 1; }
-  [ "$rc" = 0 ] || { resolution_comment_reason "$t"; return 1; }
+  [ "$rc" = 0 ] || { resolution_comment_reason "$t" control; return 1; }
   open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
     || { echo "cannot read open PRs of $REPO"; return 1; }
   if jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open"; then echo "$t has an open PR; use the normal path"; return 1; fi
@@ -778,7 +797,7 @@ newest_successful_production_sha() {
 }
 
 check_proof() {
-  local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
+  local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0 leftovers
   dropped_ok proof "$1" && return 0
   elsewhere_ok proof "$1" && return 0
   nochange_ok proof "$1" && return 0
@@ -801,6 +820,11 @@ check_proof() {
   done < <(grep -E '^[[:space:]]*- PASS:' "$p")
   [ "$n" -gt 0 ] || fail "proof.md has no '- PASS: <case> -> <evidence file>' line"
   [ -n "$(find "$d/$run" -name '*.png' -size +0 -print -quit)" ] || fail "no screenshot (*.png) in $d/$run"
+  grep -qE '^[[:space:]]*Leftovers:' "$p" \
+    || fail "proof.md has no 'Leftovers:' line; write 'Leftovers: none', or list what the test left behind"
+  leftovers=$(sed -nE 's/^[[:space:]]*Leftovers:[[:space:]]*//p' "$p" | head -1)
+  leftovers=${leftovers%"${leftovers##*[![:space:]]}"}
+  [ -n "$leftovers" ] || fail "proof.md 'Leftovers:' line is empty; write none, or list what the test left behind"
   echo "proof ok"
 }
 

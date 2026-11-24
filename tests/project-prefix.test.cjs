@@ -47,6 +47,13 @@ function load(file, stubs = {}) {
     if (request === "@/utils/controllers/notifications/inboxZero") {
       return { loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])) };
     }
+    if (request === "@/lib/mcp/tasks/previousTicketNumbers") {
+      return {
+        previousTicketNumbersFor: async () => undefined,
+        withPreviousTicketNumbers: (task) => task,
+        nameMovedTicketKeys: async (_userId, tasks) => tasks,
+      };
+    }
     if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
   };
