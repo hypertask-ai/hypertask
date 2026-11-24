@@ -179,7 +179,7 @@ test("the sign-out still asks the server, so the HttpOnly cookies go, even with 
     global.localStorage = { clear: () => { storageCleared = true; } };
     global.window = {
       document: oldWindow.document,
-      location: { get href() { return "https://app.hypertask.ai/signout"; }, set href() { throw new Error("this page must not navigate"); } },
+      location: { get href() { return "https://app.hypertask.ai/signout"; }, set href(value) { throw new Error(`this page must not navigate: ${value}`); } },
     };
     try {
       const load = loader({

@@ -25,11 +25,28 @@ function loadMove({
   ownerCanRequest = true,
   boardTeamId = "team-a",
   teamScope = null,
+  requesterSeesBoard = true,
 } = {}) {
   const calls = { moved: [], flags: [], access: 0, boardAccess: [] };
   const membership = onBoard
     ? { projectId: FOREIGN_BOARD, agentId: "agent-a", status: membershipStatus, revokedAt: null }
     : null;
+  const boardMatches = (where = {}) => {
+    if (typeof where.id === "number" && where.id !== FOREIGN_BOARD) return false;
+    if (Array.isArray(where.id?.in) && !where.id.in.includes(FOREIGN_BOARD)) return false;
+    if (Array.isArray(where.status?.in) && !where.status.in.includes(projectStatus)) return false;
+    if (where.AND && !where.AND.every(boardMatches)) return false;
+    if (where.OR && !where.OR.some(boardMatches)) return false;
+    if (where.members?.some) {
+      const some = where.members.some;
+      return Boolean(
+        membership &&
+        membership.revokedAt == null &&
+        (some.agentId == null || some.agentId === membership.agentId),
+      );
+    }
+    return true;
+  };
   const route = load("src/lib/mcp/operations/tasks/move/operation.ts", {
     "next/server": { NextResponse, NextRequest: class {} },
     "@/lib/planLimits": {
@@ -58,10 +75,7 @@ function loadMove({
         },
         project: {
           findFirst: async ({ where } = {}) => {
-            if (!projectExists) return null;
-            if (where.id != null && where.id !== FOREIGN_BOARD) return null;
-            const allowed = where.status?.in;
-            if (Array.isArray(allowed) && !allowed.includes(projectStatus)) return null;
+            if (!projectExists || !boardMatches(where)) return null;
             return { id: FOREIGN_BOARD, status: projectStatus };
           },
         },
@@ -90,7 +104,10 @@ function loadMove({
         return { success: true, task: { id: params.taskId, projectId: params.targetProjectId } };
       },
     },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: () => ({}),
+      projectContentAccessWhere: () => (requesterSeesBoard ? {} : { id: { in: [] } }),
+    },
     "@/lib/mcp/tasks/services": {
       validateProjectAccess: async () => {
         calls.access += 1;
@@ -168,6 +185,31 @@ test("a board outside the agent team is still refused, without the access-reques
   assert.equal(status, 403);
   assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
   assert.deepEqual(calls.boardAccess, [{ projectId: 15, userId: 6, actingAgentId: null, teamScope }]);
+  assert.deepEqual(calls.flags, []);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("a board the requester cannot see is refused without the membership message", async () => {
+  const denied = { status: 403, message: "User does not have permission to create tasks in this project" };
+  const { status, body, calls } = await move({ requesterSeesBoard: false, guidance: true, accessError: denied });
+  assert.equal(status, 403);
+  assert.equal(body.error, denied.message);
+  assert.equal(calls.access, 1);
+  assert.deepEqual(calls.boardAccess, []);
+  assert.deepEqual(calls.flags, []);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("an invited membership still blocks a move onto a board the requester cannot see", async () => {
+  const { status, body, calls } = await move({
+    requesterSeesBoard: false,
+    onBoard: true,
+    membershipStatus: "Invited",
+    ownerCanRequest: false,
+  });
+  assert.equal(status, 403);
+  assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
+  assert.equal(calls.access, 0);
   assert.deepEqual(calls.flags, []);
   assert.deepEqual(calls.moved, []);
 });
