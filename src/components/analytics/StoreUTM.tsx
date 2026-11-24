@@ -7,8 +7,6 @@ import {
   extractUTMFromURL, 
   storeUTMInCookies, 
   getUTMDataFromCookies,
-  fetchIPAddress,
-  getTargetUrl
 } from "@/lib/utils/utm/client";
 
 const UTMCookieHandler = () => {
@@ -17,18 +15,6 @@ const UTMCookieHandler = () => {
       const utmParams = extractUTMFromURL();
       
       const existingData = getUTMDataFromCookies() || {};
-      
-      
-      if (!existingData.ip) {
-        try {
-          const ip = await fetchIPAddress();
-          if (ip) {
-            utmParams.ip = ip;
-          }
-        } catch (error) {
-          console.warn("Failed to fetch IP address:", error);
-        }
-      }
 
       if (!existingData.userAgent && typeof navigator !== 'undefined' && navigator.userAgent) {
         utmParams.userAgent = navigator.userAgent;

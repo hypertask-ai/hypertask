@@ -18,12 +18,15 @@ export default async function Page() {
   const loading = keepShell ? <CalendarLoadingShell currentUser={userObj} /> : undefined;
 
   return (
-    <Suspense fallback={loading ?? <>Loading...</>}>
-      <CalendarHydrationBoundary fallback={loading}>
-        <CalendarProvider accountId={userObj.id}>
-          <CalenderView currentUser={userObj} />
-        </CalendarProvider>
-      </CalendarHydrationBoundary>
-    </Suspense>
+    <>
+      <h1 className="sr-only">Calendar</h1>
+      <Suspense fallback={loading ?? <>Loading...</>}>
+        <CalendarHydrationBoundary fallback={loading}>
+          <CalendarProvider accountId={userObj.id}>
+            <CalenderView currentUser={userObj} />
+          </CalendarProvider>
+        </CalendarHydrationBoundary>
+      </Suspense>
+    </>
   );
 }
