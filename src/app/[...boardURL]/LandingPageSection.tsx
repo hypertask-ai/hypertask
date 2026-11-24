@@ -46,7 +46,7 @@ export const useLandingSection = ({
   const {
   markBoardUsable, releaseSecondaryStartup, secondaryStartupEnabled, projects, setShowBoardManager,
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
-  setRecoilCurrentProject, sections, setShowTrial, showTrial, activeBuiltinViews, blockedRuleText,
+  setRecoilCurrentProject, sections, setShowTrial, showTrial, activeBuiltinViews,
   filteredSectionsForActiveView, favorites, setFavorites, setHasHorizontalScrollbar, kanbanContainerRef,
   restoredScrollForProject, restoringScroll, readinessFrameRef, readinessPaintFrameRef, readinessEntryKey,
   readinessCompletionRef,
@@ -196,7 +196,7 @@ const debouncedHandleBoardChange = useMemo(
 );
   return {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
-  sections, setShowTrial, showTrial, activeBuiltinViews, blockedRuleText, filteredSectionsForActiveView,
+  sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
   kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
   _currentUser, _activeSortingMode,
   };

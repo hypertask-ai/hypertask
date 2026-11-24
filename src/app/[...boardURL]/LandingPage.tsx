@@ -65,6 +65,7 @@ import NoBoardsEmptyState from "./NoBoardsEmptyState";
 import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
 
 import CycleBoardMeta from "@/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta";
+import BlockedViewRule from "./BlockedViewRule";
 
 import { type BoardAuthorizationProof, usePreparedBoardReadModel, useSyncedBoardReadModel } from "@/hooks/Homepage/useSyncedBoardReadModel";
 import { getBoardSyncPilotEnabled, persistBoardSyncPilotPreference } from "@/lib/boardSync/pilot";
@@ -1263,7 +1264,7 @@ const SectionComp = (props: SectionCompProps & { connectOverlayEnabled: boolean 
 function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean, connectOverlayEnabled: boolean) {
   const {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
-  sections, setShowTrial, showTrial, activeBuiltinViews, blockedRuleText, filteredSectionsForActiveView,
+  sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
   kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
   _currentUser, _activeSortingMode,
   } = context;
@@ -1333,13 +1334,11 @@ return (
             />
           )}
 
-          {blockedRuleText && (
-            <div className={appShellRailOn ? 'ml-[var(--app-shell-rail-w,48px)] pl-[calc(1.5%+9px)] pr-[1.5%]' : undefined}>
-              <p className="w-[97%] text-dense text-text-light-gray" data-testid="blocked-view-rule">
-                {blockedRuleText}
-              </p>
-            </div>
-          )}
+          <div className={appShellRailOn ? 'ml-[var(--app-shell-rail-w,48px)] pl-[calc(1.5%+9px)] pr-[1.5%]' : undefined}>
+            <BlockedViewRule
+              activeViewId={_currentProject && getActiveBoardViewId(_currentProject, activeBuiltinViews)}
+            />
+          </div>
 
           <div
             ref={kanbanContainerRef}

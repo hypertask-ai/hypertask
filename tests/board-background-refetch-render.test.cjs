@@ -130,6 +130,7 @@ const moduleMocks = {
     BUILTIN_VIEW_IDS: { blockedByMe: "builtin:blocked-by-me" },
     getActiveBoardViewId: () => "default", isBuiltinViewId: () => false,
     buildBuiltinViewContext: () => ({}), getBuiltinView: () => null,
+    blockedViewRule: () => null, builtinViewIdFromViewParam: () => undefined,
   },
   "@/lib/boardDocumentTitle": { buildBoardDocumentTitle: (project) => project.title },
   "@/utils/api/Homepage": { isBoardPayloadHydrated: () => true },

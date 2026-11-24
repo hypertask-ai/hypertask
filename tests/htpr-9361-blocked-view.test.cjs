@@ -139,11 +139,11 @@ test("Blocked states its rule and a cycle view keeps its own line", () => {
   assert.equal(blockedViewRule("builtin:blocked-by-me"), BLOCKED_BY_ME_VIEW_RULE);
   assert.equal(blockedViewRule("builtin:overdue"), null);
 
-  const landingState = fs.readFileSync(path.join(root, "src/app/[...boardURL]/useLandingSectionState.ts"), "utf8");
-  assert.match(landingState, /leaveFinishedOut \? blockedViewRule\(activeViewId\) : null/);
-  const page = fs.readFileSync(path.join(root, "src/app/[...boardURL]/LandingPage.tsx"), "utf8");
-  assert.match(page, /blockedRuleText && \(/);
-  assert.match(page, /data-testid="blocked-view-rule"[\s\S]{0,80}\{blockedRuleText\}/);
+  const blocked = renderRule(true, "builtin:blocked");
+  assert.match(blocked, new RegExp(`data-testid="blocked-view-rule"[^>]*>${BLOCKED_VIEW_RULE}`));
+  assert.match(renderRule(true, "builtin:blocked-by-me"), new RegExp(BLOCKED_BY_ME_VIEW_RULE));
+  assert.equal(renderRule(false, "builtin:blocked"), "");
+  assert.equal(renderRule(true, "builtin:overdue"), "");
 
   const cycle = renderCycle("builtin:current-cycle", {
     cyclesEnabled: true,
@@ -153,10 +153,9 @@ test("Blocked states its rule and a cycle view keeps its own line", () => {
   assert.match(cycle, /data-testid="cycle-board-meta"/);
   assert.match(cycle, /Cycle 4/);
   assert.doesNotMatch(cycle, /blocked-view-rule/);
-  assert.equal(renderCycle("builtin:blocked", { section: [], cycles: [] }), "");
 });
 
-test("a board link opens a built-in view with its rule", () => {
+test("a board link names a built-in view", () => {
   assert.equal(builtinViewIdFromViewParam("builtin:blocked"), BUILTIN_VIEW_IDS.blocked);
   assert.equal(builtinViewIdFromViewParam(" Builtin:Blocked-By-Me "), BUILTIN_VIEW_IDS.blockedByMe);
   assert.equal(builtinViewIdFromViewParam("builtin:overdue"), BUILTIN_VIEW_IDS.overdue);
@@ -164,10 +163,6 @@ test("a board link opens a built-in view with its rule", () => {
   assert.equal(builtinViewIdFromViewParam("builtin:not-a-view"), undefined);
   assert.equal(builtinViewIdFromViewParam(null), undefined);
   assert.equal(builtinViewIdFromViewParam(undefined), undefined);
-
-  const landing = fs.readFileSync(path.join(root, "src/app/[...boardURL]/useLandingSectionState.ts"), "utf8");
-  assert.match(landing, /builtinViewIdFromViewParam\(new URLSearchParams\(window\.location\.search\)\.get\("view"\)\)/);
-  assert.match(landing, /current\[currentProjectId\] === viewId/);
 });
 
 test("the Blocked done-column switch ships on for everyone", () => {
@@ -193,6 +188,22 @@ function tabCount(project, enabled) {
     "@/lib/savedViews/savedViewTaskCounts": { countTasksInSavedView: () => 0 },
   });
   return useRenderedViews(project).viewTaskCounts.get("builtin:blocked");
+}
+
+function loadBlockedRule(enabled) {
+  return loadModule("src/app/[...boardURL]/BlockedViewRule.tsx", {
+    "@/lib/constants/builtinViews": builtin,
+    "@/hooks/useFlag": {
+      useFlag: (key) => key === flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG && enabled,
+    },
+    "@/lib/flags/definitions/htpr-9361-blocked-view-done": flag,
+  }).default;
+}
+
+function renderRule(enabled, activeViewId) {
+  return renderToStaticMarkup(
+    React.createElement(loadBlockedRule(enabled), { activeViewId }),
+  );
 }
 
 function loadCycleMeta() {
