@@ -34,12 +34,9 @@ import { buildBuiltinViewContext, isBuiltinViewId, taskInColumn } from '@/lib/co
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
-import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG , HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG , HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_9361_BLOCKED_VIEW_DONE_FLAG } from '@/lib/flags/definitions/htpr-9361-blocked-view-done'
-import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
-import { quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from '@/lib/keyboard/taskShortcuts'
+import { shouldIgnoreTaskShortcutTarget , quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
     initialSections: ISection[];

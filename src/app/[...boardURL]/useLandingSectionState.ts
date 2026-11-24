@@ -17,9 +17,7 @@ import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
-import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG , HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG , HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_9361_BLOCKED_VIEW_DONE_FLAG } from "@/lib/flags/definitions/htpr-9361-blocked-view-done";
 import type { SectionCompProps } from "./LandingPageSection";
 
