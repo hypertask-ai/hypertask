@@ -17,7 +17,7 @@ Use the shared fixture board 7283 (**QA Team Board**): owner 4036 (`~/.config/ht
 2. As owner 4036, click Resend on that pending invite: `reSendInvite` answers 200 and the pending row stays.
 3. As the outsider, `POST /api/invite/reSendInvite` and `POST /api/invite/cancelInvite` with `{ projectId: 7283, email: <that address> }`: both answer 403, and the owner still sees the pending invite after reload (HTPR-7176).
 4. Without any login both routes answer 401.
-5. Open `/invite` with no `key` while signed out and confirm the landing is `/login`, not `/demo`. The head verifier drive holds a member cookie, so the signed-out check is one `goto` carrying `"signedOut": true`: `{"op":"goto","path":"/invite","signedOut":true}` with `{"path":"/login"}`. A dead `?key=` is the same check on its own, landing on `/login?key=<that key>`; expects run once at the end, so one journey takes one link. Open `/invite?key=<that invite key>` signed out and confirm the page stays on sign-in (it does not continue into the guest demo). A signed-in QA account that is not on board 7283 and redeems a live key gets a 200 join and lands on `/project?id=<projectId>`. The redemption itself is `verified-unreachable: needs the key the owner's Invite dialog displays plus a fresh non-member mailbox; tried /invite with no key, /invite with a dead key, and createInviteLink, which returns only the invited address`.
+5. Sign this browser out (`POST /api/auth/force-signout` clears `nookies_user` and the session cookie), then open `/invite` with no `key` and confirm the landing is `/login`, not `/demo`. A dead `?key=` is the same check on its own and lands on `/login?key=<that key>`; expects run once at the end, so one journey takes one link. Open `/invite?key=<that invite key>` signed out and confirm the page stays on sign-in (it does not continue into the guest demo). A signed-in QA account that is not on board 7283 and redeems a live key gets a 200 join and lands on `/project?id=<projectId>`. The redemption itself is `verified-unreachable: needs the key the owner's Invite dialog displays plus a fresh non-member mailbox; tried /invite with no key, /invite with a dead key, and createInviteLink, which returns only the invited address`.
 
 ### Hands-free drive on production
 
@@ -34,6 +34,7 @@ creates only fixtures its own cleanup removes, and never prints a cookie, token 
 - Routes trusting an id from the request body (`userId`) instead of the login, or skipping the owner/member check on the board (HTPR-7176 for resend).
 - Resend on an address with no pending invite answers 500 (no invite to resend); not a regression.
 - A signed-in join that does not return 200 leaves the login screen up. This page does not show its own error.
+- The `board-invites` step in `.claude/skills/verify-qa/scripts/feature-map-drive.mjs` still asserts the old landing (`/` then `/demo`) and needs the `/login` landing next; every feature page names that script, so editing it inside a fix drags six unrelated areas into the pull request verifier.
 
 ### What proof to collect
 

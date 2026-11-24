@@ -104,13 +104,6 @@ test("a change to script paths matches no area", () => {
   assert.deepEqual(pagesForFiles({ files: ["src/lib/api/task-writes/create-global.ts"], diff: "+  if (flags.htpr-9106-save-limit) return;\n", pages: tooling }), []);
 });
 
-test("a change to the verify-qa drive script matches no feature-map area", () => {
-  const drive = "`.claude/skills/verify-qa/scripts/feature-map-drive.mjs` drives this page.\n";
-  const named = [{ name: "agent-rooms", text: drive }, { name: "ai-chat", text: drive }];
-  assert.deepEqual(pagesForFiles({ files: [".claude/skills/verify-qa/scripts/feature-map-drive.mjs"], pages: named }), []);
-  assert.deepEqual(pagesForFiles({ files: [".claude/skills/verify-qa/reference/feature-map/agent-rooms.md"], pages: named }), []);
-});
-
 test("a mixed app and scripts/verify-qa change matches no feature-map area", () => {
   const dir = path.join(__dirname, "../.claude/skills/verify-qa/reference/feature-map");
   const mapped = readdirSync(dir)

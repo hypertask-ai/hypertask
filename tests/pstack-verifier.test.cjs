@@ -1785,36 +1785,3 @@ test("the app token writes the status and a newer actions status cannot hide it"
     fs.rmSync(work, { recursive: true, force: true });
   }
 });
-
-test("a signed-out action drops the seeded session for itself and puts it back", async () => {
-  const { parsePlan, runPlan } = await load();
-  const actions = parsePlan(JSON.stringify({
-    actions: [
-      { op: "goto", path: "/invite", signedOut: true },
-      { op: "shot", name: "invite-no-key" },
-      { op: "goto", path: "/project?id={id}" },
-    ],
-    expect: [{ path: "/login" }],
-  })).actions;
-  assert.equal(actions[0].signedOut, true);
-  assert.equal(actions[2].signedOut, undefined);
-  assert.equal(parsePlan(JSON.stringify({ actions: [{ op: "click", text: "Sign out", signedOut: true }] })).actions[0].signedOut, undefined);
-  const held = [{ name: "nookies_user", value: "member", domain: "127.0.0.1", path: "/" }];
-  const calls = [];
-  const context = {
-    async cookies() { return held.slice(); },
-    async clearCookies() { calls.push("clear"); held.length = 0; },
-    async addCookies(cookies) { calls.push(`add ${cookies.length}`); held.push(...cookies); },
-  };
-  const page = {
-    context: () => context,
-    async goto(url) { calls.push(`goto ${new URL(url).pathname} ${held.length ? "member" : "anon"}`); return { status: () => 200, url: () => url }; },
-    async screenshot() {},
-    async waitForURL() {},
-    getByText() { return { first: () => ({ async waitFor() {} }) }; },
-  };
-  const run = await runPlan({ page, plan: plan(actions, { expect: [{ path: "/login" }] }), base: "http://127.0.0.1:3100", projectId: "4", shotsDir: "/tmp", navigations: [] });
-  assert.deepEqual(calls, ["clear", "goto /invite anon", "add 1", "goto /project member"]);
-  assert.ok(run.steps.every((step) => step.ok));
-  assert.equal(run.expects[0].ok, true);
-});

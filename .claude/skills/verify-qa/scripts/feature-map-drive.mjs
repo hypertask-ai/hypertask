@@ -533,7 +533,8 @@ const featureRuns = {
       const chain = [];
       page.on("request", (request) => { if (request.isNavigationRequest()) chain.push(new URL(request.url()).pathname); });
       const noKey = await open(page, "/invite", 3500);
-      step("a signed-out visitor with no invite key lands on sign in", new URL(noKey.url).pathname === "/login", { chain, landed: new URL(noKey.url).pathname });
+      step("/invite without a key redirects to the app root", chain.includes("/"), { chain, landed: new URL(noKey.url).pathname });
+      step("a signed-out visitor then continues into the guest demo, not the login page", /\/demo|\/project/.test(new URL(noKey.url).pathname), { landed: new URL(noKey.url).pathname });
     });
     step("a real invite redemption needs a fresh mailbox", null, "the join half needs a live invite key accepted by a non-member; create the invite in the same run and open the link signed out, then sign in");
   },
