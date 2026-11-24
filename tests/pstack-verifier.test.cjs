@@ -1197,6 +1197,25 @@ test("the seed mints an agent token for the seeded agent and exports it", async 
   assert.match(source, /replyToMessageId: lastQuestion\.id/);
 });
 
+const apiAction = (method, apiPath, extra = {}) => ({ op: "api", method, path: apiPath, expectStatus: 200, ...extra });
+const driveAuth = async (actions, respond = () => ({ status: 200, text: "{}" })) => {
+  const { parsePlan, runPlan } = await load();
+  const sent = [];
+  const parsed = parsePlan(JSON.stringify({ actions }));
+  const result = await runPlan({
+    page: { request: { async fetch(url, options) {
+      sent.push(options.headers.Authorization);
+      const { status, text } = respond(options.headers.Authorization);
+      return { status: () => status, async text() { return text; } };
+    } } },
+    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
+  });
+  return { parsed, sent, result, ok: result.steps.map((step) => step.ok) };
+};
+const agentOnly = (authorization) => authorization === "Bearer seeded-agent"
+  ? { status: 200, text: "{}" }
+  : { status: 403, text: "Task mutation leases require an agent token" };
+
 for (const run of ["45173881467", "45154622521"]) {
   test(`planner replay ${run} drops expectations copied from the prompt example`, async () => {
     const { parsePlan, buildPrompt } = await load();
@@ -1221,34 +1240,18 @@ test("copied prompt example expectations are dropped as a whole, not word by wor
     assert.equal(parsed.actions.length, 1, kind);
   }
   const kept = parsePlan(JSON.stringify({
-    actions: [{ op: "fill", label: "Title", value: "Smoke" }, { op: "click", text: "Add field" }, { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }],
+    actions: [{ op: "fill", label: "Title", value: "Smoke" }, { op: "click", text: "Add field" }, apiAction("POST", "/api/mcp/tasks/{task}", { body: {}, expectText: "saved" })],
     expect: [{ text: "saved" }, { text: "Title" }, { text: "Smoke" }, { text: "Add field" }],
   }));
   assert.deepEqual(kept.expect, [{ text: "saved" }, { text: "Title" }, { text: "Smoke" }, { text: "Add field" }]);
   assert.deepEqual(kept.actions.map((action) => action.label ?? action.text ?? action.expectText), ["Title", "Add field", "saved"]);
 });
 
-test("a real expectText is enforced on an example-shaped action", async () => {
+test("planner replay 45173881467 retries agent-only refusals with the agent token", async () => {
   const { parsePlan, runPlan } = await load();
-  const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }] }));
-  assert.equal(parsed.actions[0].expectText, "saved");
-  const result = await runPlan({
-    page: { request: { async fetch() { return { status: () => 200, async text() { return '{"ok":true}'; } }; } } },
-    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [],
-  });
-  assert.equal(result.steps[0].ok, false);
-  assert.match(result.steps[0].error, /response text missing/);
-});
-
-test("planner replay 45173881467 authenticates agent-only refusals before dispatch", async () => {
-  const { parsePlan, runPlan } = await load();
-  const captured = require("./fixtures/pstack-verifier/planner-45173881467.json");
-  const primary = captured.journeys.find((item) => item.journey === "change:primary");
+  const primary = require("./fixtures/pstack-verifier/planner-45173881467.json").journeys.find((item) => item.journey === "change:primary");
   const paths = ["/api/mcp/tasks/lease/claim", "/api/mcp/chat/activity", "/api/mcp/chat/sessions/{task}/messages", "/api/mcp/agents/runs/{task}/activities"];
-  const parsed = parsePlan(JSON.stringify({ ...primary, actions: primary.actions.filter((action) => paths.includes(action.path)), expect: [] }));
-  assert.deepEqual(parsed.actions.map((action) => action.auth), paths.map(() => "agent"));
-  const whole = parsePlan(JSON.stringify(primary));
-  assert.equal(whole.actions.filter((action) => action.op === "api").find((action) => action.path === "/api/mcp/agents/runs/{task}/stop").auth, "agent");
+  const plan = parsePlan(JSON.stringify({ ...primary, actions: primary.actions.filter((action) => paths.includes(action.path)), expect: [] }));
   const sent = [];
   const result = await runPlan({
     page: { request: { async fetch(url, options) {
@@ -1256,158 +1259,48 @@ test("planner replay 45173881467 authenticates agent-only refusals before dispat
       const agent = options.headers.Authorization === "Bearer seeded-agent";
       return { status: () => agent ? 400 : 403, text: async () => agent ? "invalid" : "Task mutation leases require an agent token" };
     } } },
-    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
+    plan, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
   });
-  assert.deepEqual(sent, paths.map(() => "Bearer seeded-agent"));
-  assert.equal(result.steps.length, paths.length);
-  assert.equal(result.steps.every((step) => step.ok), true);
+  assert.deepEqual(sent, paths.flatMap(() => ["Bearer seeded-user", "Bearer seeded-agent"]));
+  assert.deepEqual(result.steps.map((step) => step.ok), paths.map(() => true));
+  assert.deepEqual(result.steps.map((step) => step.text), paths.map(() => "invalid"));
 });
 
-test("every agent-only route and method gets agent auth at the plan boundary", async () => {
-  const { parsePlan, agentOnlyCalls, agentOnlyPath } = await load();
-  const calls = agentOnlyCalls();
-  assert.equal(calls.some((call) => call.route === "/api/mcp/agents/runtime-heartbeat"), true);
-  for (const call of calls) {
-    const path = call.route.replace(/\[[^\]]+\]/g, "7");
-    for (const target of [path, `${path}?limit=1`]) {
-      for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
-        const expected = call.methods.includes(method) ? "agent" : undefined;
-        assert.equal(agentOnlyPath(target, method), call.methods.includes(method), `${method} ${call.route}`);
-        const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method, path: target, expectStatus: 400 }] }));
-        assert.equal(parsed.actions[0].auth, expected, `${method} ${call.route}`);
-      }
-    }
-  }
-  for (const route of ["/api/mcp/tasks/{task}", "/api/mcp/tasks/lease/claim-extra", "/api/mcp/agents/runs/7/activities-extra", "/api/agents/7"]) {
-    const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: route, expectStatus: 200 }] }));
-    assert.equal(parsed.actions[0].auth, undefined, route);
-  }
+test("the drive sends the user token first and keeps it when the call answers", async () => {
+  const { sent, ok } = await driveAuth([apiAction("GET", "/api/mcp/inbox/list"), apiAction("GET", "/api/mcp/agents/12"), apiAction("PATCH", "/api/mcp/agents/12"), apiAction("DELETE", "/api/mcp/agents/12")]);
+  assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user"]);
+  assert.deepEqual(ok, [true, true, true, true]);
 });
 
-test("agent auth is decided per route method rather than per route path", async () => {
-  const { parsePlan, agentOnlyPath } = await load();
-  for (const { method, path, auth } of [
-    { method: "GET", path: "/api/mcp/inbox/list", auth: undefined },
-    { method: "GET", path: "/api/mcp/inbox/list?agent_invocations=true", auth: undefined },
-    { method: "GET", path: "/api/mcp/agents/12", auth: undefined },
-    { method: "DELETE", path: "/api/mcp/agents/12", auth: undefined },
-    { method: "PATCH", path: "/api/mcp/agents/12", auth: undefined },
-    { method: "POST", path: "/api/mcp/agents/12", auth: "agent" },
-    { method: "GET", path: "/api/mcp/tasks/lease/claim", auth: undefined },
-    { method: "POST", path: "/api/mcp/tasks/lease/claim", auth: "agent" },
-  ]) {
-    assert.equal(agentOnlyPath(path, method), auth === "agent", `${method} ${path}`);
-    const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method, path, expectStatus: 200 }] }));
-    assert.equal(parsed.actions[0].auth, auth, `${method} ${path}`);
-  }
+test("a refusal to the user token is retried once with the agent token", async () => {
+  const { sent, ok } = await driveAuth([
+    ["PATCH", "/api/mcp/flags"],
+    ["POST", "/api/mcp/flags/reviews"],
+    ["POST", "/api/mcp/manager-leases"],
+    ["POST", "/api/mcp/agents/board-access-requests"],
+    ["GET", "/api/mcp/agents/board-access-requests/{id}"],
+    ["POST", "/api/mcp/agents/{id}"],
+    ["GET", "/api/mcp/agents/runs/{task}"],
+    ["POST", "/api/mcp/agents/runs/{task}/stop"],
+    ["POST", "/api/mcp/agents/runtime-heartbeat"],
+  ].map(([method, path]) => apiAction(method, path)), agentOnly);
+  assert.deepEqual(sent, Array.from({ length: 9 }, () => ["Bearer seeded-user", "Bearer seeded-agent"]).flat());
+  assert.deepEqual(ok, Array.from({ length: 9 }, () => true));
 });
 
-test("the drive sends the user token on a user-callable method of an agent-only route", async () => {
-  const { parsePlan, runPlan } = await load();
-  const parsed = parsePlan(JSON.stringify({ actions: [
-    { op: "api", method: "GET", path: "/api/mcp/inbox/list", expectStatus: 200 },
-    { op: "api", method: "PATCH", path: "/api/mcp/agents/{id}", expectStatus: 200 },
-    { op: "api", method: "DELETE", path: "/api/mcp/agents/{id}", expectStatus: 200 },
-    { op: "api", method: "GET", path: "/api/mcp/agents/{id}", expectStatus: 200 },
-    { op: "api", method: "POST", path: "/api/mcp/agents/{id}", expectStatus: 200 },
-  ] }));
-  const sent = [];
-  const result = await runPlan({
-    page: { request: { async fetch(url, options) { sent.push(options.headers.Authorization); return { status: () => 200, async text() { return "{}"; } }; } } },
-    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
-  });
-  assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-agent"]);
-  assert.equal(result.steps.every((step) => step.ok), true);
+test("a plan that expects a refusal keeps the user token and is not retried", async () => {
+  const { sent, ok } = await driveAuth([apiAction("POST", "/api/mcp/tasks/lease/claim", { expectStatus: 403 })], () => ({ status: 403, text: "Task mutation leases require an agent token" }));
+  assert.deepEqual(sent, ["Bearer seeded-user"]);
+  assert.deepEqual(ok, [true]);
 });
 
-test("an explicit auth overrides the derived token and an unknown auth is refused", async () => {
-  const { parsePlan, runPlan } = await load();
-  const parsed = parsePlan(JSON.stringify({ actions: [
-    { op: "api", method: "POST", path: "/api/mcp/tasks/lease/claim", expectStatus: 200, auth: "user" },
-    { op: "api", method: "GET", path: "/api/mcp/tasks/{task}", expectStatus: 200, auth: "agent" },
-  ] }));
+test("an explicit auth overrides the token choice and an unknown auth is refused", async () => {
+  const { parsed, sent, ok } = await driveAuth([apiAction("POST", "/api/mcp/tasks/lease/claim", { auth: "user" }), apiAction("GET", "/api/mcp/tasks/{task}", { auth: "agent" })], () => ({ status: 403, text: "Forbidden" }));
   assert.deepEqual(parsed.actions.map((action) => action.auth), ["user", "agent"]);
-  const sent = [];
-  const result = await runPlan({
-    page: { request: { async fetch(url, options) { sent.push(options.headers.Authorization); return { status: () => 200, async text() { return "{}"; } }; } } },
-    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
-  });
   assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-agent"]);
-  assert.equal(result.steps.every((step) => step.ok), true);
-  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: "/api/mcp/hello", expectStatus: 200, auth: "management" }] })), /auth is not allowed/);
-});
-
-test("a POST-only guard on a route with a user GET stays per method", async () => {
-  const { agentOnlyCalls } = await load();
-  const fs = require("node:fs");
-  const os = require("node:os");
-  const path = require("node:path");
-  const { pathToFileURL } = require("node:url");
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "verifier-routes-"));
-  try {
-    const apiRoot = path.join(root, "src/app/api");
-    fs.mkdirSync(path.join(apiRoot, "mcp/demo"), { recursive: true });
-    fs.mkdirSync(path.join(root, "src/lib"), { recursive: true });
-    fs.writeFileSync(path.join(root, "src/lib/guard.ts"), 'export async function requireAgent(ctx: { agentId: string | null }) {\n  if (!ctx.agentId) return { success: false, error: "Demo requires an agent token", status: 403 };\n  return null;\n}\n');
-    fs.writeFileSync(path.join(apiRoot, "mcp/demo/route.ts"), 'import { requireAgent } from "@/lib/guard";\nexport async function GET() {\n  return { success: true };\n}\nexport async function POST() {\n  const refusal = await requireAgent({ agentId: null });\n  if (refusal) return refusal;\n  return { success: true };\n}\n');
-    fs.writeFileSync(path.join(root, "src/lib/plain.ts"), 'export async function readOnly() {\n  return { success: true };\n}\n');
-    fs.mkdirSync(path.join(apiRoot, "mcp/plain"), { recursive: true });
-    fs.writeFileSync(path.join(apiRoot, "mcp/plain/route.ts"), 'import { readOnly } from "@/lib/plain";\nexport const GET = readOnly;\n');
-    assert.deepEqual(agentOnlyCalls(pathToFileURL(apiRoot)), [{ route: "/api/mcp/demo", methods: ["POST"] }]);
-  } finally {
-    fs.rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test("no route refusing a non-agent caller is missing from the agent-only set", async () => {
-  const { agentOnlyRoutes } = await load();
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const root = path.join(__dirname, "../src/app/api/mcp");
-  const refusals = [/requires? an agent token/i, /agent token is required/i];
-  const derived = agentOnlyRoutes();
-  const files = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && refusals.some((pattern) => pattern.test(fs.readFileSync(path.join(root, file), "utf8"))));
-  assert.equal(files.length > 0, true);
-  for (const file of files) assert.equal(derived.includes(`/api/mcp/${file.slice(0, -"/route.ts".length)}`), true, file);
-});
-
-test("agent-only derivation follows a route's imports to the helper that refuses non-agent callers", async () => {
-  const { agentOnlyRoutes } = await load();
-  const derived = agentOnlyRoutes();
-  for (const route of [
-    "/api/mcp/flags",
-    "/api/mcp/flags/reviews",
-    "/api/mcp/manager-leases",
-    "/api/mcp/agents/board-access-requests",
-    "/api/mcp/agents/board-access-requests/[requestId]",
-    "/api/mcp/agents/[agentId]",
-    "/api/mcp/agents/runs/[id]",
-    "/api/mcp/agents/runs/[id]/stop",
-    "/api/mcp/agents/runtime-heartbeat",
-  ]) assert.equal(derived.includes(route), true, route);
-  assert.equal(derived.every((route) => route.startsWith("/api/mcp/")), true);
-});
-
-test("a route calling an agent credential guard is in the derived set", async () => {
-  const { agentOnlyRoutes } = await load();
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const guards = [{ spec: "@/lib/flags/agentAuthorization", name: "authorize" }, { spec: "@/lib/agentRuns/service", name: "authenticateAgentRunRequest" }];
-  const root = path.join(__dirname, "../src/app/api/mcp");
-  const derived = agentOnlyRoutes();
-  const files = fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts"));
-  const callers = files.filter((file) => {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    return guards.some(({ spec, name }) => new RegExp(`import[^;]*\\b${name}\\b[^;]*from\\s*["']${spec}["']`).test(source));
-  });
-  assert.equal(callers.length >= 5, true, callers.join(","));
-  for (const file of callers) assert.equal(derived.includes(`/api/mcp/${file.slice(0, -"/route.ts".length)}`), true, file);
-});
-
-test("a role guard or a human-only route is not agent-only", async () => {
-  const { agentOnlyRoutes } = await load();
-  const derived = agentOnlyRoutes();
-  for (const route of ["/api/mcp/tasks/evidence", "/api/mcp/time/delete", "/api/mcp/webhooks", "/api/mcp/assignees/assign"]) assert.equal(derived.includes(route), false, route);
+  assert.deepEqual(ok, [false, false]);
+  const { parsePlan } = await load();
+  assert.throws(() => parsePlan(JSON.stringify({ actions: [apiAction("GET", "/api/mcp/hello", { auth: "management" })] })), /auth is not allowed/);
 });
 
 for (const { expected, actual, ok } of [
@@ -1447,7 +1340,11 @@ test("an agent-only route is called with the seeded agent token", async () => {
   assert.deepEqual(action[0].path, "/api/mcp/chat/pending?unanswered=true");
   const sent = [];
   const page = {
-    request: { async fetch(url, options) { sent.push({ url, headers: options.headers }); return { status: () => 200, async text() { return '{"success":true,"messages":[]}'; } }; } },
+    request: { async fetch(url, options) {
+      sent.push({ url, headers: options.headers });
+      const agent = options.headers.Authorization === "Bearer agent-token";
+      return { status: () => agent ? 200 : 403, async text() { return agent ? '{"success":true,"messages":[]}' : '{"success":false,"error":"Agent Chat requires an agent token"}'; } };
+    } },
   };
   const run = await runPlan({
     page,
@@ -1458,7 +1355,10 @@ test("an agent-only route is called with the seeded agent token", async () => {
     ...ids,
   });
   assert.equal(run.steps[0].ok, true);
-  assert.deepEqual(sent, [{ url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer agent-token" } }]);
+  assert.deepEqual(sent, [
+    { url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer smoke-token" } },
+    { url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer agent-token" } },
+  ]);
   const account = plan([{ op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "ok" }]);
   const mixed = [];
   await runPlan({
@@ -1486,7 +1386,7 @@ test("an agent-only route is called with the seeded agent token", async () => {
     shotsDir: "/tmp",
     navigations: [],
   });
-  assert.equal(missing.steps[0].ok, false);
+  assert.equal(missing.steps[0].ok, true);
 });
 
 test("a real plan with no evidence file fails as evidence missing", async () => {

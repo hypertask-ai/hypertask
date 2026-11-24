@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createSign, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -82,239 +82,10 @@ function apiBody(value) {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("body is not allowed");
   return body;
 }
-const API_ROUTE_ROOT = new URL("../src/app/api/", import.meta.url);
-const MCP_ROUTE_ROOT = "/api/mcp/";
-const AGENT_ONLY_CACHE = new Map();
-const AGENT_API_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
-const AGENT_TOKEN_REFUSAL = /error:\s*["'`][^"'`]*\bagent token\b[^"'`]*["'`]/i;
-const AGENT_IDENTITY_DENIAL = /!\s*(?:[A-Za-z_$][\w$]*\??\.)+agentId\b|\b[A-Za-z_$][\w$]*\??\.source\s*!==\s*["'`]agent["'`]/;
-const AGENT_CREDENTIAL_REFUSAL = /\b(?:401|403)\b/;
-const AGENT_CREDENTIAL_WORDING = /\bagent token\b|agent_bearer_required/i;
-const AUTHORIZATION_HEADER = /headers\.(?:has|get)\(\s*["'`]Authorization/;
-const QUERY_GATE = /searchParams|\bparams\s*\.\s*get\s*\(/;
-const CODE_WORD = /[A-Za-z_$][\w$]*/g;
-const MODULE_SUFFIXES = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
-const IMPORT_LIST = /import\s+(?:[A-Za-z_$][\w$]*\s*,?\s*)?(?:\{([^}]*)\})?\s*from\s*["']([^"']+)["']/g;
-const EXPORT_LIST = /export\s+\{([^}]*)\}\s+from\s*["']([^"']+)["']/g;
-function routePattern(route) {
-  return new RegExp(`^${route.split("/").map((part) => part.startsWith("[") ? "[^/]+" : part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("/")}$`);
-}
-function braceBlock(source, start) {
-  let depth = 0;
-  for (let at = start; at < source.length; at++) {
-    if (source[at] === "{") depth++;
-    else if (source[at] === "}") { depth--; if (!depth) return source.slice(start, at + 1); }
-  }
-  return "";
-}
-function bodyStart(source, from) {
-  let at = from;
-  while (at < source.length && /\s/.test(source[at])) at++;
-  if (source[at] !== ":") return source.indexOf("{", from);
-  let angle = 0;
-  for (at++; at < source.length && at < from + 600; at++) {
-    const char = source[at];
-    if (char === "<") angle++;
-    else if (char === ">" && source[at - 1] !== "=" && angle > 0) angle--;
-    else if (char === "{" && !angle) return at;
-  }
-  return source.indexOf("{", from);
-}
-function callableBody(source, at) {
-  const declaration = /(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*(?:<[^>]*>)?\s*\(/g;
-  const arrow = /=>\s*\{/g;
-  declaration.lastIndex = at;
-  arrow.lastIndex = at;
-  const fn = declaration.exec(source), fat = arrow.exec(source);
-  if (fn && (!fat || fn.index < fat.index)) {
-    let depth = 0, at2 = fn.index + fn[0].length - 1;
-    for (; at2 < source.length; at2++) {
-      if (source[at2] === "(") depth++;
-      else if (source[at2] === ")") { depth--; if (!depth) break; }
-    }
-    return braceBlock(source, bodyStart(source, at2 + 1));
-  }
-  if (fat) return braceBlock(source, fat.index + fat[0].length - 1);
-  return "";
-}
-function functionBodies(source) {
-  const bodies = new Map();
-  const patterns = [/(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g, /(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::[^=]+)?=/g];
-  for (const pattern of patterns) {
-    const found = new RegExp(pattern.source, "g");
-    let hit;
-    while ((hit = found.exec(source))) {
-      const body = callableBody(source, hit.index);
-      if (body && !bodies.has(hit[1])) bodies.set(hit[1], body);
-    }
-  }
-  return bodies;
-}
-function queryGated(body, index) {
-  return QUERY_GATE.test(body.slice(Math.max(0, index - 320), index));
-}
-function agentGuardKind(body) {
-  const refusal = new RegExp(AGENT_TOKEN_REFUSAL.source, "gi");
-  let hit;
-  while ((hit = refusal.exec(body))) {
-    if (queryGated(body, hit.index)) continue;
-    if (AGENT_CREDENTIAL_REFUSAL.test(body.slice(hit.index, hit.index + 260))) return "credential";
-  }
-  const denial = new RegExp(AGENT_IDENTITY_DENIAL.source, "g");
-  while ((hit = denial.exec(body))) {
-    if (queryGated(body, hit.index)) continue;
-    const site = body.slice(hit.index, hit.index + 320);
-    if (AGENT_CREDENTIAL_REFUSAL.test(site) && AGENT_CREDENTIAL_WORDING.test(site)) return "credential";
-    if (AGENT_CREDENTIAL_REFUSAL.test(site) && /\bmanagement\b/.test(site)) return "management";
-    if (/\breturn null\b/.test(site) && AUTHORIZATION_HEADER.test(body)) return "principal";
-  }
-  return "";
-}
-function moduleUrl(spec, srcRoot) {
-  if (!spec.startsWith("@/")) return null;
-  for (const suffix of MODULE_SUFFIXES) {
-    const candidate = new URL(spec.slice(2) + suffix, srcRoot);
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-function namedImports(source) {
-  const names = [];
-  for (const [pattern, listAt, specAt, exported] of [[IMPORT_LIST, 1, 2, false], [EXPORT_LIST, 1, 2, true]]) {
-    const found = new RegExp(pattern.source, "g");
-    let hit;
-    while ((hit = found.exec(source))) {
-      if (!hit[listAt]) continue;
-      for (const part of hit[listAt].split(",")) {
-        const sides = part.trim().replace(/^type\s+/, "").split(/\s+as\s+/);
-        if (!sides[0]) continue;
-        names.push({ name: sides[0].trim(), local: (sides[1] ?? sides[0]).trim(), spec: hit[specAt], exported });
-      }
-    }
-  }
-  return names;
-}
-function moduleInfo(url, cache) {
-  const key = url.href;
-  if (!cache.has(key)) {
-    let info = null;
-    try {
-      const source = readFileSync(url, "utf8");
-      const bodies = functionBodies(source);
-      const guards = new Set([...bodies].filter(([, body]) => agentGuardKind(body)).map(([name]) => name));
-      info = { source, bodies, guards };
-    } catch { info = null; }
-    cache.set(key, info);
-  }
-  return cache.get(key);
-}
-function textReachesGuard(text, info, url, srcRoot, cache, depth, seen) {
-  if (!text) return false;
-  if (agentGuardKind(text)) return true;
-  const called = new Set(text.match(CODE_WORD) ?? []);
-  for (const item of namedImports(info.source)) {
-    if (!called.has(item.local)) continue;
-    const target = moduleUrl(item.spec, srcRoot);
-    if (target && reachesAgentGuard(target, item.name, srcRoot, cache, depth + 1, seen)) return true;
-  }
-  for (const other of info.bodies.keys()) if (called.has(other) && reachesAgentGuard(url, other, srcRoot, cache, depth + 1, seen)) return true;
-  return false;
-}
-function reachesAgentGuard(url, name, srcRoot, cache, depth, seen) {
-  if (depth > 6) return false;
-  const key = `${url.href}#${name}`;
-  if (seen.has(key)) return false;
-  seen.add(key);
-  const info = moduleInfo(url, cache);
-  if (!info) return false;
-  if (info.guards.has(name)) return true;
-  const body = info.bodies.get(name);
-  if (!body) return false;
-  return textReachesGuard(body, info, url, srcRoot, cache, depth, seen);
-}
-function statementText(source, start) {
-  let depth = 0, quote = "";
-  for (let at = start; at < source.length; at++) {
-    const char = source[at];
-    if (quote) { if (char === quote && source[at - 1] !== "\\") quote = ""; continue; }
-    if (char === '"' || char === "'" || char === "`") { quote = char; continue; }
-    if (char === "(" || char === "{" || char === "[") depth++;
-    else if (char === ")" || char === "}" || char === "]") depth--;
-    else if (depth <= 0 && (char === ";" || char === "\n")) return source.slice(start, at);
-  }
-  return source.slice(start);
-}
-function methodSources(source) {
-  const found = new Map();
-  for (const method of AGENT_API_METHODS) {
-    const patterns = [
-      [new RegExp(`export\\s*\\{\\s*${method}\\s*\\}\\s*from\\s*["']([^"']+)["']`), "spec", 1],
-      [new RegExp(`export\\s+(?:async\\s+)?function\\s+${method}\\b`), "body", 0],
-      [new RegExp(`export\\s+const\\s*\\{\\s*${method}\\s*\\}\\s*=`), "statement", 0],
-      [new RegExp(`export\\s+const\\s+${method}\\s*=`), "statement", 0],
-    ];
-    for (const [pattern, kind, group] of patterns) {
-      const hit = pattern.exec(source);
-      if (!hit) continue;
-      if (kind === "spec") found.set(method, { spec: hit[group] });
-      else if (kind === "body") found.set(method, { text: callableBody(source, hit.index) });
-      else found.set(method, { text: statementText(source, hit.index + hit[0].length) });
-      break;
-    }
-  }
-  return found;
-}
-function routeAgentMethods(routeUrl, srcRoot, cache) {
-  const info = moduleInfo(routeUrl, cache);
-  const methods = new Set();
-  if (!info) return methods;
-  for (const [method, source] of methodSources(info.source)) {
-    const target = source.spec ? moduleUrl(source.spec, srcRoot) : null;
-    const guarded = target
-      ? reachesAgentGuard(target, method, srcRoot, cache, 0, new Set())
-      : textReachesGuard(source.text, info, routeUrl, srcRoot, cache, 0, new Set());
-    if (guarded) methods.add(method);
-  }
-  return methods;
-}
-function deriveAgentOnlyCalls(root) {
-  const srcRoot = new URL("../../", root);
-  const cache = new Map();
-  const calls = [];
-  for (const file of readdirSync(root, { recursive: true })) {
-    const name = String(file);
-    if (!name.endsWith("/route.ts")) continue;
-    const url = new URL(name, root);
-    if (!url.pathname.includes(MCP_ROUTE_ROOT)) continue;
-    const methods = routeAgentMethods(url, srcRoot, cache);
-    if (!methods.size) continue;
-    calls.push({ route: `/api/${name.slice(0, -"/route.ts".length)}`, methods: [...methods] });
-  }
-  return calls;
-}
-export function agentOnlyCalls(root = API_ROUTE_ROOT) {
-  const href = new URL(root).href;
-  const url = new URL(href.endsWith("/") ? href : `${href}/`);
-  if (!AGENT_ONLY_CACHE.has(url.href)) AGENT_ONLY_CACHE.set(url.href, deriveAgentOnlyCalls(url));
-  return AGENT_ONLY_CACHE.get(url.href).map((call) => ({ route: call.route, methods: call.methods.slice() }));
-}
-export function agentOnlyRoutes(root = API_ROUTE_ROOT) {
-  return agentOnlyCalls(root).map((call) => call.route);
-}
-const AGENT_ONLY_CALLS = agentOnlyCalls().map((call) => ({ pattern: routePattern(call.route), methods: new Set(call.methods) }));
-export function agentOnlyPath(apiPath, method) {
-  if (typeof apiPath !== "string" || !apiPath.startsWith("/") || apiPath.startsWith("//")) return false;
-  try {
-    const pathname = new URL(apiPath, "http://localhost").pathname;
-    const wanted = method == null ? "" : String(method).trim().toUpperCase();
-    return AGENT_ONLY_CALLS.some((call) => call.pattern.test(pathname) && (!wanted || call.methods.has(wanted)));
-  } catch { return false; }
-}
 function actionAuth(action) {
   const auth = action.auth == null ? "" : String(action.auth).trim().toLowerCase();
   if (auth && auth !== "agent" && auth !== "user") throw new Error("auth is not allowed");
-  if (auth) return { auth };
-  return action.op === "api" && agentOnlyPath(action.path, action.method) ? { auth: "agent" } : {};
+  return auth ? { auth } : {};
 }
 function normalizeAction(action) {
   if (!action || typeof action !== "object") throw new Error("action is not allowed");
@@ -1106,23 +877,24 @@ async function perform(page, action, base, projectId, navigations, taskId, beare
   if (action.op === "api") return callApi(page, action, base, projectId, taskId, bearer, archivedProjectId, agentBearer);
   throw new Error("not actionable");
 }
-function bearerFor(action, pathname, method, bearer, agentBearer) {
-  const wantsAgent = action.auth === "agent" || (action.auth !== "user" && agentOnlyPath(pathname, method));
-  if (!wantsAgent) return bearer;
-  if (!agentBearer) throw new Error("agent token is missing");
-  return agentBearer;
+function agentRetryAllowed(action, status, agentBearer) {
+  return Boolean(agentBearer) && action.auth == null && action.expectStatus !== 401 && action.expectStatus !== 403 && (status === 401 || status === 403);
 }
 async function callApi(page, action, base, projectId, taskId, bearer, archivedProjectId, agentBearer) {
   const target = fillApiPath(action.path, projectId, taskId, base);
   const mcp = target.pathname === "/api/mcp" || target.pathname.startsWith("/api/mcp/");
   if (mcp && !bearer) throw new Error("mcp token is missing");
-  const token = mcp ? bearerFor(action, target.pathname, action.method, bearer, agentBearer) : "";
-  const headers = mcp ? { Authorization: `Bearer ${token}` } : {};
-  const options = { method: action.method, headers, maxRedirects: 0, failOnStatusCode: false };
-  if (action.method !== "GET") options.data = fillApiBody(action.body, projectId, taskId, archivedProjectId);
-  const response = await page.request.fetch(target.toString(), options);
-  const status = Number(typeof response?.status === "function" ? response.status() : response?.status);
-  const raw = String(await response.text());
+  if (action.auth === "agent" && !agentBearer) throw new Error("agent token is missing");
+  const send = async (token) => {
+    const options = { method: action.method, headers: mcp ? { Authorization: `Bearer ${token}` } : {}, maxRedirects: 0, failOnStatusCode: false };
+    if (action.method !== "GET") options.data = fillApiBody(action.body, projectId, taskId, archivedProjectId);
+    const response = await page.request.fetch(target.toString(), options);
+    const status = Number(typeof response?.status === "function" ? response.status() : response?.status);
+    return { status, raw: String(await response.text()) };
+  };
+  const sentToken = action.auth === "agent" ? agentBearer : mcp ? bearer : "";
+  let { status, raw } = await send(sentToken);
+  if (mcp && agentRetryAllowed(action, status, agentBearer) && sentToken !== agentBearer) ({ status, raw } = await send(agentBearer));
   if (status !== action.expectStatus) throw new Error(`api status ${status}`);
   if (!raw.includes(action.expectText)) throw new Error("response text missing");
   const at = raw.indexOf(action.expectText);
