@@ -11,7 +11,9 @@ export async function waitForProdHealthGate({ eventName, repo, sha, token, budge
     const run = [...runsBody.workflow_runs].sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0]; if (!run) { unread = ''; await sleep(pollMs); continue }
     const statuses = await readJson(`https://api.github.com/repos/${repo}/commits/${sha}/statuses?per_page=100`, token, fetchImpl).catch(() => null)
     if (!Array.isArray(statuses)) { unread = `could not read prod-health-gate status for ${sha}`; await sleep(pollMs); continue }
-    unread = ''; const match = statuses.find((s) => s.context === 'prod-health-gate' && String(s.target_url || '').includes(`/runs/${run.id}`) && String(s.created_at || '') >= String(run.created_at || ''))
+    unread = ''; const newest = statuses.filter((s) => s.context === 'prod-health-gate').sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0]
+    if (newest?.state === 'failure') return { ok: false, unreadable: false, reason: `prod-health-gate failure for ${sha} invalidates run ${run.id}` }
+    const match = statuses.find((s) => s.context === 'prod-health-gate' && String(s.target_url || '').includes(`/runs/${run.id}`) && String(s.created_at || '') >= String(run.created_at || ''))
     if (match?.state === 'success') return { ok: true, unreadable: false, reason: `prod-health-gate success for ${sha} (run ${run.id})` }
     if (run.status === 'completed' && completedAt === null) completedAt = now()
     if (match?.state === 'failure' || (completedAt !== null && now() - completedAt >= 120_000)) return { ok: false, unreadable: false, reason: `prod-health run ${run.id} ${match?.state === 'failure' ? 'reported a prod-health-gate failure' : 'published no prod-health-gate status within 120s of completing'} for ${sha}` }
