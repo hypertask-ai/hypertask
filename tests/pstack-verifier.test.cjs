@@ -1613,7 +1613,7 @@ test("an unevaluated verifier posts an error status and no verdict comment", asy
 
 test("run 45311010610's non-app plan drives nothing, asks nothing, and a missing verdict is the error status", async () => {
   const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
-  const { planFromRequest, driveNeeded, askNeeded, judgeAskCommand, decide, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
+  const { planFromRequest, driveNeeded, askNeeded, judgeAskCommand, postCommand, decide, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
   const files = [
     ".claude/skills/verify-qa/reference/feature-map/INDEX.md",
     ".claude/skills/verify-qa/reference/feature-map/mobile.md",
