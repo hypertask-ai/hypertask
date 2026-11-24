@@ -21,10 +21,12 @@ const flag = fs.existsSync(flagFile)
 const {
   BLOCKED_BY_ME_VIEW_RULE,
   BLOCKED_VIEW_RULE,
+  BUILTIN_VIEW_IDS,
   blockedByMePredicate,
   blockedPredicate,
   blockedViewRule,
   buildBuiltinViewContext,
+  builtinViewIdFromViewParam,
 } = builtin;
 
 const finished = (leaveFinishedOut) => ({
@@ -152,6 +154,20 @@ test("Blocked states its rule and a cycle view keeps its own line", () => {
   assert.match(cycle, /data-testid="cycle-board-meta"/);
   assert.match(cycle, /Cycle 4/);
   assert.doesNotMatch(cycle, /blocked-view-rule/);
+});
+
+test("a board link opens a built-in view with its rule", () => {
+  assert.equal(builtinViewIdFromViewParam("builtin:blocked"), BUILTIN_VIEW_IDS.blocked);
+  assert.equal(builtinViewIdFromViewParam(" Builtin:Blocked-By-Me "), BUILTIN_VIEW_IDS.blockedByMe);
+  assert.equal(builtinViewIdFromViewParam("builtin:overdue"), BUILTIN_VIEW_IDS.overdue);
+  assert.equal(builtinViewIdFromViewParam("blocked"), undefined);
+  assert.equal(builtinViewIdFromViewParam("builtin:not-a-view"), undefined);
+  assert.equal(builtinViewIdFromViewParam(null), undefined);
+  assert.equal(builtinViewIdFromViewParam(undefined), undefined);
+
+  const landing = fs.readFileSync(path.join(root, "src/app/[...boardURL]/useLandingSectionState.ts"), "utf8");
+  assert.match(landing, /builtinViewIdFromViewParam\(new URLSearchParams\(window\.location\.search\)\.get\("view"\)\)/);
+  assert.match(landing, /current\[currentProjectId\] === viewId/);
 });
 
 test("the Blocked done-column switch ships on for everyone", () => {

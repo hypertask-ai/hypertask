@@ -205,6 +205,14 @@ const builtinViewsById = new Map(
 export const isBuiltinViewId = (id: string | undefined): id is BuiltinViewId =>
   id != null && builtinViewsById.has(id as BuiltinViewId);
 
+export const builtinViewIdFromViewParam = (
+  value: string | null | undefined,
+): BuiltinViewId | undefined => {
+  const candidate = String(value ?? "").trim().toLowerCase();
+  if (!candidate.startsWith("builtin:")) return undefined;
+  return isBuiltinViewId(candidate) ? candidate : undefined;
+};
+
 export const isBuiltinView = (view: BoardView): view is BuiltinView =>
   isBuiltinViewId(view.id);
 

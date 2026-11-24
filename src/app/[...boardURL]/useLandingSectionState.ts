@@ -12,7 +12,7 @@ import useTrialModal from "@/hooks/MultiPages/Route/useTrialModal";
 import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
-import { buildBuiltinViewContext, getActiveBoardViewId, isBuiltinViewId, BUILTIN_VIEW_IDS } from "@/lib/constants/builtinViews";
+import { buildBuiltinViewContext, builtinViewIdFromViewParam, getActiveBoardViewId, isBuiltinViewId, BUILTIN_VIEW_IDS } from "@/lib/constants/builtinViews";
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -102,6 +102,16 @@ useEffect(() => {
 }, [_allProjects, _projectIndex])
 
 const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
+const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
+const currentProjectId = _currentProject?.id;
+useEffect(() => {
+  if (!leaveFinishedOut || currentProjectId === undefined) return;
+  const viewId = builtinViewIdFromViewParam(new URLSearchParams(window.location.search).get("view"));
+  if (!viewId) return;
+  setActiveBuiltinViews((current) => (
+    current[currentProjectId] === viewId ? current : { ...current, [currentProjectId]: viewId }
+  ));
+}, [currentProjectId, leaveFinishedOut, setActiveBuiltinViews]);
 const subtaskSectionsForActiveView = useMemo(() => {
   const persistedFilteredSections = _allProjects?.[_projectIndex]?.filteredSections ?? [];
   if (!_currentProject) return persistedFilteredSections;
