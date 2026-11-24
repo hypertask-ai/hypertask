@@ -34,7 +34,11 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
       },
     },
     description: { findUnique: async () => ({ content: "" }) },
-    team_Activity: { update: noop },
+    team_Activity: {
+      update: noop,
+      updateMany: async () => ({ count: 1 }),
+      create: noop,
+    },
     drafts: { create: noop, createMany: noop },
     $executeRaw: noop,
   };
