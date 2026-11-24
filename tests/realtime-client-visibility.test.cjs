@@ -123,21 +123,23 @@ test("a local verify build takes realtime in an automated browser with no query 
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
   );
-  delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  try {
+    const local = fakeBrowser("", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(local.browser), false);
+    assert.equal(local.values.has(REALTIME_DISABLED_STORAGE_KEY), false);
 
-  const local = fakeBrowser("", true, "127.0.0.1");
-  assert.equal(realtimeDisabledForBrowser(local.browser), false);
-  assert.equal(local.values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+    const localhost = fakeBrowser("", true, "localhost");
+    assert.equal(realtimeDisabledForBrowser(localhost.browser), false);
 
-  const localhost = fakeBrowser("", true, "localhost");
-  assert.equal(realtimeDisabledForBrowser(localhost.browser), false);
+    const off = fakeBrowser("?realtime=off", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(off.browser), true);
 
-  const off = fakeBrowser("?realtime=off", true, "127.0.0.1");
-  assert.equal(realtimeDisabledForBrowser(off.browser), true);
-
-  const production = fakeBrowser("", true, "app.hypertask.ai");
-  assert.equal(realtimeDisabledForBrowser(production.browser), true);
-  assert.equal(production.values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+    const production = fakeBrowser("", true, "app.hypertask.ai");
+    assert.equal(realtimeDisabledForBrowser(production.browser), true);
+    assert.equal(production.values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+  } finally {
+    delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  }
 });
 
 test("headless agent-browser contexts disable realtime without webdriver", () => {
