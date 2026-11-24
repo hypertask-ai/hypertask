@@ -448,13 +448,13 @@ question_refused CI comment add X-1 --kind question --text "$plain<p>CI and OAut
 [[ $(< "$T/err") == *OAuth* ]] || fail 'did not name every developer word'
 allowed bash "$vcc" comment add X-1 --kind question --text "$plain<p>We can decide in Circle, with ci and circles.</p>"
 for link in '<a href="https://example.test">Details</a>' 'https://example.test' 'www.example.test' '<a href="/detail/project-15/1">Details</a>'; do
-  question_refused 'no outside links' comment add X-1 --kind question --text "$plain<p>$link</p>"
+  allowed bash "$vcc" comment add X-1 --kind question --text "$plain<p>$link</p>"
   fixture "$plain<p>$link</p>"
-  review_refused 'no outside links' task move X-1 --section 'Valentin Review'
+  allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 done
 question_refused '#456' comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">PR #123</a> #456</p>"
 question_refused OAuth comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">OAuth</a></p>"
-printf 'ok visible developer words and unlinked references refuse without CI substring or href false positives\n'
+printf 'ok a Question may carry links, and visible developer words and unlinked references still refuse without CI substring false positives\n'
 
 for subcommand in comment comments; do
   for option in --text --body --text= --body=; do
@@ -497,7 +497,7 @@ for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*t
 done
 context='&#9;See [the setting](https://example.test)&#x20;here.'
 text="${markdown/the setting that keeps the board tidy./"$context"}"
-question_refused 'no outside links' comment add X-1 --kind question --markdown --text "$text"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 question_refused '#123' comment add X-1 --kind question --markdown --text "$text #123"
 question_refused '#35' comment add X-1 --kind question --markdown --text "$text &#35;123"
 printf '%s\n' "$markdown" > "$T/question.md"
@@ -507,7 +507,7 @@ question_refused 'My recommendation:' comment add X-1 --kind question --markdown
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
 question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
 OAuth"
-question_refused 'no outside links' comment add X-1 --kind question --markdown --text "$markdown
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown
 [PR #123](https://example.test/api/OAuth/CI)"
 for suffix in '<p>Extra.</p>' '<div>Extra.</div>' '<li><p>Extra.</p></li>' '<br>Extra.<br>'; do
   context='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p>'
@@ -543,7 +543,7 @@ question_refused 'must be right under' comment add X-1 --kind question --markdow
 for context in '<ul><li><p>What this is: the setting that keeps the board tidy.</p></li></ul>' '<blockquote>What this is: the setting that keeps the board tidy.</blockquote>'; do
   allowed bash "$vcc" comment add X-1 --kind question --text "${plain/$label/$context}"
 done
-printf 'ok short context, immediate recommendation, one question and no links enforced with allowed controls\n'
+printf 'ok short context, immediate recommendation and one question enforced with allowed controls\n'
 printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
 
 for kind in qa done ''; do
@@ -839,7 +839,7 @@ STUB
   [ "$out" = 'local projects list' ]
 )
 printf 'ok board wrapper finds hypertask in the local command folder\n'
-# Only Chief Of Staff and the board lead may make Valentin the blocker (YPER4-1376).
+# Only Chief Of Staff and the board lead may make Valentin the waiting person (YPER4-1376).
 export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
 rm -f "$HOME/.agents/skills/ship/scripts/ship-check"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$HOME/.agents/skills/ship/scripts/ship-check"
@@ -882,8 +882,6 @@ fixture "$question"
 task_fixture '<p>Problem</p><p>Fix</p><p>Done when</p><p>Risk: low.</p><p>Decision: none.</p>'
 jq '.tasks[0].boardId = 15' "$VCC_TEST_TASK" > "$T/task15.json"
 mv "$T/task15.json" "$VCC_TEST_TASK"
-gate_refused comment add X-1 --kind question --text "$question"
-gate_refused --project 15 --json comment add X-1 --kind=question --text="$question"
 gate_refused tasks waiting-on X-1 --user 6
 gate_refused task waiting-on X-1 --user me
 gate_refused task move X-1 --section 'Valentin Review'
@@ -891,11 +889,18 @@ gate_refused task move X-1 'valentin review'
 gate_refused task update X-1 --section='Valentin Review'
 gate_refused task create --project 15 --labels brain-medium --title 'x' --section 'Valentin Review'
 for who in 'Chief Of Staff' 'HT Product Lead'; do
-  gate_allowed "$who" comment add X-1 --kind question --text "$question"
   gate_allowed "$who" task waiting-on X-1 --user 6
   gate_allowed "$who" task move X-1 --section 'Valentin Review'
   [[ $(< "$VCC_TEST_TRACE") == *'board=15'* ]] || fail 'gate did not look up the ticket board'
 done
+for who in 'Runner 3' 'Chief Of Staff' 'HT Product Lead'; do
+  run env VCC_TEST_IDENTITY="$who" bash "$vcc" comment add X-1 --kind question --text "$question"
+  [ "$status" = 0 ] || fail "$who may not ask a Question ($status): $(cat "$T/err")"
+  [[ $(< "$VCC_TEST_TRACE") != *'gate who='* ]] || fail "asking a Question was gated for $who"
+done
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" --project 15 --json comment add X-1 --kind=question --text="$question"
+[ "$status" = 0 ] || fail "a runner may not ask a Question to a named board ($status): $(cat "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") != *'gate who='* ]] || fail 'asking a Question to a named board was gated'
 run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task waiting-on X-1 --user none --reason 'not his'
 [ "$status" = 0 ] || fail 'a runner clearing the blocker was refused'
 run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" comment add X-1 --text 'agent lane note'
@@ -909,7 +914,7 @@ gate_refused task update X-1 --section 10412
 run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task update X-1 --section 31019
 [ "$status" = 0 ] || fail 'a move by section id to another column was refused'
 gate_allowed 'Chief Of Staff' task update X-1 --section 10412
-printf 'ok only Chief Of Staff and the board lead make Valentin the blocker\n'
+printf 'ok only Chief Of Staff and the board lead make Valentin the waiting person, and any agent may ask a Question\n'
 brain_refused() {
   run bash "$vcc" "$@"
   [ "$status" = 5 ] || fail "expected brain refusal (5), got $status: $*"
