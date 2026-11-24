@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getMcpSessionAgentSummary } from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
 import { mapTaskToDetail, taskDetailInclude } from "@/lib/mcp/tasks/mappers";
+import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -310,23 +311,13 @@ export async function POST(request: NextRequest) {
 
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
     const agentField = sessionAgent ? { agent: sessionAgent } : {};
-
-    if (!fullTask) {
-      return NextResponse.json(
-        {
-          success: true,
-          task: mapTaskToDetail(result.task!, user.id),
-          message: "Task moved successfully",
-          ...agentField,
-        },
-        { status: 200 }
-      );
-    }
+    const mapped = mapTaskToDetail(fullTask ?? result.task!, user.id);
+    const [task] = await nameMovedTicketKeys(user.id, [mapped]);
 
     return NextResponse.json(
       {
         success: true,
-        task: mapTaskToDetail(fullTask, user.id),
+        task,
         message: "Task moved successfully",
         ...agentField,
       },

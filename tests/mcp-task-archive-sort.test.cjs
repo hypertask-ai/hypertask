@@ -120,6 +120,11 @@ function loadRoute(tasks = []) {
     "@/utils/controllers/tasks/userCommentCounts": {
       userCommentCountsByTaskId: async () => new Map(),
     },
+    "@/lib/mcp/tasks/previousTicketNumbers": {
+      previousTicketNumbersFor: async () => undefined,
+      withPreviousTicketNumbers: (task) => task,
+      nameMovedTicketKeys: async (_userId, tasks) => tasks,
+    },
   };
   const routeModule = { exports: {} };
 
