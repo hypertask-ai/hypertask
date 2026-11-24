@@ -39,6 +39,7 @@ const NO_COMMAND_MENU_ROUTES = [
   "/trial-plan-confirmation",
   "/full-plan-confirmation",
   "/unauthorized",
+  "/signout",
   "/onboarding",
   "/interactive-onboarding",
   "/new",
