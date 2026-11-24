@@ -12,11 +12,14 @@ docker run -d --name hypertask-verify-db \
 export DATABASE_URL=postgresql://verify:verify@127.0.0.1:5678/hypertask
 npx prisma generate
 npx prisma migrate deploy
+npx next build
 BETTER_AUTH_SECRET=local-placeholder-at-least-32-characters \
-NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000 npx next dev -p 3000
+NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000 NEXT_PUBLIC_BASEURL=http://127.0.0.1:3000 \
+npx next start -H 127.0.0.1 -p 3000
 ```
 
-Stop the dev server with Ctrl+C, then remove the instance and its data:
+Serve the production build: `next dev` never hydrates here, so the board stays on
+"Loading board..." forever. Stop the server with Ctrl+C, then remove the instance and its data:
 
 ```bash
 docker rm -f hypertask-verify-db

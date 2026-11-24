@@ -62,7 +62,7 @@ function loadModule(file, stubs = {}) {
 
 const stubContexts = new WeakMap();
 function stubModule(context, specifier, exports) {
-  const filename = requireRoot.resolve(specifier.startsWith("src/") ? path.join(root, specifier) : specifier);
+  const filename = resolvedModule(specifier);
   if (!stubContexts.has(context)) {
     const previous = new Map();
     stubContexts.set(context, previous);
@@ -79,6 +79,14 @@ function stubModule(context, specifier, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
+function resolvedModule(specifier) {
+  return requireRoot.resolve(specifier.startsWith("src/") ? path.join(root, specifier) : specifier);
+}
+
+function reloadModule(specifier) {
+  delete require.cache[resolvedModule(specifier)];
+}
+
 function findElement(element, type) {
   if (Array.isArray(element)) {
     for (const child of element) {
@@ -91,4 +99,4 @@ function findElement(element, type) {
   }
 }
 
-module.exports = { loadModule, stubModule, findElement, root };
+module.exports = { loadModule, stubModule, reloadModule, findElement, root };
