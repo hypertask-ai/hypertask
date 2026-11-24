@@ -35,7 +35,7 @@ const ApiSection = () => {
       </SettingsCard>
 
       <SettingsCard title="Example">
-        <p className="px-2 text-dense font-medium leading-relaxed text-text-light-gray">
+        <p className="px-2 text-dense font-medium text-text-light-gray">
           List the projects available to the authenticated account.
         </p>
         <SettingsCodeRow value={CURL_EXAMPLE} />

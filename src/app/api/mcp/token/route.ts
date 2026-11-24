@@ -15,6 +15,10 @@ function getTokenRevocationExpiry(decoded: jwt.JwtPayload) {
     : NON_EXPIRING_TOKEN_REVOKED_UNTIL
 }
 
+function sessionRevocationStoreConfigured() {
+  return Boolean(process.env.REDIS_URL?.trim())
+}
+
 async function getCurrentUserFromCookies() {
   try {
     const cookieStore = await cookies()
@@ -34,7 +38,11 @@ async function getCurrentUserFromCookies() {
       return null
     }
 
-    if (await isSessionTokenRevoked(token, { failClosed: true })) return null
+    if (
+      sessionRevocationStoreConfigured() &&
+      await isSessionTokenRevoked(token, { failClosed: true })
+    )
+      return null
 
     return user
   } catch (error) {

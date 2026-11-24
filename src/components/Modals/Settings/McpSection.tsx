@@ -201,7 +201,6 @@ const McpSection = () => {
           onConfirm={() => void removeClient()}
         />
       )}
-
     </SettingsSectionShell>
   );
 };
