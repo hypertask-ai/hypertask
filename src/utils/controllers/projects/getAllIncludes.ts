@@ -515,6 +515,7 @@ export const projectBootstrapSelect = {
   teamId: true,
   sorting_mode: true,
   uniqueIdentifier: true,
+  issuedUniqueIndex: true,
   timeTrackingEnabled: true,
   showTimeTotals: true,
   stalenessEnabled: true,
