@@ -3,7 +3,7 @@ const test = require("node:test");
 const { NextRequest } = require("next/server");
 const { fixture, matches, hydrate } = require("./helpers/agent-board-scope.cjs");
 
-function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardProducer = false, currentRuntime = false, authenticated = true, withUsage = false } = {}) {
+function harness({ actor = "agent", enforce = true, grant = "none", zeroBoards = false, bypassBoardProducer = false, currentRuntime = false, authenticated = true, withUsage = false } = {}) {
   const f = fixture();
   f.state.enforce = enforce;
   if (actor !== "agent") f.state.ctx.agentId = null;
@@ -30,6 +30,7 @@ function harness({ actor = "agent", enforce = true, grant = "none", bypassBoardP
     if (grant === "revoked") f.agent.revokedAt = new Date();
     if (grant === "wrong-owner") f.agent.userId = 99;
   }
+  if (zeroBoards) f.projects.forEach(board => { board.members = board.members.filter(member => !member.agentId); });
   f.prisma.member.findMany = async args => f.projects
     .flatMap(board => board.members.map(member => ({ ...member, projectId: board.id, project: board })))
     .filter(member => matches(member, args.where))
@@ -153,8 +154,14 @@ for (const area of ["activity", "detail"]) {
     assert.equal(h.state.flagReads, 1);
   });
 
-  test(`${area}: same ungranted agent still allowed with flag Off (WATCH)`, async () => {
+  test(`${area}: same ungranted agent with boards is refused with flag Off (WATCH)`, async () => {
     const h = harness({ enforce: false });
+    assert.deepEqual(await visible(h), []);
+    assert.equal(h.state.flagReads, 1);
+  });
+
+  test(`${area}: zero-board agent keeps its owner access with flag Off (WATCH)`, async () => {
+    const h = harness({ enforce: false, zeroBoards: true });
     assert.equal((await visible(h)).length, area === "activity" ? 4 : 1);
     assert.equal(h.state.flagReads, 1);
     assert.notEqual(h.agent.id, h.target.id);
@@ -287,17 +294,17 @@ test("detail: all seven recorded runtime queries preserve their existing predica
   assert.deepEqual(queries[6].orderBy, [{ dueDate: { sort: "asc", nulls: "last" } }, { priority: { priority_index: "asc" } }, { uniqueIndex: "asc" }]);
 });
 
-test("detail: board producer filters runtime snapshot and board access by acting agent", async () => {
+test("detail: board producer filters runtime snapshot and board access by acting agent in both scope modes", async () => {
   for (const enforce of [true, false]) {
     const h = harness({ enforce, currentRuntime: true });
     const response = await h.request("detail");
     const { agent } = await response.json();
-    assert.equal(agent.boards.length, enforce ? 0 : 1);
-    assert.equal(agent.boardAccess.some(board => board.id === h.project.id), !enforce);
-    assert.equal(agent.operations.snapshot.queue.length, enforce ? 0 : 1);
-    assert.equal(agent.operations.snapshot.sourceSections.length, enforce ? 0 : 1);
-    assert.equal(agent.operations.snapshot.processedTickets.length, enforce ? 0 : 1);
-    assert.equal(agent.lastPostedAt === null, enforce);
+    assert.equal(agent.boards.length, 0);
+    assert.equal(agent.boardAccess.some(board => board.id === h.project.id), false);
+    assert.equal(agent.operations.snapshot.queue.length, 0);
+    assert.equal(agent.operations.snapshot.sourceSections.length, 0);
+    assert.equal(agent.operations.snapshot.processedTickets.length, 0);
+    assert.equal(agent.lastPostedAt === null, true);
   }
 });
 
@@ -315,7 +322,7 @@ test("detail: ungranted ENFORCE actor receives no working ticket from the real h
 });
 
 for (const [label, options] of [
-  ["ungranted WATCH actor", { enforce: false }],
+  ["zero-board WATCH actor", { enforce: false, zeroBoards: true }],
   ["human owner", { actor: "owner" }],
   ["human member", { actor: "member" }],
   ["human guest", { actor: "guest" }],

@@ -158,8 +158,20 @@ for (const area of ["naming", "hyper", "questions", "editor"]) {
     assert.equal(h.state.flagReads, 1);
   });
 
-  test(`${area}: same ungranted internal agent allowed in WATCH`, async () => {
+  test(`${area}: same ungranted internal agent refused in WATCH once it already has boards`, async () => {
     const h = harness({ enforce: false });
+    const response = await h.request(area);
+    if (area === "naming") {
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).session.title, "New AI Chat");
+    } else assert.equal(response.status, area === "editor" ? 403 : 404);
+    assert.equal(h.generateCalls.length, 0);
+    assert.equal(h.state.flagReads, 1);
+  });
+
+  test(`${area}: zero-board internal agent keeps its owner access in WATCH`, async () => {
+    const h = harness({ enforce: false });
+    h.projects.forEach(project => { project.members = []; });
     await allowed(h, area);
     assert.equal(h.state.flagReads, 1);
   });
@@ -211,8 +223,13 @@ test("naming: project fallback is also scoped to the authenticated actor", async
     const h = harness({ enforce });
     const response = await h.request("naming", { taskId: undefined, projectId: h.project.id });
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).session.title, enforce ? "New AI Chat" : h.project.title);
+    assert.equal((await response.json()).session.title, "New AI Chat");
   }
+  const open = harness({ enforce: false });
+  open.projects.forEach(project => { project.members = []; });
+  const response = await open.request("naming", { taskId: undefined, projectId: open.project.id });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).session.title, open.project.title);
 });
 
 test("hyper: recorded source-comment query independently refuses ungranted ENFORCE access", async () => {
@@ -262,11 +279,11 @@ for (const recentViewer of [false, true]) {
       const h = harness({ bypassTask: true, recentViewer, enforce });
       await allowed(h, "questions");
       const prompt = h.generateCalls[0].prompt;
-      assert.ok(prompt.includes(recentViewer || !enforce ? "Last comment: Older viewer source" : "Last comment: none"));
-      assert.ok(prompt.includes(`Comments newer than the viewer's last comment: ${enforce ? 0 : 1}`));
+      assert.ok(prompt.includes(recentViewer ? "Last comment: Older viewer source" : "Last comment: none"));
+      assert.ok(prompt.includes("Comments newer than the viewer's last comment: 0"));
       const query = h.queries.find(query => query.method === (recentViewer ? "count" : "findMany"));
       assert.ok(query);
-      assert.equal(matches(recentViewer ? h.newer : h.older, query.where), !enforce);
+      assert.equal(matches(recentViewer ? h.newer : h.older, query.where), false);
     }
   });
 }

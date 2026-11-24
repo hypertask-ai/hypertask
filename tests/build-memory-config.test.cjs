@@ -62,6 +62,7 @@ for (const smoke of [false, true]) {
       if (posthog) assert.equal(config.env.POSTHOG_RELEASE_ID, "build-memory-test-release");
       assert.equal(config.experimental.webpackBuildWorker, true);
       assert.equal(config.experimental.webpackMemoryOptimizations, true);
+      assert.equal(config.experimental.agentUpgrade, false);
       assert.equal(typeof config.webpack, "function");
       assert.equal(config.turbopack.resolveAlias["vfile-message"], path.resolve(__dirname, "..", "src/lib/vendor/vfile-message.mjs"));
       assert.equal(config.experimental.cpus, 1);
@@ -80,8 +81,7 @@ for (const smoke of [false, true]) {
         resolve: { alias: {} },
       };
       config.webpack(productionCache, { dev: false });
-      assert.equal(productionCache.cache.type, "filesystem");
-      assert.equal(productionCache.cache.maxMemoryGenerations, 0);
+      assert.equal(productionCache.cache, false);
       assert.ok(productionCache.plugins.some(plugin => plugin.constructor.name === "BuildMemoryPlugin"));
       const developmentCache = {
         cache: { type: "filesystem", maxMemoryGenerations: Infinity },
@@ -93,6 +93,24 @@ for (const smoke of [false, true]) {
     });
   }
 }
+
+test("production webpack keeps no filesystem cache to flush at the end of a compile", () => {
+  assert.match(
+    source,
+    /if \(!options\.dev\) \{\s*config\.cache = false;\s*\}/,
+    "production webpack must not keep a filesystem cache: flushing it held 2.6 GB more than the compile " +
+      "in the server worker and OOM-killed every production deployment since 2026-11-23 (HTPR-8459)",
+  );
+});
+
+test("production builds do not stop on the Next advisory feed", () => {
+  assert.match(
+    source,
+    /agentUpgrade: false/,
+    "a build-time network advisory check must not fail the production build: " +
+      "next 16.4.2's security nudge exited 1 after a complete build on 2026-11-24 (HTPR-8459)",
+  );
+});
 
 test("production build heap cap leaves half the build machine for native memory", () => {
   const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));

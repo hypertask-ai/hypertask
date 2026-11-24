@@ -62,8 +62,6 @@ server-only diff (verified 2026-11-20).
 - A replay run from the pinned base checkout, or with a stale
   `refs/remotes/origin/production`, silently passes server-only diffs with `No
   changed file matches the UI-change path filter.` and writes `automerge`.
-- Five leftover `console.error('DEBUG …')` lines in the merged evaluator print
-  on every run (`feature-flag-gate.mjs` DEBUG block); they are not a failure.
 
 ### What proof to collect
 

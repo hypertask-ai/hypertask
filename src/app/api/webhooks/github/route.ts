@@ -710,6 +710,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    if (syncResult.suppressed) {
+      return NextResponse.json({
+        success: true,
+        ticketId,
+        ignored: "Pull request link was removed",
+      });
+    }
+
     if (!["opened", "reopened", "closed"].includes(payload.action)) {
       return NextResponse.json(
         { success: true, ignored: `Unsupported action: ${payload.action}` },
