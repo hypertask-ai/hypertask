@@ -61,29 +61,32 @@ def repo_root():
     raise SystemExit("publish refused: cannot find the app design tokens (tailwind.config.ts and src/styles/tailwindThemes); run this from the Hypertask repo")
 
 
-def _rgb(value):
+def _rgba(value):
     v = value.strip().lower()
     if v == "transparent":
-        return (0, 0, 0)
+        return (0, 0, 0, 0)
     if v.startswith("#"):
         h = v[1:]
         if len(h) in (3, 4):
-            h = "".join(c * 2 for c in h[:3])
-        elif len(h) in (6, 8):
-            h = h[:6]
-        else:
+            h = "".join(c * 2 for c in h)
+        elif len(h) not in (6, 8):
             return None
         try:
-            return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+            return (*tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)), int(h[6:8] or "ff", 16))
         except ValueError:
             return None
     m = re.fullmatch(r"rgba?\(([^)]*)\)", v)
     if not m:
         return None
     parts = [p for p in re.split(r"[\s,/]+", m.group(1).strip()) if p]
+    if len(parts) not in (3, 4) and not (len(parts) == 2 and parts[0].startswith("#")):
+        return None
     try:
-        return tuple(round(float(p[:-1]) * 255 / 100) if p.endswith("%") else round(float(p)) for p in parts[:3])
-    except ValueError:
+        alpha = parts[-1] if len(parts) in (2, 4) else "1"
+        alpha = int(float(alpha[:-1]) * 255 / 100 + 0.5) if alpha.endswith("%") else int(float(alpha) * 255 + 0.5)
+        channels = _rgba(parts[0])[:3] if len(parts) == 2 else tuple(round(float(p[:-1]) * 255 / 100) if p.endswith("%") else round(float(p)) for p in parts[:3])
+        return (*channels, alpha)
+    except (ValueError, TypeError):
         return None
 
 
@@ -93,7 +96,7 @@ def _hsl(h, s, l):
         k = (n + h * 12) % 12
         a = s * min(l, 1 - l)
         return round(255 * (l - a * max(-1, min(k - 3, 9 - k, 1))))
-    return (channel(0), channel(8), channel(4))
+    return (channel(0), channel(8), channel(4), 255)
 
 
 def design_tokens():
@@ -106,13 +109,13 @@ def design_tokens():
             continue
         text = path.read_text(errors="replace")
         for raw in re.findall(r"#[0-9a-fA-F]{3,8}\b", text):
-            rgb = _rgb(raw)
-            if rgb:
-                colors.add(rgb)
+            rgba = _rgba(raw)
+            if rgba:
+                colors.add(rgba)
         for raw in re.findall(r"rgba?\([^)]*\)", text):
-            rgb = _rgb(raw)
-            if rgb:
-                colors.add(rgb)
+            rgba = _rgba(raw)
+            if rgba:
+                colors.add(rgba)
         for raw in re.findall(r"(?<![\w.%-])(-?\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%", text):
             colors.add(_hsl(*raw))
         for raw in re.findall(r"font-size:\s*([\d.]+)(px|rem)", text):
@@ -125,9 +128,9 @@ def design_tokens():
                     fonts.add(name.lower())
     tailwind = (root / "tailwind.config.ts").read_text()
     for raw in re.findall(r"#[0-9a-fA-F]{3,8}\b", tailwind) + re.findall(r"rgba?\([^)]*\)", tailwind):
-        rgb = _rgb(raw)
-        if rgb:
-            colors.add(rgb)
+        rgba = _rgba(raw)
+        if rgba:
+            colors.add(rgba)
     block = re.search(r"fontSize:\s*\{(.*?)\n      \}", tailwind, re.S)
     if block:
         for raw in re.findall(r"\"([\d.]+)px\"", block.group(1)):
@@ -181,13 +184,16 @@ function collect(doc = document, prefix = '') {
         for (const pseudo of ['', '::before', '::after']) {
             const style = getComputedStyle(el, pseudo || null);
             if (pseudo && (['none', 'normal'].includes(style.content) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)) continue;
-            const colors = [['color', style.color], ['background', style.backgroundColor]];
+            const colors = [['color', style.color], ['background', style.backgroundColor], ['text-fill', style.webkitTextFillColor]];
             const sides = [['top', style.borderTopWidth, style.borderTopColor], ['right', style.borderRightWidth, style.borderRightColor],
                            ['bottom', style.borderBottomWidth, style.borderBottomColor], ['left', style.borderLeftWidth, style.borderLeftColor]];
             for (const [side, width, color] of sides) {
                 if (parseFloat(width) > 0) colors.push(['border-' + side, color]);
             }
             if (parseFloat(style.outlineWidth) > 0 && style.outlineStyle !== 'none') colors.push(['outline', style.outlineColor]);
+            if (style.textDecorationLine !== 'none') colors.push(['text-decoration', style.textDecorationColor]);
+            if (style.textEmphasisStyle !== 'none') colors.push(['text-emphasis', style.textEmphasisColor]);
+            if (parseFloat(style.webkitTextStrokeWidth) > 0) colors.push(['text-stroke', style.webkitTextStrokeColor]);
             if (solid(style.fill)) colors.push(['fill', style.fill]);
             if (solid(style.stroke)) colors.push(['stroke', style.stroke]);
             for (const [kind, value] of [['gradient', style.backgroundImage], ['box-shadow', style.boxShadow], ['text-shadow', style.textShadow]]) {
@@ -213,15 +219,18 @@ TOKEN_JS = COLLECT_JS + r"""
 const fs = require('fs');
 const { chromium } = require(process.argv[1]);
 const tokens = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
-const colors = new Set(tokens.colors.map((rgb) => rgb.join(' ')));
+const colors = new Set(tokens.colors.map((rgba) => rgba.join(' ')));
 const sizes = tokens.sizes;
 const fonts = new Set(tokens.fonts);
 const radii = new Set(tokens.radii);
-const rgb = (value) => {
+const rgba = (value) => {
     const match = /^rgba?\(([^)]*)\)$/.exec(value);
     if (!match) return null;
-    const parts = match[1].split(/[\s,/]+/).filter(Boolean).slice(0, 3);
-    return parts.map((part) => Math.round(part.endsWith('%') ? parseFloat(part) * 255 / 100 : parseFloat(part))).join(' ');
+    const parts = match[1].split(/[\s,/]+/).filter(Boolean);
+    const channels = parts.slice(0, 3).map((part) => Math.round(part.endsWith('%') ? parseFloat(part) * 255 / 100 : parseFloat(part)));
+    const alpha = parts[3] ?? '1';
+    channels.push(Math.round(parseFloat(alpha) * 255 / (alpha.endsWith('%') ? 100 : 1)));
+    return channels.join(' ');
 };
 const px = (value) => value.endsWith('px') ? parseFloat(value) : NaN;
 const check = (row) => {
@@ -231,7 +240,7 @@ const check = (row) => {
     if (!fonts.has(family)) problems.push('font ' + family);
     if (!sizes.some((allowed) => Math.abs(allowed - px(row.size)) < 0.5)) problems.push('size ' + row.size);
     for (const [kind, color] of row.colors) {
-        if (!colors.has(rgb(color))) problems.push(kind + ' ' + color);
+        if (!colors.has(rgba(color))) problems.push(kind + ' ' + color);
     }
     for (const corner of row.radii) {
         if (!radii.has(px(corner))) problems.push('radius ' + corner);

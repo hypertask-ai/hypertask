@@ -350,6 +350,27 @@ p, log = invoke("publish", "HTPR-255", "--no-comment")
 assert len(uploaded(log, "waiting")) == 1
 ok("a Tailwind design token colour from tailwind.config.ts passes")
 
+for color, fail in (("rgba(68,85,187,0.01)", True), ("#4455bb03", True), ("rgba(255,255,255,0.8)", False), ("#ffffffcc", False)):
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;color:{color}">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+    if fail:
+        assert p.stderr.startswith(TOKENS) and not events(log, "http")
+    else:
+        assert len(uploaded(log, "waiting")) == 1
+ok("alpha variants stay distinct and literal translucent app tokens pass in rgba and hex forms")
+
+for accent in ("text-decoration:underline;text-decoration-color:#ff0000", "text-emphasis:filled dot #ff0000", "-webkit-text-stroke:1px #ff0000", "-webkit-text-fill-color:#ff0000"):
+    for css, fail in ((accent, True), (accent.replace("#ff0000", "#ececec"), False)):
+        page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{css}">Changed card</div>'))
+        add_today(page.parent)
+        p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+        if fail:
+            assert p.stderr.startswith(TOKENS) and not events(log, "http")
+        else:
+            assert len(uploaded(log, "waiting")) == 1
+ok("painted text decorations, emphasis, strokes and fills use app token colours")
+
 page.write_text(valid_page.replace("<body>", '<body style="background-color:#ff0000">'))
 add_today(page.parent)
 p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
