@@ -4,7 +4,7 @@ const test = require("node:test");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
@@ -182,6 +182,40 @@ test("server-only changes require a changed ticket-specific server gate", async 
       "HTPR-1 [FEATURE] server behavior", base, gated, decision], { cwd: dir });
     assert.equal(fs.readFileSync(decision, "utf8"), "feature-gated-ui\n");
   }
+});
+
+test("flag gate run log has no debug lines", (t) => {
+  const { dir, git } = makeRepo(t);
+  const script = path.join(root, ".github/scripts/feature-flag-gate.mjs");
+  const title = "HTPR-1 [FEATURE] server behavior";
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/api/widget/route.ts", 'export async function execute(userId) { return "new"; }\n');
+  const ungated = commit(git, "server feature");
+  const refused = spawnSync(process.execPath, [script, title, base, ungated], { cwd: dir, encoding: "utf8" });
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.equal(
+    refused.stdout,
+    "[FEATURE] changes server behavior (src/app/api/widget/route.ts) without a ticket-specific server flag. " +
+      "Define src/lib/flags/definitions/htpr-1-<name>.ts and call isFeatureEnabled from @/lib/flags " +
+      "with that key on an added or modified server line controlling the behavior.\n",
+  );
+  assert.equal(refused.stderr, "");
+
+  writeFile(
+    dir,
+    "src/app/api/widget/route.ts",
+    'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function execute(userId) { return await isFeatureEnabled(OTHER_FLAG, userId) ? "new" : "old"; }\n',
+  );
+  const gated = commit(git, "server flag");
+  const decision = path.join(dir, "decision.txt");
+  const allowed = spawnSync(process.execPath, [script, title, base, gated, decision], { cwd: dir, encoding: "utf8" });
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(
+    allowed.stdout,
+    "[FEATURE] calls ticket-specific feature gate htpr-1-other in changed code covering the changed server behavior and every UI entry from src/app/api/widget/route.ts.\n",
+  );
+  assert.equal(fs.readFileSync(decision, "utf8"), "feature-gated-ui\n");
+  assert.equal(allowed.stderr, "");
 });
 
 test("server gates reject client hooks, dead calls, unrelated flags and unchanged reads", async (t) => {
@@ -3175,4 +3209,178 @@ export default { key: NEW_FLAG, kind: "feature", defaultMode: "EVERYONE", shippe
   const head = commit(git, "new flag");
   const result = await evaluateFlagDefinitions(base, head, dir, ["src/lib/flags/definitions/htpr-2-new.ts"]);
   assert.equal(result.pass, true, result.reason);
+});
+
+const GALLERY_KEY = "htpr-2-gallery";
+const galleryUiBase = `import { useCallback } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { GALLERY_FLAG } from "@/lib/flags/keys";
+export function Gallery({ items, extra }) {
+  const galleryEnabled = useFlag(GALLERY_FLAG);
+  const show = useCallback(() => items, [items, galleryEnabled]);
+  if (!galleryEnabled) return;
+  if ((galleryEnabled && items) || extra) return items;
+  return galleryEnabled && items ? items : null;
+}
+`;
+const galleryUiHead = `import { useCallback } from "react";
+export function Gallery({ items, extra }) {
+  const show = useCallback(() => items, [items]);
+  if (items || extra) return items;
+  return items ? items : null;
+}
+`;
+const galleryServerBase = `import { isFeatureEnabled } from "@/lib/flags";
+import { GALLERY_FLAG } from "@/lib/flags/keys";
+export async function load(userId: string, items: string) {
+  const galleryEnabled = await isFeatureEnabled(GALLERY_FLAG, userId);
+  if (!galleryEnabled) return;
+  return !galleryEnabled || items;
+}
+`;
+const galleryServerHead = `export async function load(userId: string, items: string) {
+  return items;
+}
+`;
+
+function retiredFlagsSource(key) {
+  const setLine = key ? `\n  "${key}",` : "";
+  const clientLine = key ? `\n  "${key}": true,` : "";
+  return `import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
+const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";
+const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";
+export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
+export const RETIRED_FEATURE_FLAG_KEYS = new Set([${setLine}
+]);
+const RETIRED_CLIENT_FEATURE_FLAGS = {${clientLine}
+} as const;
+`;
+}
+
+function galleryModes(include, mode = "EVERYONE") {
+  const body = { "htpr-1-other": "EVERYONE" };
+  if (include) body[GALLERY_KEY] = mode;
+  return `${JSON.stringify({ capturedAt: "2026-11-16T00:00:00.000Z", modes: body }, null, 2)}\n`;
+}
+
+function galleryRemovalRepo(t, { ui = galleryUiBase, server = galleryServerBase, mode = "EVERYONE" } = {}) {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  writeFile(dir, "src/lib/flags.ts", retiredFlagsSource(""));
+  writeFile(dir, `src/lib/flags/definitions/${GALLERY_KEY}.ts`, `export const GALLERY_FLAG = "${GALLERY_KEY}";\nexport default { key: GALLERY_FLAG, description: "Gallery", shippedOn: "2026-10-09" } as const;\n`);
+  writeFile(dir, "e2e/smoke/production-flag-modes.json", galleryModes(true, mode));
+  writeFile(dir, `e2e/smoke/flag-modes/${GALLERY_KEY}.json`, '{"mode":"EVERYONE"}\n');
+  writeFile(dir, "src/components/Gallery.tsx", ui);
+  writeFile(dir, "src/app/api/gallery/route.ts", server);
+  writeFile(dir, "tests/gallery.test.cjs", "test('keeps the gallery flag', () => {});\n");
+  writeFile(dir, "src/lib/extra.ts", "export const extra = 1;\n");
+  const base = commit(git, "base");
+  git(["update-ref", "refs/remotes/origin/production", base]);
+  return { dir, git, base };
+}
+
+function commitGalleryRemoval(dir, git, { ui = galleryUiHead, server = galleryServerHead, mode = "EVERYONE" } = {}) {
+  fs.unlinkSync(path.join(dir, `src/lib/flags/definitions/${GALLERY_KEY}.ts`));
+  fs.unlinkSync(path.join(dir, `e2e/smoke/flag-modes/${GALLERY_KEY}.json`));
+  writeFile(dir, "src/lib/flags.ts", retiredFlagsSource(GALLERY_KEY));
+  const modes = JSON.parse(galleryModes(true, mode));
+  delete modes.modes[GALLERY_KEY];
+  writeFile(dir, "e2e/smoke/production-flag-modes.json", `${JSON.stringify(modes, null, 2)}\n`);
+  writeFile(dir, "src/components/Gallery.tsx", ui);
+  writeFile(dir, "src/app/api/gallery/route.ts", server);
+  writeFile(dir, "src/prisma/migrations/20261116120000_drop_gallery/migration.sql", `DELETE FROM "FeatureFlag" WHERE "key" = '${GALLERY_KEY}';\n`);
+  writeFile(dir, "tests/gallery.test.cjs", "test('gallery flag is gone', () => {});\n");
+  writeFile(dir, "docs/gallery.md", "The gallery flag is gone.\n");
+  return commit(git, "remove the gallery flag");
+}
+
+test("a pull request that only removes one flag already on for everyone passes", async (t) => {
+  const { dir, git, base } = galleryRemovalRepo(t);
+  const result = await evaluate("HTPR-2 [FEATURE] remove the gallery switch", base, commitGalleryRemoval(dir, git), dir);
+  assert.equal(result.pass, true, result.reason);
+  assert.equal(result.ownerReview, "exempt-ui");
+  assert.equal(result.reason, `This pull request only removes feature flag ${GALLERY_KEY}, already on for everyone.`);
+});
+
+test("a normal UI change still fails the flag check", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/features/Plain.tsx", "export const Plain = () => <div />;\n");
+  const result = await evaluate("HTPR-2 [FEATURE] add a plain view", base, commit(git, "ui"), dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /without a feature flag/);
+  assert.doesNotMatch(result.reason, /already on for everyone/);
+});
+
+test("removing a flag does not excuse a new UI element", async (t) => {
+  const { dir, git, base } = galleryRemovalRepo(t);
+  const head = commitGalleryRemoval(dir, git, {
+    ui: `${galleryUiHead}export const Extra = () => <aside />;\n`,
+  });
+  const result = await evaluate("HTPR-2 [FEATURE] remove the gallery switch", base, head, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /removes existing feature flag/);
+  assert.doesNotMatch(result.reason, /already on for everyone/);
+});
+
+test("removing a flag that is not on for everyone still fails", async (t) => {
+  for (const mode of ["OFF", "OWNER_AND_QA"]) {
+    const { dir, git, base } = galleryRemovalRepo(t, { mode });
+    const result = await evaluate("HTPR-2 [FEATURE] remove the gallery switch", base, commitGalleryRemoval(dir, git, { mode }), dir);
+    assert.equal(result.pass, false, mode);
+    assert.match(result.reason, /removes existing feature flag/);
+    assert.doesNotMatch(result.reason, /already on for everyone/);
+  }
+});
+
+test("removing a flag does not excuse an unrelated source edit", async (t) => {
+  const { dir, git, base } = galleryRemovalRepo(t);
+  writeFile(dir, "src/lib/extra.ts", "export const extra = 2;\n");
+  const result = await evaluate("HTPR-2 [FEATURE] remove the gallery switch", base, commitGalleryRemoval(dir, git), dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /removes existing feature flag/);
+  assert.doesNotMatch(result.reason, /already on for everyone/);
+});
+
+test("removing a flag does not rewrite a negated flag combined with another condition", async (t) => {
+  const ui = `import { useFlag } from "@/hooks/useFlag";
+import { GALLERY_FLAG } from "@/lib/flags/keys";
+export function Gallery({ isAdmin }) {
+  const galleryEnabled = useFlag(GALLERY_FLAG);
+  if (!galleryEnabled && isAdmin) grant();
+  return null;
+}
+`;
+  const { dir, git, base } = galleryRemovalRepo(t, { ui });
+  const result = await evaluate("HTPR-2 [FEATURE] remove the gallery switch", base, commitGalleryRemoval(dir, git, {
+    ui: `export function Gallery({ isAdmin }) {
+  if (!isAdmin) grant();
+  return null;
+}
+`,
+  }), dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /removes existing feature flag/);
+  assert.doesNotMatch(result.reason, /already on for everyone/);
+});
+
+test("removing a flag does not treat a flag call combined with another condition as the flag", async (t) => {
+  const server = `import { isFeatureEnabled } from "@/lib/flags";
+import { GALLERY_FLAG } from "@/lib/flags/keys";
+export async function load(userId: string, isAdmin: boolean, items: string) {
+  const galleryEnabled = await isFeatureEnabled(GALLERY_FLAG, userId) && isAdmin;
+  if (!galleryEnabled) return;
+  return items;
+}
+`;
+  const { dir, git, base } = galleryRemovalRepo(t, { server });
+  const result = await evaluate("HTPR-2 [FEATURE] remove the gallery switch", base, commitGalleryRemoval(dir, git, {
+    server: `export async function load(userId: string, isAdmin: boolean, items: string) {
+  return items;
+}
+`,
+  }), dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /removes existing feature flag/);
+  assert.doesNotMatch(result.reason, /already on for everyone/);
 });

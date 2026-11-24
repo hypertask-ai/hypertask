@@ -177,6 +177,7 @@ creates only fixtures its own cleanup removes, and never prints a cookie, token 
 
 ## Gotchas
 
+- Known failing on production, tracked in [HTPR-9583](https://app.hypertask.ai/detail/project-15/9583).
 - Board switching leaving stale state behind ([HTPR-6627](https://app.hypertask.ai/detail/project-15/6627), "make shallow
   board switch permanent"), previously flagged behind a flag until proven
   stable.
