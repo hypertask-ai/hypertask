@@ -12,6 +12,7 @@ import { searchTaskDescription } from '@/lib/mcp/tasks/searchDescription'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
+import { previousTicketNumbersFor, withPreviousTicketNumbers } from '@/lib/mcp/tasks/previousTicketNumbers'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { parseSearchWithChipNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
@@ -37,6 +38,7 @@ type SearchSortField = (typeof TASK_SEARCH_SORT_FIELDS)[number]
 export interface TaskSearchItem {
   id: number
   ticketNumber?: string
+  previousTicketNumbers?: string[]
   uniqueIndex?: number
   title: string
   description: string
@@ -461,6 +463,7 @@ export async function GET(request: NextRequest) {
         ? String(orderedTasks[orderedTasks.length - 1]?.id ?? '')
         : null
 
+    const previousTicketNumbers = await previousTicketNumbersFor(user.id, orderedTasks)
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
       recordAgentBoardScopeMiss(task.projectId, "read");
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
@@ -479,7 +482,7 @@ export async function GET(request: NextRequest) {
         ...(agent ? { agent } : {}),
         ...(comment?.createdAt ? { commentId: Number(comment.id), commentText: comment.commentText, commentCreatedAt: new Date(comment.createdAt).toISOString() } : {}),
       }
-      return withTaskPresentation({ ...item, uniqueIndex: task.uniqueIndex })
+      return withTaskPresentation(withPreviousTicketNumbers({ ...item, uniqueIndex: task.uniqueIndex }, previousTicketNumbers))
     })
 
     const response: SearchTasksResponse = {

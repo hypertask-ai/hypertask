@@ -6,8 +6,11 @@
 
 ## How to get to it (user POV)
 
-Agents use `hypertask task move` or `POST /api/mcp/tasks/update` with `sectionId`.
-The section adapter calls the ordinary task move route.
+Agents use `hypertask task move` (`POST /api/mcp/tasks/move`) with
+`{"task_id": <number>, "ticket_number": "<key>", "target_project_id": <number>, "target_section_id": <number>}`.
+One of `task_id`, `ticket_number` or `project_id` plus `unique_index` identifies the ticket;
+`target_project_id` is required and must be a live board, because a move into an archived
+board is refused. Moving between two columns of one board is the ordinary update route.
 
 ## Driving it with agent-browser
 
@@ -35,6 +38,27 @@ both absent the old plain-Error path returns 500. Assert the status, not just
 
 The `move` action takes `target_project_id` and `target_section_id`; a
 `section_id` field is refused as unsupported.
+
+A ticket moved to another board keeps its old key resolvable and names it. Task get,
+list, search, next, context, batch read and the move response carry
+`previousTicketNumbers`, newest old key first, while the old key still opens the same
+ticket. A number a live ticket occupies, a blank alias and the current key are left out.
+The ticket switch `htpr-9542-moved-ticket-old-key` defaults to Everyone; off omits the
+field, and so does a failed flag read or alias lookup, so the read or the move still
+returns the ticket.
+
+To check it on production, move one disposable fixture to a second board the QA user can
+write, then read the ticket back by its old key:
+
+```bash
+hypertask_tasks {"action":"move","input":{"ticket_number":"<old key>","target_project_id":7049}}
+hypertask_tasks {"action":"get","input":{"ticket_number":"<old key>"}}   # names previousTicketNumbers
+```
+
+The local verifier seeds one writable board and one archived board, and the move route
+refuses an archived target, so the browser harness cannot drive a cross-board move. The
+changed test is the proof there: `node --test tests/htpr-9542-moved-ticket-old-key.test.cjs`,
+which also shows the base commit failing it.
 
 ### What proof to collect
 

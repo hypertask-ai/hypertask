@@ -10,16 +10,28 @@ export interface DeleteCommentParams {
   teamScope?: AgentTokenTeamScope | null
 }
 
+function isPullRequestUnlinkActivity(activity: unknown): boolean {
+  if (!activity || typeof activity !== 'object' || Array.isArray(activity)) return false
+  if ((activity as { type?: unknown }).type !== 'TaskPullRequest') return false
+  const data = (activity as { data?: unknown }).data
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false
+  return (data as { action?: unknown }).action === 'unlinked'
+}
+
 export async function deleteCommentService(params: DeleteCommentParams) {
   const { commentId } = params
 
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    select: { id: true, taskId: true, creatorId: true }
+    select: { id: true, taskId: true, creatorId: true, activity: true }
   })
 
   if (!comment) {
     throw new Error('Comment not found')
+  }
+
+  if (isPullRequestUnlinkActivity(comment.activity)) {
+    throw new Error('Comment cannot be deleted')
   }
 
   const remove = async (db: typeof prisma | import('@prisma/client').Prisma.TransactionClient) => {
