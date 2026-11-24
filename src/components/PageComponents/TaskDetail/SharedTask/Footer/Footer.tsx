@@ -4,8 +4,6 @@ import { IUser } from "@/models/model";
 import { TaskShareType } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9546-share-footer-layout";
 
 export const GUEST_INVITE_MESSAGE =
   "Part of the team? You're almost there to begin working in Hypertask";
@@ -18,15 +16,18 @@ type Props = {
   sharedUserEmail: string;
   checkBoardMember: 200 | 201 | 400 | undefined;
   user?: IUser;
+  stackedOnPhone?: boolean;
 };
 
 export const GuestInviteBar = ({
   onAction,
+  stackedOnPhone = false,
 }: {
   onAction: () => void;
+  stackedOnPhone?: boolean;
 }) => {
   const isMobile = useContext(MobileViewContext);
-  const stacked = useFlag(HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG) && isMobile;
+  const stacked = stackedOnPhone && isMobile;
   return (
     <div
       className={
@@ -49,25 +50,31 @@ export const GuestInviteBar = ({
 const SharedTaskPageFooter = ({
   children,
   shareId,
+  stackedOnPhone = false,
 }: Props) => {
   const router = useRouter();
   const isMobile = useContext(MobileViewContext);
-  const stacked = useFlag(HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG) && isMobile;
+  const stacked = stackedOnPhone && isMobile;
   return (
     <>
       {children}
-      <div aria-hidden className={stacked ? "h-32 shrink-0" : "h-14 shrink-0"} />
+      {stacked && <div aria-hidden className="h-32 shrink-0" />}
       <div className="relative" translate="no">
         <div
           style={{
             zIndex: 5001,
           }}
-          className="fixed inset-x-0 bottom-0 flex items-center justify-center border-t-[1px] border-t-black bg-containerBackground py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]"
+          className={
+            stacked
+              ? "fixed inset-x-0 bottom-0 flex items-center justify-center border-t-[1px] border-t-black bg-containerBackground py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]"
+              : "fixed bottom-0 border-t-[1px] border-t-black bg-containerBackground w-full py-2.5 min-h-fit flex items-center justify-center"
+          }
         >
           <GuestInviteBar
             onAction={() => {
               router.push(`/login?shareKey=${shareId}`);
             }}
+            stackedOnPhone={stackedOnPhone}
           />
         </div>
       </div>

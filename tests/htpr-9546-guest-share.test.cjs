@@ -12,22 +12,23 @@ const message = "Part of the team? You're almost there to begin working in Hyper
 
 const MobileViewContext = React.createContext(false);
 
-function footer(flagOn) {
-  return load("src/components/PageComponents/TaskDetail/SharedTask/Footer/Footer.tsx", {
-    "@/models/model": {},
-    "@prisma/client": {},
-    "next/navigation": { useRouter: () => ({ push() {} }) },
-    "@/lib/contexts/mobileContext": { MobileViewContext },
-    "@/hooks/useFlag": { useFlag: () => flagOn },
-  }).default;
-}
+const SharedTaskPageFooter = load("src/components/PageComponents/TaskDetail/SharedTask/Footer/Footer.tsx", {
+  "@/models/model": {},
+  "@prisma/client": {},
+  "next/navigation": { useRouter: () => ({ push() {} }) },
+  "@/lib/contexts/mobileContext": { MobileViewContext },
+}).default;
 
-function inviteHtml(mobile, flagOn = true) {
+function inviteHtml(mobile, stackedOnPhone = true) {
   return renderToStaticMarkup(
     React.createElement(
       MobileViewContext.Provider,
       { value: mobile },
-      React.createElement(footer(flagOn), { shareId: "share-9546" }, React.createElement("main", null, "HOME-9")),
+      React.createElement(
+        SharedTaskPageFooter,
+        { shareId: "share-9546", stackedOnPhone },
+        React.createElement("main", null, "HOME-9"),
+      ),
     ),
   );
 }
@@ -89,14 +90,25 @@ test("a phone guest sees the invite sentence and the sign-in action on separate 
   assert.equal(desktop.stacked, false);
 });
 
-test("the phone layout is revertable by its flag and the desktop row stays the same", () => {
-  const flagOff = inviteText(inviteHtml(true, false));
+test("switching the flag off restores the old phone bar completely", () => {
+  const offHtml = inviteHtml(true, false);
+  const flagOff = inviteText(offHtml);
   assert.equal(flagOff.ticket, "HOME-9");
   assert.equal(flagOff.sentence, message);
   assert.equal(flagOff.action, "Sign up or Login");
   assert.equal(flagOff.actionInsideSentence, false);
   assert.equal(flagOff.stacked, false);
-  assert.equal(inviteText(inviteHtml(false, false)).stacked, false);
+  assert.equal(offHtml.includes("h-32"), false);
+  assert.equal(offHtml.includes("safe-area-inset-bottom"), false);
+  assert.equal(offHtml.includes("min-h-fit"), true);
+});
+
+test("the flag on a phone adds the spacer and the home-indicator padding", () => {
+  const onHtml = inviteHtml(true, true);
+  assert.equal(inviteText(onHtml).stacked, true);
+  assert.equal(onHtml.includes("h-32"), true);
+  assert.equal(onHtml.includes("safe-area-inset-bottom"), true);
+  assert.equal(inviteText(inviteHtml(false, true)).stacked, false);
 });
 
 test("a shared follower list keeps named people and drops a missing account", () => {
