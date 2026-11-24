@@ -35,7 +35,7 @@ creates only fixtures its own cleanup removes, and never prints a cookie, token 
 - Resend on an address with no pending invite answers 500 (no invite to resend); not a regression.
 - A signed-in join that does not return 200 leaves the login screen up. This page does not show its own error.
 - The `board-invites` step in `.claude/skills/verify-qa/scripts/feature-map-drive.mjs` still asserts the old landing (`/` then `/demo`) and needs the `/login` landing next; every feature page names that script, so editing it inside a fix drags six unrelated areas into the pull request verifier.
-- A head-verifier journey that lands on `/login` fails on `offOrigin`, because `src/app/login/page.tsx` mounts `src/components/analytics/StoreUTM.tsx`, which asks `api.ipify.org` and then `api.ipapi.com` for the visitor's IP unless consent is `essential`. Only `cdn.usefathom.com` is quiet in `noteForeign`, so checking the sign-in landing needs those two hosts on that quiet list, or a drive that starts signed out.
+- A head-verifier journey may land on `/login`: `src/app/login/page.tsx` mounts `src/components/analytics/StoreUTM.tsx` for UTM attribution only. It no longer asks `api.ipify.org` or `api.ipapi.com` for the visitor's IP, so a signed-out journey to `/login` keeps its requests on the app origin (HTPR-9534). Any new third-party call on a page a journey visits fails the verifier's `offOrigin` check; only `cdn.usefathom.com` is quiet in `noteForeign`.
 
 ### What proof to collect
 

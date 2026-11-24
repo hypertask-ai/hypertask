@@ -292,6 +292,13 @@ test("HTPR-9534: a guest demo cookie cannot redeem an invite", async () => {
   assert.equal(redeemed, undefined);
 });
 
+test("HTPR-9534: the sign-in landing a signed-out invitee reaches stays on the app origin", () => {
+  const landing = ["src/components/analytics/StoreUTM.tsx", "src/lib/utils/utm/client.ts"]
+    .map((file) => fs.readFileSync(path.join(root, file), "utf8"))
+    .join("\n");
+  assert.doesNotMatch(landing, /api\.ipify\.org|api\.ipapi\.com/);
+});
+
 test("HTPR-9534: a signed-in member still joins the invited board", async () => {
   sessionCookie = { value: JSON.stringify({ id: 99 }) };
   const view = "kanban";
