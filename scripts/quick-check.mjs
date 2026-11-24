@@ -246,7 +246,7 @@ if (!typeTargets.length && !fullTypecheck) {
   const declarations = split(git(root, ["ls-files", "-z", "--", "*.d.ts"]));
   const augmentations = split(git(root, [
     "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
-    "--", "src/**/*.ts", "src/**/*.tsx",
+    "--", ":(glob)src/**/*.ts", ":(glob)src/**/*.tsx",
   ]));
   const include = [...new Set([
     ...(existsSync(join(root, "next-env.d.ts")) ? ["next-env.d.ts"] : []),

@@ -104,7 +104,7 @@ test("partial type checks retain project declarations and module augmentations",
   });
   commit(repository, "src/one.ts", 'import type { Commands } from "library"; export const run = (commands: Commands): string => commands.create();\n');
   const stubs = makeStubs();
-  writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${process.execPath}" "${require.resolve("typescript/bin/tsc")}" "$@"\n`);
+  writeFileSync(path.join(stubs.directory, "tsc"), `#!/bin/sh\nexec "${process.execPath}" "${require.resolve("typescript/lib/tsc.js")}" "$@"\n`);
   const result = run(repository, stubs);
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
