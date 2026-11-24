@@ -1,7 +1,5 @@
 import { useGetAllFavorites } from "@/hooks/MultiPages/useGetAllFavorites";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG } from "@/lib/flags/definitions/htpr-7852-internal-team-saved-plan";
 import { IFavorites } from "@/models/model";
 import {
   currentBoardBillingAtom,
@@ -20,9 +18,6 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   const [currentProjectIndex, setCurrentProjectIndex] = useState<number>();
   const [currentUser, ___] = useRecoilState(currentUserAtom);
   const hydrated = useHydrated();
-  const internalTeamSavedPlan = useFlag(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG);
-  let savedPlanOnly = false;
-  if (internalTeamSavedPlan) savedPlanOnly = true;
   const { data: favoritesTQ } = useGetAllFavorites(
     currentUser?.UserSettingId ?? null,
     { enabled: secondaryStartupEnabled },
@@ -47,12 +42,8 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   }, [favoritesTQ]);
 
   useEffect(() => {
-    setCurrentBoardBilling(
-      savedPlanOnly
-        ? deriveCurrentBoardBilling(_currentProject, true)
-        : deriveCurrentBoardBilling(_currentProject),
-    );
-  }, [_currentProject, savedPlanOnly, setCurrentBoardBilling]);
+    setCurrentBoardBilling(deriveCurrentBoardBilling(_currentProject, true));
+  }, [_currentProject, setCurrentBoardBilling]);
 
   return {
     setCurrentProjectIndex,

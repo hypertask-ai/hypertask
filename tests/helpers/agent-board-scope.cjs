@@ -81,7 +81,7 @@ function fixture() {
     userSetting: { findUnique: async () => null },
     $transaction: async run => run(prisma),
   };
-  const memberRows = (args = {}) => projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
+  const memberRows = (args = {}) => projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id, project }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
   prisma.member = {
     findMany: async args => {
       state.grantReads++;

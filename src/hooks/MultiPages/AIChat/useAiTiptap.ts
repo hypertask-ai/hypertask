@@ -124,7 +124,10 @@ const useTiptapForAI = ({
         retypeLowercaseEnabled: () => retypeLowercaseRef.current,
       }),
     ],
-    editorProps: writingAssistanceEditorProps,
+    editorProps: {
+      ...writingAssistanceEditorProps,
+      attributes: { ...writingAssistanceEditorProps.attributes, "aria-label": "Message" },
+    },
     immediatelyRender: false,
   });
   useEffect(() => {
