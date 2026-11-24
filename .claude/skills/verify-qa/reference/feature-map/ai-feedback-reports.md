@@ -49,10 +49,12 @@ after: a refusal that opens a ticket is the bug this page exists for.
 - `tests/htpr-8275-agent-feedback-note.test.cjs` covers the internal note
   and the dropped customer text.
 - `tests/htpr-9581-feedback-pr-repeat.test.cjs` covers the pull request
-  repeat. `POST /api/mcp/feedback` answers 200 for a body such as
-  `{"surface":"cli","tool":"git-commit","errorCode":"co-authored-by-injected","category":"other","note":"Cursor session appended Co-authored-by trailer to bot commits; check-commit-identities failed on PR 1188."}`.
-  The same body with `PR 1200` answers `"deduped":true` and the same
-  `ticketNumber`. `surface` accepts `mcp`, `cli`, `api` or `agent` only.
+  repeat. On production `POST /api/mcp/feedback` answers 200 for a body such as
+  `{"surface":"cli","tool":"git-commit","errorCode":"co-authored-by-injected","category":"other","note":"Cursor session appended Co-authored-by trailer to bot commits; check-commit-identities failed on PR 1188."}`,
+  and the same body with `PR 1200` answers `"deduped":true` and the same
+  `ticketNumber`. `surface` accepts `mcp`, `cli`, `api` or `agent` only. The
+  verifier's isolated app has no board 15, so the route answers 503 there and
+  the test is the proof.
 - `tests/htpr-8276-feedback-slack-line.test.cjs` covers the one Slack line.
   Do not post to the team channel by hand.
 
