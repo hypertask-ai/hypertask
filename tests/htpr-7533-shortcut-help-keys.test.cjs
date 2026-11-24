@@ -179,6 +179,7 @@ for (const [title, code] of [["Star comment", 83], ["Pin comment", 80]]) contrac
 contract(taskGroup, "Speech to text", "MOD|SHIFT|D", "edit", 'action: "dictate", matches: () => e.shiftKey && cmdControl && e.keyCode === KeyCodes.D');
 contract(taskGroup, "Dictate and Improve", "MOD|SHIFT|F", "edit", 'action: "dictateAndImprove", matches: () => e.shiftKey && cmdControl && e.keyCode === KeyCodes.F');
 contract(taskGroup, "Discard draft", "MOD|SHIFT|,", "comments", "e.keyCode === KeyCodes.COMMA && e.shiftKey && cmdControl", 'setResetDraft("Comment")');
+contract(taskGroup, "Jump to top", "G|THEN|G", "src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", "lastGPressedBw500ms", "else if (jumpToTop) {", "scrollTicketToTop(scrollElementRef?.current ?? window)");
 
 for (const [title, display, expression] of [
   ["Save", "MOD|ENTER", '!e.altKey && !e.shiftKey) CtrlEnterHandler("Save")'],
