@@ -6,6 +6,7 @@
 - `plain-ai-feedback` With `htpr-7536-plain-ai-feedback` on, the ticket is plain sentences: what happened, who hit it, whether it looks like a bug, and what to do. An agent access refusal (wrong key, or a board or action the agent may not use) updates an open matching ticket and does not open a new one. A 5xx still files. Flag off keeps the previous report text.
 - `quiet-fixable-reports` With `htpr-7941-quiet-fixable-reports` on, an MCP 400 the caller can correct from the named field or listed value does not file a ticket. The same fingerprint already filed in the last 24 hours is not filed again. A refusal that names nothing the caller can fix still files. The flag ships at EVERYONE. Runners never switch it Off, so a live flag-off check is UNREACHABLE. Even in the off state, `fileAiFeedback` still drops an automatic 400 through `quietInputRefusal` in `src/lib/aiFeedback/callerFixable.ts` when the code is `unrecognized_keys`, `invalid_enum_value` or `unrecognized`, or a named-field code such as `invalid_type` that includes a field. The flag is unread on that drop. Other caller-fixable refusals file only in that off state. Proof is `tests/htpr-7941-quiet-fixable-reports.test.cjs`.
 - `agent-feedback-note` With `htpr-8275-agent-feedback-note` on, an internal Hypertask account keeps `kind` (`bug`, `friction`, `missing` or `idea`) and a short note of plain words, with credentials stripped. Any other account drops that free text. The title becomes `Agent feedback, <kind>: <note>`. Flag off drops the kind before filing.
+- `feedback-pr-repeat` With `htpr-9581-feedback-pr-repeat` on, a repeat of the same failure joins the open ticket when the note only changes the pull request number. The error code, surface, tool, HTTP status, field, category, kind, the words before the number and the words after it all have to match. A missing line matches only a log that also omitted it. With the house log off the lookup searches the ticket description too. Flag off files a separate ticket for a number that was never joined. Proof is `tests/htpr-9581-feedback-pr-repeat.test.cjs`.
 - `feedback-slack-line` With `htpr-8276-feedback-slack-line` on, a new board-15 ticket that carries the `ai-feedback` label posts one Slack line: kind, summary, and `https://app.hypertask.ai/detail/project-15/<index>`. No channel or no Slack install posts nothing and still creates the ticket. Flag off posts nothing.
 
 ## How to get to it (user POV)
@@ -47,6 +48,13 @@ after: a refusal that opens a ticket is the bug this page exists for.
   `invalid_type` with a field stay dropped when the flag is off.
 - `tests/htpr-8275-agent-feedback-note.test.cjs` covers the internal note
   and the dropped customer text.
+- `tests/htpr-9581-feedback-pr-repeat.test.cjs` covers the pull request
+  repeat. On production `POST /api/mcp/feedback` answers 200 for a body such as
+  `{"surface":"cli","tool":"git-commit","errorCode":"co-authored-by-injected","category":"other","note":"Cursor session appended Co-authored-by trailer to bot commits; check-commit-identities failed on PR 1188."}`,
+  and the same body with `PR 1200` answers `"deduped":true` and the same
+  `ticketNumber`. `surface` accepts `mcp`, `cli`, `api` or `agent` only. The
+  verifier's isolated app has no board 15, so the route answers 503 there and
+  the test is the proof.
 - `tests/htpr-8276-feedback-slack-line.test.cjs` covers the one Slack line.
   Do not post to the team channel by hand.
 
