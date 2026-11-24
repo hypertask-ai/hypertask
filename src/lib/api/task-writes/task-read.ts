@@ -3,6 +3,7 @@ import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRequest, type TaskWriteRoute } from "./route";
 import { taskReadQuery } from "./read-query";
 import tasksGetTask from "@/utils/controllers/tasks/getTask";
+import { findTaskByTicketNumber } from "@/utils/controllers/taskDetail/load";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
@@ -16,6 +17,13 @@ const route = taskWriteRoute({
   operation: async (query, userObj) => {
     try {
       const { project, uniqueIndex } = query;
+      const ticketKey = (query.ticketNumber ?? query.ticket_number) as string | undefined;
+      if (ticketKey && !project && !uniqueIndex) {
+        const resolved = await findTaskByTicketNumber(ticketKey, userObj.id);
+        if (!resolved) return NextResponse.json(null, { status: 404, headers: privateHeaders });
+        const response = await tasksGetTask(`project-${resolved.projectId}`, resolved.uniqueIndex, userObj);
+        return NextResponse.json(response.json, { status: response.status, headers: privateHeaders });
+      }
       if (!uniqueIndex || !project) {
         return NextResponse.json({ message: httpStatusConfig.statusCodes[400].userMessage }, { status: 400, headers: privateHeaders });
       }

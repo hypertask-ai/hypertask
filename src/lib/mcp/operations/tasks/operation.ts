@@ -23,7 +23,7 @@ import {
 } from '@/lib/mcp/tasks/mappers'
 import { userCommentCountsByTaskId } from '@/utils/controllers/tasks/userCommentCounts'
 import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
-import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
+import { findReusedKeyCollisions, findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -417,16 +417,24 @@ export async function GET(request: NextRequest) {
         const projectSingleTask = (task: Record<string, unknown>) =>
           singleTaskFields.length ? projectRows([task], parseFields(singleTaskFields))[0] : task
 
+        const reusedKeyCollisions =
+          typeof findReusedKeyCollisions === 'function' && (requestedTickets.length > 0 || (uniqueIndex !== null && projectIdForLookup !== null))
+            ? await findReusedKeyCollisions(user, tasks, { ticketNumbers: requestedTickets, uniqueIndex, projectId: projectIdForLookup }, ctx.agentId, undefined, ctx.teamScope)
+            : []
+        const collisionField = reusedKeyCollisions.length ? { reusedKeyCollisions } : {}
+
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: projectSingleTask(await mapTask(tasks[0]))
+            task: projectSingleTask(await mapTask(tasks[0])),
+            ...collisionField,
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: (await Promise.all(tasks.map(mapTask))).map(projectSingleTask)
+          tasks: (await Promise.all(tasks.map(mapTask))).map(projectSingleTask),
+          ...collisionField,
         })
       }
     }
@@ -679,7 +687,8 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { description_: { content: { contains: search, mode: 'insensitive' } } },
-        { ticketNumber: { contains: search, mode: 'insensitive' } }
+        { ticketNumber: { contains: search, mode: 'insensitive' } },
+        { numberAliases: { some: { ticketNumber: { equals: search.trim(), mode: 'insensitive' } } } },
       ]
     }
 

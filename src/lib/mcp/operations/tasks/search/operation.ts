@@ -10,8 +10,10 @@ import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { searchTaskDescription } from '@/lib/mcp/tasks/searchDescription'
 import prisma from '@/lib/prisma'
+import type { Prisma } from '@prisma/client'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
+import { findReusedKeyCollisions, findTaskByIdentifier, type ReusedTicketKeyCollision, TaskIdentifierAmbiguityError, TICKET_KEY_PATTERN } from '@/lib/mcp/tasks/resolveTask'
 import { previousTicketNumbersFor, withPreviousTicketNumbers } from '@/lib/mcp/tasks/previousTicketNumbers'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { parseSearchWithChipNames } from '@/lib/search/serverOperators'
@@ -65,6 +67,7 @@ export interface SearchTasksResponse {
   tasks: TaskSearchItem[]
   total: number
   partial?: boolean
+  reusedKeyCollisions?: ReusedTicketKeyCollision[]
   boardId?: number
   nextCursor?: string | null
 }
@@ -354,15 +357,33 @@ export async function GET(request: NextRequest) {
     const personProjectIds = targetProjectId != null ? [targetProjectId] : accessibleProjectIds
     const parsedQuery = await parseSearchWithChipNames(query, accessibleProjectIds, personProjectIds, true)
     const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
+    const lookupKey = (parsed ? parsed.text : query).trim()
+    let aliasMatch: { id: number; projectId: number } | null = null
+    if (TICKET_KEY_PATTERN?.test(lookupKey) && typeof findTaskByIdentifier === 'function') {
+      try {
+        const resolved = await findTaskByIdentifier(user, { ticket_number: lookupKey, ...(targetProjectId != null ? { project_id: targetProjectId } : {}) }, ctx.agentId, undefined, ctx.teamScope)
+        if (resolved && accessibleProjectIds.includes(resolved.projectId)) aliasMatch = resolved
+      } catch (error) { if (!(error instanceof TaskIdentifierAmbiguityError)) throw error }
+    }
+    const aliasOffBoard = aliasMatch && targetProjectId != null && aliasMatch.projectId !== targetProjectId
+      ? { taskId: aliasMatch.id, projectId: aliasMatch.projectId, targetProjectId }
+      : null
+    const aliasOffBoardScope = aliasOffBoard ? { OR: [{ projectId: aliasOffBoard.targetProjectId }, { id: aliasOffBoard.taskId }] } : null
+    const withAliasBoardScope = (and: Prisma.TaskWhereInput[] | Prisma.TaskWhereInput | undefined) => aliasOffBoardScope
+      ? [...(and == null ? [] : Array.isArray(and) ? and : [and]), aliasOffBoardScope]
+      : and
+    if (aliasOffBoard) where.projectId = { in: [aliasOffBoard.targetProjectId, aliasOffBoard.projectId] }
+    const aliasScopedWhere = aliasOffBoardScope ? { ...where, AND: withAliasBoardScope(where.AND) } : where
     if (parsed) {
       const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
-        { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
+        { ...aliasScopedWhere, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true,
         sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined,
         Boolean(parsed.filters.assignee?.length) && await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id))
+      if (aliasMatch && !filtered.rankedIds.includes(aliasMatch.id)) filtered.rankedIds.unshift(aliasMatch.id)
       commentById = filtered.commentById
       const rankedResults = Boolean(parsed.text || filtered.commentMode)
       operatorPartial = parsed.text ? filtered.partial : false
-      where.AND = filtered.where.AND
+      where.AND = withAliasBoardScope(filtered.where.AND)
       if (parsed.filters.is) where.status = filtered.where.status
       if (rankedResults && !filtered.paged) where.id = { in: filtered.rankedIds }
       const total = await prisma.task.count({ where })
@@ -389,13 +410,18 @@ export async function GET(request: NextRequest) {
       operatorResult = { orderedTasks, total }
     }
     async function legacySearch(query: string) {
-    const turbopufferIds = await turbopufferSearchTaskIds({
+    if (aliasOffBoardScope) where.AND = withAliasBoardScope(where.AND)
+    const rawTurbopufferIds = await turbopufferSearchTaskIds({
       searchQuery: query,
       projectIds: accessibleProjectIds,
       status,
       projectId: targetProjectId ?? undefined,
       perPage: Math.min(limit * 5, 100),
     })
+    const turbopufferIds =
+      aliasMatch && !rawTurbopufferIds.includes(aliasMatch.id)
+        ? [aliasMatch.id, ...rawTurbopufferIds]
+        : rawTurbopufferIds
     const useTurbopufferWindow =
       turbopufferIds.length > 0 && !extraFilters && !sortField
 
@@ -405,7 +431,8 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { title: { contains: query, mode: 'insensitive' } },
         { description: { contains: query, mode: 'insensitive' } },
-        { ticketNumber: { contains: query, mode: 'insensitive' } }
+        { ticketNumber: { contains: query, mode: 'insensitive' } },
+        ...(aliasMatch ? [{ id: aliasMatch.id }] : []),
       ]
     }
 
@@ -485,6 +512,10 @@ export async function GET(request: NextRequest) {
       return withTaskPresentation(withPreviousTicketNumbers({ ...item, uniqueIndex: task.uniqueIndex }, previousTicketNumbers))
     })
 
+    const reusedKeyCollisions = aliasMatch && typeof findReusedKeyCollisions === 'function'
+      ? await findReusedKeyCollisions(user, orderedTasks, { ticketNumbers: [lookupKey], projectId: targetProjectId }, ctx.agentId, undefined, ctx.teamScope)
+      : []
+
     const response: SearchTasksResponse = {
       success: true,
       tasks: (listQuery?.fields.length
@@ -493,6 +524,7 @@ export async function GET(request: NextRequest) {
         : taskList) as TaskSearchItem[],
       total,
       ...(operatorPartial ? { partial: true } : {}),
+      ...(reusedKeyCollisions.length ? { reusedKeyCollisions } : {}),
       boardId: boardId || projectId || undefined,
       nextCursor: nextCursor || null,
     }
