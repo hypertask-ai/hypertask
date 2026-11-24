@@ -1,5 +1,5 @@
 import { ILabel, IView } from "@/models/model";
-import { appShellRailAtom, currentProjectAtom, currentUserAtom, hiddenViewTabIdsAtom, showEmptyViewTabsAtom } from "@/store";
+import { activeBuiltinViewsAtom, appShellRailAtom, currentProjectAtom, currentUserAtom, hiddenViewTabIdsAtom, showEmptyViewTabsAtom } from "@/store";
 import { ChangeEvent, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Eye, EyeOff, GripVertical, LayoutGrid, Lock, Rows3, Settings, Sparkles, Trash2, UsersRound, X } from "lucide-react";
 import { DragDropContext, Draggable, Droppable, type DropResult } from "@hello-pangea/dnd";
@@ -19,7 +19,7 @@ import toast from "react-hot-toast";
 import axios from "axios";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { asViewOrder, sortViewsByOrder } from "@/utils/helperFunctions/Views/ViewOrderHelperFunctions";
-import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
+import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, getViewToActivateWhenHidden, isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { getSmartSplitLabel } from "@/lib/smartSplits";
 import SmartSplitModal from "./SmartSplitModal";
@@ -30,6 +30,7 @@ import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFun
 import { replaceProjectViewForCurrentBoard } from "@/utils/helperFunctions/Views/ProjectViewState";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7804_BLOCKED_BY_ME_FLAG } from "@/lib/flags/keys";
+import { HTPR_9362_HIDE_ACTIVE_VIEW_FLAG } from "@/lib/flags/definitions/htpr-9362-hide-active-view";
 type Props = {
     toggle: () => void | Promise<void>
 }
@@ -37,6 +38,7 @@ type Props = {
 const ManageViews: React.FC<Props> = ({ toggle }) => {
 
     const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
+    const hideOpenView = useFlag(HTPR_9362_HIDE_ACTIVE_VIEW_FLAG)
     const isMbl = useContext(MobileViewContext)
     const queryClient = useQueryClient()
     const router = useRouter()
@@ -47,6 +49,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
     const currentUser = useRecoilValue(currentUserAtom)
     const [showEmptyViewTabs, setShowEmptyViewTabs] = useRecoilState(showEmptyViewTabsAtom)
     const [hiddenViewTabIds, setHiddenViewTabIds] = useRecoilState(hiddenViewTabIdsAtom)
+    const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom)
     const [orderUpdating, setOrderUpdating] = useState(false)
     const [editMode, setEditMode] = useState<boolean>(false);
     const [editView, setEditView] = useState<IView | null>(null);
@@ -67,7 +70,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
     const smartSplitMetadataReady = labelsFetched && !labelsFailed
     const smartSplitMetadataLoading = !labelsFetched && !labelsFailed
 
-    const { applyBoardLayoutPreference, deleteView, renameView, updateViewLayout } = useKanbanViews(currentProject)
+    const { applyBoardLayoutPreference, deleteView, renameView, switchViewHandler, updateViewLayout } = useKanbanViews(currentProject)
     const { views, orderedViews, renderedViews, viewTaskCounts } = useRenderedViews(currentProject)
     const pillViewIds = useMemo(() => new Set(views.map((view) => view.id)), [views])
     const renderedViewIds = useMemo(() => new Set(renderedViews.map((view) => view.id)), [renderedViews])
@@ -250,6 +253,11 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
 
     const toggleViewTabVisibility = (viewId: string) => {
         const key = viewTabPreferenceKey(currentProject?.id, viewId)
+        const willHide = !hiddenViewTabIds[key]
+        if (hideOpenView && willHide && currentProject) {
+            const nextView = getViewToActivateWhenHidden(currentProject, activeBuiltinViews, orderedViews, viewId)
+            if (nextView) void switchViewHandler(nextView)
+        }
         setHiddenViewTabIds((prev) => ({ ...prev, [key]: !prev[key] }))
     }
 
