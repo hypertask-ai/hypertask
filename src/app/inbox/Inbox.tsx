@@ -9,6 +9,8 @@ import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-809
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
+import { HTPR_9071_INBOX_ZERO_IMAGE_FLAG } from "@/lib/flags/definitions/htpr-9071-inbox-zero-image";
+import { hidesInboxZeroSplitTabs } from "@/lib/inboxSplitTabs";
 import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
 
 import {
@@ -80,6 +82,7 @@ import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG, HTPR_7841_INBOX_KEEPS_SCROLL_FLAG 
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
+import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 
@@ -142,6 +145,7 @@ const Inbox = ({
     return cached?.serverDocumentGeneration === candidate?.scope.generation ? candidate : null;
   });
   const [seeded] = useState(() => Boolean(inboxDocument));
+  const { drafts } = useGetUserDrafts(currentUser.id, inboxDocument?.data.drafts);
   const InboxSplit = seeded ? SeededInboxSplit : ClientInboxSplit;
   const isMbl = useMobileView();
   const [appShellRail] = useRecoilState(appShellRailAtom);
@@ -760,6 +764,9 @@ const Inbox = ({
     toast.dismiss(toastId);
   };
   const { isInboxZero } = useInboxZeroStyling();
+  const splitRows = _notificationsTQ?.structuredData?.data ?? inboxDocument?.data.payload.structuredData.data ?? [];
+  const splitLengths = splitRows.map((rows) => rows.length);
+  const unsavedCommentDrafts = drafts.filter((draft) => draft.type === "Comment" && draft.saved !== true).length;
   const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
   const canArchiveSafe = archiveSafeEnabled &&
     (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
@@ -877,6 +884,11 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               narrowLayout={narrowInboxTabs}
@@ -917,6 +929,7 @@ const Inbox = ({
                 ),
               )}
             </SplitTitlesContainer>
+            </SplitTabsUnlessInboxZero>
 
             <div
               className={
@@ -988,6 +1001,11 @@ const Inbox = ({
                 </>
               ))}
             </div>
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             {!isMbl && !narrowInboxTabs && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
@@ -1014,6 +1032,12 @@ const Inbox = ({
                 )}
               </div>
             )}
+            </SplitTabsUnlessInboxZero>
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             {isMbl && (
               <MobileInboxSplitDock
                 tabs={_notificationsTQ?.structuredData?.tabs ?? []}
@@ -1022,6 +1046,7 @@ const Inbox = ({
                 trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
               />
             )}
+            </SplitTabsUnlessInboxZero>
           </div>
           {!isMbl && (
             <Link
@@ -1061,6 +1086,22 @@ const Inbox = ({
 };
 
 export default Inbox;
+
+const SplitTabsUnlessInboxZero = ({
+  isInboxZero,
+  splitLengths,
+  unsavedCommentDrafts,
+  children,
+}: {
+  isInboxZero: boolean;
+  splitLengths: readonly number[];
+  unsavedCommentDrafts: number;
+  children?: ReactNode;
+}) => {
+  const hideInboxZeroTabs = useFlag(HTPR_9071_INBOX_ZERO_IMAGE_FLAG);
+  if (hidesInboxZeroSplitTabs({ enabled: hideInboxZeroTabs, isInboxZero, splitLengths, unsavedCommentDrafts })) return null;
+  return children;
+};
 
 interface IProps {
   children?: ReactNode;

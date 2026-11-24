@@ -30,15 +30,13 @@ import { useUniversalMovement } from '../useUniversalMovement'
 import { CommandMode } from '@/models/enums'
 import { MobileViewContext } from '@/lib/contexts/mobileContext'
 import { toggleTaskTimer } from '@/hooks/Task Detail/useTimeTracking'
-import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builtinViews'
+import { buildBuiltinViewContext, isBuiltinViewId, taskInColumn } from '@/lib/constants/builtinViews'
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
-import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
-import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
-import { quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from '@/lib/keyboard/taskShortcuts'
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG , HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG , HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_9361_BLOCKED_VIEW_DONE_FLAG } from '@/lib/flags/definitions/htpr-9361-blocked-view-done'
+import { shouldIgnoreTaskShortcutTarget , quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
     initialSections: ISection[];
@@ -58,6 +56,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
+    const leaveFinishedOut = useFlag(HTPR_9361_BLOCKED_VIEW_DONE_FLAG);
     const tableSortColumnsEnabled = useFlag("htpr-8973-table-sort-columns");
     const boardLayout = useRecoilValue(boardLayoutAtom)
     const queryClient = useQueryClient();   
@@ -459,8 +458,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     }
 
     const newItem = {
-      ...item,
-      sectionId: newSecId,
+      ...taskInColumn(item, { sectionId: newSecId, section_title: displayDestination.section_title }),
       ranking,
       updatedAt: updatedAt.toString(),
     };
@@ -530,7 +528,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       newSections,
       _currentProject,
       isBuiltinViewId(activeBuiltinViewId) ? activeBuiltinViewId : undefined,
-      buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
+      buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName, leaveFinishedOut),
       filterRuntimeContext,
     )
     const filteredEmptySections = showEmptyViewColumns
