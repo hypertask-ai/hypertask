@@ -124,10 +124,6 @@ A read-only agent, or an agent without write access to the ticket's board, is re
 
 A ticket that already sits in a Done column is refused to Delete for every agent. Archiving one is refused while the ticket switch `htpr-8231-agent-archive-done` is off; with it on, the ticket owner's own agents may archive it, and the archive records which agent did it and when.
 
-### A ticket moved to another board
-
-Moving a ticket to another board gives it that board's next key. The old key still opens the same ticket until a newer ticket on the old board takes that number. Task get, list, search, next, context, batch read, and the move response then include `previousTicketNumbers`, newest old key first, so a tool that stored work under the old key can match the ticket it just received. A reused number is left out. The ticket switch `htpr-9542-moved-ticket-old-key` defaults to Everyone. Off omits the field.
-
 ## Connected-agent skill templates
 
 Ticket get (`hypertask tasks get --json` / `hypertask_tasks` action `get`), task context, comment reads and comment-create receipts include `skill_context`: matched `active_skills` with full bodies, a one-line `summary`, and policy-bounded `instructions`. These fields also survive concise MCP formatting. `/deeper` in a comment therefore supplies the readable, enabled `deeper` skill to the connected agent; the server supplies a template, not model execution or permission to run commands. No separate CLI command or MCP tool is required.
