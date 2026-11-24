@@ -93,8 +93,12 @@ export async function searchHelpDocs(
               const doc = (await full.json()) as HelpDocsArticleResponse;
               const html = doc.content ?? doc.article?.content;
               if (html) content = helpArticleText(html, wholeArticle);
+            } else {
+              console.warn(`[help-docs] Help article failed to load: ${hit.slug} (${full.status})`);
             }
-          } catch {
+          } catch (error) {
+            const detail = error instanceof Error && error.message ? error.message : "request failed";
+            console.warn(`[help-docs] Help article failed to load: ${hit.slug} (${detail})`);
           }
         }
 

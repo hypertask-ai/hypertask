@@ -36,3 +36,33 @@ report it instead of forcing the row away.
 
 Only clean fixtures this run created, on the QA boards. Never delete a
 customer ticket or another session's work.
+
+## Logins, labels and switched settings
+
+Deleting a test ticket does not undo a login, a label, or a setting this run
+changed. Put each one back before the proof says `Leftovers: none`. If it
+cannot be undone, name it on that line.
+
+**Logins.** The shared accounts in [logins.md](logins.md) stay. Do not create
+a new production user for a live run. If this run did create a user or an
+invite, remove it through the same product screen that created it. Until it
+is gone, the leftovers line names the user id. Never print a password,
+cookie or login code.
+
+**Labels.** Delete a label this run created with the same call the label
+editor uses: `DELETE /api/labels/updateLabel?labelId=<id>&projectId=<id>&userId=<id>`,
+from the QA state file. Take a label off a ticket you did not delete by
+clearing it on that ticket. Leave labels that were already on the board.
+
+**Switched settings.** Read `GET /api/users/preferences` before changing a
+preference, then write only the fields this run changed back with
+`POST /api/users/preferences`, the same route Settings uses. Card parts and
+notification choices are preferences. A theme change is the `theme` cookie:
+read it first and write the previous value back. Read the saved value after
+the write and confirm it matches.
+
+**Reminders.** Hard-deleting a ticket removes the reminders on that ticket.
+A reminder left on any other ticket stays. Name that ticket on the leftovers
+line.
+
+Write `Leftovers: none` only when nothing from this run remains.
