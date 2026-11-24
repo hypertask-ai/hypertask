@@ -130,6 +130,8 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
+import { HTPR_9078_SIDEBAR_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-9078-sidebar-chat-shortcuts";
+import { sidebarChatTypingBlocksShortcuts, sidebarChatTypingCapture } from "@/lib/keyboard/sidebarChatTyping";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { shouldRenderGlobalCommandMenu } from "@/lib/constants/commandCenterShortcut";
 import { useCommandCenterShortcut } from "@/hooks/General/useCommandCenterShortcut";
@@ -345,6 +347,7 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const myTasksSingleCommandCenter = useFlag(HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG);
+  const keepSidebarChatTyping = useFlag(HTPR_9078_SIDEBAR_CHAT_SHORTCUTS_FLAG);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
@@ -745,6 +748,7 @@ export default function GlobalProvider({
   );
 
   const handleKeyPress = async (e: KeyboardEvent) => {
+    if (sidebarChatTypingBlocksShortcuts(e)) return;
     if (showTrialModal || emailVerificationBlocking) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
@@ -1230,6 +1234,11 @@ export default function GlobalProvider({
       closeAIChatInterface();
     }
   }, [pathname, showAiChatInterface, closeAIChatInterface]);
+
+  useEffect(keepSidebarChatTyping ? () => {
+    document.addEventListener("keydown", sidebarChatTypingCapture, true);
+    return () => document.removeEventListener("keydown", sidebarChatTypingCapture, true);
+  } : () => {}, [keepSidebarChatTyping]);
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyPress);

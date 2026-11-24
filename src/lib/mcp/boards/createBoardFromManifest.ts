@@ -233,6 +233,14 @@ export async function createBoardFromManifest(
       })
     }
 
+    const issued = tasksOut.reduce((max, task) => Math.max(max, task.uniqueIndex ?? 0), 0)
+    if (issued > 0) {
+      await prisma.project.updateMany({
+        where: { id: projectId, issuedUniqueIndex: { lt: issued } },
+        data: { issuedUniqueIndex: issued },
+      })
+    }
+
     const sectionsWithCounts: CreateBoardSectionResult[] = await Promise.all(
       sectionRows.map(async (sec) => ({
         id: sec.id,
@@ -381,10 +389,18 @@ async function createManifestBoardAtomically(
         link: { url: buildMcpTaskUrl(projectId, index + 1), format: 'detail', example: buildMcpTaskUrl(projectId, index + 1) },
       })
     }
-    if (creation.firstTaskPointerIndex != null) {
-      const pointer = tasks[creation.firstTaskPointerIndex]
-      if (!pointer) throw new Error('First task pointer is missing from manifest')
-      await tx.project.update({ where: { id: projectId }, data: { firstTaskPointerTaskId: pointer.id, firstTaskPointerSectionId: pointer.sectionId } })
+    const pointer = creation.firstTaskPointerIndex == null ? null : tasks[creation.firstTaskPointerIndex]
+    if (creation.firstTaskPointerIndex != null && !pointer) {
+      throw new Error('First task pointer is missing from manifest')
+    }
+    if (tasks.length > 0 || pointer) {
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          ...(tasks.length > 0 ? { issuedUniqueIndex: tasks.length } : {}),
+          ...(pointer ? { firstTaskPointerTaskId: pointer.id, firstTaskPointerSectionId: pointer.sectionId } : {}),
+        },
+      })
     }
     await createProjectViewAndCreateDefault({ projectId, userId }, tx)
     analyticsKeys.push(await enqueueBoardCreated(tx, projectId, creation.method, actor, project.createdAt))

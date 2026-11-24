@@ -3,9 +3,6 @@
 
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG } from "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top";
-import { addTicketJumpToTopShortcut } from "@/lib/taskDetailJumpToTop";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 import { useContext, useMemo, useState } from "react";
@@ -19,7 +16,6 @@ const ShortcutsSection = () => {
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const historyToggleLabel = "Toggle agent log";
-  const jumpToTop = useFlag(HTPR_8998_TICKET_JUMP_TO_TOP_FLAG);
   const shortcutGroups = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
@@ -27,7 +23,6 @@ const ShortcutsSection = () => {
     true,
     true,
   );
-  if (jumpToTop) addTicketJumpToTopShortcut(shortcutGroups);
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredGroups = useMemo(() => {

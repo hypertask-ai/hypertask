@@ -65,6 +65,7 @@ import NoBoardsEmptyState from "./NoBoardsEmptyState";
 import { getActiveBoardViewId } from "@/lib/constants/builtinViews";
 
 import CycleBoardMeta from "@/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta";
+import BlockedViewRule from "./BlockedViewRule";
 
 import { type BoardAuthorizationProof, usePreparedBoardReadModel, useSyncedBoardReadModel } from "@/hooks/Homepage/useSyncedBoardReadModel";
 import { getBoardSyncPilotEnabled, persistBoardSyncPilotPreference } from "@/lib/boardSync/pilot";
@@ -1332,6 +1333,12 @@ return (
               project={_currentProject}
             />
           )}
+
+          <div className={appShellRailOn ? 'ml-[var(--app-shell-rail-w,48px)] pl-[calc(1.5%+9px)] pr-[1.5%]' : undefined}>
+            <BlockedViewRule
+              activeViewId={_currentProject && getActiveBoardViewId(_currentProject, activeBuiltinViews)}
+            />
+          </div>
 
           <div
             ref={kanbanContainerRef}

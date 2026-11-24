@@ -13,7 +13,101 @@ const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_
 const MAX_LOCAL_COUNTS = 1_000
 const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
+const agentCounts = new Map<string, { count: number; authenticated: boolean }>()
+let agentOverflow = 0
 let localWindowStart: number | undefined
+
+function unverifiedUserId(token: string): number {
+  const parts = token.split('.')
+  if (parts.length !== 3) return 0
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { userId?: unknown }
+    return typeof payload.userId === 'number' && Number.isFinite(payload.userId) ? payload.userId : 0
+  } catch {
+    return 0
+  }
+}
+
+function evictUnauthenticated(onlyOneShot: boolean): boolean {
+  let older: string | undefined
+  for (const [candidate, entry] of agentCounts) {
+    if (entry.authenticated) continue
+    if (entry.count === 1) {
+      agentCounts.delete(candidate)
+      return true
+    }
+    if (!onlyOneShot && older === undefined) older = candidate
+  }
+  if (older === undefined) return false
+  agentCounts.delete(older)
+  return true
+}
+
+function rememberAgentCount(key: string, authenticated: boolean): number {
+  const seen = agentCounts.get(key)
+  if (seen !== undefined) {
+    const count = seen.count + 1
+    agentCounts.delete(key)
+    agentCounts.set(key, { count, authenticated: seen.authenticated || authenticated })
+    return count
+  }
+  if (agentCounts.size >= MAX_LOCAL_COUNTS) {
+    if (authenticated) {
+      if (!evictUnauthenticated(false)) {
+        const oldest = agentCounts.keys().next().value
+        if (oldest !== undefined) agentCounts.delete(oldest)
+      }
+    } else if (!evictUnauthenticated(true)) {
+      agentOverflow += 1
+      return agentOverflow
+    }
+  }
+  agentCounts.set(key, { count: 1, authenticated })
+  return 1
+}
+
+export function rateLimitSkipsUpstash(token: string): boolean {
+  if (token.startsWith('htk_')) return true
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as { agentId?: unknown }
+    return typeof payload.agentId === 'string' && payload.agentId.length > 0
+  } catch {
+    return false
+  }
+}
+
+async function agentRateLimitSkipsUpstash(
+  token: string,
+  resolveAuth?: () => Promise<McpAuthContext | null>,
+): Promise<{ skip: boolean; authenticated: boolean }> {
+  if (!rateLimitSkipsUpstash(token)) return { skip: false, authenticated: false }
+  const { isFeatureEnabled } = await import('@/lib/flags')
+  if (typeof isFeatureEnabled !== 'function') return { skip: true, authenticated: false }
+  const { HTPR_8978_AGENT_UPSTASH_SKIP_FLAG } = await import('@/lib/flags/keys')
+  const { releaseFlagSnapshotUnless, withFeatureFlagSnapshot } = await import('@/lib/flags/modeCache')
+  let userId = unverifiedUserId(token)
+  let authenticated = false
+  if (resolveAuth) {
+    try {
+      const ctx = await resolveAuth()
+      if (typeof ctx?.user?.id === 'number' && Number.isFinite(ctx.user.id)) {
+        userId = ctx.user.id
+        authenticated = true
+      } else return { skip: true, authenticated: false }
+    } catch {
+      return { skip: true, authenticated: false }
+    }
+  }
+  const audience = token.startsWith('htk_') ? 'cli' : 'agent'
+  const skip = await withFeatureFlagSnapshot(
+    () => isFeatureEnabled(HTPR_8978_AGENT_UPSTASH_SKIP_FLAG, userId),
+    audience,
+  )
+  releaseFlagSnapshotUnless(skip)
+  return { skip, authenticated: skip && authenticated }
+}
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagLookup: Promise<boolean> | undefined
 
@@ -58,7 +152,19 @@ export async function checkMcpRateLimit(
 
     if (localWindowStart !== windowStartSeconds) {
       localCounts.clear()
+      agentCounts.clear()
+      agentOverflow = 0
       localWindowStart = windowStartSeconds
+    }
+    const agentLimit = await agentRateLimitSkipsUpstash(token, resolveAuth)
+    if (agentLimit.skip) {
+      const count = rememberAgentCount(key, agentLimit.authenticated)
+      const decision = decideMcpRateLimit(count, MCP_AGENT_RATE_LIMIT_PER_MINUTE, windowStartSeconds, nowSeconds)
+      if (!decision.limited) return null
+      return NextResponse.json(
+        { message: 'Rate limit exceeded. Please slow down and try again shortly.' },
+        { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
+      )
     }
     const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
