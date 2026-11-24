@@ -7,21 +7,31 @@ import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { aiChatAutoOpenPreferencesAtom, currentUserAtom } from "@/store";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
+import { HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches";
 import { AI_CHAT_AUTO_OPEN_DEFAULTS, AI_CHAT_AUTO_OPEN_KEYS, readLocalAiChatAutoOpenPreferences, type AiChatAutoOpenKey, type AiChatAutoOpenPreferences } from "@/lib/aiChat/autoOpenPreferences";
 import { useHydrated } from "./useHydrated";
 import { useGetUserPreferences, type IUserPreferences } from "./useGetUserPreferences";
 
 let preferenceWrites: Promise<unknown> = Promise.resolve();
 
+const savedAiChatOpenSwitchesQueryKey = (userId: number | undefined) =>
+  ["user-preferences", "ai-chat-auto-open", String(userId ?? "anonymous")] as const;
+
 export function useAiChatOpenPreferences() {
   const enabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   const flagReady = useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
+  const waitsForSavedSwitches = useFlag(HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG);
   const hydrated = useHydrated();
   const user = useRecoilValue(currentUserAtom);
   const [saved, setSaved] = useRecoilState(aiChatAutoOpenPreferencesAtom);
   const queryClient = useQueryClient();
   const migrated = useMemo(() => hydrated ? readLocalAiChatAutoOpenPreferences() : AI_CHAT_AUTO_OPEN_DEFAULTS, [hydrated, user?.id]);
   const values = user?.id ? { ...migrated, ...saved[user.id] } : migrated;
+  const accountCopyHeld = Boolean(user?.id && saved[user.id]);
+  const { isError: savedSwitchesUnavailable } = useGetUserPreferences(savedAiChatOpenSwitchesQueryKey(user?.id), undefined, {
+    enabled: waitsForSavedSwitches && enabled && hydrated && flagReady && !!user?.id && !accountCopyHeld,
+  });
+  const savedReady = !waitsForSavedSwitches || !user?.id || accountCopyHeld || savedSwitchesUnavailable;
   const setPreference = useCallback((key: AiChatAutoOpenKey, value: boolean) => {
     if (!enabled || !user?.id) return;
     setSaved((previous) => ({ ...previous, [user.id]: { ...migrated, ...previous[user.id], [key]: value } }));
@@ -31,14 +41,14 @@ export function useAiChatOpenPreferences() {
       .then(() => axios.post("/api/users/preferences", { [key]: value }))
       .catch(() => {});
   }, [enabled, user?.id, migrated, setSaved, queryClient]);
-  return { enabled, flagReady, ready: hydrated && flagReady, values, setPreference };
+  return { enabled, flagReady, savedReady, ready: hydrated && flagReady, values, setPreference };
 }
 
 export function useSyncAiChatOpenPreferences() {
   const { enabled, ready } = useAiChatOpenPreferences();
   const user = useRecoilValue(currentUserAtom);
   const [saved, setSaved] = useRecoilState(aiChatAutoOpenPreferencesAtom);
-  const queryKey = useMemo(() => ["user-preferences", "ai-chat-auto-open", String(user?.id ?? "anonymous")], [user?.id]);
+  const queryKey = useMemo(() => savedAiChatOpenSwitchesQueryKey(user?.id), [user?.id]);
   const { data, dataUpdatedAt, isSuccess } = useGetUserPreferences(queryKey, undefined, { enabled: enabled && ready && !!user?.id });
   const attempted = useRef(new Set<string>());
   const applied = useRef<{ userId: number; data: IUserPreferences } | null>(null);

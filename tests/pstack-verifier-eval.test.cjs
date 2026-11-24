@@ -92,9 +92,19 @@ test("replay is the self check the workflow runs both ways", async () => {
   assert.equal(missed, false);
 });
 
-test("live mode refuses to run without a key", async () => {
+test("live mode refuses to run without token ladder", async () => {
   const { main } = await load();
-  await assert.rejects(main(["--live"], { alt, key: "", write() {} }), /OPENROUTER_EVAL_KEY is missing/);
+  const keys = ["LADDER_CALL_BIN", "LADDER_CALL_ROOT", "AI_GATEWAY_API_KEY", "OPENCODE_API_KEY", "DEEPSEEK_API_KEY", "OPENROUTER_API_KEY"];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  for (const key of keys) delete process.env[key];
+  try {
+    await assert.rejects(main(["--live"], { alt, write() {} }), /token ladder is not configured/);
+  } finally {
+    for (const key of keys) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
 });
 
 test("the live run plans and judges every case through the model", async () => {
@@ -105,7 +115,7 @@ test("the live run plans and judges every case through the model", async () => {
     if (prompt.includes("Plan one user check")) return JSON.stringify(CASES[0].plan);
     return '{"verdict":"PASS","notes":"The saved field is visible."}';
   };
-  const result = await runEval({ alt, key: "test-key", complete });
+  const result = await runEval({ alt, complete });
   assert.equal(result.ok, true);
   assert.equal(prompts.filter((prompt) => prompt.includes("Plan one user check")).length, CASES.length * 2);
   assert.equal(prompts.filter((prompt) => prompt.includes("Judge whether the changed user path worked")).length, 6);
@@ -116,7 +126,7 @@ test("a plan stage that returns no actions fails the eval even when the judge sa
   const { CASES, runEval } = await load();
   const complete = async (prompt) => (prompt.includes("Plan one user check") ? '{"actions":[],"expect":[],"reason":"no user path"}' : '{"verdict":"PASS","notes":"looks fine"}');
   const clean = CASES.filter((item) => item.name === "clean");
-  const result = await runEval({ alt, key: "test-key", complete, cases: clean });
+  const result = await runEval({ alt, complete, cases: clean });
   assert.equal(result.ok, false);
   for (const row of result.results) {
     assert.equal(row.ok, false);
@@ -128,7 +138,7 @@ test("a plan that ignores the fixture fails the eval even with a valid shape", a
   const { CASES, runEval } = await load();
   const complete = async (prompt) => (prompt.includes("Plan one user check") ? '{"actions":[{"op":"goto","path":"/"}],"expect":[{"text":"Welcome"}],"reason":"home"}' : '{"verdict":"PASS","notes":"looks fine"}');
   const clean = CASES.filter((item) => item.name === "clean");
-  const result = await runEval({ alt, key: "test-key", complete, cases: clean });
+  const result = await runEval({ alt, complete, cases: clean });
   assert.equal(result.ok, false);
   for (const row of result.results) assert.match(row.failure, /does not exercise the fixture/);
 });
@@ -140,7 +150,7 @@ test("a failed model call is an eval error, not a FAIL the planted case accepts"
     return '{"verdict":"PASS","notes":"The saved field is visible."}';
   };
   const planted = CASES.filter((item) => item.name === "planted-bug");
-  const result = await runEval({ alt, key: "test-key", complete, cases: planted });
+  const result = await runEval({ alt, complete, cases: planted });
   assert.equal(result.ok, false);
   for (const row of result.results) {
     assert.equal(row.ok, false);

@@ -48,6 +48,13 @@ function load(relativePath, stubs) {
       }
       return value;
     }
+    if (request === "@/lib/mcp/tasks/previousTicketNumbers") {
+      return {
+        previousTicketNumbersFor: async () => undefined,
+        withPreviousTicketNumbers: (task) => task,
+        nameMovedTicketKeys: async (_userId, tasks) => tasks,
+      };
+    }
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
   };

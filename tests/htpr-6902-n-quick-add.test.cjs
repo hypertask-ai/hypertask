@@ -69,6 +69,7 @@ function commonMocks(calls) {
     "@/lib/flags/keys": { HTPR_7047_SHARP_PLUS_SIGNS_FLAG: "htpr-7047-sharp-plus-signs" },
     "@/lib/flags/definitions/htpr-8149-archive-focus-order": load("src/lib/flags/definitions/htpr-8149-archive-focus-order.ts"),
     "@/lib/flags/definitions/htpr-8171-hide-tags": { HTPR_8171_HIDE_TAGS_FLAG: "htpr-8171-hide-tags" },
+    "@/lib/flags/definitions/htpr-9361-blocked-view-done": { HTPR_9361_BLOCKED_VIEW_DONE_FLAG: "htpr-9361-blocked-view-done" },
     "@/utils/helperFunctions/helperFunctions": {
       throttle: (handler) => handler,
       returnIfModalOrInputActive: () => Boolean(document.querySelector(".modal") || document.activeElement.matches("input,textarea,[contenteditable='true']")),

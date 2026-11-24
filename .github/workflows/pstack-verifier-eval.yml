@@ -34,10 +34,17 @@ jobs:
             echo "a verifier stuck on FAIL was accepted, so the eval cannot fail" >&2
             exit 1
           fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: valentinyeo/token-ladder, ref: deb4fa6c0fd1d47576804538242a1e7f231d21dd, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - name: Live eval on two model families
         env:
-          OPENROUTER_EVAL_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}"
           PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL || 'openai/gpt-5' }}"
+          LADDER_CALL_BIN: "${{ github.workspace }}/token-ladder/ci/ladder-call"
+          LADDER_CALL_ROOT: "${{ github.workspace }}/token-ladder"
+          AI_GATEWAY_API_KEY: "${{ secrets.AI_GATEWAY_API_KEY }}"
+          OPENCODE_API_KEY: "${{ secrets.OPENCODE_API_KEY }}"
+          DEEPSEEK_API_KEY: "${{ secrets.DEEPSEEK_API_KEY }}"
+          OPENROUTER_API_KEY: "${{ secrets.OPENROUTER_EVAL_KEY }}"
         run: node scripts/pstack-verifier-eval.mjs --live --out pstack-verifier-eval.json
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

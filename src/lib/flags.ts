@@ -89,6 +89,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6938-my-tasks-icon-controls",
   "htpr-7871-ctrlk-ellipsis",
   "htpr-7924-free-file-25mb",
+  "htpr-7852-internal-team-saved-plan",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,
@@ -125,6 +126,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6938-my-tasks-icon-controls": true,
   "htpr-7871-ctrlk-ellipsis": true,
   "htpr-7924-free-file-25mb": true,
+  "htpr-7852-internal-team-saved-plan": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
@@ -282,7 +284,7 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
     : DEFAULT_FEATURE_FLAG_MODE);
 }
 
-const flagModeLookups = new Map<"agent" | "human", { generation: number; promise: Promise<RawFlagMode[] | null> }>();
+const flagModeLookups = new Map<"agent" | "cli" | "human", { generation: number; promise: Promise<RawFlagMode[] | null> }>();
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const {
@@ -292,6 +294,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
     FLAG_SNAPSHOT_MAX_AGE_MS,
     flagCacheCommand,
     flagCacheGeneration,
+    flagCacheSkipsUpstash,
     flagModeScope,
     readProcessFlagCache,
     storeProcessFlagCache,
@@ -306,7 +309,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
   const startedAt = Date.now();
   const read = async (): Promise<RawFlagMode[] | null> => {
     try {
-      if (audience === "agent") {
+      if (flagCacheSkipsUpstash(audience)) {
         const rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
         const mode = rows.find(({ key }) => key === HTPR_7042_NEON_WORK_AVOIDANCE_FLAG)?.mode
           ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);
