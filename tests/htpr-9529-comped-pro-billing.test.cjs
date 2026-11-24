@@ -7,9 +7,7 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 const slots = ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"];
 for (const [index, slot] of slots.entries()) process.env[`NEXT_PUBLIC_STRIPE_${slot}`] = `price_choice_${index}`;
 
-const { HTPR_9529_COMPED_PRO_BILLING_FLAG } = loadModule(
-  "src/lib/flags/definitions/htpr-9529-comped-pro-billing.ts",
-);
+const HTPR_9529_COMPED_PRO_BILLING_FLAG = "htpr-9529-comped-pro-billing";
 const { deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 
 let team;
@@ -78,8 +76,10 @@ function row(html, label) {
 }
 
 test("the comped billing copy is an Everyone bugfix flag", () => {
-  const definition = loadModule("src/lib/flags/definitions/htpr-9529-comped-pro-billing.ts").default;
-  assert.equal(HTPR_9529_COMPED_PRO_BILLING_FLAG, "htpr-9529-comped-pro-billing");
+  const definition = require("./helpers/flag-files.cjs")
+    .definitions()
+    .find((item) => item?.key === HTPR_9529_COMPED_PRO_BILLING_FLAG);
+  assert.ok(definition, "the flag definition is missing");
   assert.equal(definition.key, HTPR_9529_COMPED_PRO_BILLING_FLAG);
   assert.equal(definition.kind, "bugfix");
   assert.equal(definition.defaultMode, "EVERYONE");
