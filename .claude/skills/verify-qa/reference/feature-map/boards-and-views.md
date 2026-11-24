@@ -52,7 +52,9 @@ path that redirects there (`src/lib/boardRoutePath.ts:11-24`,
 `src/app/detail/[...slug]/page.tsx:74-78`). Real selector:
 `.kanban-column-title`, `src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx`,
 per `e2e/smoke/prod.spec.ts`), `/all-tasks` for the task list (`#users-list`),
-or the board/table/calendar view switcher inside a board. Switching boards
+or the board/table/calendar view switcher inside a board. Add `?surface=table`
+to a board address to open the table view directly; that is the only way to reach
+the table on a phone, because the rail is desktop only. Switching boards
 from the sidebar is the `switch-boards` journey. Board
 routes are `src/app/[...boardURL]/page.tsx`. Open `/settings/board` for
 board settings. It redirects to board general unless the path names
@@ -67,6 +69,7 @@ switch views, then switch to a second board and back, since the bugs below
 cluster around what happens on that second switch, not the first load. The
 rail switches views by accessible name: Board layout, Table layout, Go to
 calendar (`src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx:254,271,301`).
+The rail is not on a phone: drive the phone with `?surface=table` or `?surface=board`.
 The table view is a div grid, not a `<table>`, so assert its header row
 (`TICKET TITLE ASSIGNEE`) and the `surface=table` address rather than a tag.
 The first draw can still say `Loading Board controls`, so wait for a saved-view
