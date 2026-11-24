@@ -14,6 +14,14 @@ const actionSentences = (finding) => String(finding.action ?? "")
   .map((part) => `${part}.`)
   .join(" ");
 
+const fixStep = (finding) => finding.kind === "stale"
+  ? `<p>Remove the old model from every picker. Move saved picks to the model that stays in its class.</p><p>Follow the update-ai-models skill. Check gateway input and output prices.</p>`
+  : `<p>Follow the update-ai-models skill. Replace the old model everywhere, not only in the pickers.</p><p>Move saved picks to the new model. Check gateway input and output prices.</p>`;
+
+const doneStep = (finding) => finding.kind === "stale"
+  ? `<p>A remaining model of the class answers in a live chat. The old model leaves every picker.</p>`
+  : `<p>A live chat answer uses the new model. No picker keeps the old model.</p>`;
+
 const opensWithoutAsking = (finding) => finding.kind === "new-version" && ["openai", "anthropic"].includes(finding.provider);
 const needsValentin = (finding) => finding.kind !== "stale" && !opensWithoutAsking(finding);
 
@@ -90,8 +98,8 @@ function ticketFor(finding) {
   });
   const parts = plainParts({
     problem: `<p>Model ${escapeHtml(model)}, class ${escapeHtml(finding.modelClass ?? "unknown")}.</p><p>Reason: ${escapeHtml(finding.reason ?? "not stated")}.</p><p>Catalog now: ${entry}.</p><p>${priceLine(finding)}</p>`,
-    fix: `<p>${escapeHtml(actionSentences(finding))}</p><p>Follow the update-ai-models skill. Replace the old model in every picker.</p><p>Migrate saved picks and check gateway input and output prices.</p>`,
-    done: `<p>A live chat answer uses the new model.</p>`,
+    fix: `<p>${escapeHtml(actionSentences(finding))}</p>${fixStep(finding)}`,
+    done: doneStep(finding),
     risk: `<p>Saved picks can break. Undo by reverting the catalog change.</p>`,
     decision: `<p>${decision}</p>`,
   });
