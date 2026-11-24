@@ -5,15 +5,11 @@ import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/h
 import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
 import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-storage-2gb";
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
-import { getTeamById } from "@/lib/serverActions";
 import { HTPR_7686_FREE_PLAN_COPY_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-copy";
 import { subscriptionPlansFor, trialComparisonColumns, trialPlanBlurb } from "@/lib/subscriptionPlans";
-import { CreateCheckoutParams, IPricingSearchParams } from "@/models/model";
-import { StartPlanButton, requestCheckout } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
-import { useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { useFlag } from "@/hooks/useFlag";
+import React from "react";
 
 interface IRowPerkTitle {
     AIPrefix?: boolean;
@@ -50,97 +46,10 @@ export const RowContent: React.FC<IRowPerkTitle> = ({ AIPrefix, content, checkVa
 
 
 export const TrialsButton = ({teamId}:{teamId:string}) => {
-    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-    const [pending, setPending] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [teamInfo, setTeamInfo] = useState<IPricingSearchParams|undefined>(undefined);
-    const [fetchingInfo, setFetching ] = useState(true)
-
-    const router = useRouter()
-
-    const createCheckout = async () => {
-        if (
-            !teamInfo
-        ) {
-        }
-        else {
-            const body: CreateCheckoutParams = {
-                teamTitle: teamInfo.teamTitle,
-                googleAccountId: teamInfo.googleAccountId,
-                quantity: teamInfo.totalSeats,
-                stripe_customer_id: teamInfo.stripe_customer_id,
-                teamId: teamInfo.teamId,
-                mode:"Trial",
-                priceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID!,
-                returnUrl: `${process.env.NEXT_PUBLIC_BASEURL}/trial-page-confirmation`,
-                cancelUrl: process.env.NEXT_PUBLIC_BASEURL
-
-            };
-            if (pending) return;
-            setPending(true);
-            setError(null);
-            try {
-                router.push(await requestCheckout(body));
-            } catch {
-                setError("Could not start checkout. Please try again.");
-                setPending(false);
-            }
-        }
-    };
-
-    useEffect(()=>{
-        let cancelled = false
-        if (!flagReady || startPlanEnabled) return
-
-        const fetchTeamInfo = async()=>{
-            try {
-                if (teamId){
-                    const res = await getTeamById(teamId)
-                    if (!res || !res.stripe_customer_id)throw "Team doesnt exist or doesn't have a stripe attached to it"
-                    if (cancelled) return
-                    setTeamInfo({
-                        teamId:res.id,
-                        googleAccountId:res.googleAccountId,
-                        totalSeats:res.totalSeats,
-                        teamTitle:res.title??"",
-                        stripe_customer_id:res.stripe_customer_id,
-                        hasCompletedTrial:res?.team_activity?.hasCompletedTrial
-                    })
-                }
-            } catch (error) {
-                if (!cancelled) console.log("🚀 ~ fetchTeamInfo ~ error:", error)
-            }
-            finally{
-                if (!cancelled) setFetching(false)
-            }
-        }
-
-        setFetching(true)
-        fetchTeamInfo()
-        return () => {
-            cancelled = true
-        }
-    },[teamId, flagReady, startPlanEnabled])
-    if (!flagReady) return null;
-    if (startPlanEnabled) return <StartPlanButton teamId={teamId} />;
-    if (fetchingInfo){
-        return (<p className="text-content sm:text-emphasis text-[var(--color-plan-message)] font-normal">Checking plan access…</p>)
-    }
-    if (teamInfo?.hasCompletedTrial){
-        return (<p className="text-content sm:text-emphasis text-[var(--color-plan-message)] font-normal">You have already used your free trial</p>)
-    }
-    return (
-        <>
-            <button type="button" disabled={pending || !teamInfo} onClick={createCheckout} className="min-w-[280px] px-10 font-semibold text-content btn btn-dark">{pending ? "Opening checkout…" : "Start 14 Day Pro Trial"}</button>
-            {error && <p role="alert">{error}</p>}
-        </>
-    )
+    return <StartPlanButton teamId={teamId} />;
 }
 
 export const PlansTable = ()=>{
-    const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-    const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     const showCorrectedCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
     const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
     const planLimits = useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG);
@@ -160,7 +69,7 @@ export const PlansTable = ()=>{
         : undefined);
     return(
         <>
-        <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>
+        <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">Start a Hypertask plan</h2>
         <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">{trialPlanBlurb(useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG))}</p>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
                 <div className="flex xs:gap-3 lg:gap-8">
