@@ -88,9 +88,7 @@ node scripts/rag-eval.cjs --check-set
 node scripts/rag-eval.cjs --output rag-search-report.json
 ```
 
-Run these only in GitHub-hosted CI, not on the VPS. AI evals runs on every PR and
-every production push. Each run publishes a step-summary table and the
-`rag-search-report` artifact containing all six surface/mode measurements.
+Run these only in GitHub-hosted CI, not on the VPS. `npm test` runs the harness tests; `node scripts/rag-eval.cjs --check-set` and report generation are manual or hosted jobs, not pull-request gates. Each full report publishes a step-summary table and a `rag-search-report` artifact with all six surface/mode measurements.
 Recall@10, reciprocal rank, nDCG and deleted-hit rates are informational; no score
 floor blocks changes. Invalid fixtures or broken harness behavior still fail.
 

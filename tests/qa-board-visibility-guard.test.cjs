@@ -133,3 +133,68 @@ test('rejects partial column loss after hydration', async () => {
     /board lost columns \(had 3, now 1\)/,
   );
 });
+
+test('counts columns only after the named board is on screen', async () => {
+  const started = Date.now();
+  const arrived = () => Date.now() - started > 50;
+  const columnReads = [];
+  const page = {
+    locator(selector) {
+      if (selector === '[data-board-id="20"][data-board-tasks-hydrated="true"]') {
+        return { count: async () => (arrived() ? 1 : 0) };
+      }
+      if (selector === '[data-board-tasks-hydrated="true"]') {
+        return { count: async () => 1 };
+      }
+      return {
+        count: async () => {
+          const count = arrived() ? 2 : 3;
+          columnReads.push(count);
+          return count;
+        },
+        first: () => ({
+          waitFor: async () => {},
+          isVisible: async () => true,
+        }),
+      };
+    },
+    getByRole: () => ({
+      first: () => ({ isVisible: async () => false }),
+    }),
+    waitForTimeout: async () => {},
+  };
+
+  await assertColumnsStayVisible(page, '.kanban-column-title', 200, 1_000, 20);
+  assert.equal(columnReads.length > 0, true);
+  assert.deepEqual(columnReads, columnReads.map(() => 2));
+});
+
+test('rejects a named board that leaves the screen', async () => {
+  let columnReads = 0;
+  const page = {
+    locator(selector) {
+      if (selector === '[data-board-id="20"][data-board-tasks-hydrated="true"]') {
+        return { count: async () => (columnReads >= 1 ? 0 : 1) };
+      }
+      return {
+        count: async () => {
+          columnReads += 1;
+          return 2;
+        },
+        first: () => ({
+          waitFor: async () => {},
+          isVisible: async () => true,
+        }),
+      };
+    },
+    getByRole: () => ({
+      first: () => ({ isVisible: async () => false }),
+    }),
+    waitForTimeout: async () => {},
+  };
+
+  await assert.rejects(
+    assertColumnsStayVisible(page, '.kanban-column-title', 100, 1_000, 20),
+    /board 20 left the screen/,
+  );
+});

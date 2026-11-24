@@ -163,11 +163,12 @@ export const getAllFollowers = async(taskId:number) => {
   try {
     if (!hasSessionCookie()) {
       const legacy = await axios.post("/api/follower/getFollower", { taskId });
-      return legacy.data;
+      return legacy.data ?? [];
     }
     const meta = await getTaskDetailMeta(taskId);
-    return meta.followers;
-  } catch (error) {
+    return meta.followers ?? [];
+  } catch {
+    return [];
   }
 }
 

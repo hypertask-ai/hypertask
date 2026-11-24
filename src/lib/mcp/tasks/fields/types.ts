@@ -2,7 +2,7 @@ import type { McpAuthContext } from '@/lib/mcp/auth';
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import type { NextRequest, NextResponse } from 'next/server';
 import type { TaskDetail } from '@/lib/mcp/tasks/types';
-import type { linkTaskPullRequest } from '@/lib/pullRequests/taskPullRequests';
+import type { linkTaskPullRequest, unlinkTaskPullRequests } from '@/lib/pullRequests/taskPullRequests';
 import type { EstimateConstants, PriorityConstants } from '@/lib/constants/constants';
 import type { ActingAgent } from '@/lib/agents/activityAttribution';
 import type { ContractFieldUpdates } from '@/lib/mcp/tasks/contractFields';
@@ -75,7 +75,7 @@ export interface UpdateTaskBody {
     risk_level?: string;
     acceptance_criteria?: string;
     verify_command?: string;
-    pull_request_url?: string;
+    pull_request_url?: string | null;
 }
 
 export interface TaskUpdateExecutionResult {
@@ -118,6 +118,7 @@ export interface ExecuteTaskUpdateOptions {
     assignAssignees?: TaskUpdateAssigneeHandler;
     clearAssignees?: TaskClearAssigneesHandler;
     linkPullRequest?: typeof linkTaskPullRequest;
+    unlinkPullRequest?: typeof unlinkTaskPullRequests;
     strictSideEffectFailures?: boolean;
     persist?: (
         persistTaskUpdates: () => Promise<UpdateTaskResponse>
@@ -143,10 +144,12 @@ export interface TaskUpdateFieldContext {
     hasContractFieldUpdate: boolean;
     contractFieldUpdates: ContractFieldUpdates;
     parsedPullRequest: ReturnType<typeof parseGithubPullRequestUrl>;
+    clearPullRequest: boolean;
     assigneeUserIds: number[] | undefined;
     assignAssignees: ExecuteTaskUpdateOptions['assignAssignees'];
     clearAssignees: ExecuteTaskUpdateOptions['clearAssignees'];
     linkPullRequest: typeof linkTaskPullRequest;
+    unlinkPullRequest: typeof unlinkTaskPullRequests;
     strictSideEffectFailures: boolean;
 }
 

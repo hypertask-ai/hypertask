@@ -82,6 +82,7 @@ test("resolve stops and publishes when the same head tree was already verified",
         if (url.startsWith("run download")) return "";
         if (url.includes("/statuses")) return JSON.stringify([{ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "success", target_url: `https://github.com/${REPO}/actions/runs/${RUN}/attempts/1` }]);
         if (url.includes(`/commits/${head}`)) return JSON.stringify({ commit: { tree: { sha: TREE } } });
+        if (url.includes("/pulls/5/commits")) return "[]";
         if (url.includes("vnd.github.diff")) return diffFor();
         if (url.includes("/pulls/5")) return JSON.stringify(pull);
         throw new Error(url);
@@ -91,6 +92,42 @@ test("resolve stops and publishes when the same head tree was already verified",
     assert.match(written, /stop=true/);
     assert.match(written, /mark=success/);
     assert.deepEqual(posts, []);
+  } finally {
+    for (const [key, value] of savedEnv) value === undefined ? delete process.env[key] : (process.env[key] = value);
+  }
+});
+
+test("a reused verdict from another author family is not reused", async () => {
+  const { resolveCommand } = await load();
+  const head = "d".repeat(40);
+  const work = mkdtempSync(join(tmpdir(), "pv-author-change-"));
+  const output = join(work, "out");
+  writeFileSync(output, "");
+  const artifactDir = join(tmpdir(), `pstack-reuse-${RUN}`);
+  mkdirSync(artifactDir, { recursive: true });
+  writeFileSync(join(artifactDir, "verdict.json"), JSON.stringify(artifact({ diffSha256: sha256(diffFor()), tree: TREE })));
+  const savedEnv = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT", "RUNNER_TEMP"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: REPO, HEAD_SHA: head, GITHUB_RUN_ID: "11", GITHUB_RUN_ATTEMPT: "1", WORK: work, GITHUB_OUTPUT: output, RUNNER_TEMP: tmpdir() });
+  const pull = { number: 5, state: "open", draft: false, user: { login: "octocat" }, title: "t", body: "Author-Model: codex", base: { ref: "production", sha: BASE }, head: { sha: head, repo: { full_name: REPO } } };
+  try {
+    await resolveCommand({
+      event: { workflow_run: { conclusion: "success", head_sha: head, pull_requests: [{ number: 5 }] } },
+      spawn: () => ({ status: 0, stdout: `${"e".repeat(40)} 0000000\n` }),
+      postStatus: async () => {},
+      gh: (args) => {
+        const url = args.join(" ");
+        if (url.includes("/issues/5/comments")) return JSON.stringify([{ user: { login: BOT }, body: markerBodies() }]);
+        if (url.startsWith("run download")) return "";
+        if (url.includes("/statuses")) return JSON.stringify([{ context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "success", target_url: `https://github.com/${REPO}/actions/runs/${RUN}/attempts/1` }]);
+        if (url.includes(`/commits/${head}`)) return JSON.stringify({ commit: { tree: { sha: TREE } } });
+        if (url.includes("/pulls/5/commits")) return "[]";
+        if (url.includes("vnd.github.diff")) return diffFor();
+        if (url.includes("/pulls/5/files")) return "";
+        if (url.includes("/pulls/5")) return JSON.stringify(pull);
+        throw new Error(url);
+      },
+    });
+    assert.doesNotMatch(String(require("node:fs").readFileSync(output, "utf8")), /mark=success/);
   } finally {
     for (const [key, value] of savedEnv) value === undefined ? delete process.env[key] : (process.env[key] = value);
   }
@@ -114,6 +151,7 @@ test("resolve keeps going when the earlier artifact is gone", async () => {
         if (url.includes("/issues/5/comments")) return JSON.stringify([{ user: { login: BOT }, body: markerBodies() }]);
         if (url.startsWith("run download")) throw new Error("artifact expired");
         if (url.includes(`/commits/${head}`)) return JSON.stringify({ commit: { tree: { sha: TREE } } });
+        if (url.includes("/pulls/5/commits")) return "[]";
         if (url.includes("vnd.github.diff")) return diffFor();
         if (url.includes("/pulls/5/files")) return "";
         if (url.includes("/pulls/5/commits")) return "[]";

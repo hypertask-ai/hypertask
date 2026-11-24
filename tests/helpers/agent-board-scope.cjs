@@ -83,7 +83,7 @@ function fixture() {
   };
   prisma.member = { findMany: async args => {
     state.grantReads++;
-    return projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
+    return projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id, project }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
   } };
   const crossTeamContext = load('src/lib/auth/crossTeamContext.ts', {});
   const scope = load('src/lib/auth/agentScope.ts', {

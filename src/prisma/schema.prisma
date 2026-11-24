@@ -925,6 +925,7 @@ model Project {
   labels                 Label[]
   Reminders              Reminder[]
   uniqueIdentifier       String?
+  issuedUniqueIndex      Int                      @default(0)
   prefixAliases          ProjectPrefixAlias[]
   project_view           Project_View?
   ai_custom_instructions AI_Custom_Instructions[]
