@@ -43,7 +43,7 @@
 - `border-only-select` With `htpr-8960-border-only-select` on, board cards have no selection checkbox. Shift+click or X starts a selection. A click toggles a card while a selection exists. The selected card keeps the blue border. Off restores the checkbox.
 - `selection-bar-button` With `htpr-8961-selection-bar-button` on for Owner + QA, Open actions on the board selection bar uses the neutral filled button. Off uses the indigo button. The label stays Open actions.
 - `calm-cards` With `htpr-8970-calm-cards` on for Owner + QA, cards use 4px corners and one avatar stack. Tags stop at two, and brain- and design-pass tags stay off the card. The In inbox pill is hidden. The agent status line on the tag row is hidden. Off restores the previous card, including up to three tags and the In inbox pill.
-- `table-sort-columns` With `htpr-8973-table-sort-columns` on for Owner + QA, the table Sort button and a column header share one sort stack. Each view stores its own stack and columns. Switching to another view and back keeps them. Off keeps the shared browser columns and the separate board sort button.
+- `table-sort-columns` With `htpr-8973-table-sort-columns` on, the table Sort button and a column header share one sort stack. Each view stores its own stack and columns. Switching to another view and back keeps them. The desktop Sort button names itself `Sort`; the shell view controls are not drawn on a phone, where the column headers do the same job. Off keeps the shared browser columns and the separate board sort button.
 
 ## How to get to it (user POV)
 
@@ -166,7 +166,7 @@ Open actions colour: with `htpr-8961-selection-bar-button` on, select a card. Op
 
 Calm cards: with `htpr-8970-calm-cards` on, a card has 4px corners, one avatar stack, at most two tags, no brain- or design-pass tag, and no In inbox pill. Off, the pill and the third tag return.
 
-Table sort and columns: with `htpr-8973-table-sort-columns` on, use the table Sort button and a column header. Both change the same stack. Reload the view, open another view, and come back. The stack and the visible columns remain on that view, and the other view keeps its own. Off, Sort opens the board sort, and columns stay the shared browser set. Restore the QA view's sort and columns.
+Table sort and columns: with `htpr-8973-table-sort-columns` on, open the table with `?surface=table` and sort with the column headers, `Priority` then `Updated`. The header row carries the sort arrows. The toolbar sort button is named `Sort` on desktop, and the shell view controls are not drawn on a phone, so a click on `Sort` only lands on desktop. Open another view, then come back. The stack and the visible columns remain on that view, and the other view keeps its own. The address gains `view=<slug>` after load, so assert header text, not the raw address. Off, Sort opens the board sort, and columns stay the shared browser set. Restore the QA view's sort and columns.
 
 ### Hands-free drive on production
 

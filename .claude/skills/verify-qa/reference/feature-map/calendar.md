@@ -15,6 +15,8 @@
 
 Open `/calendar` with QA 985. Wait for the calendar grid or the muted **Loading calendar…** shell when `htpr-7397-calendar-loading-shell` is on (`src/app/calendar/page.tsx:15-28`). Confirm the app rail stays visible during hydration. Do not drag events unless the ticket requires a write check.
 
+There is no `Calendar` heading to read. The rail is icons with accessible names only, and on a phone the bottom tab carries the word. The week view draws weekday headers (`Monday` to `Friday`) plus `Today` and a date range such as `Nov 23 – 29`; expect one of those, so the check waits for the grid instead of passing on the **Loading calendar…** shell. The `‹` and `›` arrows move one period and have no accessible name, so do not plan a click by name on them.
+
 ## Gotchas
 
 Calendar is its own route, not a board view switch (`boards-and-views.md`). Hydration mismatches show React errors #418/#423/#425. Timezone bugs remount the whole page.

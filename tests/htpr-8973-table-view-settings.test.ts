@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   applyTableSortClick,
   commitTableSettings,
@@ -17,6 +18,7 @@ import {
   getActiveTableColumnsFromProject,
   getActiveTableSortStackFromProject,
 } from "../src/utils/helperFunctions/Views/ViewsHelperFunctions";
+import definition from "../src/lib/flags/definitions/htpr-8973-table-sort-columns";
 import type { IProject } from "../src/models/model";
 
 test("priority then updated both survive a reload", () => {
@@ -62,6 +64,15 @@ test("desktop and phone read the same account columns", () => {
 
 test("HTPR-8973 table settings marker", () => {
   console.log("HTPR-8973 table settings ok");
+});
+
+test("the flag default matches the mode this flag runs at in production", async () => {
+  const live = await readFile(new URL("../e2e/smoke/production-flag-modes.json", import.meta.url), "utf8");
+  const own = JSON.parse(await readFile(new URL("../e2e/smoke/flag-modes/htpr-8973-table-sort-columns.json", import.meta.url), "utf8"));
+  assert.equal(definition.key, "htpr-8973-table-sort-columns");
+  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(own.mode, "EVERYONE");
+  assert.match(live, /"htpr-8973-table-sort-columns": "EVERYONE"/);
 });
 
 const emptyView = (id: string): StoredTableView => ({
