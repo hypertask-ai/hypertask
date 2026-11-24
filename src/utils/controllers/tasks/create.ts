@@ -27,7 +27,7 @@ import {
 
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 
-type TaskDb = Pick<PrismaClient, "task">
+type TaskDb = Pick<PrismaClient, "task" | "taskNumberAlias" | "project">
 
 export function buildWebhookTaskSnapshot(
   row: {

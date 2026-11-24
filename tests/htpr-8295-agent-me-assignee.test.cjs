@@ -7,6 +7,7 @@ const personFlag = "htpr-7733-person-assignment-filter";
 const agentFlag = "htpr-8295-agent-me-assignee";
 const parkedFlag = "htpr-8738-picker-skips-parked";
 const searchDescriptionFlag = "htpr-9072-search-description";
+const oldKeyFlag = "htpr-9542-moved-ticket-old-key";
 const user = { id: 6, email: "person@example.test" };
 const callerAgent = "caller-agent";
 
@@ -117,7 +118,7 @@ for (const surface of ["MCP list", "MCP search"]) {
     const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0, "the handler must filter on an assignee");
     for (const filter of filters) assert.deepEqual(filter, { some: { agentId: callerAgent } });
-    assert.deepEqual(f.flagKeys(), surface === "MCP list" ? [personFlag, agentFlag, parkedFlag] : [personFlag, agentFlag, searchDescriptionFlag]);
+    assert.deepEqual(f.flagKeys(), surface === "MCP list" ? [personFlag, agentFlag, parkedFlag, oldKeyFlag] : [personFlag, agentFlag, searchDescriptionFlag, oldKeyFlag]);
   });
 
   test(`${surface} assignee=me as an agent with the flag off keeps owner matching`, async () => {
@@ -126,7 +127,7 @@ for (const surface of ["MCP list", "MCP search"]) {
     const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { some: { userId: user.id, agentId: null } });
-    assert.deepEqual(f.flagKeys(), surface === "MCP list" ? [personFlag, agentFlag, parkedFlag] : [personFlag, agentFlag, searchDescriptionFlag]);
+    assert.deepEqual(f.flagKeys(), surface === "MCP list" ? [personFlag, agentFlag, parkedFlag, oldKeyFlag] : [personFlag, agentFlag, searchDescriptionFlag, oldKeyFlag]);
   });
 
   test(`${surface} assignee=me as a person is unchanged and reads no agent flag`, async () => {
@@ -135,7 +136,7 @@ for (const surface of ["MCP list", "MCP search"]) {
     const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { some: { userId: user.id, agentId: null } });
-    assert.deepEqual(f.flagKeys(), surface === "MCP list" ? [personFlag, parkedFlag] : [personFlag, searchDescriptionFlag]);
+    assert.deepEqual(f.flagKeys(), surface === "MCP list" ? [personFlag, parkedFlag, oldKeyFlag] : [personFlag, searchDescriptionFlag, oldKeyFlag]);
   });
 
   test(`${surface} assignee=me as an agent with both flags off keeps every owner-backed row`, async () => {

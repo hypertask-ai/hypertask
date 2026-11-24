@@ -9,6 +9,7 @@ import UpdateKanban from '../MultiPages/useUpdateTaskInBoards';
 import { useMemo } from 'react';
 import { getActiveSortingModeFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions';
 import toast from 'react-hot-toast';
+import { taskInColumn } from '@/lib/constants/builtinViews';
 
 interface IUseMoveTasks {
   initialSections: ISection[];
@@ -81,7 +82,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
           const prevRank = targetSectionItems.length > 0 ? lastItemInTargetSection.ranking : undefined
           const nextRank = undefined
           ranking = generateRanking(prevRank,  nextRank);
-          newItem = { ...itemToMove, sectionId: newSecId, ranking: ranking, updatedAt: updatedAt.toString() }
+          newItem = { ...taskInColumn(itemToMove, { sectionId: newSecId, section_title: targetSection.section_title }), ranking: ranking, updatedAt: updatedAt.toString() }
 
           newSections[index].items.push(newItem);
         }
@@ -91,7 +92,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
           const nextRank = targetSectionItems.length > 0 ? targetSectionItems[itemToMoveIndex].ranking : undefined
           ranking = generateRanking(prevRank,  nextRank);
 
-          newItem = { ...itemToMove, sectionId: newSecId, ranking: ranking, updatedAt: updatedAt.toString() }
+          newItem = { ...taskInColumn(itemToMove, { sectionId: newSecId, section_title: targetSection.section_title }), ranking: ranking, updatedAt: updatedAt.toString() }
 
           targetSectionItems.length === 0 ?
             newSections[index].items.push(newItem) :
@@ -103,7 +104,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
           const nextRank = (itemToMoveIndex) < targetSectionItems.length ? targetSectionItems[itemToMoveIndex].ranking : undefined
           ranking = generateRanking(prevRank,  nextRank);
 
-          let newItem = { ...itemToMove, sectionId: newSecId, ranking: ranking, updatedAt: updatedAt.toString()  }
+          let newItem = { ...taskInColumn(itemToMove, { sectionId: newSecId, section_title: targetSection.section_title }), ranking: ranking, updatedAt: updatedAt.toString()  }
           newSections[index].items.splice(itemToMoveIndex, 0, newItem);
         }
         let itemsToSort = returnSortedItems(newSections[index].items,_currentProject! )
