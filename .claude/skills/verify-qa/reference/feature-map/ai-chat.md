@@ -555,6 +555,18 @@ Check desktop and phone in all four themes. Do not send messages or wake
 agents merely to verify selection. `htpr-7737-agent-hover-chat` Off removes
 only this shortcut, preserving existing sidebar and profile navigation.
 
+### Agent chat deep link
+
+With `htpr-7518-agent-sidebar-chats` enabled, open a board route that carries an
+agent deep link: `/project?agentSidebar=1&sidebarAgent=<agent id>`, the URL the
+person hovercard **Chat** action builds. The sidebar must open that agent, not
+AI chat. Repeat on ten cold loads and on a reload where the viewer snapshot is
+replaced after the roster arrives; every load must keep the named agent, and
+the roster refresh must not open a second chat. Selecting AI chat by hand
+afterwards must stick, and a board switch must not reopen the previous board's
+agent. Use an agent the signed-in user already owns; do not detach or create
+an agent for this check.
+
 ### Agent sessions in the sidebar
 
 On a board with an agent, open AI chat. With `htpr-8048-agent-sessions`
