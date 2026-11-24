@@ -16,6 +16,7 @@ import {
   type TaskWithBlockingRelations,
 } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 import { blockedByRelationsInclude } from "@/utils/controllers/projects/getAllIncludes";
+import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 
 import type { ToolContext } from "./context";
 
@@ -198,9 +199,7 @@ export function createListTasksTool(context: ToolContext) {
           tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
         );
 
-        return sanitizeForJson({
-          success: true,
-          tasks: tasksWithBlockers.map((task) => {
+        const listed = tasksWithBlockers.map((task) => {
             task = stripForeignTaskRelations(task);
             const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId);
             const assigneeCount = task.assignees.filter(
@@ -251,7 +250,10 @@ export function createListTasksTool(context: ToolContext) {
               updatedAt: task.updatedAt?.toISOString() || undefined,
               ...(agent ? { agent } : {}),
             };
-          }),
+        });
+        return sanitizeForJson({
+          success: true,
+          tasks: await nameMovedTicketKeys(user.id, listed),
           total,
           limit: input.limit,
           offset: input.offset,

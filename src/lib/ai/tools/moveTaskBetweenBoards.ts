@@ -9,6 +9,7 @@ import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
 import { TOOL_TASK_ID_DESCRIPTION } from "@/lib/ai/tools/constants";
 import { withToolErrors, resolveTaskForTool } from "@/lib/ai/tools/execution";
 import { buildActivityUser, mapTaskToDetail, sanitizeForJson } from "@/lib/ai/tools/helpers";
+import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 
 import type { ToolContext } from "./context";
 
@@ -96,9 +97,11 @@ export function createMoveTaskBetweenBoardsTool(context: ToolContext) {
           return { success: false, error: "Task moved but could not be retrieved" };
         }
 
-        const mappedTask = finalTask
-          ? mapTaskToDetail(finalTask, user.id)
-          : mapTaskToDetail(result.task, user.id);
+        const [mappedTask] = await nameMovedTicketKeys(user.id, [
+          finalTask
+            ? mapTaskToDetail(finalTask, user.id)
+            : mapTaskToDetail(result.task, user.id),
+        ]);
 
         return sanitizeForJson({
           success: true,

@@ -2056,6 +2056,360 @@ export function evaluateFlagDefinitionChanges({ baseSha, headSha, changedFiles }
   }
 }
 
+const FLAG_KEY_PATTERN = /^(?:htpr|hyfa|yper4)-\d+-[a-z0-9-]+$/;
+const HOOKS_WITH_DEPS = new Set(["useEffect", "useLayoutEffect", "useCallback", "useMemo"]);
+
+function showAt(ref, path) {
+  try {
+    return git(["show", `${ref}:${path}`]);
+  } catch {
+    return null;
+  }
+}
+
+function scriptKindFor(path) {
+  if (path.endsWith(".tsx")) return typescript.ScriptKind.TSX;
+  if (path.endsWith(".jsx")) return typescript.ScriptKind.JSX;
+  if (path.endsWith(".ts") || path.endsWith(".mts") || path.endsWith(".cts")) return typescript.ScriptKind.TS;
+  return typescript.ScriptKind.JS;
+}
+
+function wholeLineSpan(source, start, end) {
+  const lineStart = source.lastIndexOf("\n", start - 1) + 1;
+  const newline = source.indexOf("\n", end);
+  const lineEnd = newline < 0 ? source.length : newline + 1;
+  if (source.slice(lineStart, start).trim() !== "" || source.slice(end, lineEnd).trim() !== "") return null;
+  return [lineStart, lineEnd];
+}
+
+function applyEdits(source, edits) {
+  const ordered = [...edits].sort((left, right) => right[0] - left[0] || right[1] - left[1]);
+  let cursor = source.length;
+  let next = source;
+  for (const [start, end, text] of ordered) {
+    if (start < 0 || end < start || end > cursor) return null;
+    next = next.slice(0, start) + text + next.slice(end);
+    cursor = start;
+  }
+  return next;
+}
+
+function parseSource(path, source) {
+  const file = typescript.createSourceFile(path, source, typescript.ScriptTarget.Latest, true, scriptKindFor(path));
+  if (file.parseDiagnostics.length) return null;
+  return file;
+}
+
+function identifierNamed(node, name) {
+  return typescript.isIdentifier(node) && node.text === name;
+}
+
+function flagCall(initializer, symbol) {
+  const awaited = typescript.isAwaitExpression(initializer);
+  const call = awaited ? initializer.expression : initializer;
+  if (!typescript.isCallExpression(call) || !typescript.isIdentifier(call.expression)) return false;
+  const callee = call.expression.text;
+  const [first] = call.arguments;
+  if (!first || !identifierNamed(first, symbol)) return false;
+  if (!awaited && callee === "useFlag" && call.arguments.length === 1) return true;
+  return awaited && callee === "isFeatureEnabled" && call.arguments.length >= 2;
+}
+
+function forceFlagOn(path, source, symbol) {
+  const file = parseSource(path, source);
+  if (!file) return null;
+  const bindings = [];
+  function collect(node) {
+    if (typescript.isVariableDeclaration(node) && typescript.isIdentifier(node.name) && node.initializer &&
+        flagCall(node.initializer, symbol)) {
+      const statement = node.parent?.parent;
+      if (typescript.isVariableStatement(statement) && statement.declarationList.declarations.length === 1) {
+        bindings.push({ alias: node.name.text, statement });
+      }
+    }
+    typescript.forEachChild(node, collect);
+  }
+  collect(file);
+  if (!bindings.length) return source;
+  const aliases = new Set(bindings.map((binding) => binding.alias));
+  const edits = [];
+  let blocked = false;
+  function visit(node) {
+    if (typescript.isParenthesizedExpression(node) && typescript.isBinaryExpression(node.expression) &&
+        node.expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken &&
+        aliases.has(node.expression.left.text) && typescript.isIdentifier(node.expression.left) &&
+        typescript.isIdentifier(node.expression.right)) {
+      edits.push([node.getStart(file), node.getEnd(), node.expression.right.text]);
+      return;
+    }
+    if (typescript.isBinaryExpression(node) && aliases.has(node.left.text) && typescript.isIdentifier(node.left) &&
+        node.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) {
+      edits.push([node.left.getStart(file), node.right.getStart(file), ""]);
+      visit(node.right);
+      return;
+    }
+    if (typescript.isBinaryExpression(node) && node.operatorToken.kind === typescript.SyntaxKind.BarBarToken &&
+        typescript.isPrefixUnaryExpression(node.left) && node.left.operator === typescript.SyntaxKind.ExclamationToken &&
+        typescript.isIdentifier(node.left.operand) && aliases.has(node.left.operand.text)) {
+      edits.push([node.left.getStart(file), node.right.getStart(file), ""]);
+      visit(node.right);
+      return;
+    }
+    if (typescript.isIfStatement(node) && !node.elseStatement &&
+        typescript.isPrefixUnaryExpression(node.expression) &&
+        node.expression.operator === typescript.SyntaxKind.ExclamationToken &&
+        typescript.isIdentifier(node.expression.operand) && aliases.has(node.expression.operand.text) &&
+        typescript.isReturnStatement(node.thenStatement) && !node.thenStatement.expression) {
+      const span = wholeLineSpan(source, node.getStart(file), node.getEnd());
+      if (!span) blocked = true;
+      else edits.push([span[0], span[1], ""]);
+      return;
+    }
+    if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
+        HOOKS_WITH_DEPS.has(node.expression.text) && node.arguments.length >= 2 &&
+        typescript.isArrayLiteralExpression(node.arguments[1])) {
+      const elements = node.arguments[1].elements;
+      for (let index = 0; index < elements.length; index += 1) {
+        const element = elements[index];
+        if (!typescript.isIdentifier(element) || !aliases.has(element.text)) continue;
+        if (index < elements.length - 1) edits.push([element.getStart(file), elements[index + 1].getStart(file), ""]);
+        else if (index > 0) edits.push([elements[index - 1].getEnd(), element.getEnd(), ""]);
+        else edits.push([element.getStart(file), element.getEnd(), ""]);
+      }
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(file);
+  for (const binding of bindings) {
+    const span = wholeLineSpan(source, binding.statement.getStart(file), binding.statement.getEnd());
+    if (!span) blocked = true;
+    else edits.push([span[0], span[1], ""]);
+  }
+  if (blocked) return null;
+  const folded = applyEdits(source, edits);
+  if (folded == null) return null;
+  return dropRetiredFlagImports(path, folded, symbol, aliases);
+}
+
+function usesOutsideImports(file, name) {
+  let used = false;
+  function visit(node) {
+    if (typescript.isIdentifier(node) && node.text === name && !typescript.isImportSpecifier(node.parent)) used = true;
+    typescript.forEachChild(node, visit);
+  }
+  visit(file);
+  return used;
+}
+
+function specifierEdit(file, source, name) {
+  for (const statement of file.statements) {
+    if (!typescript.isImportDeclaration(statement) || !statement.importClause || statement.importClause.isTypeOnly) continue;
+    const bindings = statement.importClause.namedBindings;
+    if (!bindings || !typescript.isNamedImports(bindings)) continue;
+    const index = bindings.elements.findIndex((element) => !element.propertyName && element.name.text === name);
+    if (index < 0) continue;
+    const element = bindings.elements[index];
+    if (bindings.elements.length === 1) {
+      const span = wholeLineSpan(source, statement.getStart(file), statement.getEnd());
+      return span ? [[span[0], span[1], ""]] : null;
+    }
+    if (index === 0) return [[element.getStart(file), bindings.elements[1].getStart(file), ""]];
+    return [[bindings.elements[index - 1].getEnd(), element.getEnd(), ""]];
+  }
+  return [];
+}
+
+function dropRetiredFlagImports(path, source, symbol, aliases) {
+  let current = source;
+  for (let pass = 0; pass < 4; pass += 1) {
+    const file = parseSource(path, current);
+    if (!file) return null;
+    for (const alias of aliases) {
+      if (usesOutsideImports(file, alias)) return null;
+    }
+    if (usesOutsideImports(file, symbol)) return null;
+    const names = [symbol, "useFlag", "isFeatureEnabled"].filter((name) => !usesOutsideImports(file, name));
+    let changed = false;
+    for (const name of names) {
+      const edit = specifierEdit(file, current, name);
+      if (edit == null) return null;
+      if (!edit.length) continue;
+      const next = applyEdits(current, edit);
+      if (next == null) return null;
+      current = next;
+      changed = true;
+      break;
+    }
+    if (!changed) return current;
+  }
+  return null;
+}
+
+function retiredFlagLinesOnly(base, head, key) {
+  const setLine = `\n  "${key}",\n`;
+  const clientLine = `\n  "${key}": true,\n`;
+  if (!head.includes(setLine) || !head.includes(clientLine)) return false;
+  if (head.replace(setLine, "\n").replace(clientLine, "\n") !== base) return false;
+  const region = (source, pattern) => pattern.exec(source)?.[1] ?? "";
+  const setPattern = /export const RETIRED_FEATURE_FLAG_KEYS = new Set\(\[([\s\S]*?)\]\);/;
+  const clientPattern = /const RETIRED_CLIENT_FEATURE_FLAGS = \{([\s\S]*?)\} as const;/;
+  const baseSet = region(base, setPattern);
+  const headSet = region(head, setPattern);
+  const baseClient = region(base, clientPattern);
+  const headClient = region(head, clientPattern);
+  return !baseSet.includes(`"${key}"`) && headSet.includes(`"${key}"`) &&
+    !baseClient.includes(`"${key}"`) && headClient.includes(`"${key}": true`);
+}
+
+function sameJsonWithoutKey(base, head, key) {
+  try {
+    const before = JSON.parse(base);
+    const after = JSON.parse(head);
+    if (before?.modes?.[key] !== "EVERYONE" || !after?.modes) return false;
+    delete before.modes[key];
+    return JSON.stringify(before) === JSON.stringify(after);
+  } catch {
+    return false;
+  }
+}
+
+function diffRows(diffBase, headSha) {
+  return git(["-c", "core.quotePath=false", "diff", "--name-status", "--no-renames", `${diffBase}...${headSha}`])
+    .split("\n").filter(Boolean).map((row) => {
+      const [status, ...path] = row.split("\t");
+      return { status, path: path.join("\t") };
+    });
+}
+
+function tokenHit(content, token) {
+  let from = 0;
+  while (from < content.length) {
+    const at = content.indexOf(token, from);
+    if (at < 0) return false;
+    const before = content[at - 1] ?? "";
+    const after = content[at + token.length] ?? "";
+    if (!/[A-Za-z0-9_-]/.test(before) && !/[A-Za-z0-9_-]/.test(after)) return true;
+    from = at + token.length;
+  }
+  return false;
+}
+
+function grepHits(ref, token) {
+  let text = "";
+  try {
+    text = git(["grep", "-n", "-I", "-F", token, ref, "--", "src"]);
+  } catch (error) {
+    if (error?.status !== 1) throw error;
+  }
+  const prefix = `${ref}:`;
+  const hits = [];
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    if (!line.startsWith(prefix)) return null;
+    const rest = line.slice(prefix.length);
+    const pathEnd = rest.indexOf(":");
+    const lineEnd = rest.indexOf(":", pathEnd + 1);
+    if (pathEnd < 0 || lineEnd < 0) return null;
+    const content = rest.slice(lineEnd + 1);
+    if (tokenHit(content, token)) hits.push({ path: rest.slice(0, pathEnd), content });
+  }
+  return hits;
+}
+
+function singleFlagRemoval({ diffBase, headSha, key }) {
+  if (!FLAG_KEY_PATTERN.test(key)) return null;
+  const definitionPath = `src/lib/flags/definitions/${key}.ts`;
+  const definitionSource = showAt(diffBase, definitionPath);
+  if (definitionSource == null) return null;
+  let symbol = "";
+  try {
+    const parsed = parseFlagFile(definitionSource, definitionPath);
+    if (parsed.definition.key !== key) return null;
+    symbol = parsed.identifier;
+  } catch {
+    return null;
+  }
+  let rows = [];
+  try {
+    rows = diffRows(diffBase, headSha);
+  } catch {
+    return null;
+  }
+  if (rows.some((row) => !["A", "M", "D"].includes(row.status))) return null;
+  const modesPath = "e2e/smoke/production-flag-modes.json";
+  const modeFile = `e2e/smoke/flag-modes/${key}.json`;
+  const migration = /^src\/prisma\/migrations\/[^/]+\/migration\.sql$/;
+  let migrations = 0;
+  let sawDefinition = false;
+  let sawModes = false;
+  let sawFlags = false;
+  for (const row of rows) {
+    if (row.path === definitionPath) {
+      if (row.status !== "D") return null;
+      sawDefinition = true;
+      continue;
+    }
+    if (row.path === modesPath) {
+      if (row.status !== "M" || !sameJsonWithoutKey(showAt(diffBase, modesPath), showAt(headSha, modesPath), key)) return null;
+      sawModes = true;
+      continue;
+    }
+    if (row.path === modeFile) {
+      if (row.status !== "D") return null;
+      try {
+        const mode = JSON.parse(showAt(diffBase, modeFile));
+        if (Object.keys(mode).length !== 1 || mode.mode !== "EVERYONE") return null;
+      } catch {
+        return null;
+      }
+      continue;
+    }
+    if (row.path === "src/lib/flags.ts") {
+      const base = showAt(diffBase, row.path);
+      const head = showAt(headSha, row.path);
+      if (row.status !== "M" || base == null || head == null || !retiredFlagLinesOnly(base, head, key)) return null;
+      sawFlags = true;
+      continue;
+    }
+    if (migration.test(row.path)) {
+      const body = showAt(headSha, row.path);
+      if (row.status !== "A" || body == null || body.trim() !== `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';`) return null;
+      migrations += 1;
+      continue;
+    }
+    if (/^(?:tests|docs)\//.test(row.path) || row.path.endsWith(".md")) continue;
+    if (row.status !== "M" || !/^src\/.+\.[jt]sx?$/.test(row.path)) return null;
+    const base = showAt(diffBase, row.path);
+    const head = showAt(headSha, row.path);
+    if (base == null || head == null) return null;
+    const folded = forceFlagOn(row.path, base, symbol);
+    if (folded == null || folded !== head) return null;
+  }
+  if (!sawDefinition || !sawModes || !sawFlags || migrations > 1) return null;
+  let migrationPath = "";
+  for (const row of rows) {
+    if (migration.test(row.path)) migrationPath = row.path;
+  }
+  let hits = [];
+  try {
+    const keyHits = grepHits(headSha, key);
+    const symbolHits = grepHits(headSha, symbol);
+    if (!keyHits || !symbolHits) return null;
+    hits = [...keyHits, ...symbolHits];
+  } catch {
+    return null;
+  }
+  for (const hit of hits) {
+    if (hit.content.includes(symbol) && tokenHit(hit.content, symbol)) return null;
+    if (!tokenHit(hit.content, key)) continue;
+    const retired = hit.path === "src/lib/flags.ts" &&
+      (hit.content.trim() === `"${key}",` || hit.content.trim() === `"${key}": true,`);
+    const dropped = hit.path === migrationPath && hit.content.includes(`'${key}'`);
+    if (!retired && !dropped) return null;
+  }
+  return `This pull request only removes feature flag ${key}, already on for everyone.`;
+}
+
 export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const diffBase = diffBaseSha(baseSha, headSha);
   const changedFiles = git(["diff", "--name-only", `${diffBase}...${headSha}`])
@@ -2153,11 +2507,19 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     const baseDefinitions = parseDefinitions(diffBase);
     const headDefinitions = parseDefinitions(headSha);
     const removed = baseDefinitions.keys.filter((key) => !headDefinitions.keys.includes(key));
-    if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
-
     const productionDefinitions = parseDefinitions(currentProductionSha(baseSha));
     const added = headDefinitions.keys.filter((key) =>
       !baseDefinitions.keys.includes(key) && !productionDefinitions.keys.includes(key));
+    if (removed.length === 1 && added.length === 0) {
+      let removal = null;
+      try {
+        removal = singleFlagRemoval({ diffBase, headSha, key: removed[0] });
+      } catch {
+        removal = null;
+      }
+      if (removal) return { pass: true, ownerReview: "exempt-ui", reason: removal };
+    }
+    if (removed.length > 0) return failure(`The pull request removes existing feature flag definition ${removed[0]}.`);
     const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
     if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
       return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
@@ -2190,7 +2552,6 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         addedLinesFor(diffBase, headSha, path, true),
         diffBase,
       );
-      console.error('DEBUG path', path, 'key', key);
       if (key) {
         if (isServerFile(path)) hasServerGate = true;
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
@@ -2198,10 +2559,6 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         if ((covered.size > 0 || isServerFile(path)) && !matchedGate) matchedGate = { key, path };
       }
     }
-    console.error('DEBUG runtimeFiles', runtimeFiles);
-    console.error('DEBUG uiFiles', uiFiles);
-    console.error('DEBUG coveredUiFiles', [...coveredUiFiles]);
-    console.error('DEBUG matchedGate', matchedGate);
     if (serverFiles.length > 0 && !hasServerGate) {
       return failure(`[${tag}] changes server behavior (${serverFiles.slice(0, 5).join(", ")}) without a ticket-specific server flag. ` +
         `Define src/lib/flags/definitions/${ticketPrefix}<name>.ts and call isFeatureEnabled from @/lib/flags ` +

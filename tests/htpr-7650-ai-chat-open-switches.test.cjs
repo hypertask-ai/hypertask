@@ -20,6 +20,7 @@ function load(file, mocks = {}) {
     if (name === flagFile) return { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag };
     if (name === "@/lib/flags/definitions/htpr-8038-chat-opener-ready") return { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" };
     if (name === "@/lib/flags/definitions/htpr-8088-manual-chat") return { HTPR_8088_MANUAL_CHAT_FLAG: "htpr-8088-manual-chat" };
+    if (name === "@/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches") return { HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG: "htpr-9245-chat-waits-for-saved-switches" };
     if (name === "@/lib/flags/definitions/htpr-7983-free-mode-signup") return { HTPR_7983_FREE_MODE_SIGNUP_FLAG: "htpr-7983-free-mode-signup" };
     if (name === "@/lib/demo/guest") return { isGuestUser: (user) => Boolean(user?.uid?.startsWith("guest_")) };
     if (name === policyFile) return policy;
