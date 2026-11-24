@@ -21,9 +21,11 @@ import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/definitions/htpr-7804-blocked-by-me'
+import { HTPR_9361_BLOCKED_VIEW_DONE_FLAG } from '@/lib/flags/definitions/htpr-9361-blocked-view-done'
 
 const useRenderedViews = (project: IProject | null) => {
   const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG)
+  const leaveFinishedOut = useFlag(HTPR_9361_BLOCKED_VIEW_DONE_FLAG)
   const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const tagHideFilterEnabled = useFlag(HTPR_8171_HIDE_TAGS_FLAG)
@@ -69,7 +71,7 @@ const useRenderedViews = (project: IProject | null) => {
 
   const viewTaskCounts = useMemo(() => {
     const tasks = project?.tasks ?? []
-    const builtinContext = buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName)
+    const builtinContext = buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName, leaveFinishedOut)
     return new Map<string, number>([
       ...savedViewTaskCounts,
       ...BUILTIN_VIEWS.map((view) => [
@@ -79,7 +81,7 @@ const useRenderedViews = (project: IProject | null) => {
           : tasks.filter((task) => view.predicate(task, builtinContext)).length,
       ] as const),
     ])
-  }, [blockedByMeListEnabled, currentUser?.id, currentUser?.displayName, project, savedViewTaskCounts])
+  }, [blockedByMeListEnabled, currentUser?.id, currentUser?.displayName, leaveFinishedOut, project, savedViewTaskCounts])
 
   const renderedViews: BoardView[] = useMemo(() => {
     if (showEmptyViewTabs) return views

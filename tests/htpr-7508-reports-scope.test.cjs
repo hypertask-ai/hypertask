@@ -80,8 +80,16 @@ for (const area of ["status-update", "velocity"]) {
     assert.equal(h.state.flagReads, 1);
   });
 
-  test(`${area}: same ungranted agent still allowed with flag Off (WATCH)`, async () => {
+  test(`${area}: same ungranted agent with boards is refused with flag Off (WATCH)`, async () => {
     const h = harness(area, { enforce: false });
+    assert.equal((await h.request()).status, 404);
+    assert.equal(h.taskQueries.length, 0);
+    assert.equal(h.state.flagReads, 1);
+  });
+
+  test(`${area}: zero-board agent keeps its owner access with flag Off (WATCH)`, async () => {
+    const h = harness(area, { enforce: false });
+    h.projects.forEach(project => { project.members = []; });
     assert.equal((await h.request()).status, 200);
     assert.equal(h.state.flagReads, 1);
     assert.ok(h.taskResults.every(rows => rows.length === 1));

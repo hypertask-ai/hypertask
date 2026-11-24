@@ -172,6 +172,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
 
         <button
           type="button"
+          aria-label="Open AI chat"
           aria-pressed={showAiChatInterface}
           onClick={toggleAIChatInterface}
           disabled={openerDisabled}

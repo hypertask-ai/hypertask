@@ -52,6 +52,8 @@ test("nightly canary throws on production, polls for the PostHog ticket, then mo
     "@/lib/mcp/tasks/contractFields": {},
     "@/lib/mcp/tasks/updateFields": { hasSingleTaskUpdate: (body) => body.title !== undefined || body.description !== undefined || body.parent_task_id !== undefined },
     "@/lib/pullRequests/githubPullRequests": {},
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/definitions/htpr-9276-unlink-pull-request": { HTPR_9276_UNLINK_PULL_REQUEST_FLAG: "htpr-9276-unlink-pull-request" },
   };
   vm.runInNewContext(code, { module: mod, exports: mod.exports, require: (id) => stubs[id] || require(id), console });
   const valid = await mod.exports.validateTaskUpdateFields(closeBody, false);
