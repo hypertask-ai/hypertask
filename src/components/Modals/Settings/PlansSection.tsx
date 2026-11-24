@@ -10,7 +10,10 @@ import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-79
 import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7919-allowance-percent";
 import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { visibleFreePlanCopy } from "@/lib/freePlanLimits";
-import { subscriptionPlansFor } from "@/lib/subscriptionPlans";
+import {
+  ISubscriptionPlan,
+  subscriptionPlansFor,
+} from "@/lib/subscriptionPlans";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,9 +27,6 @@ import {
   buildPricingCheckoutCancelUrl,
   buildPricingCheckoutSuccessUrl,
 } from "@/lib/pricingCheckoutUrls";
-import {
-  ISubscriptionPlan,
-} from "@/lib/subscriptionPlans";
 import type { IPricingSearchParams } from "@/models/model";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import {
