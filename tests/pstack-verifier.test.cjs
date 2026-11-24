@@ -103,7 +103,8 @@ for (const [number, pull] of Object.entries(authorPulls)) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), `pv-pr-${number}-`));
     const output = path.join(dir, "output");
     const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
-    const sha = pull.commits.at(-1).sha;
+    const sha = pull.headSha;
+    assert.equal(pull.commits.at(-1).sha, sha);
     const bound = { sha, run: "10", attempt: "1" };
     const item = { number: Number(number), state: "open", draft: false, user: { login: pull.authorLogin }, body: pull.body, base: { ref: "production", sha: "b".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } }, commits: pull.commits.length };
     Object.assign(process.env, { GITHUB_REPOSITORY: "acme/app", GITHUB_RUN_ID: bound.run, GITHUB_RUN_ATTEMPT: bound.attempt, WORK: dir, GITHUB_OUTPUT: output });
@@ -123,13 +124,16 @@ for (const [number, pull] of Object.entries(authorPulls)) {
       });
       assert.match(fs.readFileSync(output, "utf8"), /stop=false/);
       const request = JSON.parse(fs.readFileSync(path.join(dir, "request/request.json"), "utf8"));
+      assert.equal(request.sha, pull.headSha);
       assert.equal(request.author, pull.author);
       assert.equal(request.botLogin ?? "", pull.botLogin);
       const plan = await planFromRequest(request, { binding: bound, ask: () => { throw new Error("no model call expected"); } });
       assert.equal(plan.authorFamily, pull.botLogin || pull.author);
       fs.mkdirSync(path.join(dir, "plan"));
       fs.writeFileSync(path.join(dir, "plan/plan.json"), JSON.stringify(plan));
-      assert.equal(await judgeAskCommand({ work: dir, binding: bound }), null);
+      assert.equal(fs.existsSync(path.join(dir, "evidence", "evidence.json")), false);
+      assert.equal(await judgeAskCommand({ work: dir, binding: bound, ask: () => { throw new Error("no model call expected"); } }), null);
+      assert.equal(decide({ plan, evidence: null, binding: bound, checksPassed: false }).verdict, "FAIL");
       const verdict = decide({ plan, evidence: null, binding: bound, checksPassed: true });
       assert.equal(verdict.verdict, "PASS+NOTES");
       assert.equal(statusDescription({ ...verdict, authorFamily: plan.authorFamily, verifierModel: plan.verifierModel }), `PASS+NOTES: author ${plan.authorFamily}, verifier ${plan.verifierModel || "none"}`);
@@ -153,6 +157,7 @@ for (const family of ["deepseek", "mystery"]) {
     assert.equal(merge.parents.length, 2);
     merge.commit.message += `\n\nAuthor-Model: ${family}`;
     assert.equal(authorFamily(pull.body, commits, pull.authorLogin), "codex");
+    assert.equal(authorFamily("", [merge], pull.authorLogin), "");
     merge.parents.pop();
     assert.equal(authorFamily(pull.body, commits, pull.authorLogin), "");
     assert.equal(authorFamily(pull.body, null, pull.authorLogin), "");
