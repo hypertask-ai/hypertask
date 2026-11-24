@@ -9,7 +9,7 @@ import authConfig from "@/lib/configs/auth.config";
 type Status = "signing-out" | "signed-out" | "failed";
 
 const buttonClassName =
-  "mt-6 inline-flex min-h-10 items-center justify-center rounded-[4px] bg-hypertasks-purple px-4 py-2 text-[14px] font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selected-item-border disabled:opacity-60";
+  "mt-6 inline-flex min-h-10 items-center justify-center rounded-[4px] bg-hypertasks-purple px-4 py-2 text-content font-medium text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selected-item-border disabled:opacity-60";
 
 export default function SignOutScreen({ hasSession }: { hasSession: boolean }) {
   const { handleHardReset } = useSignout(undefined, { redirectTo: null });
@@ -58,12 +58,12 @@ export default function SignOutScreen({ hasSession }: { hasSession: boolean }) {
       >
         <LogOut aria-hidden="true" className="h-16 w-16 text-text-light-gray" strokeWidth={1.75} />
         {status === "signing-out" && (
-          <h1 className="mt-5 text-[20px] font-semibold">Signing you out</h1>
+          <h1 className="mt-5 text-subheading font-semibold">Signing you out</h1>
         )}
         {status === "signed-out" && (
           <>
-            <h1 className="mt-5 text-[20px] font-semibold">You are signed out</h1>
-            <p className="mt-2 max-w-[420px] text-[14px] text-text-light-gray">
+            <h1 className="mt-5 text-subheading font-semibold">You are signed out</h1>
+            <p className="mt-2 max-w-[420px] text-content text-text-light-gray">
               This browser no longer holds a Hypertask session. Pick your account when you sign in again.
             </p>
             <button type="button" onClick={() => void signInAgain()} disabled={starting} className={buttonClassName}>
@@ -73,8 +73,8 @@ export default function SignOutScreen({ hasSession }: { hasSession: boolean }) {
         )}
         {status === "failed" && (
           <>
-            <h1 className="mt-5 text-[20px] font-semibold">Could not sign you out</h1>
-            <p className="mt-2 max-w-[420px] text-[14px] text-text-light-gray">
+            <h1 className="mt-5 text-subheading font-semibold">Could not sign you out</h1>
+            <p className="mt-2 max-w-[420px] text-content text-text-light-gray">
               Nothing was changed. Try again.
             </p>
             <button type="button" onClick={signOut} className={buttonClassName}>
