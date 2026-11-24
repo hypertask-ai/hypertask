@@ -13,6 +13,129 @@ test("missing Author-Model fails", async () => {
   assert.equal(authorGate("Author-Model: grok").author, "grok");
 });
 
+const RUNNER = "hypertask-runners[bot]";
+
+for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, author = "", commitFailure = false, commitCount = messages.length } of [
+  { name: "parenthesised author model", body: "Author-Model: codex (gpt-6.1-sol)", author: "codex" },
+  { name: "lowercase body line", body: "author-model: claude (claude-opus-5)", author: "claude" },
+  { name: "missing body line with codex commit trailer", messages: ["Fix verifier\n\nAuthor-Model: codex"], author: "codex" },
+  { name: "missing body line with model coauthor", messages: ["Fix verifier\n\nCo-Authored-By: gpt-6.1-sol <noreply@openai.com>"], author: "codex" },
+  { name: "agreeing commit trailers", messages: ["Fix\n\nAuthor-Model: codex", "Test\n\nCo-Authored-By: Codex <noreply@openai.com>"], author: "codex" },
+  { name: "disagreeing commits", messages: ["Fix\n\nAuthor-Model: codex", "Test\n\nAuthor-Model: deepseek"] },
+  { name: "body line and commit trailer disagree", body: "Author-Model: claude", messages: ["Fix\n\nAuthor-Model: codex"] },
+  { name: "fenced example beside a real line", body: "```\nAuthor-Model: deepseek\n```\n\nAuthor-Model: codex (gpt-6.1-sol)", author: "codex" },
+  { name: "fenced example alone", body: "```md\nAuthor-Model: codex\n```" },
+  { name: "unknown body family cannot fall back", body: "Author-Model: mystery (codex)", messages: ["Fix\n\nAuthor-Model: codex"] },
+  { name: "unknown commit family", messages: ["Fix\n\nAuthor-Model: mystery"] },
+  { name: "unknown commit family cannot be outvoted", messages: ["Fix\n\nAuthor-Model: mystery", "Test\n\nAuthor-Model: codex"] },
+  { name: "incomplete commit list", messages: ["Fix\n\nAuthor-Model: codex"], commitCount: 2 },
+  { name: "conflicting author after the first commit page", messages: [...Array.from({ length: 30 }, () => "Fix\n\nAuthor-Model: codex"), "Test\n\nAuthor-Model: deepseek"] },
+  { name: "agent account commits a bot-opened pull request", messages: ["Fix\n\nCo-Authored-By: OpenAI <noreply@openai.com>"], owners: [["codex", "codex"]], author: "codex" },
+  { name: "commit by another author cannot set the family", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "octocat"]], prAuthor: "valentinyeo" },
+  { name: "any attributed commit counts in a bot-opened pull request", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "octocat"]], author: "codex" },
+  { name: "commit authored elsewhere but committed by the pr author", messages: ["Fix\n\nAuthor-Model: codex"], owners: [["octocat", "valentinyeo"]], prAuthor: "valentinyeo", author: "codex" },
+  { name: "unattributed commit cannot set the family", messages: ["Fix\n\nAuthor-Model: codex"], owners: [[null, null]], prAuthor: "valentinyeo" },
+  { name: "unreadable commit evidence fails closed beside a body line", body: "Author-Model: codex", messages: ["Fix\n\nAuthor-Model: deepseek"], commitFailure: true },
+  { name: "incomplete commit page fails closed beside a body line", body: "Author-Model: codex", messages: ["Fix\n\nAuthor-Model: codex"], commitCount: 2 },
+]) {
+  test(`author resolution: ${name}`, async () => {
+    const { resolveCommand } = await load();
+    const fs = require("node:fs");
+    const os = require("node:os");
+    const path = require("node:path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pv-author-"));
+    const output = path.join(dir, "output");
+    const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
+    const sha = "d".repeat(40);
+    const pull = { number: 7, state: "open", draft: false, user: { login: prAuthor }, body, base: { ref: "production", sha: "b".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } }, commits: commitCount };
+    Object.assign(process.env, { GITHUB_REPOSITORY: "acme/app", GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", WORK: dir, GITHUB_OUTPUT: output });
+    try {
+      await resolveCommand({
+        event: { workflow_run: { conclusion: "success", head_sha: sha, pull_requests: [{ number: 7 }] } },
+        gh: (args) => {
+          const url = args.join(" ");
+          if (url.includes("/pulls/7/commits")) {
+            if (commitFailure) return "{}";
+            const commits = messages.map((message, index) => {
+              const [login, committer] = owners[index] ?? [RUNNER, RUNNER];
+              return { sha: index === messages.length - 1 ? sha : "c".repeat(40), author: { login }, committer: { login: committer }, commit: { message } };
+            });
+            if (!args.includes("--paginate")) return JSON.stringify(commits.slice(0, 30));
+            const pages = Array.from({ length: Math.max(1, Math.ceil(commits.length / 30)) }, (_, index) => commits.slice(index * 30, (index + 1) * 30));
+            return args.includes("--slurp") ? JSON.stringify(pages) : pages.map((page) => JSON.stringify(page)).join("\n");
+          }
+          if (url.includes("/pulls/7/files")) return '{"filename":"scripts/pstack-verifier.mjs"}';
+          if (url.includes("vnd.github.diff")) return "";
+          if (url.includes("/pulls/7")) return JSON.stringify(pull);
+          if (url.includes(`/commits/${sha}`)) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+          if (url.includes("/issues/7/comments")) return "[]";
+          throw new Error(url);
+        },
+      });
+      const result = fs.readFileSync(output, "utf8");
+      const requestPath = path.join(dir, "request/request.json");
+      if (author) {
+        assert.match(result, /stop=false/);
+        assert.equal(JSON.parse(fs.readFileSync(requestPath, "utf8")).author, author);
+      } else {
+        assert.match(result, /stop=true/);
+        assert.match(result, /description=FAIL: author model unknown/);
+        assert.equal(fs.existsSync(requestPath), false);
+      }
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("an unreadable commit list is unknown evidence, not an empty one", async () => {
+  const { pullCommits, authorFamily } = await load();
+  assert.equal(pullCommits(() => { throw new Error("HTTP 500"); }, "acme/app", 7), null);
+  assert.equal(pullCommits(() => "{}", "acme/app", 7), null);
+  assert.deepEqual(pullCommits(() => JSON.stringify([[{ sha: "a" }, { sha: "b" }]]), "acme/app", 7).length, 2);
+  assert.equal(pullCommits(() => JSON.stringify([[{ sha: "a" }]]), "acme/app", 7, 2), null);
+  assert.equal(pullCommits(() => JSON.stringify([[]]), "acme/app", 7, 0).length, 0);
+  assert.equal(authorFamily("Author-Model: codex", null, RUNNER), "");
+});
+
+test("author trailers fail closed without treating prose, other authors or human coauthors as model evidence", async () => {
+  const { authorGate } = await load();
+  const commits = (...messages) => messages.map((message) => ({ author: { login: RUNNER }, committer: { login: RUNNER }, commit: { message } }));
+  const gate = (body, ...messages) => authorGate(body, commits(...messages), RUNNER);
+  for (const family of ["claude", "deepseek", "grok", "codex", "other"]) {
+    assert.equal(authorGate(`Author-Model: ${family.toUpperCase()} (model id)\r\n`).author, family);
+  }
+  assert.equal(authorGate("Author-Model: CODEX").author, "codex");
+  assert.equal(authorGate("Author-Model: codex", null, RUNNER).stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Claude Smith <claude.smith@example.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Cody Exter <cody.exter@example.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex <noreply@OpenAI.com>").author, "codex");
+  assert.equal(gate("", "Fix\n\nAuthor-Model: codex").author, "codex");
+  assert.equal(gate("Author-Model: claude", "Fix\n\nAuthor-Model: codex").stop, true);
+  assert.equal(authorGate("Author-Model: codex", [{ author: { login: "octocat" }, commit: { message: "Fix\n\nAuthor-Model: deepseek" } }], "valentinyeo").author, "codex");
+  assert.equal(authorGate("", [{ author: { login: "octocat" }, committer: { login: "octocat" }, commit: { message: "Fix\n\nAuthor-Model: codex" } }], "valentinyeo").stop, true);
+  assert.equal(authorGate("", [{ author: { login: "octocat" }, committer: { login: "valentinyeo" }, commit: { message: "Fix\n\nAuthor-Model: codex" } }], "valentinyeo").author, "codex");
+  assert.equal(authorGate("", [{ author: { login: "codex" }, committer: { login: "codex" }, commit: { message: "Fix\n\nCo-Authored-By: OpenAI <noreply@openai.com>" } }], RUNNER).author, "codex");
+  assert.equal(authorGate("", [{ commit: { message: "Fix\n\nAuthor-Model: codex" } }], RUNNER).stop, true);
+  assert.equal(authorGate("", commits("Fix\n\nAuthor-Model: codex")).stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex Claude <noreply@example.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nAuthor-Model: codex\nCo-Authored-By: Claude <noreply@anthropic.com>").stop, true);
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: A human <human@example.com>").stop, true);
+  assert.equal(gate("", "Author-Model: codex\n\nUnrelated prose").stop, true);
+  assert.equal(gate("", "Author-Model: codex").stop, true);
+  assert.equal(gate("", "Fix\n\nAuthor-Model: codex\nUnrelated prose").stop, true);
+  assert.equal(gate("Author-Model:\ncodex", "Fix\n\nAuthor-Model: codex").stop, true);
+  assert.equal(gate("Author-Model: codex\nAuthor-Model: deepseek").stop, true);
+  assert.equal(gate("```\nAuthor-Model: codex\n```\nAuthor-Model: deepseek").author, "deepseek");
+  assert.equal(gate("```\nAuthor-Model: codex\n```").stop, true);
+  assert.equal(gate("~~~\nAuthor-Model: mystery\n~~~", "Fix\n\nAuthor-Model: codex").author, "codex");
+  assert.equal(gate("", "Fix\n\nCo-Authored-By: Codex <noreply@openai.com>\nCo-Authored-By: A human <human@example.com>").author, "codex");
+});
+
 test("deepseek author picks the alt model and an empty alt is unevaluated", async () => {
   const { pickVerifier, decide, FLASH } = await load();
   assert.equal(pickVerifier("grok", "openai/gpt-5").model, FLASH);
@@ -372,6 +495,50 @@ test("formal models and repros under verification are non-app; a src file stays 
   const result = decide({ model: { verdict: "", notes: "" }, plan: plan([], { reason: "no user path: formal models are never shipped", files: ["verification/formal/x.tla"], filesTruncated: false }), evidence: null, binding, checksPassed: true });
   assert.equal(result.verdict, "PASS+NOTES");
   assert.match(result.notes, /^no app path: /);
+});
+
+for (const [name, files] of [
+  ["formal verification paths", ["verification/formal/seat-billing/SeatBilling.tla", "verification/formal/seat-billing/SeatBilling.cfg", "verification/formal/seat-billing/repro.cjs"]],
+  ["formal runner paths", ["scripts/formal-verification/run.mjs"]],
+  ["formal test paths", ["tests/formal-seat-billing.test.cjs", "tests/formal-webhook-retry.test.cjs"]],
+]) {
+  test(`${name} select the non-app plan and pass only with green checks`, async () => {
+    const { hasAppPath, selectPlan, decide } = await load();
+    const selected = { actions: [], expect: [], reason: "no user path: non-app files only" };
+    for (const file of files) {
+      assert.equal(hasAppPath([file]), false, file);
+      assert.deepEqual(selectPlan([file], false), selected, file);
+    }
+    const checked = plan([], { ...selected, files, filesTruncated: false });
+    const input = { model: {}, plan: checked, evidence: null, binding };
+    assert.equal(decide({ ...input, checksPassed: true }).verdict, "PASS+NOTES");
+    assert.equal(decide({ ...input, checksPassed: false }).verdict, "FAIL");
+    assert.equal(decide({ ...input, checksPending: true }).verdict, "PENDING");
+    assert.equal(selectPlan(files, true), null);
+    const mixed = [...files, "src/app/page.tsx"];
+    assert.equal(hasAppPath(mixed), true);
+    assert.equal(selectPlan(mixed, false), null);
+    assert.equal(decide({ ...input, plan: { ...checked, files: mixed }, checksPassed: true }).verdict, "FAIL");
+  });
+}
+
+test("PR 3697's complete file list takes the non-app pass", async () => {
+  const { hasAppPath, selectPlan, decide } = await load();
+  const files = [
+    ".claude/skills/INDEX.md",
+    ".claude/skills/formal-verification/SKILL.md",
+    "scripts/formal-verification/run.mjs",
+    "tests/formal-seat-billing.test.cjs",
+    "verification/formal/checks.json",
+    "verification/formal/seat-billing/SeatBilling.cfg",
+    "verification/formal/seat-billing/SeatBilling.tla",
+    "verification/formal/seat-billing/repro.cjs",
+  ];
+  assert.equal(hasAppPath(files), false);
+  const selected = selectPlan(files, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  const result = decide({ model: {}, plan: plan([], { ...selected, files, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.deepEqual(result, { verdict: "PASS+NOTES", notes: "no app path: no user path: non-app files only" });
 });
 
 test("a failed expect fails even when the model says PASS", async () => {
@@ -824,6 +991,29 @@ test("non-app files skip the model and pass on green checks", async () => {
   });
   assert.equal(passed.verdict, "PASS+NOTES");
   assert.equal(passed.notes, "no app path: no user path: non-app files only");
+});
+
+test("tooling folders that src never imports take the non-app pass", async () => {
+  const { selectPlan, hasAppPath, decide } = await load();
+  const pr3806 = [
+    "eslint-local-rules/radius-baseline.json",
+    "eslint-local-rules/style-guide-suppressions.json",
+    "eslint-local-rules/style-guide.mjs",
+    "scripts/generate-radius-baseline.mjs",
+    "scripts/prove-radius-rule.mjs",
+    "tests/style-guide-eslint-rules.test.cjs",
+  ];
+  assert.equal(hasAppPath(pr3806), false);
+  const selected = selectPlan(pr3806, false);
+  assert.deepEqual(selected, { actions: [], expect: [], reason: "no user path: non-app files only" });
+  const passed = decide({ model: { verdict: "FAIL", notes: "model should not run" }, plan: plan([], { ...selected, files: pr3806, filesTruncated: false }), evidence: null, binding, checksPassed: true });
+  assert.deepEqual([passed.verdict, passed.notes], ["PASS+NOTES", "no app path: no user path: non-app files only"]);
+  for (const file of ["eslint-local-rules/style-guide.mjs", "config/quarantined-tests.json", "design-system/tokens/colors.html", "evals/mcp-client/run.mjs", "licenses/Iconoir.txt"]) {
+    assert.equal(hasAppPath([file]), false, file);
+    assert.deepEqual(selectPlan([file], false), { actions: [], expect: [], reason: "no user path: non-app files only" }, file);
+  }
+  assert.equal(hasAppPath(["eslint-local-rules/style-guide.mjs", "src/app/page.tsx"]), true);
+  assert.equal(hasAppPath(["config/quarantined-tests.json", "src/lib/api/task-writes/create-global.ts"]), true);
 });
 
 test("a preview that never listens is not a model verdict", async () => {

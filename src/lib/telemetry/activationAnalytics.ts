@@ -2,6 +2,7 @@ import "server-only";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
 import { FEATURE_FLAG_QA_USER_ID, HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9533_PROBE_SYNTHETIC_FLAG } from "@/lib/flags/definitions/htpr-9533-probe-synthetic";
 import { accountCategory, isSyntheticAccount } from "./accountCategory";
 import { recordServerCapture, scheduleAnalytics } from "./signupAnalytics";
 
@@ -20,7 +21,12 @@ export async function isActivationEligible(userId: number): Promise<boolean> {
     select: { uid: true, email: true },
   });
   if (await isFeatureEnabled(HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, userId)) {
-    return !!user && !isSyntheticAccount(accountCategory({ ...user, id: userId }));
+    if (!user) return false;
+    const category = accountCategory({ ...user, id: userId });
+    const probeIsSynthetic = category === "probe"
+      ? await isFeatureEnabled(HTPR_9533_PROBE_SYNTHETIC_FLAG, userId)
+      : true;
+    return !isSyntheticAccount(category, probeIsSynthetic);
   }
   const qaEmail = process.env.QA_LOGIN_EMAIL?.trim().toLowerCase();
   return !!user && !isGuestUser(user) && !(qaEmail && user.email.trim().toLowerCase() === qaEmail);
