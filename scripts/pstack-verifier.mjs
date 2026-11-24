@@ -1584,9 +1584,17 @@ async function askJourney({ plan, item, head, viewport, index, picked, ask, work
     return "UNEVALUATED";
   }
 }
+function readWrittenEvidence(work, binding) {
+  try {
+    return readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding);
+  } catch (error) {
+    if (error?.code === "ENOENT") return { journeys: [] };
+    throw error;
+  }
+}
 export async function judgeAskCommand({ work = workDir(), binding = bindingNow(), ask = askVerifier, evidence = null, picked = null } = {}) {
   const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
-  const head = evidence ?? readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding);
+  const head = evidence ?? readWrittenEvidence(work, binding);
   const judge = picked ?? pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   let asked = 0;
   for (const [index, item] of (plan.journeys ?? []).entries()) {

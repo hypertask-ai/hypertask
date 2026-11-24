@@ -228,6 +228,29 @@ test("basePlanCommand writes base-plan.json and signals needed only when a side 
   }
 });
 
+test("judge-ask answers nothing when an empty plan left no evidence to judge", async () => {
+  const { judgeAskCommand, basePlanCommand } = await load();
+  const fs = require("node:fs");
+  const work = mkdtempSync(join(tmpdir(), "judge-ask-empty-"));
+  const outFile = join(work, "github-output");
+  const previousOut = process.env.GITHUB_OUTPUT;
+  fs.mkdirSync(join(work, "plan"), { recursive: true });
+  try {
+    process.env.GITHUB_OUTPUT = outFile;
+    fs.writeFileSync(outFile, "");
+    fs.writeFileSync(join(work, "plan", "plan.json"), JSON.stringify(planFor([], { bugfix: true, reason: "no user path" })));
+    const asked = [];
+    assert.equal(await judgeAskCommand({ work, binding, picked: { model: "deepseek/deepseek-v4.1-flash" }, ask: (prompt) => { asked.push(prompt); return { verdict: "PASS", notes: "" }; } }), null);
+    assert.equal(asked.length, 0);
+    assert.equal(basePlanCommand({ work, binding }), null);
+    assert.match(fs.readFileSync(outFile, "utf8"), /needed=false/);
+  } finally {
+    if (previousOut === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = previousOut;
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
 test("judge-ask records the model verdict so a judge-only side journey failure is re-driven on the base", async () => {
   const { judgeAskCommand, basePlanCommand, judgeJourneys } = await load();
   const fs = require("node:fs");
