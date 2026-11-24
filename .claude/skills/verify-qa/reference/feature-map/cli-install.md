@@ -7,8 +7,8 @@
 
 ## How to get to it (user POV)
 
-- Open `https://app.hypertask.ai/settings/cli` by URL (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`). The page has no `Install CLI` button. It shows the Install card with the install command, the Sign In card with the login command, and the `Read the CLI docs` link.
-- `Install CLI` is a Ctrl+K command-menu row only. Press Ctrl+K, type `install cli`, press Enter, and `CliInstallModal` (`#cliInstallModal`) opens with the title `Hypertask CLI`. A click on `Install CLI` anywhere on `/settings/cli` has no target.
+- Open `https://app.hypertask.ai/settings/cli` by URL (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`). A read-only check of this page is: open the URL, read the `CLI` heading, the `Install` card with `curl -fsSL https://hypertask.ai/install | sh`, the `Sign In` card with `hypertask login`, and the `Read the CLI docs` link, then take a shot. All of those show at 1440x900 and at 390x844 alike. The page has no `Install CLI` button, so this check clicks nothing on the page.
+- `Install CLI` is a Ctrl+K command-menu row, not a control on this page. Press Ctrl+K, type `install cli`, press Enter, and `CliInstallModal` (`#cliInstallModal`) opens with the title `Hypertask CLI`. That title lives only inside the modal, which a page check cannot open, and a click on `Install CLI` on `/settings/cli` has no target. A page check reads the page text above and never expects `Hypertask CLI`. The modal is a keyboard check, described in `Driving it with agent-browser` step 3.
 - Onboarding "connect your agent" step email and the guest demo board's CLI task (`completeOnboardingStep.ts`, `guestSeedTasks.ts`) print the same install command, but the onboarding text still tells the reader bare `hypertask login` does not sign in and prescribes `hypertask login --token <agent token>`. The Settings page and the modal both say `hypertask login` opens the browser to authorize; that is the shipped path today.
 - `https://app.hypertask.ai/llms.txt` for AI agents: `curl -fsSL https://hypertask.ai/install | sh`, then `hypertask login`, plus the PowerShell line.
 - After install the CLI signs in with `hypertask login` (browser authorize) or `hypertask login --token <agent token>` for agents; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).
@@ -23,7 +23,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 
 1. Shoot `/settings/cli` with `phone-shot.sh` (390x844) and at 1440x900 with the QA state. Read the visible text, not the source: the page shows `curl -fsSL https://hypertask.ai/install | sh`, `hypertask login`, `Windows (PowerShell): irm https://hypertask.ai/install.ps1 | iex` while `htpr-7033-cli-install-command` is on, and `Read the CLI docs`.
 2. `curl -fsS https://app.hypertask.ai/llms.txt | sed -n '11,12p'` shows the same two commands plus the Windows line.
-3. Open Ctrl+K, type `install cli`, open the `Install CLI` row. `#cliInstallModal` shows `Hypertask CLI`, `1. Install`, `2. Sign in`, and `Opens your browser to authorize the CLI for your account.` The two commands sit in read-only inputs (`.value`), so read the inputs, not `innerText`. The modal has no Windows line.
+3. Press Ctrl+K on a board or settings page, type `install cli`, press Enter on the `Install CLI` row. There is no `Install CLI` button on `/settings/cli`, so a click there does nothing. `#cliInstallModal` shows `Hypertask CLI`, `1. Install`, `2. Sign in`, and `Opens your browser to authorize the CLI for your account.` The two commands sit in read-only inputs (`.value`), so read the inputs, not `innerText`. The modal has no Windows line.
 4. Run the shown command for real into a scratch folder: `HYPERTASK_INSTALL_DIR=<scratch> sh -c 'curl -fsSL https://hypertask.ai/install | sh'`, then `<scratch>/hypertask --version`. Verified 2026-11-20: `hypertask 0.2.68 (zig)`.
 5. `ht-verify flags show htpr-7033-cli-install-command` and `ht-verify flags show htpr-6542-team-scoped-management-keys` confirm the modes before judging the screens.
 6. With `htpr-6542-team-scoped-management-keys` on, open `/settings/management-keys`: the `CREATE KEY` form has Scope (Management, Usage, Full access) and Team (`Whole account` plus each team). Choosing a team disables Full access. Do not create a key on a shared account.
@@ -39,6 +39,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 - Test fixtures in `tests/fixtures/cli-install/legacy.json` holding the old command.
 - A team-limited key (`httk_`), or an agent token that carries a team id, is refused while `htpr-6542-team-scoped-management-keys` is off.
 - The Settings page, the Ctrl+K modal and `llms.txt` all print bare `hypertask login`, while the onboarding agent step (HTPR-7549 flag) says bare login does not sign in and prescribes `--token`. Treat the Settings/modal text as shipped and the onboarding sentence as a product copy gap.
+- A verifier journey cannot send Ctrl+K, so it must not plan a click on `Install CLI` or an expect for `Hypertask CLI`. The page check on `/settings/cli` is text only, and the Ctrl+K modal stays a manual check.
 
 ### What proof to collect
 
