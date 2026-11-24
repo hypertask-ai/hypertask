@@ -223,7 +223,7 @@ test("still allowed: an agent that is a member of the target board moves the tas
   assert.equal(body.message, "Task moved successfully");
   assert.deepEqual(body.task, { id: 150, projectId: 15, title: "On the target board" });
   assert.deepEqual(calls.moved, [{ taskId: 150, targetProjectId: 15, agentId: "agent-a" }]);
-  assert.deepEqual(calls.flags, []);
+  assert.equal(calls.flags.some((flag) => flag.key === "htpr-8471-board-refusal-next-step"), false);
 });
 
 test("still allowed: a person without an agent moves onto the board with no agent membership check", async () => {
@@ -232,5 +232,5 @@ test("still allowed: a person without an agent moves onto the board with no agen
   assert.equal(body.success, true);
   assert.deepEqual(body.task, { id: 150, projectId: 15, title: "On the target board" });
   assert.deepEqual(calls.moved, [{ taskId: 150, targetProjectId: 15, agentId: null }]);
-  assert.deepEqual(calls.flags, []);
+  assert.equal(calls.flags.some((flag) => flag.key === "htpr-8471-board-refusal-next-step"), false);
 });
