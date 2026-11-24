@@ -386,7 +386,7 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
 })
 
 
-test('successful agent-tier requests reuse the authenticated context while legacy still performs both auth passes', () => quiet(async () => {
+test('agent tokens skip the shared rate counter and authenticate once on the wrapped and legacy paths', () => quiet(async () => {
   const on = harness({ count: 121, agent: true })
   const off = harness({ legacy: true, count: 121, agent: true })
   const a = await scaffold(on)(on.request())
@@ -396,9 +396,9 @@ test('successful agent-tier requests reuse the authenticated context while legac
   assert.equal(await a.text(), await b.text())
   assert.deepEqual(withoutTiming(a.headers), withoutTiming(b.headers))
   assert.equal(on.counts().authCalls, 1)
-  assert.equal(off.counts().authCalls, 2)
-  assert.equal(on.events.filter(e => e === 'rate').length, 1)
-  assert.equal(off.events.filter(e => e === 'rate').length, 1)
+  assert.equal(off.counts().authCalls, 1)
+  assert.equal(on.events.filter(e => e === 'rate').length, 0)
+  assert.equal(off.events.filter(e => e === 'rate').length, 0)
 }))
 
 test('wrapped responses carry existing and diagnostic Server-Timing names without caller identity', () => quiet(async () => {

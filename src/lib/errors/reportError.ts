@@ -223,7 +223,14 @@ async function reportErrorTicket(report: ErrorReport) {
   }
 }
 
+const INJECTED_WALLET_EXCEPTION = /window\.ethereum\b|['"]selectedAddress['"]/;
+
+export function isInjectedWalletExceptionMessage(message: unknown) {
+  return typeof message === "string" && INJECTED_WALLET_EXCEPTION.test(message);
+}
+
 export async function reportError(unredactedReport: ErrorReport) {
+  if (isInjectedWalletExceptionMessage(unredactedReport.message)) return;
   if (
     (unredactedReport.message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE ||
       unredactedReport.message === DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE) &&
