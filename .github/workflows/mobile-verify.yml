@@ -7,15 +7,16 @@ concurrency: { group: mobile-verify, cancel-in-progress: true }
 jobs:
   mobile-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 70
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: ^24.22.1, check-latest: true, cache: npm }
       - run: npm ci --no-audit --no-fund && npx prisma generate && bash .github/scripts/install-chromium.sh
-        timeout-minutes: 20
+        timeout-minutes: 15
       - id: gate
+        timeout-minutes: 34
         env: { GITHUB_TOKEN: '${{ github.token }}', GITHUB_REPOSITORY: '${{ github.repository }}', SHA: '${{ github.sha }}', EVENT_NAME: '${{ github.event_name }}' }
         run: node .github/scripts/wait-prod-health-gate.mjs
       - if: steps.gate.outputs.ok == 'true'

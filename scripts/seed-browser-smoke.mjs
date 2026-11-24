@@ -524,7 +524,7 @@ async function seedSessionFixtures(flags) {
   }));
   await appendFile(
     process.env.GITHUB_OUTPUT,
-    `board_path=/project?id=${board.id}&surface=board\ndemo_board_path=/project?id=${demoBoard.id}&surface=board\n`,
+    `board_path=/project?id=${board.id}&surface=board\ndemo_board_path=/project?id=${demoBoard.id}&surface=board\ntask_path=/detail/project-${board.id}/${board.task.uniqueIndex}\n`,
   );
 }
 

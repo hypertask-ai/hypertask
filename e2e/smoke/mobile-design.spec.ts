@@ -7,7 +7,7 @@ const list = (v?: string) => v?.split(',').map((s: string) => s.trim()).filter(B
 if (UPDATE) test.describe.configure({ mode: 'serial' })
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
 for (const theme of MOBILE_THEMES) {
-  test(`mobile design audit (${theme})`, async ({ browser, baseURL }, testInfo) => {
+  test(`mobile design audit (${theme})`, { tag: ['@id:mobile-design'] }, async ({ browser, baseURL }, testInfo) => {
     test.skip(Boolean(THEME_FILTER?.length && !THEME_FILTER.includes(theme)), `filtered to ${THEME_FILTER?.join(',')}`); test.setTimeout(360_000)
     const origin = baseURL || process.env.SMOKE_BASE_URL || process.env.BASE_URL || 'https://app.hypertask.ai', boardPath = process.env.SMOKE_BOARD_PATH || '/project?id=7049&surface=board', boardId = new URL(boardPath, origin).searchParams.get('id') || '7049', taskPath = process.env.SMOKE_TASK_PATH || `/detail/project-${boardId}/6283`
     const storageState = (testInfo.project.use.storageState as string | undefined) || 'e2e/smoke/.state/smoke-state.json', baseline: MobileDesignBaseline | null = existsSync(BASELINE_PATH) ? JSON.parse(readFileSync(BASELINE_PATH, 'utf8')) : null

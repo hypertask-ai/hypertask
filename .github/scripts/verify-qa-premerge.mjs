@@ -42,7 +42,7 @@ export const FEATURE_MAP_CATALOG = [
   { page: 'search-and-filters.md', journey: null, prefixes: ['src/pages/api/search/'] },
   { page: 'billing-and-plans.md', journey: ['plan-check'], prefixes: ['src/components/Modals/Settings/BillingSection.tsx', 'src/app/settings/billing/'] },
   { page: 'my-tasks.md', journey: null, prefixes: ['src/app/my-tasks/'] },
-  { page: 'mobile.md', journey: ['open-board', 'open-task', 'create-task', 'reply-inbox', 'ai-chat', 'switch-boards', 'switch-column'], prefixes: ['e2e/smoke/mobile-design.spec.ts', 'e2e/smoke/lib/mobile-design.ts'] },
+  { page: 'mobile.md', journey: ['open-board', 'open-task', 'create-task', 'reply-inbox', 'ai-chat', 'switch-boards', 'switch-column'], runner: 'mobile', prefixes: ['e2e/smoke/mobile-design.spec.ts', 'e2e/smoke/lib/mobile-design.ts'] },
 ]
 
 function prefixHits(file, prefix) {
@@ -78,6 +78,7 @@ export function selectJourney(files, catalog = FEATURE_MAP_CATALOG) {
   return {
     matchedPage: matched,
     journey,
+    runner: matchedEntry?.runner || 'desktop',
     reason,
     featureMap: matched ? `${FEATURE_MAP_DIR}/${matched}` : null,
     counts: Object.fromEntries(ranked),
@@ -367,13 +368,14 @@ async function loadInboxFixture(fixturePath) {
   return items
 }
 
-export async function runTaggedJourneys({ base, journey, outDir }, execute = spawnSync) {
+export async function runTaggedJourneys({ base, journey, outDir, runner = 'desktop' }, execute = spawnSync) {
+  const suite = runner === 'mobile' ? { config: 'e2e/smoke/playwright.config.mobile.ts', projects: ['mobile-journeys', 'mobile-design'], audit: 'mobile-design' } : { config: 'playwright.config.smoke.ts', projects: ['journeys'], audit: null }, ids = suite.audit ? [...journey, suite.audit] : journey
   const reportFile = path.join(outDir, 'journeys.json')
   const run = execute(process.execPath, [
     path.join(root, 'node_modules/@playwright/test/cli.js'),
-    'test', '-c', 'playwright.config.smoke.ts', '--project=journeys',
-    '--grep', `@id:(${journey.join('|')})(\\s|$)`,
-    '--workers=1', '--retries=0', '--global-timeout=140000', '--reporter=json',
+    'test', '-c', suite.config, ...suite.projects.map((project) => `--project=${project}`),
+    '--grep', `@id:(${ids.join('|')})(\\s|$)`,
+    `--workers=${suite.audit ? 4 : 1}`, '--retries=0', `--global-timeout=${suite.audit ? 300000 : 140000}`, '--reporter=json',
     `--output=${path.join(outDir, 'test-results')}`,
   ], {
     cwd: root,
@@ -387,7 +389,7 @@ export async function runTaggedJourneys({ base, journey, outDir }, execute = spa
       PLAYWRIGHT_JSON_OUTPUT_NAME: reportFile,
     },
     encoding: 'utf8',
-    timeout: 150_000,
+    timeout: suite.audit ? 330_000 : 150_000,
   })
   if (run.error) throw new Error(`journey runner: ${run.error.message}`)
   const report = JSON.parse(await readFile(reportFile, 'utf8'))
@@ -397,7 +399,7 @@ export async function runTaggedJourneys({ base, journey, outDir }, execute = spa
     for (const child of suite.suites || []) collect(child)
   }
   collect(report)
-  const steps = journey.map((id) => {
+  const steps = ids.map((id) => {
     const spec = specs.find((entry) => entry.tags?.includes(`id:${id}`))
     const tests = spec?.tests || []
     const statuses = tests.flatMap((entry) => (entry.results || []).map((result) => result.status))
@@ -451,7 +453,7 @@ async function main() {
     }
     result.base = assertLoopback(baseRaw)
     if (!choice.journey.includes('inbox-cycle')) {
-      Object.assign(result, await runTaggedJourneys({ base: result.base, journey: choice.journey, outDir }))
+      Object.assign(result, await runTaggedJourneys({ base: result.base, journey: choice.journey, outDir, runner: choice.runner }))
       await writeEvidence(outDir, result)
       finish(result)
       return

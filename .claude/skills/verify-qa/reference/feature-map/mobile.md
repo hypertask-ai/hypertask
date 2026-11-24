@@ -38,26 +38,7 @@ and `[data-phone-new-task-card="on"]` on `/new?id=<board>`; `#body`
 
 `e2e/smoke/journeys.spec.ts` `@mobile` tests (`open-board`, `open-task`, `create-task`, `reply-inbox`, `ai-chat`, `switch-boards`, `switch-column`) drive all seven flows with real taps at 390x844 (`isMobile`, `hasTouch`, `pointer: coarse`) when `HT_QA_JOURNEYS=1`. `e2e/smoke/mobile-design.spec.ts` audits all 16 screens across Porcelain, Graphite, AMOLED, and Dia against `e2e/smoke/__snapshots__/mobile-design.baseline.json` (set `MOBILE_DESIGN_STRICT=1` for zero-debt check or `MOBILE_DESIGN_UPDATE=1` to refresh baseline). `.github/workflows/mobile-verify.yml` runs `--project=mobile-design` and `--project=mobile-journeys` after production pushes and on dispatch; `.github/scripts/feature-map-live-daily.mjs` runs `mobile-journeys` daily alongside desktop `journeys`.
 
-### Per-screen mobile flows
-
-| Screen | Entry point / tap flow | Observable end state |
-|---|---|---|
-| Kanban board | `/project?id=<id>&surface=board` | Columns (`.kanban-column-title`), cards, bottom nav, `Ask AI`, `Create task`; no reload loop |
-| Task detail | Tap `#task-<id> a[href^="/detail/"]` or `/detail/project-<id>/<n>` | `#title-input`, description, `[data-task-properties-rail]`, comment composer visible |
-| Inbox | `/inbox` -> tap row -> tap composer -> type -> tap `Send comment` | `POST /api/comments/create` 200; reply persists after reload |
-| AI chat sheet | Board -> tap bottom nav `AI` or `Ask AI` | AI chat dialog/sheet opens with `#ai-chat-tiptap-editor` |
-| AI chat full | `/chat` -> tap editor -> type -> tap `Send message` | Delivered assistant reply appears in `.submessage-container.delivered` |
-| Commands / Ctrl+K | Board -> tap `Commands` | Command sheet opens on Search tab |
-| Ctrl+J task writer | Board -> tap `Commands` -> tap tab `New Task` -> fill `Describe the task` -> tap `Create task` | `POST /api/tasks/create` 200; created task opens and persists after reload |
-| New task modal | Board -> tap `Create task` or `/new?id=<id>` | `#createTaskModal` opens with title, description, properties, Save |
-| Table view | `/project?id=<id>&surface=table` | Table rows and sortable headers render without page overflow |
-| Calendar | `/calendar` | `.mobile-calendar` renders current schedule |
-| My Tasks | `/my-tasks` | `[data-testid="my-tasks-list"]` and splits render |
-| Search | `/search` | `#search-input` renders and accepts queries |
-| Board switcher | Board -> tap `Switch board` -> tap `#mobile-board-option-<id>` | URL updates to `?id=<id>` with 0 full page reloads |
-| View switcher | Board -> tap `Switch view` | View options sheet/dropdown opens |
-| Switch column | Task detail -> tap status in `[data-task-properties-rail]` -> tap target column | Column updates via `/api/tasks/moveTask` and persists after reload |
-| Settings | `/settings` and `/settings/general` | Settings search input and profile/theme controls render |
+Every screen carries a readiness landmark and a tap flow: board (`board-kanban`, `/project?id=<id>&surface=board`, `.kanban-column-title`), table (`board-table`, `/project?id=<id>&surface=table`, `.table-view-header`), calendar (`calendar`, `/calendar`, `.mobile-calendar`), my tasks (`my-tasks`, `/my-tasks`, `[data-testid="my-tasks-list"]`), search (`search`, `/search`, `#search-input`), inbox (`inbox`, `/inbox`, `[data-testid="inbox-panel"]`, tap row -> reply -> `Send comment` -> `POST /api/comments/create` 200 -> survives reload), task detail (`task-detail`, `/detail/project-<id>/<n>` or tap `#task-<id> a[href^="/detail/"]`, `#title-input`, `[data-task-properties-rail]`). Sheets and switchers: AI chat (`ai-chat-sheet` via bottom-nav `AI`, `ai-chat-full` at `/chat`, `#ai-chat-tiptap-editor`, send -> `.submessage-container.delivered`), Commands (`commands-search` via `Commands`, `#htc-mobile-search`), Ctrl+J writer (`commands-new-task` via `Commands` -> tab `New Task`, `[aria-label="Describe the task"]`, create -> `POST /api/tasks/create` 200), new task (`new-task-modal` via `Create task`, `#createTaskModal`), board switcher (`board-switcher` via `Switch board`, `#mobile-board-option-<id>`, 0 reloads), view switcher (`view-switcher` via `Switch view`, `#mobile-board-view-picker`), switch column (task detail status in `[data-task-properties-rail]` -> target column, `/api/tasks/moveTask`, survives reload), settings (`settings-menu` at `/settings`, `settings-general` at `/settings/general`, `#settings-display-name`).
 
 For the New Task title, open a sandbox board at 390x844, press `C`, expand
 `Title: Add`, then tap the title field, type and save. Check the textarea itself
