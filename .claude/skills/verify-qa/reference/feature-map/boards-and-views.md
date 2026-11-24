@@ -59,11 +59,6 @@ board settings. It redirects to board general unless the path names
 board-ai, board-skills, board-files, board-members, or board-agents.
 Calendar is the rail button Go to calendar, or G then C. Settings,
 Calendar is where Google Calendar connects. G then B is Go to task board.
-A board link may also name a built-in view, for example
-`/project?id=<id>&view=builtin:blocked` or
-`/project?id=<id>&view=builtin:blocked-by-me`, and the board opens that view
-with its own columns and rule line (`src/lib/constants/builtinViews.ts`,
-`src/app/[...boardURL]/useLandingSectionState.ts`).
 
 ## Driving it with agent-browser
 

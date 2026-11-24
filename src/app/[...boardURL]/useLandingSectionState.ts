@@ -12,7 +12,7 @@ import useTrialModal from "@/hooks/MultiPages/Route/useTrialModal";
 import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
-import { buildBuiltinViewContext, builtinViewIdFromViewParam, getActiveBoardViewId, isBuiltinViewId, BUILTIN_VIEW_IDS } from "@/lib/constants/builtinViews";
+import { buildBuiltinViewContext, blockedViewRule, builtinViewIdFromViewParam, getActiveBoardViewId, isBuiltinViewId, BUILTIN_VIEW_IDS } from "@/lib/constants/builtinViews";
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
@@ -100,6 +100,8 @@ useEffect(() => {
 }, [_allProjects, _projectIndex])
 
 const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
+const activeViewId = getActiveBoardViewId(_currentProject, activeBuiltinViews);
+const blockedRuleText = leaveFinishedOut ? blockedViewRule(activeViewId) : null;
 const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
 const currentProjectId = _currentProject?.id;
 useEffect(() => {
@@ -177,6 +179,7 @@ useLayoutEffect(() => {
   markBoardUsable, releaseSecondaryStartup, secondaryStartupEnabled, projects, setShowBoardManager,
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
   setRecoilCurrentProject, sections: boardSections, setShowTrial, showTrial, activeBuiltinViews,
+  blockedRuleText,
   filteredSectionsForActiveView, favorites, setFavorites, setHasHorizontalScrollbar, kanbanContainerRef,
   restoredScrollForProject, restoringScroll, readinessFrameRef, readinessPaintFrameRef, readinessEntryKey,
   readinessCompletionRef,

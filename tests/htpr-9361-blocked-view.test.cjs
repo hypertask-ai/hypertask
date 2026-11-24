@@ -139,14 +139,13 @@ test("Blocked states its rule and a cycle view keeps its own line", () => {
   assert.equal(blockedViewRule("builtin:blocked-by-me"), BLOCKED_BY_ME_VIEW_RULE);
   assert.equal(blockedViewRule("builtin:overdue"), null);
 
-  const blocked = renderRule(true, "builtin:blocked");
-  assert.match(blocked, new RegExp(`data-testid="blocked-view-rule"[^>]*>${BLOCKED_VIEW_RULE}`));
-  assert.doesNotMatch(blocked, /cycle-board-meta/);
-  assert.match(renderRule(true, "builtin:blocked-by-me"), new RegExp(BLOCKED_BY_ME_VIEW_RULE));
-  assert.equal(renderRule(false, "builtin:blocked"), "");
-  assert.equal(renderRule(true, "builtin:overdue"), "");
+  const landingState = fs.readFileSync(path.join(root, "src/app/[...boardURL]/useLandingSectionState.ts"), "utf8");
+  assert.match(landingState, /leaveFinishedOut \? blockedViewRule\(activeViewId\) : null/);
+  const page = fs.readFileSync(path.join(root, "src/app/[...boardURL]/LandingPage.tsx"), "utf8");
+  assert.match(page, /blockedRuleText && \(/);
+  assert.match(page, /data-testid="blocked-view-rule"[\s\S]{0,80}\{blockedRuleText\}/);
 
-  const cycle = renderRule(true, "builtin:current-cycle", {
+  const cycle = renderCycle("builtin:current-cycle", {
     cyclesEnabled: true,
     cycles: [{ id: 1, number: 4, projectId: 15, startDate: "2020-01-01", endDate: "2100-01-01" }],
     section: [],
@@ -154,6 +153,7 @@ test("Blocked states its rule and a cycle view keeps its own line", () => {
   assert.match(cycle, /data-testid="cycle-board-meta"/);
   assert.match(cycle, /Cycle 4/);
   assert.doesNotMatch(cycle, /blocked-view-rule/);
+  assert.equal(renderCycle("builtin:blocked", { section: [], cycles: [] }), "");
 });
 
 test("a board link opens a built-in view with its rule", () => {
@@ -195,19 +195,15 @@ function tabCount(project, enabled) {
   return useRenderedViews(project).viewTaskCounts.get("builtin:blocked");
 }
 
-function loadMeta(enabled) {
+function loadCycleMeta() {
   return loadModule("src/components/PageComponents/Kanban/HeaderComponents/CycleBoardMeta.tsx", {
     "@/lib/constants/builtinViews": builtin,
     "@/lib/cycles": jiti(path.join(root, "src/lib/cycles.ts")),
-    "@/hooks/useFlag": {
-      useFlag: (key) => key === flag.HTPR_9361_BLOCKED_VIEW_DONE_FLAG && enabled,
-    },
-    "@/lib/flags/definitions/htpr-9361-blocked-view-done": flag,
   }).default;
 }
 
-function renderRule(enabled, activeViewId, project = { section: [], cycles: [] }) {
+function renderCycle(activeViewId, project) {
   return renderToStaticMarkup(
-    React.createElement(loadMeta(enabled), { activeViewId, project }),
+    React.createElement(loadCycleMeta(), { activeViewId, project }),
   );
 }

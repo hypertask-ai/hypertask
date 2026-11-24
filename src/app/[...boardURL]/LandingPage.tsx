@@ -1263,7 +1263,7 @@ const SectionComp = (props: SectionCompProps & { connectOverlayEnabled: boolean 
 function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean, connectOverlayEnabled: boolean) {
   const {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
-  sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
+  sections, setShowTrial, showTrial, activeBuiltinViews, blockedRuleText, filteredSectionsForActiveView,
   kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
   _currentUser, _activeSortingMode,
   } = context;
@@ -1324,14 +1324,20 @@ return (
             )}
 
           {_currentProject && (
+            <CycleBoardMeta
+              activeViewId={getActiveBoardViewId(
+                _currentProject,
+                activeBuiltinViews,
+              )}
+              project={_currentProject}
+            />
+          )}
+
+          {blockedRuleText && (
             <div className={appShellRailOn ? 'ml-[var(--app-shell-rail-w,48px)] pl-[calc(1.5%+9px)] pr-[1.5%]' : undefined}>
-              <CycleBoardMeta
-                activeViewId={getActiveBoardViewId(
-                  _currentProject,
-                  activeBuiltinViews,
-                )}
-                project={_currentProject}
-              />
+              <p className="w-[97%] text-dense text-text-light-gray" data-testid="blocked-view-rule">
+                {blockedRuleText}
+              </p>
             </div>
           )}
 
