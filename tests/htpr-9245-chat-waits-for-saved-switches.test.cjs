@@ -152,15 +152,10 @@ const providerRestore = (() => {
   }
   visit(ast);
   assert.equal(effects.length, 1);
-  const loaded = { exports: {} };
-  const javascript = ts.transpileModule(`exports.run = function run(scope) {
-    const { useEffect, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, hasAttemptedChatRestoreRef,
+  return new Function("scope", `const { useEffect, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, hasAttemptedChatRestoreRef,
       currentUser, pathname, NO_CHAT_RESTORE_ROUTES, keepChatClosed, aiChatAutoOpenSuppressed,
       readChatOpenForSession, setChatRuntimeMounted, setShowAiChatInterface, setAiChatExplicitOpenAt } = scope;
-    ${effects[0]};
-  }`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  new Function("require", "module", "exports", javascript)(require, loaded, loaded.exports);
-  return loaded.exports.run;
+    ${effects[0]};`);
 })();
 
 function sessionRestoreHarness({ saved = {}, waits = true } = {}) {
@@ -330,7 +325,9 @@ test("manual chat does not restore an open session before the saved switches arr
 test("the flag is a client-safe bugfix that ships to everyone", async () => {
   const filename = "src/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches.ts";
   const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
-  const { definition } = parseFlagFile(fs.readFileSync(path.join(root, filename), "utf8"), filename);
+  const file = path.join(root, filename);
+  assert.ok(fs.existsSync(file), `${filename} exists`);
+  const { definition } = parseFlagFile(fs.readFileSync(file, "utf8"), filename);
   assert.equal(definition.key, WAITS);
   assert.equal(definition.kind, "bugfix");
   assert.equal(definition.defaultMode, "EVERYONE");
