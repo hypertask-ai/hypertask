@@ -205,11 +205,12 @@ test("an invited membership still blocks a move onto a board the requester canno
     requesterSeesBoard: false,
     onBoard: true,
     membershipStatus: "Invited",
-    guidance: true,
+    ownerCanRequest: false,
   });
   assert.equal(status, 403);
   assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
   assert.equal(calls.access, 0);
+  assert.deepEqual(calls.flags, []);
   assert.deepEqual(calls.moved, []);
 });
 
