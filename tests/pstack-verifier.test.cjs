@@ -1611,6 +1611,85 @@ test("an unevaluated verifier posts an error status and no verdict comment", asy
   assert.equal(cancelKeepsStatus({ state: "error", description: "FAIL: something", target_url: owned.target_url }, owned.target_url), false);
 });
 
+test("run 45311010610's non-app plan drives nothing, asks nothing, and a missing verdict is the error status", async () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const { planFromRequest, driveNeeded, askNeeded, judgeAskCommand, decide, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
+  const files = [
+    ".claude/skills/verify-qa/reference/feature-map/INDEX.md",
+    ".claude/skills/verify-qa/reference/feature-map/mobile.md",
+    ".claude/skills/verify-qa/reference/feature-map/rows/mobile.md",
+    ".github/scripts/feature-map-live-daily.mjs",
+    ".github/scripts/verify-qa-premerge.mjs",
+    ".github/scripts/wait-prod-health-gate.mjs",
+    ".github/workflows/ci-tests.yml",
+    ".github/workflows/mobile-verify.yml",
+    "e2e/smoke/__snapshots__/mobile-design.baseline.json",
+    "e2e/smoke/journeys.spec.ts",
+    "e2e/smoke/lib/mobile-design.ts",
+    "e2e/smoke/mobile-design.spec.ts",
+    "e2e/smoke/playwright.config.mobile.ts",
+    "scripts/seed-browser-smoke.mjs",
+    "tests/mobile-design.test.cjs",
+    "tests/verify-qa-premerge.test.cjs",
+  ];
+  const request = { ...binding, author: "codex", title: "HTPR-9636 [INFRA] Add mobile verification map, design audit, and phone journeys", body: "", diff: "", files, filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  let asked = 0;
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  let built;
+  try {
+    built = await planFromRequest(request, { binding, pages: [], ask() { asked += 1; throw new Error("the model must not be asked"); } });
+  } finally {
+    if (savedToken !== undefined) process.env.GH_TOKEN = savedToken;
+  }
+  assert.equal(asked, 0);
+  assert.deepEqual([built.actions, built.reason], [[], "no user path: non-app files only"]);
+  assert.equal(built.journeys, undefined);
+  assert.deepEqual([driveNeeded(built), askNeeded(built)], [false, false]);
+  const green = settleWaiting({
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: "success" })),
+  });
+  assert.deepEqual([green.verdict, green.state, green.notes], ["PASS+NOTES", "success", "no app path: no user path"]);
+  assert.deepEqual([decide({ model: {}, plan: built, evidence: null, binding, checksPassed: false }).verdict, decide({ model: {}, plan: built, evidence: null, binding, checksPassed: true }).verdict], ["FAIL", "PASS+NOTES"]);
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "pv-no-journey-"));
+  fs.mkdirSync(path.join(work, "plan"));
+  fs.writeFileSync(path.join(work, "plan", "plan.json"), JSON.stringify(built));
+  const savedOut = process.env.GITHUB_OUTPUT;
+  process.env.GITHUB_OUTPUT = path.join(work, "output");
+  try {
+    assert.equal(await judgeAskCommand({ work, binding }), null);
+    assert.equal(fs.existsSync(path.join(work, "evidence", "evidence.json")), false);
+  } finally {
+    if (savedOut === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = savedOut;
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  const sha = built.sha;
+  const postDir = fs.mkdtempSync(path.join(os.tmpdir(), "pv-no-verdict-"));
+  const saved = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "45311010610", GITHUB_RUN_ATTEMPT: "1", PR: "3825", WORK: postDir });
+  const pull = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
+  const owned = { context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "pending", target_url: "https://github.com/acme/app/actions/runs/45311010610/attempts/1" };
+  const posts = [];
+  try {
+    await postCommand({
+      token: "app-token",
+      fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
+      gh: (args) => {
+        const url = String(args[1]);
+        if (url === "repos/acme/app/pulls/3825") return JSON.stringify(pull);
+        if (url === `repos/acme/app/commits/${sha}/statuses`) return JSON.stringify([owned]);
+        throw new Error(url);
+      },
+    });
+  } finally {
+    for (const [key, value] of saved) value === undefined ? delete process.env[key] : (process.env[key] = value);
+    fs.rmSync(postDir, { recursive: true, force: true });
+  }
+  assert.deepEqual([posts.length, posts[0].state, posts[0].description], [1, "error", "verifier could not evaluate: the judge lane did not produce a verdict"]);
+});
+
 test("docs and bot shortcuts skip the model only for the sets decide accepts", async () => {
   const fs = require("node:fs");
   const os = require("node:os");
