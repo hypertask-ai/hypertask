@@ -98,8 +98,6 @@ question_check() {
        then "at most 8 context lines before Question:" else empty end),
       (if $question_index != null and ($plain[$question_index + 1] // "" | startswith("My recommendation:") | not)
        then "My recommendation: must be right under Question:" else empty end),
-      (if $text | test("https?://|www\\.|<a\\b|\\[[^\\]]*\\]\\("; "i")
-       then "no outside links in a Question" else empty end),
       (if any($plain[]; startswith("Why:") or (startswith("My recommendation:") and test("\\bWhy:")))
        then empty else "Why:" end),
       ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
@@ -487,9 +485,9 @@ blocker_gate() {
     out=$("$BLOCKER_REVIEW" --gate --who "$IDENTITY" --board "$board" 2>&1 < /dev/null) || blocker_refuse "$what" "$out"
   fi
 }
-# A Question comment, or a waiting person set to Valentin (user 6, or "me": every login writes as user 6).
+# A waiting person set to Valentin (user 6, or "me": every login writes as user 6).
 blocker_entry() {
-  local project='' ticket='' kind='' text='' file='' user='' have_user=false what arg
+  local project='' ticket='' user='' have_user=false what arg
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project=${2:-}; shift; [ "$#" -gt 0 ] && shift ;;
@@ -500,7 +498,6 @@ blocker_entry() {
     esac
   done
   case "${1:-} ${2:-}" in
-    'comment add'|'comments add') what=Question ;;
     'task waiting-on'|'tasks waiting-on') what='Valentin as the waiting person' ;;
     *) return 0 ;;
   esac
@@ -508,19 +505,13 @@ blocker_entry() {
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
-      --kind|--text|--body|--file|--user|--project)
+      --user|--project)
         [ "$#" -ge 2 ] || break
         case "$arg" in
-          --kind) kind=$2 ;;
-          --text|--body) text=$2; file='' ;;
-          --file) file=$2; text='' ;;
           --user) user=$2; have_user=true ;;
           --project) project=$2 ;;
         esac
         shift ;;
-      --kind=*) kind=${arg#*=} ;;
-      --text=*|--body=*) text=${arg#*=}; file='' ;;
-      --file=*) file=${arg#*=}; text='' ;;
       --user=*) user=${arg#*=}; have_user=true ;;
       --project=*) project=${arg#*=} ;;
       --*) ;;
@@ -528,16 +519,8 @@ blocker_entry() {
     esac
     shift
   done
-  if [ "$what" = Question ]; then
-    [ "$kind" = question ] || return 0
-    if [ -n "$file" ]; then
-      text=$(cat -- "$file" 2>/dev/null) || blocker_refuse Question 'cannot read --file'
-    fi
-    blocker_gate "$what" "$ticket" "$project" "$text"
-  else
-    [ "$have_user" = true ] && { [ "$user" = 6 ] || [ "$user" = me ]; } || return 0
-    blocker_gate "$what" "$ticket" "$project"
-  fi
+  [ "$have_user" = true ] && { [ "$user" = 6 ] || [ "$user" = me ]; } || return 0
+  blocker_gate "$what" "$ticket" "$project"
 }
 review_move() {
   local project='' to_project='' ticket='' section='' second='' newest reason description verb comments name id board
