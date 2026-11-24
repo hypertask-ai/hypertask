@@ -4,7 +4,7 @@ const test = require("node:test");
 const path = require("node:path");
 const os = require("node:os");
 const fs = require("node:fs");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
@@ -182,6 +182,40 @@ test("server-only changes require a changed ticket-specific server gate", async 
       "HTPR-1 [FEATURE] server behavior", base, gated, decision], { cwd: dir });
     assert.equal(fs.readFileSync(decision, "utf8"), "feature-gated-ui\n");
   }
+});
+
+test("flag gate run log has no debug lines", (t) => {
+  const { dir, git } = makeRepo(t);
+  const script = path.join(root, ".github/scripts/feature-flag-gate.mjs");
+  const title = "HTPR-1 [FEATURE] server behavior";
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/api/widget/route.ts", 'export async function execute(userId) { return "new"; }\n');
+  const ungated = commit(git, "server feature");
+  const refused = spawnSync(process.execPath, [script, title, base, ungated], { cwd: dir, encoding: "utf8" });
+  assert.equal(refused.status, 1, refused.stderr);
+  assert.equal(
+    refused.stdout,
+    "[FEATURE] changes server behavior (src/app/api/widget/route.ts) without a ticket-specific server flag. " +
+      "Define src/lib/flags/definitions/htpr-1-<name>.ts and call isFeatureEnabled from @/lib/flags " +
+      "with that key on an added or modified server line controlling the behavior.\n",
+  );
+  assert.equal(refused.stderr, "");
+
+  writeFile(
+    dir,
+    "src/app/api/widget/route.ts",
+    'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function execute(userId) { return await isFeatureEnabled(OTHER_FLAG, userId) ? "new" : "old"; }\n',
+  );
+  const gated = commit(git, "server flag");
+  const decision = path.join(dir, "decision.txt");
+  const allowed = spawnSync(process.execPath, [script, title, base, gated, decision], { cwd: dir, encoding: "utf8" });
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(
+    allowed.stdout,
+    "[FEATURE] calls ticket-specific feature gate htpr-1-other in changed code covering the changed server behavior and every UI entry from src/app/api/widget/route.ts.\n",
+  );
+  assert.equal(fs.readFileSync(decision, "utf8"), "feature-gated-ui\n");
+  assert.equal(allowed.stderr, "");
 });
 
 test("server gates reject client hooks, dead calls, unrelated flags and unchanged reads", async (t) => {
