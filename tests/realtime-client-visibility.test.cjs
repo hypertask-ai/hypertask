@@ -119,14 +119,24 @@ test("localhost browser smoke can opt an automated browser into realtime", () =>
 });
 
 test("a local verify build takes realtime in an automated browser with no query flag", () => {
+  const previous = process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
   process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
   );
   try {
     const local = fakeBrowser("", true, "127.0.0.1");
+    local.values.set(REALTIME_DISABLED_STORAGE_KEY, "1");
     assert.equal(realtimeDisabledForBrowser(local.browser), false);
     assert.equal(local.values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+
+    const headless = fakeHeadlessBrowser();
+    headless.browser.location.hostname = "127.0.0.1";
+    assert.equal(realtimeDisabledForBrowser(headless.browser), false);
+
+    const managed = fakeBrowser("", true, "127.0.0.1");
+    managed.browser.__multipromptNotificationClickBridgeInstalled = true;
+    assert.equal(realtimeDisabledForBrowser(managed.browser), true);
 
     const localhost = fakeBrowser("", true, "localhost");
     assert.equal(realtimeDisabledForBrowser(localhost.browser), false);
@@ -138,7 +148,8 @@ test("a local verify build takes realtime in an automated browser with no query 
     assert.equal(realtimeDisabledForBrowser(production.browser), true);
     assert.equal(production.values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
   } finally {
-    delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
   }
 });
 

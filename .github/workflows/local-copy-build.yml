@@ -1,0 +1,46 @@
+name: Local copy build
+on:
+  pull_request:
+    branches: [production]
+    paths:
+      - .github/workflows/local-copy-build.yml
+      - .claude/skills/verify-hypertask/bin/lib/commands/up.cjs
+      - src/lib/realtime/client.ts
+      - src/hooks/realtime/useBoardRealtime.ts
+permissions:
+  contents: read
+  packages: read
+concurrency:
+  group: local-copy-build-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Authenticate CI image pulls
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: printf '%s\n' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and start the disposable local copy
+        run: node .claude/skills/verify-hypertask/bin/ht-verify up --port 3344
+      - name: Package the local copy
+        run: tar --exclude='.next/cache' --exclude='.next/dev' -czf "$RUNNER_TEMP/local-copy-build.tgz" .next
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: local-copy-build
+          path: ${{ runner.temp }}/local-copy-build.tgz
+          retention-days: 7
+          if-no-files-found: error
+      - name: Stop the disposable local copy
+        if: always()
+        run: node .claude/skills/verify-hypertask/bin/ht-verify down

@@ -147,11 +147,39 @@ test("fallback startup reuses the initial board load and polls only on the inter
   assert.equal(board.planningRefetches.length, 1);
 });
 
-test("a local copy polls the fallback every two seconds", async (t) => {
+test("an opted-in local copy polls the fallback every two seconds", async (t) => {
+  const previous = process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
+  });
   const board = await mountBoardRealtime(t, {
     url: "http://127.0.0.1:3100/project?id=38",
     intervalMs: 2_000,
   });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
+});
+
+test("a default build keeps the ten-second fallback even on loopback", async (t) => {
+  const board = await mountBoardRealtime(t, {
+    url: "http://127.0.0.1:3100/project?id=38",
+  });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
+});
+
+test("the local build opt-in does not accelerate a non-loopback fallback", async (t) => {
+  const previous = process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
+  t.after(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
+  });
+  const board = await mountBoardRealtime(t);
   assert.equal(board.timers.size, 1);
   await board.tick();
   assert.equal(board.scopedReconciles.length, 1);
