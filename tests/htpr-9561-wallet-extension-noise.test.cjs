@@ -35,7 +35,7 @@ function loadMessageGuard(relative, until) {
   const javascript = source
     .slice(start, end)
     .replace(/export function isInjectedWalletExceptionMessage\(message: unknown\)/, "function isInjectedWalletExceptionMessage(message)")
-    .replace(/function dropInjectedWalletException\(event: \{[\s\S]*?\} \| null\)/, "function dropInjectedWalletException(event)");
+    .replace(/function dropInjectedWalletException\(event: CaptureResult \| null\): CaptureResult \| null/, "function dropInjectedWalletException(event)");
   const context = {};
   vm.runInNewContext(
     `${javascript}\nthis.isInjectedWalletExceptionMessage = typeof isInjectedWalletExceptionMessage === "function" ? isInjectedWalletExceptionMessage : null;\nthis.dropInjectedWalletException = typeof dropInjectedWalletException === "function" ? dropInjectedWalletException : null;`,
