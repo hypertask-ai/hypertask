@@ -38,7 +38,7 @@ test('changed pages select their own drivers, never an inbox fallback', async ()
   }
   for (const files of [[], ['docs/ci.md'], ['.github/scripts/verify-qa-premerge.mjs']]) {
     assert.deepEqual(selectJourney(files), {
-      matchedPage: null, journey: null, reason: 'no feature-map page matched the diff', featureMap: null, counts: {},
+      matchedPage: null, journey: null, runner: 'desktop', reason: 'no feature-map page matched the diff', featureMap: null, counts: {},
     })
   }
   const unsupported = selectJourney(['src/app/my-tasks/page.tsx'])

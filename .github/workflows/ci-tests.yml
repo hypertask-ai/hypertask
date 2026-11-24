@@ -1424,7 +1424,6 @@ jobs:
           BASE_URL: http://127.0.0.1:3100
           SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
           SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
-          SMOKE_TASK_PATH: ${{ steps.fixtures.outputs.task_path }}
           BROWSER_SMOKE_PR: '1'
         run: |
           set -euo pipefail
@@ -2147,6 +2146,7 @@ jobs:
           BASE_URL: http://127.0.0.1:3100
           SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
           SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
+          SMOKE_TASK_PATH: ${{ steps.fixtures.outputs.task_path }}
           BROWSER_SMOKE_PR: '1'
         run: |
           set -euo pipefail
