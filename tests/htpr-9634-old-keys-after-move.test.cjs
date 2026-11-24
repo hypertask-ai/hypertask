@@ -20,9 +20,9 @@ function matches(row, where) {
 }
 function harness({ visibleProjects = [2060, 13734], tasks = [movedTask], aliases } = {}) {
   aliases ??= [{ id: 1, projectId: 2060, uniqueIndex: 3148, ticketNumber: "SOFT-3148", taskId: 5000, createdAt: new Date("2026-11-22T00:00:00Z"), task: movedTask }];
-  const projects = [{ id: 2060, uniqueIdentifier: "SOFT", status: "Normal" }, { id: 13734, uniqueIdentifier: "DEST", status: "Normal" }];
+  const projects = [{ id: 2060, uniqueIdentifier: "SOFT", status: "Normal", issuedUniqueIndex: 0 }, { id: 13734, uniqueIdentifier: "DEST", status: "Normal", issuedUniqueIndex: 0 }];
   const prisma = {
-    project: { findMany: async ({ where }) => projects.filter((p) => (!where?.visible || where.visible.includes(p.id)) && (!where?.uniqueIdentifier || matches(p, { uniqueIdentifier: where.uniqueIdentifier }))) },
+    project: { findMany: async ({ where }) => projects.filter((p) => (!where?.visible || where.visible.includes(p.id)) && (!where?.uniqueIdentifier || matches(p, { uniqueIdentifier: where.uniqueIdentifier }))), findUnique: async ({ where }) => projects.find((p) => p.id === where.id) ?? null, updateMany: async () => ({ count: 1 }) },
     task: { findMany: async ({ where }) => tasks.filter((t) => matches(t, where)), findFirst: async ({ where }) => tasks.find((t) => matches(t, where)) ?? null, count: async ({ where }) => tasks.filter((t) => matches(t, where)).length, aggregate: async ({ where }) => ({ _max: { uniqueIndex: tasks.filter((t) => t.projectId === where.projectId).reduce((m, t) => Math.max(m, t.uniqueIndex), null) } }) },
     taskNumberAlias: { findMany: async ({ where }) => aliases.filter((a) => matches(a, where)), findFirst: async ({ where }) => aliases.find((a) => matches(a, where)) ?? null, findUnique: async ({ where }) => aliases.find((a) => a.projectId === where.projectId_uniqueIndex.projectId && a.uniqueIndex === where.projectId_uniqueIndex.uniqueIndex) ?? null, aggregate: async ({ where }) => ({ _max: { uniqueIndex: aliases.filter((a) => a.projectId === where.projectId).reduce((m, a) => Math.max(m, a.uniqueIndex), null) } }) },
     projectPrefixAlias: { findMany: async () => [] }, comment: { count: async () => 0, findMany: async () => [] }, taskRelations: { findMany: async () => [] }, $queryRaw: async () => [],
