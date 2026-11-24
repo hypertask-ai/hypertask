@@ -53,12 +53,13 @@ State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), s
 .claude/skills/verify-hypertask/bin/ht-verify shot --session --out "$PWD/my-tasks.png"
 ```
 
-A bare `ht-verify up` board view waits on the premerge realtime stack and stays at
-"Loading board..."; the task detail and `/my-tasks` do render. Shoot the board
-against production with the QA identity read-only. `up` refuses a `node_modules`
-symlink that resolves outside this checkout and stops in seconds on a fatal line
-in `dev.log`, so a stack that cannot serve never waits out the 240s timeout or
-leaves `env.json` behind for the next command.
+A bare `ht-verify up` serves a production build with Redis and Soketi, so the board
+renders its columns and cards locally and a new ticket lands through realtime. It rebuilds
+when HEAD or the working tree changed since the last build, so no run serves stale code,
+and it refuses to report a port another server already answers. `up`
+refuses a `node_modules` symlink that resolves outside this checkout and stops in seconds
+on a fatal line in `dev.log`, so a stack that cannot serve never waits out the 240s timeout
+or leaves `env.json` behind for the next command.
 
 ## Launch
 
@@ -76,16 +77,20 @@ export DATABASE_URL=postgresql://verify:verify@127.0.0.1:5678/hypertask
 export SESSION_SECRET=local-verification-session-placeholder-32
 export BETTER_AUTH_SECRET=local-verification-auth-placeholder-32
 export NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
+export NEXT_PUBLIC_BASEURL=http://127.0.0.1:3000
 npx prisma generate
 npx prisma migrate deploy
-setsid nohup env CI=1 __NEXT_AGENT_UPGRADE=security npx next dev -p 3000 \
+npx next build
+setsid nohup env CI=1 __NEXT_AGENT_UPGRADE=security npx next start -H 127.0.0.1 -p 3000 \
   > <run-folder>/dev.log 2>&1 &
 echo $! > <run-folder>/dev.pid
 ```
 
-Write `dev.pid` in the step that starts the server, because Cleanup kills that exact pid.
-`Ready` in `dev.log` is not ready: the first page still compiles, up to a minute cold. Ready
-means `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.
+Build and serve, never `next dev`: in dev the inline Flight payload never resolves, no page
+hydrates, and the board sits on "Loading board..." forever. Real live board updates also need
+`REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up` starts. Write
+only `dev.log`. `Ready` in it is not ready: the first `/login` still compiles. Ready means
+`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.
 `CI=1` and `__NEXT_AGENT_UPGRADE=security` stop Next's agent upgrade nudge from exiting
 before it serves. `npm run dev` also starts `stripe:listen`, which local proof does not need.
 A worktree whose `node_modules` is a symlink elsewhere cannot run Next: it fails on module
@@ -330,6 +335,7 @@ Write `<TICKET>/proof.md`:
 Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
 Doctor: sha <latest-merge-sha> deployment success; /my-tasks signed in as user <id>
 Run: <YYYY-MM-DD>-qa-run-<n>
+Leftovers: none
 
 ## Cases
 - PASS: <case> -> <nonempty-file-in-run-folder>
@@ -337,9 +343,9 @@ Run: <YYYY-MM-DD>-qa-run-<n>
 - UNREACHABLE: <case> -> <reason; closest real check>
 ```
 
-`ship-check proof <TICKET>` must print `proof ok`, and it belongs to the production target
+`Leftovers` is `none`, or a list of what the run left on production: a test login, a label, a switched setting, a reminder. `ship-check proof <TICKET>` must print `proof ok`, and it belongs to the production target
 only: it reads the merge sha and requires the `Doctor:` line to name that sha and its
-`success`, so it cannot pass before a merge exists. A local or PR-visual run proves itself
+`success`, so it cannot pass before a merge exists. A proof with no `Leftovers` line fails that check. A local or PR-visual run proves itself
 with its own run folder: the cases, the served HTML, the 390x844 shot, that folder named in
 the ticket comment, and, for a visual run, the current-head run URL. A FAIL case cannot pass.
 Publish the self-contained HTML report as a ticket page with `vcc pages create`, then post one
@@ -365,7 +371,10 @@ docker volume rm hypertask-verify-db
 ```
 
 Remove your own fixtures through product surfaces only, never SQL:
-`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`. It targets
+`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`.
+Ticket deletion does not undo a test login, a label, or a switched setting.
+Put those back as `.claude/skills/verify-qa/reference/fixture-cleanup.md` describes
+before writing `Leftovers: none`. It targets
 production by default; `--base-url` accepts only an `http://127.0.0.1` origin, so pass it for a
 local run and omit it for production. Design and phone runs start and close their own headless
 browsers and create no

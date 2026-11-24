@@ -14,6 +14,7 @@ import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from "@/lib/flags/definition
 import { HTPR_8896_SKIP_TAKEN_WORK_FLAG } from "@/lib/flags/definitions/htpr-8896-skip-taken-work";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
+import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 
 import type { ToolContext } from "./context";
 
@@ -177,9 +178,7 @@ export function createNextTasksTool(context: ToolContext) {
           );
         const limit = Math.min(input.limit, 50);
 
-        return sanitizeForJson({
-          success: true,
-          tasks: rankedTasks.slice(0, limit).map(({ task, score }) => ({
+        const page = rankedTasks.slice(0, limit).map(({ task, score }) => ({
             id: task.id,
             ticketNumber: task.ticketNumber || undefined,
             title: task.title,
@@ -191,7 +190,10 @@ export function createNextTasksTool(context: ToolContext) {
               id: label.id,
               name: label.value || "",
             })),
-          })),
+        }));
+        return sanitizeForJson({
+          success: true,
+          tasks: await nameMovedTicketKeys(user.id, page),
           total: rankedTasks.length,
           truncated: scanMetadata.truncated,
         });
