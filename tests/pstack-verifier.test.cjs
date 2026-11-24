@@ -1263,21 +1263,99 @@ test("planner replay 45173881467 authenticates agent-only refusals before dispat
   assert.equal(result.steps.every((step) => step.ok), true);
 });
 
-test("every agent-only route gets agent auth at the plan boundary", async () => {
-  const { parsePlan, agentOnlyRoutes, agentOnlyPath } = await load();
-  const routes = agentOnlyRoutes();
-  assert.equal(routes.includes("/api/mcp/agents/runtime-heartbeat"), true);
-  for (const route of routes) {
-    const path = route.replace(/\[[^\]]+\]/g, "7");
-    assert.equal(agentOnlyPath(`${path}?limit=1`), true, route);
+test("every agent-only route and method gets agent auth at the plan boundary", async () => {
+  const { parsePlan, agentOnlyCalls, agentOnlyPath } = await load();
+  const calls = agentOnlyCalls();
+  assert.equal(calls.some((call) => call.route === "/api/mcp/agents/runtime-heartbeat"), true);
+  for (const call of calls) {
+    const path = call.route.replace(/\[[^\]]+\]/g, "7");
     for (const target of [path, `${path}?limit=1`]) {
-      const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "POST", path: target, expectStatus: 400 }] }));
-      assert.equal(parsed.actions[0].auth, "agent", route);
+      for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
+        const expected = call.methods.includes(method) ? "agent" : undefined;
+        assert.equal(agentOnlyPath(target, method), call.methods.includes(method), `${method} ${call.route}`);
+        const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method, path: target, expectStatus: 400 }] }));
+        assert.equal(parsed.actions[0].auth, expected, `${method} ${call.route}`);
+      }
     }
   }
   for (const route of ["/api/mcp/tasks/{task}", "/api/mcp/tasks/lease/claim-extra", "/api/mcp/agents/runs/7/activities-extra", "/api/agents/7"]) {
     const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: route, expectStatus: 200 }] }));
     assert.equal(parsed.actions[0].auth, undefined, route);
+  }
+});
+
+test("agent auth is decided per route method rather than per route path", async () => {
+  const { parsePlan, agentOnlyPath } = await load();
+  for (const { method, path, auth } of [
+    { method: "GET", path: "/api/mcp/inbox/list", auth: undefined },
+    { method: "GET", path: "/api/mcp/inbox/list?agent_invocations=true", auth: undefined },
+    { method: "GET", path: "/api/mcp/agents/12", auth: undefined },
+    { method: "DELETE", path: "/api/mcp/agents/12", auth: undefined },
+    { method: "PATCH", path: "/api/mcp/agents/12", auth: undefined },
+    { method: "POST", path: "/api/mcp/agents/12", auth: "agent" },
+    { method: "GET", path: "/api/mcp/tasks/lease/claim", auth: undefined },
+    { method: "POST", path: "/api/mcp/tasks/lease/claim", auth: "agent" },
+  ]) {
+    assert.equal(agentOnlyPath(path, method), auth === "agent", `${method} ${path}`);
+    const parsed = parsePlan(JSON.stringify({ actions: [{ op: "api", method, path, expectStatus: 200 }] }));
+    assert.equal(parsed.actions[0].auth, auth, `${method} ${path}`);
+  }
+});
+
+test("the drive sends the user token on a user-callable method of an agent-only route", async () => {
+  const { parsePlan, runPlan } = await load();
+  const parsed = parsePlan(JSON.stringify({ actions: [
+    { op: "api", method: "GET", path: "/api/mcp/inbox/list", expectStatus: 200 },
+    { op: "api", method: "PATCH", path: "/api/mcp/agents/{id}", expectStatus: 200 },
+    { op: "api", method: "DELETE", path: "/api/mcp/agents/{id}", expectStatus: 200 },
+    { op: "api", method: "GET", path: "/api/mcp/agents/{id}", expectStatus: 200 },
+    { op: "api", method: "POST", path: "/api/mcp/agents/{id}", expectStatus: 200 },
+  ] }));
+  const sent = [];
+  const result = await runPlan({
+    page: { request: { async fetch(url, options) { sent.push(options.headers.Authorization); return { status: () => 200, async text() { return "{}"; } }; } } },
+    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
+  });
+  assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-agent"]);
+  assert.equal(result.steps.every((step) => step.ok), true);
+});
+
+test("an explicit auth overrides the derived token and an unknown auth is refused", async () => {
+  const { parsePlan, runPlan } = await load();
+  const parsed = parsePlan(JSON.stringify({ actions: [
+    { op: "api", method: "POST", path: "/api/mcp/tasks/lease/claim", expectStatus: 200, auth: "user" },
+    { op: "api", method: "GET", path: "/api/mcp/tasks/{task}", expectStatus: 200, auth: "agent" },
+  ] }));
+  assert.deepEqual(parsed.actions.map((action) => action.auth), ["user", "agent"]);
+  const sent = [];
+  const result = await runPlan({
+    page: { request: { async fetch(url, options) { sent.push(options.headers.Authorization); return { status: () => 200, async text() { return "{}"; } }; } } },
+    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
+  });
+  assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-agent"]);
+  assert.equal(result.steps.every((step) => step.ok), true);
+  assert.throws(() => parsePlan(JSON.stringify({ actions: [{ op: "api", method: "GET", path: "/api/mcp/hello", expectStatus: 200, auth: "management" }] })), /auth is not allowed/);
+});
+
+test("a POST-only guard on a route with a user GET stays per method", async () => {
+  const { agentOnlyCalls } = await load();
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { pathToFileURL } = require("node:url");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "verifier-routes-"));
+  try {
+    const apiRoot = path.join(root, "src/app/api");
+    fs.mkdirSync(path.join(apiRoot, "mcp/demo"), { recursive: true });
+    fs.mkdirSync(path.join(root, "src/lib"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src/lib/guard.ts"), 'export async function requireAgent(ctx: { agentId: string | null }) {\n  if (!ctx.agentId) return { success: false, error: "Demo requires an agent token", status: 403 };\n  return null;\n}\n');
+    fs.writeFileSync(path.join(apiRoot, "mcp/demo/route.ts"), 'import { requireAgent } from "@/lib/guard";\nexport async function GET() {\n  return { success: true };\n}\nexport async function POST() {\n  const refusal = await requireAgent({ agentId: null });\n  if (refusal) return refusal;\n  return { success: true };\n}\n');
+    fs.writeFileSync(path.join(root, "src/lib/plain.ts"), 'export async function readOnly() {\n  return { success: true };\n}\n');
+    fs.mkdirSync(path.join(apiRoot, "mcp/plain"), { recursive: true });
+    fs.writeFileSync(path.join(apiRoot, "mcp/plain/route.ts"), 'import { readOnly } from "@/lib/plain";\nexport const GET = readOnly;\n');
+    assert.deepEqual(agentOnlyCalls(pathToFileURL(apiRoot)), [{ route: "/api/mcp/demo", methods: ["POST"] }]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

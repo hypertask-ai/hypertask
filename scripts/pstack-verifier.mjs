@@ -85,12 +85,13 @@ function apiBody(value) {
 const API_ROUTE_ROOT = new URL("../src/app/api/", import.meta.url);
 const MCP_ROUTE_ROOT = "/api/mcp/";
 const AGENT_ONLY_CACHE = new Map();
-const AGENT_TOKEN_REFUSAL = /error:\s*["'`][^"'`]*\bagent token\b/i;
-const NON_AGENT_GUARD = /!\s*(?:ctx\??\.)?agentId\b|principal\.source\s*!==\s*["']agent["']|requireAgentToken\s*\(/;
+const AGENT_API_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+const AGENT_TOKEN_REFUSAL = /error:\s*["'`][^"'`]*\bagent token\b[^"'`]*["'`]/i;
 const AGENT_IDENTITY_DENIAL = /!\s*(?:[A-Za-z_$][\w$]*\??\.)+agentId\b|\b[A-Za-z_$][\w$]*\??\.source\s*!==\s*["'`]agent["'`]/;
 const AGENT_CREDENTIAL_REFUSAL = /\b(?:401|403)\b/;
 const AGENT_CREDENTIAL_WORDING = /\bagent token\b|agent_bearer_required/i;
 const AUTHORIZATION_HEADER = /headers\.(?:has|get)\(\s*["'`]Authorization/;
+const QUERY_GATE = /searchParams|\bparams\s*\.\s*get\s*\(/;
 const CODE_WORD = /[A-Za-z_$][\w$]*/g;
 const MODULE_SUFFIXES = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"];
 const IMPORT_LIST = /import\s+(?:[A-Za-z_$][\w$]*\s*,?\s*)?(?:\{([^}]*)\})?\s*from\s*["']([^"']+)["']/g;
@@ -106,6 +107,19 @@ function braceBlock(source, start) {
   }
   return "";
 }
+function bodyStart(source, from) {
+  let at = from;
+  while (at < source.length && /\s/.test(source[at])) at++;
+  if (source[at] !== ":") return source.indexOf("{", from);
+  let angle = 0;
+  for (at++; at < source.length && at < from + 600; at++) {
+    const char = source[at];
+    if (char === "<") angle++;
+    else if (char === ">" && source[at - 1] !== "=" && angle > 0) angle--;
+    else if (char === "{" && !angle) return at;
+  }
+  return source.indexOf("{", from);
+}
 function callableBody(source, at) {
   const declaration = /(?:async\s+)?function\s+[A-Za-z_$][\w$]*\s*(?:<[^>]*>)?\s*\(/g;
   const arrow = /=>\s*\{/g;
@@ -118,7 +132,7 @@ function callableBody(source, at) {
       if (source[at2] === "(") depth++;
       else if (source[at2] === ")") { depth--; if (!depth) break; }
     }
-    return braceBlock(source, source.indexOf("{", at2));
+    return braceBlock(source, bodyStart(source, at2 + 1));
   }
   if (fat) return braceBlock(source, fat.index + fat[0].length - 1);
   return "";
@@ -136,14 +150,23 @@ function functionBodies(source) {
   }
   return bodies;
 }
+function queryGated(body, index) {
+  return QUERY_GATE.test(body.slice(Math.max(0, index - 320), index));
+}
 function agentGuardKind(body) {
-  const denial = new RegExp(AGENT_IDENTITY_DENIAL.source, "g");
+  const refusal = new RegExp(AGENT_TOKEN_REFUSAL.source, "gi");
   let hit;
+  while ((hit = refusal.exec(body))) {
+    if (queryGated(body, hit.index)) continue;
+    if (AGENT_CREDENTIAL_REFUSAL.test(body.slice(hit.index, hit.index + 260))) return "credential";
+  }
+  const denial = new RegExp(AGENT_IDENTITY_DENIAL.source, "g");
   while ((hit = denial.exec(body))) {
-    const refusal = body.slice(hit.index, hit.index + 260);
-    if (AGENT_CREDENTIAL_REFUSAL.test(refusal) && AGENT_CREDENTIAL_WORDING.test(refusal)) return "credential";
-    if (AGENT_CREDENTIAL_REFUSAL.test(refusal) && /\bmanagement\b/.test(refusal)) return "management";
-    if (/\breturn null\b/.test(refusal) && AUTHORIZATION_HEADER.test(body)) return "principal";
+    if (queryGated(body, hit.index)) continue;
+    const site = body.slice(hit.index, hit.index + 320);
+    if (AGENT_CREDENTIAL_REFUSAL.test(site) && AGENT_CREDENTIAL_WORDING.test(site)) return "credential";
+    if (AGENT_CREDENTIAL_REFUSAL.test(site) && /\bmanagement\b/.test(site)) return "management";
+    if (/\breturn null\b/.test(site) && AUTHORIZATION_HEADER.test(body)) return "principal";
   }
   return "";
 }
@@ -185,6 +208,18 @@ function moduleInfo(url, cache) {
   }
   return cache.get(key);
 }
+function textReachesGuard(text, info, url, srcRoot, cache, depth, seen) {
+  if (!text) return false;
+  if (agentGuardKind(text)) return true;
+  const called = new Set(text.match(CODE_WORD) ?? []);
+  for (const item of namedImports(info.source)) {
+    if (!called.has(item.local)) continue;
+    const target = moduleUrl(item.spec, srcRoot);
+    if (target && reachesAgentGuard(target, item.name, srcRoot, cache, depth + 1, seen)) return true;
+  }
+  for (const other of info.bodies.keys()) if (called.has(other) && reachesAgentGuard(url, other, srcRoot, cache, depth + 1, seen)) return true;
+  return false;
+}
 function reachesAgentGuard(url, name, srcRoot, cache, depth, seen) {
   if (depth > 6) return false;
   const key = `${url.href}#${name}`;
@@ -195,51 +230,91 @@ function reachesAgentGuard(url, name, srcRoot, cache, depth, seen) {
   if (info.guards.has(name)) return true;
   const body = info.bodies.get(name);
   if (!body) return false;
-  const called = new Set(body.match(CODE_WORD) ?? []);
-  for (const item of namedImports(info.source)) {
-    if (!called.has(item.local)) continue;
-    const target = moduleUrl(item.spec, srcRoot);
-    if (target && reachesAgentGuard(target, item.name, srcRoot, cache, depth + 1, seen)) return true;
+  return textReachesGuard(body, info, url, srcRoot, cache, depth, seen);
+}
+function statementText(source, start) {
+  let depth = 0, quote = "";
+  for (let at = start; at < source.length; at++) {
+    const char = source[at];
+    if (quote) { if (char === quote && source[at - 1] !== "\\") quote = ""; continue; }
+    if (char === '"' || char === "'" || char === "`") { quote = char; continue; }
+    if (char === "(" || char === "{" || char === "[") depth++;
+    else if (char === ")" || char === "}" || char === "]") depth--;
+    else if (depth <= 0 && (char === ";" || char === "\n")) return source.slice(start, at);
   }
-  for (const other of info.bodies.keys()) if (other !== name && called.has(other) && reachesAgentGuard(url, other, srcRoot, cache, depth + 1, seen)) return true;
-  return false;
+  return source.slice(start);
 }
-function routeRefusesNonAgentCalls(routeUrl, srcRoot, cache) {
-  const source = readFileSync(routeUrl, "utf8");
-  if (AGENT_TOKEN_REFUSAL.test(source) && NON_AGENT_GUARD.test(source)) return true;
-  const called = new Set(source.match(CODE_WORD) ?? []);
-  for (const item of namedImports(source)) {
-    if (!item.exported && !called.has(item.local)) continue;
-    const target = moduleUrl(item.spec, srcRoot);
-    if (target && reachesAgentGuard(target, item.name, srcRoot, cache, 0, new Set())) return true;
+function methodSources(source) {
+  const found = new Map();
+  for (const method of AGENT_API_METHODS) {
+    const patterns = [
+      [new RegExp(`export\\s*\\{\\s*${method}\\s*\\}\\s*from\\s*["']([^"']+)["']`), "spec", 1],
+      [new RegExp(`export\\s+(?:async\\s+)?function\\s+${method}\\b`), "body", 0],
+      [new RegExp(`export\\s+const\\s*\\{\\s*${method}\\s*\\}\\s*=`), "statement", 0],
+      [new RegExp(`export\\s+const\\s+${method}\\s*=`), "statement", 0],
+    ];
+    for (const [pattern, kind, group] of patterns) {
+      const hit = pattern.exec(source);
+      if (!hit) continue;
+      if (kind === "spec") found.set(method, { spec: hit[group] });
+      else if (kind === "body") found.set(method, { text: callableBody(source, hit.index) });
+      else found.set(method, { text: statementText(source, hit.index + hit[0].length) });
+      break;
+    }
   }
-  return false;
+  return found;
 }
-export function agentOnlyRoutes(root = API_ROUTE_ROOT) {
-  const key = new URL(root).href;
-  if (!AGENT_ONLY_CACHE.has(key)) AGENT_ONLY_CACHE.set(key, deriveAgentOnlyRoutes(new URL(root)));
-  return AGENT_ONLY_CACHE.get(key).slice();
+function routeAgentMethods(routeUrl, srcRoot, cache) {
+  const info = moduleInfo(routeUrl, cache);
+  const methods = new Set();
+  if (!info) return methods;
+  for (const [method, source] of methodSources(info.source)) {
+    const target = source.spec ? moduleUrl(source.spec, srcRoot) : null;
+    const guarded = target
+      ? reachesAgentGuard(target, method, srcRoot, cache, 0, new Set())
+      : textReachesGuard(source.text, info, routeUrl, srcRoot, cache, 0, new Set());
+    if (guarded) methods.add(method);
+  }
+  return methods;
 }
-function deriveAgentOnlyRoutes(root) {
+function deriveAgentOnlyCalls(root) {
   const srcRoot = new URL("../../", root);
   const cache = new Map();
-  return readdirSync(root, { recursive: true })
-    .filter((file) => String(file).endsWith("/route.ts"))
-    .filter((file) => new URL(String(file), root).pathname.includes(MCP_ROUTE_ROOT))
-    .filter((file) => routeRefusesNonAgentCalls(new URL(String(file), root), srcRoot, cache))
-    .map((file) => `/api/${String(file).slice(0, -"/route.ts".length)}`);
+  const calls = [];
+  for (const file of readdirSync(root, { recursive: true })) {
+    const name = String(file);
+    if (!name.endsWith("/route.ts")) continue;
+    const url = new URL(name, root);
+    if (!url.pathname.includes(MCP_ROUTE_ROOT)) continue;
+    const methods = routeAgentMethods(url, srcRoot, cache);
+    if (!methods.size) continue;
+    calls.push({ route: `/api/${name.slice(0, -"/route.ts".length)}`, methods: [...methods] });
+  }
+  return calls;
 }
-const AGENT_ONLY_API = agentOnlyRoutes().map(routePattern);
-export function agentOnlyPath(apiPath) {
+export function agentOnlyCalls(root = API_ROUTE_ROOT) {
+  const href = new URL(root).href;
+  const url = new URL(href.endsWith("/") ? href : `${href}/`);
+  if (!AGENT_ONLY_CACHE.has(url.href)) AGENT_ONLY_CACHE.set(url.href, deriveAgentOnlyCalls(url));
+  return AGENT_ONLY_CACHE.get(url.href).map((call) => ({ route: call.route, methods: call.methods.slice() }));
+}
+export function agentOnlyRoutes(root = API_ROUTE_ROOT) {
+  return agentOnlyCalls(root).map((call) => call.route);
+}
+const AGENT_ONLY_CALLS = agentOnlyCalls().map((call) => ({ pattern: routePattern(call.route), methods: new Set(call.methods) }));
+export function agentOnlyPath(apiPath, method) {
   if (typeof apiPath !== "string" || !apiPath.startsWith("/") || apiPath.startsWith("//")) return false;
   try {
     const pathname = new URL(apiPath, "http://localhost").pathname;
-    return AGENT_ONLY_API.some((route) => route.test(pathname));
+    const wanted = method == null ? "" : String(method).trim().toUpperCase();
+    return AGENT_ONLY_CALLS.some((call) => call.pattern.test(pathname) && (!wanted || call.methods.has(wanted)));
   } catch { return false; }
 }
 function actionAuth(action) {
-  if (action.auth != null && action.auth !== "" && action.auth !== "agent") throw new Error("auth is not allowed");
-  return action.auth === "agent" || (action.op === "api" && agentOnlyPath(action.path)) ? { auth: "agent" } : {};
+  const auth = action.auth == null ? "" : String(action.auth).trim().toLowerCase();
+  if (auth && auth !== "agent" && auth !== "user") throw new Error("auth is not allowed");
+  if (auth) return { auth };
+  return action.op === "api" && agentOnlyPath(action.path, action.method) ? { auth: "agent" } : {};
 }
 function normalizeAction(action) {
   if (!action || typeof action !== "object") throw new Error("action is not allowed");
@@ -1031,8 +1106,9 @@ async function perform(page, action, base, projectId, navigations, taskId, beare
   if (action.op === "api") return callApi(page, action, base, projectId, taskId, bearer, archivedProjectId, agentBearer);
   throw new Error("not actionable");
 }
-function bearerFor(action, pathname, bearer, agentBearer) {
-  if (action.auth !== "agent" && !agentOnlyPath(pathname)) return bearer;
+function bearerFor(action, pathname, method, bearer, agentBearer) {
+  const wantsAgent = action.auth === "agent" || (action.auth !== "user" && agentOnlyPath(pathname, method));
+  if (!wantsAgent) return bearer;
   if (!agentBearer) throw new Error("agent token is missing");
   return agentBearer;
 }
@@ -1040,7 +1116,7 @@ async function callApi(page, action, base, projectId, taskId, bearer, archivedPr
   const target = fillApiPath(action.path, projectId, taskId, base);
   const mcp = target.pathname === "/api/mcp" || target.pathname.startsWith("/api/mcp/");
   if (mcp && !bearer) throw new Error("mcp token is missing");
-  const token = mcp ? bearerFor(action, target.pathname, bearer, agentBearer) : "";
+  const token = mcp ? bearerFor(action, target.pathname, action.method, bearer, agentBearer) : "";
   const headers = mcp ? { Authorization: `Bearer ${token}` } : {};
   const options = { method: action.method, headers, maxRedirects: 0, failOnStatusCode: false };
   if (action.method !== "GET") options.data = fillApiBody(action.body, projectId, taskId, archivedProjectId);
