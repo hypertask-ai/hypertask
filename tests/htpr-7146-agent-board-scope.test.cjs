@@ -168,11 +168,13 @@ for (const mode of ['WATCH', 'ENFORCE']) {
             const project = f.projects.find(row => row.id === board);
             const allowed = matches(project, f.access[helper](f.user.id, f.state.ctx.agentId));
             const valid = !['revoked', 'other-owner'].includes(kind);
-            const expected = kind === 'human' || valid && (mode === 'WATCH' || kind === 'granted' && board === 15);
+            const expected = kind === 'human'
+              || (kind === 'granted' && board === 15)
+              || (mode === 'WATCH' && (kind === 'zero' || kind === 'pending'));
             assert.equal(allowed, expected);
             if (allowed && kind !== 'human') f.scope.recordAgentBoardScopeMiss(board);
             assert.equal(f.state.grantReads, mode === 'WATCH' && valid && kind !== 'human' ? 1 : 0);
-            assert.equal(f.state.events.length, mode === 'WATCH' && valid && kind !== 'human' && (board === 2128 || kind !== 'granted') ? 1 : 0);
+            assert.equal(f.state.events.length, mode === 'WATCH' && (kind === 'zero' || kind === 'pending') ? 1 : 0);
           });
         });
       }
@@ -183,6 +185,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
 test('WATCH predicates exactly preserve production owner, human-member, agent-member, discovery and saved-view branches', async () => {
   const f = fixture();
   f.state.enforce = false;
+  f.projects.forEach(project => { project.members = []; });
   await f.run({ url: '/api/mcp/tasks' }, async () => {
     const activeAgent = { id: f.agent.id, userId: f.user.id, revokedAt: null };
     const branches = [
@@ -229,16 +232,21 @@ test('WATCH mode and Accepted grants are request-cached; miss capture is ids-onl
   } finally { Date.now = originalNow; }
 });
 
-test('only flag-read failure falls back to WATCH with a safe log; grant errors propagate', async () => {
+test('flag-read failure still limits an agent that already has boards and leaves a zero-board agent open', async () => {
   const f = fixture();
   f.state.flagError = new Error('private flag failure');
   const warnings = [];
   const warn = console.warn;
   console.warn = (...args) => warnings.push(args);
   try {
-    await f.run({ url: '/api/mcp/tasks' }, async () => assert.equal(f.scope.agentScopeEnforced(), false));
+    await f.run({ url: '/api/mcp/tasks' }, async () => assert.equal(f.scope.agentScopeEnforced(), true));
+    f.projects.forEach(project => { project.members = []; });
+    await f.run({ url: '/api/mcp/tasks/open' }, async () => assert.equal(f.scope.agentScopeEnforced(), false));
   } finally { console.warn = warn; }
-  assert.deepEqual(warnings, [['[agent-board-scope] flag read failed; using WATCH']]);
+  assert.deepEqual(warnings, [
+    ['[agent-board-scope] flag read failed; using WATCH'],
+    ['[agent-board-scope] flag read failed; using WATCH'],
+  ]);
   f.state.flagError = null;
   f.state.enforce = false;
   f.prisma.member.findMany = async () => { throw new Error('grants unavailable'); };
@@ -250,17 +258,34 @@ test('scope flag is registered as default OFF for everyone', () => {
   assert.equal(flags.FEATURE_FLAG_DEFINITIONS.find(row => row.key === 'htpr-7146-agent-scope-enforce').defaultMode, 'OFF');
 });
 
-test('WATCH leaves production notification visibility, hierarchy includes and team-wide presence intact', async () => {
+test('agents with accepted boards only see those boards in notifications, task trees and presence while the flag is off', async () => {
   const f = fixture();
   f.state.enforce = false;
-  f.projects[2].ownerId = 7;
-  f.projects[2].owner = { id: 7, agents: [] };
   const { notificationBoardAccessWhere } = f.load('src/utils/controllers/notifications/boardAccess.ts');
   const { taskMcpGetInclude } = f.load('src/lib/mcp/tasks/mappers.ts', { '@/lib/mcp/agents': { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null } });
   f.prisma.taskSession = { findMany: async args => f.tasks.map(task => ({ task, agentId: `other-${task.projectId}`, agent: { id: `other-${task.projectId}` }, lastSeenAt: new Date() })).filter(row => matches(row, args.where)) };
   f.prisma.taskLease = { findMany: async () => [] };
   const { getTeamAgentPresence } = f.load('src/lib/mcp/agents/presence.ts');
   await f.run({ url: '/api/mcp/agents/presence' }, async () => {
+    assert.deepEqual(f.notifications.filter(row => matches(row, notificationBoardAccessWhere(f.user.id, f.agent.id))).map(row => row.projectId), [15, 4060]);
+    const include = taskMcpGetInclude(f.user.id, f.agent.id);
+    assert.ok(include.parentTask.where);
+    assert.ok(include.subTasks.where);
+    assert.equal((await getTeamAgentPresence('team', { userId: f.user.id, agentId: f.agent.id })).length, 2);
+  });
+});
+
+test('agents with no boards still use owner boards for notifications, task trees and presence while the flag is off', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  f.projects.forEach(project => { project.members = []; });
+  const { notificationBoardAccessWhere } = f.load('src/utils/controllers/notifications/boardAccess.ts');
+  const { taskMcpGetInclude } = f.load('src/lib/mcp/tasks/mappers.ts', { '@/lib/mcp/agents': { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null } });
+  f.prisma.taskSession = { findMany: async args => f.tasks.map(task => ({ task, agentId: `other-${task.projectId}`, agent: { id: `other-${task.projectId}` }, lastSeenAt: new Date() })).filter(row => matches(row, args.where)) };
+  f.prisma.taskLease = { findMany: async () => [] };
+  const { getTeamAgentPresence } = f.load('src/lib/mcp/agents/presence.ts');
+  await f.run({ url: '/api/mcp/agents/presence' }, async () => {
+    assert.equal(f.scope.agentScopeEnforced(), false);
     assert.deepEqual(notificationBoardAccessWhere(f.user.id, f.agent.id), {});
     const include = taskMcpGetInclude(f.user.id, f.agent.id);
     assert.equal(include.parentTask.where, undefined);
