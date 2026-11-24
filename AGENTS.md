@@ -21,7 +21,6 @@ Reference command paths are repo-relative.
 - Never stash or discard another session's changes.
 - Never use the archived `hypertask-ai/hypertasks` repository.
 - Verify the successful production deployment and live behavior before Done.
-- Mobile at 390x844 touch: tap targets >= 44x44, inputs >= 16px, 0/2/4px corners, no overflow or clipping, no purple outside AI, standard mic on text fields, journeys by real taps.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
 - Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
