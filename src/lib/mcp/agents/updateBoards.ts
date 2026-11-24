@@ -1,6 +1,6 @@
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma } from '@prisma/client'
-import { getAgentBoardScope } from '@/lib/mcp/agents/delegatedAccess'
+import { getAgentBoardScope, selfBoardAccessRefusal } from '@/lib/mcp/agents/delegatedAccess'
 
 import { crossTeamAgentsEnabled, ownerTeamWhere } from '@/lib/agents/crossTeam'
 
@@ -157,7 +157,8 @@ export async function updateOwnedAgentBoards(
   userId: number,
   input: AgentBoardUpdateInput,
   teamId?: string,
-  actingAgentId?: string
+  actingAgentId?: string,
+  requireProjectAdmin = false,
 ) {
   const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
   for (let attempt = 0; ; attempt += 1) {
@@ -189,6 +190,13 @@ export async function updateOwnedAgentBoards(
               'Agent not found or you do not own this agent',
               404,
               'agent_id'
+            )
+          }
+          if (requireProjectAdmin && (agent.revokedAt || agent.archivedAt)) {
+            throw new AgentBoardUpdateError(
+              selfBoardAccessRefusal(input.addProjectIds[0] ?? 0, input.agentId),
+              403,
+              'add_project_ids'
             )
           }
 
@@ -233,6 +241,40 @@ export async function updateOwnedAgentBoards(
                   400,
                   'add_project_ids'
                 )
+              }
+              if (requireProjectAdmin) {
+                const selfHomeTeamId = agent.boardHomeTeamId ??
+                  agent.credentialTeamId ??
+                  agent.members.find((membership) => membership.project.teamId)?.project.teamId ??
+                  null
+                const adminBoard = selfHomeTeamId && project.teamId === selfHomeTeamId
+                  ? await tx.project.findFirst({
+                      where: {
+                        id,
+                        OR: [
+                          { ownerId: userId },
+                          {
+                            members: {
+                              some: {
+                                userId,
+                                status: 'Accepted',
+                                agentId: null,
+                                role: 'Admin',
+                              },
+                            },
+                          },
+                        ],
+                      },
+                      select: { id: true },
+                    })
+                  : null
+                if (!adminBoard) {
+                  throw new AgentBoardUpdateError(
+                    selfBoardAccessRefusal(id, input.agentId),
+                    403,
+                    'add_project_ids'
+                  )
+                }
               }
               if (
                 (teamId && project.teamId !== teamId) ||

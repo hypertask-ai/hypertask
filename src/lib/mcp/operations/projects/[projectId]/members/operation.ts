@@ -174,7 +174,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
 
     if (ctx.agentId) {
       const delegationError = target.kind === "agent"
-        ? await checkAgentBoardDelegation(ctx, target.agentId)
+        ? await checkAgentBoardDelegation(ctx, target.agentId, { projectId })
         : await requireRole(ctx, "admin");
       if (delegationError) return delegationError;
       await assertAgentBoardInviteScope(prisma.member, projectId, user.id, ctx.agentId);

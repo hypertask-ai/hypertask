@@ -164,7 +164,7 @@ export function createProjectAdminTool(context: ToolContext) {
           }
           const ctx = { user, agentId: actingAgentId, teamScope };
           const delegationError = typeof input.userToAdd === "string" && PROJECT_ADMIN_MEMBER_UUID_PATTERN.test(input.userToAdd)
-            ? await checkAgentBoardDelegation(ctx, input.userToAdd)
+            ? await checkAgentBoardDelegation(ctx, input.userToAdd, { projectId: input.project_id })
             : await requireRole(ctx, "admin");
           if (delegationError) return sanitizeForJson(await delegationError.json());
           await assertAgentBoardInviteScope(prisma.member, input.project_id, user.id, actingAgentId);
