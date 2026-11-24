@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  addTicketJumpToTopShortcut,
   scrollTicketToTop,
   ticketShowsJumpToTop,
   TICKET_JUMP_TO_TOP_AFTER_PX,
@@ -37,19 +36,6 @@ test("reduced motion jumps to the top without animation", () => {
   } finally {
     globalThis.matchMedia = previous;
   }
-});
-
-test("shortcut help names G then G as jump to top", () => {
-  const groups = [
-    { title: "Board", sub: [{ shortTitle: "Add task", pressKey: ["C"] }] },
-    { title: "Task View", sub: [{ shortTitle: "Follow task", pressKey: ["F"] }] },
-  ];
-  addTicketJumpToTopShortcut(groups);
-  assert.deepEqual(groups[0].sub, [{ shortTitle: "Add task", pressKey: ["C"] }]);
-  assert.deepEqual(groups[1].sub, [
-    { shortTitle: "Follow task", pressKey: ["F"] },
-    { shortTitle: "Jump to top", pressKey: ["G", null, "G"] },
-  ]);
 });
 
 test("htpr-8998 jump to top ships as a small feature for everyone", async () => {

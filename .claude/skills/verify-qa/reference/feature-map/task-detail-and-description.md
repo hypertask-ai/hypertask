@@ -22,7 +22,7 @@
 - `right-column` With `htpr-8991-right-column` on (Owner + QA), the ticket side panel keeps Status and Project, shows the other fields only when they have a value, and adds Add field. Add field opens the command list of the empty fields. Live, `htpr-8997-id-row` (EVERYONE) also puts the ticket ID in that panel under ID; without it the ID sits beside the title and copies on click.
 - `sticky-title` With `htpr-8992-sticky-title` on (Owner + QA), the ticket title bar stays put and, once the page is scrolled, draws a 1px line under it. On a phone that line uses the border token that stays visible in dark themes. Off leaves the header as it is.
 - `ai-box-outline` With `htpr-9025-ai-box-outline` on (Owner + QA), the Write with AI box in the description and comment editors gets a 1px outline in the editor border colour. Size and corners stay the same. Off removes that outline.
-- `ticket-jump-to-top` With `htpr-8998-ticket-jump-to-top` on (Everyone), a long ticket shows a 32px jump-to-top button at the bottom right after the page scrolls down. A click, or G then G, returns to the top. Hover says Jump to top with G G. The button stays hidden on a phone. Off hides the button and G then G moves to the description again. Shift+G then G still focuses the new comment. The cheatsheet and Settings list the shortcut only while the flag is on. Ticket page: `src/app/detail`. Cheatsheet: `src/components/sidebars/keyboardShortcuts.tsx`. Settings: `src/components/Modals/Settings/ShortcutsSection.tsx`. Live check is `/settings/shortcuts`. Off proof: `tests/htpr-8998-ticket-jump-to-top.test.ts`.
+- `ticket-jump-to-top` With `htpr-8998-ticket-jump-to-top` on (Everyone), a long ticket shows a 32px jump-to-top button at the bottom right after the page scrolls down. A click, or G then G, returns to the top. Hover says Jump to top with G G. The button stays hidden on a phone. Off hides the button and G then G moves to the description again. Shift+G then G still focuses the new comment. The cheatsheet and the Settings shortcut list both end the Task View group with Jump to top and the keys G then G. Ticket page: `src/app/detail`. Shortcut list: `src/lib/constants/shortcuts.ts`. Live check is `/settings/shortcuts`. Off proof: `tests/htpr-8998-ticket-jump-to-top.test.ts`.
 
 ## How to get to it (user POV)
 
@@ -208,9 +208,8 @@ runner cannot scroll or hover, so a ticket page in the same plan leaves the
 URL expectation failing after the Settings visit. On a long ticket by hand,
 scroll down, click the 32px button at the bottom right, and confirm the page
 returns to the top; G then G does the same. Do not switch
-`htpr-8998-ticket-jump-to-top` Off. The ticket page is `src/app/detail`, the
-cheatsheet `src/components/sidebars/keyboardShortcuts.tsx`, and Settings
-`src/components/Modals/Settings/ShortcutsSection.tsx`. Off proof:
+`htpr-8998-ticket-jump-to-top` Off. The ticket page is `src/app/detail` and
+the shortcut list is `src/lib/constants/shortcuts.ts`. Off proof:
 `tests/htpr-8998-ticket-jump-to-top.test.ts`.
 
 
