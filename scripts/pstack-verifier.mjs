@@ -546,12 +546,12 @@ export function modelHttpError(status, body, secrets) {
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
 const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/", "verification/", "eslint-local-rules/", "config/", "design-system/", "evals/", "licenses/", ".githooks/"];
-const ROOT_CONFIG_FILE = /^\.[^/]+$/;
+const NON_APP_ROOT_DOTFILES = new Set([".gitignore", ".gitattributes", ".gitleaksignore", ".gitleaks.toml", ".c8rc.json", ".dependency-cruiser.cjs", ".env.example", ".oxlintrc.json"]);
 export function hasAppPath(files) {
   return (Array.isArray(files) ? files : []).some((file) => {
     const name = String(file);
     if (NON_APP_PREFIXES.some((prefix) => name.startsWith(prefix))) return false;
-    if (ROOT_CONFIG_FILE.test(name)) return false;
+    if (NON_APP_ROOT_DOTFILES.has(name)) return false;
     if (!name.includes("/") && name.endsWith(".md")) return false;
     return true;
   });

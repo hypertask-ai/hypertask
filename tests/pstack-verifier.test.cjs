@@ -428,10 +428,14 @@ test("agent docs and root markdown are non-app; a src file stays app", async () 
   assert.match(app.notes, /no user path verified/);
 });
 
-test("repo dotfiles are non-app; a shipped asset stays app", async () => {
+test("git metadata dotfiles are non-app; build inputs stay app", async () => {
   const { decide, hasAppPath, selectPlan } = await load();
-  for (const file of [".gitignore", ".gitattributes", ".npmrc", ".gitleaksignore", ".githooks/pre-commit"]) {
+  for (const file of [".gitignore", ".gitattributes", ".gitleaksignore", ".gitleaks.toml", ".c8rc.json", ".dependency-cruiser.cjs", ".env.example", ".oxlintrc.json", ".githooks/pre-commit"]) {
     assert.equal(hasAppPath([file]), false, file);
+  }
+  for (const file of [".npmrc", ".nvmrc", "dir/.npmrc"]) {
+    assert.equal(hasAppPath([file]), true, file);
+    assert.equal(selectPlan([file], false), null, file);
   }
   assert.deepEqual(selectPlan([".gitignore"], false), { actions: [], expect: [], reason: "no user path: non-app files only" });
   assert.equal(hasAppPath([".gitignore", "src/app/page.tsx"]), true);
