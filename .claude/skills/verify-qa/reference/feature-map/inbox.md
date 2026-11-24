@@ -24,6 +24,7 @@
 - `inbox-row-fill` With `htpr-8264-inbox-row-fill` on, a desktop inbox row packs the sender, ticket number and title on the left. The preview fills the space before the task chips. It joins the leading comment or the reason, the latest human comment when that text differs, and the description when it differs from the title. The joiner is a middle dot. A reason with no other text can show `No comments or description yet`. Flag off restores the previous widths and one preview line.
 - `agent-waiting-person` With `htpr-8917-agent-waiting-person` on, a ticket can wait on one board-member agent. Send `agentId` on POST `/api/mcp/tasks/waiting-on` or POST `/api/tasks/waiting-on`. Do not also send a person. The agent sees the ticket in Blocked by you and in GET `/api/mcp/inbox/list?waiting_on=me`. The task field shows the agent display name. Flag off returns 404 for the agent write and hides the agent in that field.
 - `sticky-inbox-splits` With `htpr-9029-sticky-splits` on, desktop inbox split tabs stay pinned at the top of the list. Rows scroll underneath. After the list moves, a thin line shows under the tabs. Flag off lets the tabs scroll away with the rows.
+- `inbox-zero-image` With `htpr-9071-inbox-zero-image` on, open `/inbox` on an account with no notifications. The inbox-zero image covers the screen with the words `INBOX ZERO`, and no `All` tab, split-tab row, footer tab row or phone dock sits on top of it. Tabs and the sticky bar stay when any split has a row, or when an unsaved comment draft remains. Flag off puts the bar back on the empty inbox. The gate is in `src/app/inbox/Inbox.tsx`.
 - `jev-inbox-triage` With `htpr-9045-jev-inbox-triage` on, Inbox Zero preview asks `typesafe/jev-1.14` which eligible rows are noise. A row is suggested for archive only when the answer is noise at 0.9 or higher. Mentions, assignments, reminders, due items, questions, money and access stay out. An unclear answer stays too. One confirmation still archives. Flag off drops the suggestion.
 - `inbox-split-overflow` With `htpr-9080-split-overflow` on, Manage inbox splits shows Overflow hidden. The choice is saved per person and starts off. When Overflow hidden is on, desktop splits stay on one horizontal line. Scroll splits left and Scroll splits right appear when that line overflows. The selected split stays visible. Flag off hides the switch and wraps the tabs.
 
@@ -257,8 +258,9 @@ Flag off retains the previous global checkbox behavior.
 ### AI inbox triage command
 
 With `htpr-8044-triage-inbox` and `htpr-8045-inbox-batches` on, press
-Ctrl+K, search **Triage inbox**, then select it. A fresh full-screen human chat opens
+Ctrl+K, search **Triage inbox**, then press Enter in the palette field. A fresh full-screen human chat opens
 with the triage request; an agent-selected conversation is never reused. No new panel or archive engine is involved.
+Enter from the palette field must never open the highlighted inbox ticket; a click on the row also opens the chat.
 
 Use a clean QA chat composer. Seed more than 100 QA-only notifications,
 including pure agent updates and a question/reminder that must stay. Require

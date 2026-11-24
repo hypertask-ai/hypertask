@@ -3,13 +3,14 @@ import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7
 import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
+import { HTPR_9581_FEEDBACK_PR_REPEAT_FLAG } from '@/lib/flags/definitions/htpr-9581-feedback-pr-repeat'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
-import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
+import { aiFeedbackSchema, feedbackFingerprint, repeatJoinKey, repeatNoteShape, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
 
@@ -73,6 +74,10 @@ function preservedDiagnostics(content: string): string {
   return rows.join('')
 }
 
+function fingerprintMarkers(content: string): string[] {
+  return [...new Set(content.match(/<p>Fingerprint: ai-fb-[0-9a-f]{12}<\/p>/g) ?? [])]
+}
+
 function membershipRefusal(input: AiFeedbackInput): boolean {
   const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
   return /\bnot a member\b/i.test(code) || /\bnot a member of (?:this|that|the) (?:board|project|team)\b/i.test(input.error ?? '')
@@ -85,6 +90,55 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   if (membershipRefusal(input) && (input.status === undefined || [400, 401, 403, 404].includes(input.status))) return true
   if (![401, 403, 404].includes(input.status ?? 0)) return false
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
+}
+
+function repeatLookup(input: AutomaticFeedbackInput, stored?: StoredNote) {
+  const shape = stored?.note ? repeatNoteShape(stored.note) : undefined
+  if (!shape || !input.errorCode) return null
+  const has = (part: string) => ({ text: { contains: part } })
+  const lacks = (part: string) => ({ NOT: { text: { contains: part } } })
+  const line = (label: string, value: string | number | undefined) => value !== undefined && value !== ''
+    ? has(`<p>${label}: ${escapeHtml(String(value))}</p>`)
+    : lacks(`<p>${label}:`)
+  return {
+    shape,
+    clauses: [
+      line('Error code', input.errorCode),
+      line('Surface', input.surface),
+      line('Tool', input.tool),
+      line('HTTP status', input.status),
+      line('Field', input.field),
+      line('Category', input.category ?? 'other'),
+      line('Kind', stored?.kind),
+      has(`<p>Note: ${escapeHtml(shape.prefix)}`),
+    ],
+  }
+}
+
+function noteRepeats(text: string, shape: { prefix: string; suffix: string }): boolean {
+  const quoted = (value: string) => escapeHtml(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`<p>Note: ${quoted(shape.prefix)}\\d+${quoted(shape.suffix)}</p>`).test(text)
+}
+
+const REPEAT_PAGE = 50
+
+async function pageRepeat<T extends { text: string }>(
+  load: (skip: number) => Promise<T[]>,
+  shape: { prefix: string; suffix: string },
+): Promise<T | undefined> {
+  let skip = 0
+  for (;;) {
+    const page = await load(skip)
+    const hit = page.find((row) => noteRepeats(row.text, shape))
+    if (hit || page.length < REPEAT_PAGE) return hit
+    skip += page.length
+  }
+}
+
+function descriptionClause(clause: { text?: { contains: string }; NOT?: { text: { contains: string } } }) {
+  const missing = clause.NOT?.text?.contains
+  if (missing) return { NOT: { description_: { is: { content: { contains: missing } } } } }
+  return { description_: { is: { content: { contains: clause.text?.contains ?? '' } } } }
 }
 
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
@@ -229,6 +283,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
   const input: AutomaticFeedbackInput = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
   let plain = false
   let house = false
+  let joinPullRequestRepeat = false
   try {
     const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
     plain = userId === undefined
@@ -239,6 +294,9 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         ? await featureFlagCandidateUserIds(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG) === null
         : await isFeatureEnabled(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG, userId)
     }
+    joinPullRequestRepeat = userId === undefined
+      ? await featureFlagCandidateUserIds(HTPR_9581_FEEDBACK_PR_REPEAT_FLAG) === null
+      : await isFeatureEnabled(HTPR_9581_FEEDBACK_PR_REPEAT_FLAG, userId)
   } catch {}
   const noteAllowed = reporter.origin === 'agent' && (input.kind !== undefined || input.note !== undefined) && await agentNoteAllowed(userId)
   const stored: StoredNote | undefined = noteAllowed
@@ -260,6 +318,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
     OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
   }
   const key = BigInt.asIntN(64, BigInt(`0x${fingerprint.slice(0, 16)}`))
+  const joinKey = joinPullRequestRepeat ? repeatJoinKey(input, stored) : undefined
   let changedTaskId: number | undefined
   const deadline = Date.now() + 30000
   try {
@@ -267,6 +326,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
       const result = await prisma.$transaction(async (tx) => {
         const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(${key}) AS locked`
         if (!lock.locked) return
+        if (joinKey !== undefined) {
+          const [joined] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(${joinKey}) AS locked`
+          if (!joined.locked) return
+        }
         const [project, user] = await Promise.all([
           prisma.project.findFirst({
             where: { id: PROJECT_ID, status: 'Normal' },
@@ -289,6 +352,36 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           })
           existing = logged?.task ?? null
         }
+        const lookup = !existing && joinPullRequestRepeat ? repeatLookup(input, stored) : null
+        if (lookup && tx.comment?.findMany) {
+          const logged = await pageRepeat(
+            (skip) => tx.comment.findMany({
+              where: { agentId: null, AND: lookup.clauses, task: openWhere },
+              orderBy: { id: 'asc' },
+              skip,
+              take: REPEAT_PAGE,
+              select: { text: true, task: { select: ticketSelect } },
+            }),
+            lookup.shape,
+          )
+          existing = logged?.task ?? null
+        }
+        if (lookup && !existing && tx.task?.findMany) {
+          const logged = await pageRepeat(
+            async (skip) => {
+              const rows = await tx.task.findMany({
+                where: { AND: [openWhere, ...lookup.clauses.map(descriptionClause)] },
+                orderBy: { id: 'asc' },
+                skip,
+                take: REPEAT_PAGE,
+                select: { ...ticketSelect, description_: { select: { content: true } } },
+              })
+              return rows.map((row) => ({ text: row.description_?.content ?? '', task: row }))
+            },
+            lookup.shape,
+          )
+          existing = logged?.task ?? null
+        }
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
@@ -306,10 +399,20 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }
         const actorId = existing?.userId ?? reporterId
         const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
-        const comment = existing ? await tx.comment.findFirst({
-          where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
+        const tallyWhere = existing
+          ? { taskId: existing.id, creatorId: actorId, agentId: null as null }
+          : null
+        let comment = existing && tallyWhere ? await tx.comment.findFirst({
+          where: { ...tallyWhere, text: { contains: tallyMarker } },
           orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
         }) : null
+        if (existing && tallyWhere && !comment && joinPullRequestRepeat) {
+          comment = await tx.comment.findFirst({
+            where: { ...tallyWhere, text: { contains: '<p>AI feedback tally:' } },
+            orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
+          })
+        }
+        const priorMarkers = fingerprintMarkers(comment?.text ?? '')
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
         const keptMarker = Boolean(comment?.text.includes(marker))
         const logText = (text: string) => {
@@ -320,7 +423,8 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         }
         if (existing) {
           const count = storedCount + 1
-          const text = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
+          const logged = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
+          const text = logged + priorMarkers.filter((item) => !logged.includes(item)).join('')
           const previous = comment?.activity
           const hadLog = Boolean(previous && typeof previous === 'object' && !Array.isArray(previous) && previous.type === 'AiFeedbackLog')
           const activity = house || hadLog ? feedbackLogActivity(text) : undefined

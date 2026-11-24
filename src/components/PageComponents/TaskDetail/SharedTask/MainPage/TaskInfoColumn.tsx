@@ -19,6 +19,7 @@ import { EstimateConstants } from "@/lib/constants/constants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelComponent";
+import { shareFollowerPeople } from "./shareFollowers";
 
 interface IProps {
   dynamicTopValue: number;
@@ -40,6 +41,7 @@ const SharedTaskInfo = ({
   priority_,
 }: IProps) => {
   const _mbl = useContext(MobileViewContext);
+  const followerPeople = shareFollowerPeople(followers);
   return (
     <TaskInfoColumnContainer
       heightVariant="fit"
@@ -229,28 +231,23 @@ const SharedTaskInfo = ({
           </TaskInfoValue>
         )}
       </TaskInfoRow>
-      {followers.length > 0 && (
+      {followerPeople.length > 0 && (
         <TaskInfoRow>
           <TaskInfoLabel>Followers</TaskInfoLabel>
           <TaskInfoValue
             className={_mbl ? "flex flex-row" : "flex flex-col"}
           >
-            {followers.length < 1 && (
-              <span style={{ color: "#8E9093" }}>The Assignees</span>
-            )}
-            {followers.length > 0 && (
-              <div
-                className={`text-white-black ${
-                  _mbl
-                    ? "py-1 flex flex-row flex-wrap gap-1"
-                    : "space-y-3 rounded-[4px]"
-                }`}
-              >
-                {followers?.map((item, i) => (
-                  <AssigneeCard user={item.user} _mbl={_mbl} key={i} i={i} />
-                ))}
-              </div>
-            )}
+            <div
+              className={`text-white-black ${
+                _mbl
+                  ? "py-1 flex flex-row flex-wrap gap-1"
+                  : "space-y-3 rounded-[4px]"
+              }`}
+            >
+              {followerPeople.map((person, i) => (
+                <AssigneeCard user={person} _mbl={_mbl} key={person.id} i={i} />
+              ))}
+            </div>
           </TaskInfoValue>
         </TaskInfoRow>
       )}

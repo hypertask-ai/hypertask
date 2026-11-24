@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
+import type { CaptureResult } from "posthog-js";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
 
 import { getCookieConsent, onCookieConsentChange } from "@/lib/cookieConsent";
@@ -26,6 +27,21 @@ import {
   dropSelfRecoveringChunkLoadException,
 } from "@/lib/analytics/browserNoise";
 import { installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
+
+const INJECTED_WALLET_EXCEPTION = /window\.ethereum\b|['"]selectedAddress['"]/;
+
+function dropInjectedWalletException(event: CaptureResult | null): CaptureResult | null {
+  if (!event || event.event !== "$exception") return event;
+  const exceptions = event.properties?.$exception_list;
+  if (
+    Array.isArray(exceptions) &&
+    exceptions.length > 0 &&
+    exceptions.every((entry) => typeof entry?.value === "string" && INJECTED_WALLET_EXCEPTION.test(entry.value))
+  ) {
+    return null;
+  }
+  return event;
+}
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
 const AUTHENTICATED_ANALYTICS_MAX_WAIT_MS = 8_000;
@@ -403,9 +419,11 @@ export default function PostHogAnalytics({
               event.properties.source = "web";
             }
             return scopeProjectWebVitalsEvent(
-              dropNetworkBlipException(
-                dropSelfRecoveringChunkLoadException(
-                  dropResizeObserverLoopException(event),
+              dropInjectedWalletException(
+                dropNetworkBlipException(
+                  dropSelfRecoveringChunkLoadException(
+                    dropResizeObserverLoopException(event),
+                  ),
                 ),
               ),
               {
