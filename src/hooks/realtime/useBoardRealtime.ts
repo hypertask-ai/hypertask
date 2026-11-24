@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   connectRealtimeClient,
+  localRealtimeOptedIn,
   releaseRealtimeClientIfIdle,
 } from "@/lib/realtime/client";
 import { projectPlanningQueryKey } from "@/lib/projectPlanning";
@@ -23,8 +24,7 @@ export const BOARD_LOCAL_RECONCILE_INTERVAL_MS = 2_000;
 function boardReconcileIntervalMs(): number {
   const hostname =
     typeof window === "undefined" ? "" : (window.location?.hostname ?? "");
-  return process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME === "1" &&
-    (hostname === "127.0.0.1" || hostname === "localhost")
+  return localRealtimeOptedIn(hostname)
     ? BOARD_LOCAL_RECONCILE_INTERVAL_MS
     : BOARD_RECONCILE_INTERVAL_MS;
 }

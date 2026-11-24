@@ -90,7 +90,9 @@ Build and serve, never `next dev`: in dev the inline Flight payload never resolv
 hydrates, and the board sits on "Loading board..." forever. Real live board updates also need
 `REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up` starts, plus
 `NEXT_PUBLIC_HT_LOCAL_REALTIME=1` at build time so a headless QA browser on loopback takes the
-realtime path. `ht-verify up` sets it before building. Only this opted-in local build uses the
+realtime path. `ht-verify up` sets it before building, and a build whose
+`NEXT_PUBLIC_BASEURL` is loopback counts as a local copy too, which covers the smoke runner on
+`http://127.0.0.1:3100`. Only this opted-in local build uses the
 two-second fallback poll; default builds retain ten seconds. `?realtime=off` still disables
 realtime. Write only `dev.log`. `Ready` in it is not ready: the first `/login` still compiles. Ready means
 `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.

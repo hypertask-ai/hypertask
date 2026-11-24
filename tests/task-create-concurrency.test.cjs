@@ -34,7 +34,8 @@ function load(relativePath, stubs) {
   return mod.exports;
 }
 
-function harness({ uniqueIndexes = [41], issuedUniqueIndex = 0 } = {}) {
+function harness({ uniqueIndexes = [41], issuedUniqueIndex = 0, teamActivityRow = true } = {}) {
+  const teamActivity = [];
   const rows = uniqueIndexes.map((uniqueIndex, index) => ({ id: index + 1, projectId: 15, uniqueIndex }));
   const deliveries = [];
   const events = [];
@@ -59,7 +60,16 @@ function harness({ uniqueIndexes = [41], issuedUniqueIndex = 0 } = {}) {
     },
     section: { findFirst: async () => ({ id: 9, section_title: "Backlog" }) },
     task: { aggregate, count: async () => 1 },
-    team_Activity: { update: async () => undefined },
+    team_Activity: {
+      updateMany: async ({ data }) => {
+        teamActivity.push({ kind: "updateMany", data });
+        return { count: teamActivityRow ? 1 : 0 };
+      },
+      create: async ({ data }) => {
+        teamActivity.push({ kind: "create", data });
+        return data;
+      },
+    },
     drafts: { create: async () => undefined },
     $transaction: async (callback) => {
       let releaseLock;
@@ -145,7 +155,7 @@ function harness({ uniqueIndexes = [41], issuedUniqueIndex = 0 } = {}) {
       emitAgentTaskCreatedWebhook: async () => undefined,
     },
   });
-  return { create, rows, deliveries, events };
+  return { create, rows, deliveries, events, teamActivity };
 }
 
 for (const index of [undefined, 0]) {
@@ -173,6 +183,27 @@ for (const index of [undefined, 0]) {
     assert.deepEqual(events, Array.from({ length: 4 }, () => ["lock", "allocate", "create", "commit"]).flat());
   });
 }
+
+test("a create succeeds when the team has no activity row yet", async () => {
+  const { create, rows, teamActivity } = harness({ teamActivityRow: false });
+  const result = await create({
+    title: "Seeded team without activity",
+    description: "",
+    section: "Backlog",
+    userId: 7,
+    ranking: "rank-seeded",
+    projectId: 15,
+    sectionId: 9,
+    currentUser: { id: 7 },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(rows.at(-1).title, "Seeded team without activity");
+  assert.deepEqual(teamActivity, [
+    { kind: "updateMany", data: { total_tasks: { increment: 1 } } },
+    { kind: "create", data: { teamId: 2, total_tasks: 1 } },
+  ]);
+});
 
 test("a create after deleting the highest task number gets the next number", async () => {
   const { create, rows } = harness({ uniqueIndexes: [6285], issuedUniqueIndex: 6286 });

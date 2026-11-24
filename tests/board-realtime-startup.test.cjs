@@ -73,6 +73,16 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
         return realtime ? client : null;
       },
       releaseRealtimeClientIfIdle() {},
+      localRealtimeOptedIn(hostname) {
+        const loopback =
+          hostname === "127.0.0.1" || hostname === "localhost";
+        let loopbackBase = false;
+        try {
+          const base = new URL(process.env.NEXT_PUBLIC_BASEURL ?? "").hostname;
+          loopbackBase = base === "127.0.0.1" || base === "localhost";
+        } catch {}
+        return loopback && (process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME === "1" || loopbackBase);
+      },
     },
     "@/lib/realtime/shared": {
       BOARD_EVENT: "board:changed",
@@ -153,6 +163,22 @@ test("an opted-in local copy polls the fallback every two seconds", async (t) =>
   t.after(() => {
     if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
     else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
+  });
+  const board = await mountBoardRealtime(t, {
+    url: "http://127.0.0.1:3100/project?id=38",
+    intervalMs: 2_000,
+  });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
+});
+
+test("a loopback public base URL gives the local copy the two-second poll", async (t) => {
+  const previous = process.env.NEXT_PUBLIC_BASEURL;
+  process.env.NEXT_PUBLIC_BASEURL = "http://127.0.0.1:3100";
+  t.after(() => {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_BASEURL;
+    else process.env.NEXT_PUBLIC_BASEURL = previous;
   });
   const board = await mountBoardRealtime(t, {
     url: "http://127.0.0.1:3100/project?id=38",
