@@ -5,7 +5,7 @@
 - `test-teams-for-every-plan` Test teams for every plan.
 - `start-plan-trial-duration` Start plan trial duration.
 - `free-ticket-admission` Free ticket admission.
-- `free-plan-limits-copy` With `htpr-7686-free-plan-limits` and `htpr-7686-free-plan-copy` on for the team owner, the Plans Free card and the trial comparison list `Up to 2 GB attachment storage per team`. The retired `htpr-7924-free-storage-2gb` key reads true for every account, so the 2 GB cap applies whenever plan limits are on.
+- `free-plan-limits-copy` Production has `htpr-7686-free-plan-limits` and `htpr-7686-free-plan-copy` on for Everyone. The Plans Free card and the trial comparison list `Up to 2 GB attachment storage per team`. The retired `htpr-7924-free-storage-2gb` key reads true for every account, so the 2 GB cap applies whenever plan limits are on.
 - `cancellation-and-failed-payment-admission` Cancellation and failed-payment admission.
 - `free-board-admission` Free board admission.
 - `dedicated-billing-portal` Dedicated billing portal.
@@ -22,7 +22,7 @@
 ## How to get to it (user POV)
 
 - Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`). A read-only check of this page is: open it, read the `Billing` heading and the `Plan` row, and take a shot. The heading and the `Plan` row show at 1440x900 and at 390x844 alike.
-- The Free storage cap sits behind `htpr-7686-free-plan-limits` and `htpr-7686-free-plan-copy`, both Owner + QA, so a preview smoke account sees neither and must not expect the `Up to 2 GB attachment storage per team` line. The read-only check that works for any account is `GET /api/flags`, whose body holds `"htpr-7924-free-storage-2gb":true` because that key is retired; that value is what keeps the cap on for old clients. A check of this area opens `/settings/plans`, takes a shot, and makes that one flag call.
+- Production has `htpr-7686-free-plan-limits` and `htpr-7686-free-plan-copy` on for Everyone, so an ordinary account, including the preview smoke account, sees `Up to 2 GB attachment storage per team` on the Plans Free card and in the trial comparison. `GET /api/flags` returns `"htpr-7924-free-storage-2gb":true` because that key is retired, and that value keeps the cap on for old clients. A check of this area opens `/settings/plans`, reads that storage line, takes a shot, and makes that flag call.
 - Plans is its own sidebar entry at `/settings/plans`, not the Manage subscription row. On phone the settings sidebar is hidden, so open `/settings/plans` by URL. `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
 - `Manage` on the Manage subscription row and Update under Billing > Payment both open the Stripe customer portal and leave the app, so a read-only check presses neither. The portal card is titled **Payment**
   and its row shows the saved card (`src/components/Modals/Settings/BillingSection.tsx:401-413`).
