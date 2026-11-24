@@ -339,7 +339,7 @@ export function authorFamily(body, commits = [], authorLogin = "") {
   if (bodyFamilies.size > 1) return "";
   const commitFamilies = new Set();
   for (const commit of commits) {
-    if (!commitOwnedBy(commit, authorLogin)) continue;
+    if (commit?.parents?.length > 1 || !commitOwnedBy(commit, authorLogin)) continue;
     for (const { key, value } of trailerLines(commit)) {
       if (key === "author-model") {
         const family = value.split(/\s+/)[0].toLowerCase();
