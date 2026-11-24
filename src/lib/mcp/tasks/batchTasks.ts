@@ -14,6 +14,7 @@ import {
 } from '@/lib/mcp/tasks/updateTask'
 import type { TaskDetail } from '@/lib/mcp/tasks/types'
 import prisma from '@/lib/prisma'
+import { nameMovedTicketKeys } from '@/lib/mcp/tasks/previousTicketNumbers'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { IUser } from '@/models/model'
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard'
@@ -163,12 +164,11 @@ async function handleBatchGet(
     include: taskMcpGetInclude(ctx.user.id, ctx.agentId, ctx.teamScope),
   })
 
-  const tasksById = new Map(
-    tasks.map((task) => [
-      task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope),
-    ])
+  const named = await nameMovedTicketKeys(
+    ctx.user.id,
+    tasks.map((task) => mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope)),
   )
+  const tasksById = new Map(named.map((task) => [task.id, task]))
 
   return NextResponse.json({
     success: true,

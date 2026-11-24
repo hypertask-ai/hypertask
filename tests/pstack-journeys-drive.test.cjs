@@ -152,3 +152,172 @@ test("journey evidence must match the run binding", async () => {
   assert.throws(() => verifier.readJourneyEvidence(JSON.stringify({ ...body, run: "10" }), binding), /schema\/binding mismatch/);
   assert.throws(() => verifier.readJourneyEvidence(JSON.stringify({ ...body, journeys: [{ journey: "x", steps: [{ ok: "yes" }], expects: [] }] }), binding), /schema\/binding mismatch/);
 });
+
+test("baseRedrivePlan selects only failed side journeys, tracks their failed viewports and enforces the cap of four", async () => {
+  const { BASE_REDRIVE_LIMIT, baseRedrivePlan, readPlan } = await load();
+  assert.equal(BASE_REDRIVE_LIMIT, 4);
+  const items = [
+    journeyItem("change:primary"),
+    journeyItem("area:ok"),
+    ...Array.from({ length: 5 }, (_, index) => journeyItem(`area:fail-${index + 1}`)),
+  ];
+  const plan = planFor(items, { viewports: ["desktop", "phone"] });
+  const runAt = (journey, viewport, ok) => ({ ...headRun(journey, ok), viewport });
+  const evidence = {
+    ...binding,
+    journeys: [
+      runAt("change:primary", "desktop", false),
+      runAt("change:primary", "phone", false),
+      runAt("area:ok", "desktop", true),
+      runAt("area:ok", "phone", true),
+      runAt("area:fail-1", "desktop", true),
+      runAt("area:fail-1", "phone", false),
+      runAt("area:fail-2", "desktop", false),
+      runAt("area:fail-2", "phone", false),
+      runAt("area:fail-3", "desktop", false),
+      runAt("area:fail-3", "phone", true),
+      runAt("area:fail-4", "desktop", false),
+      runAt("area:fail-4", "phone", false),
+      runAt("area:fail-5", "desktop", false),
+      runAt("area:fail-5", "phone", false),
+    ],
+  };
+  const basePlan = baseRedrivePlan(plan, evidence);
+  assert.deepEqual(basePlan.journeys.map((item) => item.journey), ["area:fail-1", "area:fail-2", "area:fail-3", "area:fail-4"]);
+  assert.deepEqual(basePlan.journeys[0].viewports, ["phone"]);
+  assert.deepEqual(basePlan.journeys[1].viewports, ["desktop", "phone"]);
+  assert.deepEqual(basePlan.journeys[2].viewports, ["desktop"]);
+  assert.deepEqual(basePlan.viewports, ["desktop", "phone"]);
+  assert.equal(readPlan(JSON.stringify(basePlan), binding).journeys.length, 4);
+  const onlyChangeFailed = baseRedrivePlan(planFor([journeyItem("change:primary"), journeyItem("area:ok")]), {
+    ...binding,
+    journeys: [headRun("change:primary", false), headRun("area:ok", true)],
+  });
+  assert.equal(onlyChangeFailed, null);
+  assert.equal(baseRedrivePlan(plan, { ...binding, preview: "down", journeys: [] }), null);
+});
+
+test("basePlanCommand writes base-plan.json and signals needed only when a side journey fails", async () => {
+  const { basePlanCommand } = await load();
+  const fs = require("node:fs");
+  const work = mkdtempSync(join(tmpdir(), "base-plan-cmd-"));
+  const outFile = join(work, "github-output");
+  const previousOut = process.env.GITHUB_OUTPUT;
+  fs.mkdirSync(join(work, "plan"), { recursive: true });
+  fs.mkdirSync(join(work, "evidence"), { recursive: true });
+  try {
+    process.env.GITHUB_OUTPUT = outFile;
+    fs.writeFileSync(outFile, "");
+    const plan = planFor([journeyItem("change:primary"), journeyItem("area:ci-runner-policy")]);
+    fs.writeFileSync(join(work, "plan", "plan.json"), JSON.stringify(plan));
+    fs.writeFileSync(join(work, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [headRun("change:primary", true), headRun("area:ci-runner-policy", true)] }));
+    assert.equal(basePlanCommand({ work, binding }), null);
+    assert.match(fs.readFileSync(outFile, "utf8"), /needed=false/);
+    assert.equal(fs.existsSync(join(work, "plan", "base-plan.json")), false);
+
+    fs.writeFileSync(outFile, "");
+    fs.writeFileSync(join(work, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [headRun("change:primary", true), headRun("area:ci-runner-policy", false)] }));
+    const written = basePlanCommand({ work, binding });
+    assert.deepEqual(written.journeys.map((item) => item.journey), ["area:ci-runner-policy"]);
+    assert.match(fs.readFileSync(outFile, "utf8"), /needed=true/);
+    assert.deepEqual(JSON.parse(fs.readFileSync(join(work, "plan", "base-plan.json"), "utf8")).journeys.map((item) => item.journey), ["area:ci-runner-policy"]);
+  } finally {
+    if (previousOut === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = previousOut;
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("judge-ask asks nothing when the plan needs no drive, so a plan without evidence still settles", async () => {
+  const { judgeAskCommand, decide } = await load();
+  const fs = require("node:fs");
+  const work = mkdtempSync(join(tmpdir(), "judge-ask-nodrive-"));
+  fs.mkdirSync(join(work, "plan"), { recursive: true });
+  try {
+    const plan = planFor([], { bugfix: true, reachable: [], files: ["src/app/api/cron/search-index-drift/route.ts"] });
+    fs.writeFileSync(join(work, "plan", "plan.json"), JSON.stringify(plan));
+    const asked = await judgeAskCommand({ work, binding, picked: { model: "deepseek/deepseek-v4.1-flash" }, ask: () => { throw new Error("asked with no evidence"); } });
+    assert.equal(asked, null);
+    assert.equal(decide({ plan: { ...plan, reason: "no user path" }, evidence: null, binding, checksPassed: true, reproFirstPassed: true }).verdict, "PASS+NOTES");
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("judge-ask records the model verdict so a judge-only side journey failure is re-driven on the base", async () => {
+  const { judgeAskCommand, basePlanCommand, judgeJourneys } = await load();
+  const fs = require("node:fs");
+  const work = mkdtempSync(join(tmpdir(), "judge-ask-"));
+  const outFile = join(work, "github-output");
+  const previousOut = process.env.GITHUB_OUTPUT;
+  fs.mkdirSync(join(work, "plan"), { recursive: true });
+  fs.mkdirSync(join(work, "evidence"), { recursive: true });
+  try {
+    process.env.GITHUB_OUTPUT = outFile;
+    fs.writeFileSync(outFile, "");
+    const plan = planFor([journeyItem("change:primary"), journeyItem("area:ci-runner-policy")]);
+    fs.writeFileSync(join(work, "plan", "plan.json"), JSON.stringify(plan));
+    fs.writeFileSync(join(work, "evidence", "evidence.json"), JSON.stringify({ ...binding, journeys: [headRun("change:primary"), headRun("area:ci-runner-policy")] }));
+    assert.equal(basePlanCommand({ work, binding }), null);
+    const asked = [];
+    await judgeAskCommand({ work, binding, picked: { model: "deepseek/deepseek-v4.1-flash" }, ask: (prompt) => { asked.push(prompt); return asked.length === 1 ? { verdict: "PASS", notes: "the new total is right" } : { verdict: "FAIL", notes: "the same wrong total is on production" }; } });
+    assert.equal(asked.length, 2);
+    const recorded = JSON.parse(fs.readFileSync(join(work, "evidence", "evidence.json"), "utf8"));
+    assert.deepEqual(recorded.journeys.map((run) => run.judged), ["PASS", "FAIL"]);
+    const written = basePlanCommand({ work, binding });
+    assert.deepEqual(written.journeys.map((item) => item.journey), ["area:ci-runner-policy"]);
+    let reasked = 0;
+    const judged = await judgeJourneys({
+      plan,
+      evidence: recorded,
+      baseEvidence: { ...binding, journeys: [headRun("area:ci-runner-policy", false)] },
+      picked: { model: "deepseek/deepseek-v4.1-flash" },
+      ask: () => { reasked += 1; return { verdict: "PASS", notes: "" }; },
+      reuseJudged: true,
+      work: "",
+    });
+    assert.equal(reasked, 0);
+    assert.equal(judged.verdict, "PASS+NOTES");
+    assert.match(judged.notes, /area:ci-runner-policy also fails on production/);
+  } finally {
+    if (previousOut === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = previousOut;
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("judgeJourneys excuses failed side journeys that also fail on production base and blocks real regressions", async () => {
+  const { judgeJourneys } = await load();
+  const plan = planFor([journeyItem("change:primary"), journeyItem("area:ci-runner-policy")]);
+  const headEvidence = { ...binding, journeys: [headRun("change:primary", true), headRun("area:ci-runner-policy", false)] };
+  const bothRed = await judgeJourneys({
+    plan,
+    evidence: headEvidence,
+    baseEvidence: { ...binding, journeys: [headRun("area:ci-runner-policy", false)] },
+    picked: { model: "deepseek/deepseek-v4.1-flash" },
+    ask: () => ({ verdict: "PASS", notes: "" }),
+    work: "",
+  });
+  assert.equal(bothRed.verdict, "PASS+NOTES");
+  assert.match(bothRed.notes, /area:ci-runner-policy also fails on production/);
+  const headOnlyRed = await judgeJourneys({
+    plan,
+    evidence: headEvidence,
+    baseEvidence: { ...binding, journeys: [headRun("area:ci-runner-policy", true)] },
+    picked: { model: "deepseek/deepseek-v4.1-flash" },
+    ask: () => ({ verdict: "PASS", notes: "" }),
+    work: "",
+  });
+  assert.equal(headOnlyRed.verdict, "FAIL");
+  assert.match(headOnlyRed.notes, /area:ci-runner-policy: failed at step 1/);
+  const changeRed = await judgeJourneys({
+    plan,
+    evidence: { ...binding, journeys: [headRun("change:primary", false), headRun("area:ci-runner-policy", false)] },
+    baseEvidence: { ...binding, journeys: [headRun("change:primary", false), headRun("area:ci-runner-policy", false)] },
+    picked: { model: "deepseek/deepseek-v4.1-flash" },
+    ask: () => ({ verdict: "PASS", notes: "" }),
+    work: "",
+  });
+  assert.equal(changeRed.verdict, "FAIL");
+  assert.match(changeRed.notes, /change:primary: failed at step 1/);
+});

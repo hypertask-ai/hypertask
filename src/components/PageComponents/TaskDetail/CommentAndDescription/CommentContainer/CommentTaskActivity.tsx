@@ -258,7 +258,7 @@ const TaskPullRequestActivity = ({
   );
   const actor = fromAgent ?? fromUser;
 
-  if (action === "linked") {
+  if (action === "linked" || action === "unlinked") {
     return (
       <>
         {actor && (
@@ -269,7 +269,7 @@ const TaskPullRequestActivity = ({
             />
           </BoldElement>
         )}{" "}
-        linked pull request{" "}
+        {action === "unlinked" ? "unlinked" : "linked"} pull request{" "}
         <a href={pullRequest.url} target="_blank" rel="noopener noreferrer">
           <BoldElement>#{pullRequest.number}</BoldElement>
         </a>{" "}
