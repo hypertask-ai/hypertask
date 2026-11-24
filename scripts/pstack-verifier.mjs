@@ -12,6 +12,7 @@ const compareLib = libRequire("./lib/pstack-compare.cjs");
 
 export const FEATURE_MAP_DIR = ".claude/skills/verify-qa/reference/feature-map";
 export const AREA_JOURNEY_LIMIT = 6;
+export const BASE_REDRIVE_LIMIT = compareLib.BASE_REDRIVE_LIMIT;
 export const JOURNEY_RUN_LIMIT = (AREA_JOURNEY_LIMIT + 2) * 2;
 
 export const VIEWPORTS = [
@@ -288,19 +289,80 @@ export function cookiesFromHeader(header, base) {
     return [{ name, value, domain: host, path: "/", httpOnly: name !== "nookies_user", secure: false, sameSite: "Lax" }];
   });
 }
-export function authorFamily(body) {
-  const family = (/^Author-Model:\s*(\S+)\s*$/m.exec(String(body ?? ""))?.[1] ?? "").toLowerCase();
-  return FAMILIES.has(family) ? family : "";
+export function pullCommits(call, repo, number, expected) {
+  let found;
+  try {
+    const pages = JSON.parse(call(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${number}/commits`]));
+    found = Array.isArray(pages) ? pages.flat() : null;
+  } catch {
+    return null;
+  }
+  if (found === null || (expected != null && found.length !== expected)) return null;
+  return found;
 }
-export function authorGate(body) {
-  const author = authorFamily(body);
+function commitOwnedBy(commit, authorLogin) {
+  const login = String(authorLogin ?? "").toLowerCase();
+  if (!login) return false;
+  const owners = [commit?.author?.login, commit?.committer?.login].map((value) => String(value ?? "").toLowerCase()).filter(Boolean);
+  const botOpened = /\[bot\]$|^app\//.test(login);
+  return botOpened ? owners.length > 0 : owners.includes(login);
+}
+function trailerLines(commit) {
+  const paragraphs = String(commit?.commit?.message ?? "").trimEnd().split(/\r?\n[ \t]*\r?\n/);
+  if (paragraphs.length < 2) return [];
+  const block = paragraphs.at(-1);
+  if (!block.split(/\r?\n/).every((line) => /^[A-Za-z0-9-]+:[ \t]*[^\r\n]*$/.test(line))) return [];
+  return [...block.matchAll(/^(Author-Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)].map(([, key, value]) => ({ key: key.toLowerCase(), value: value.trim() }));
+}
+function proseOnly(body) {
+  let fence = "";
+  return String(body ?? "").split(/\r?\n/).map((line) => {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1] ?? "";
+    if (!fence) {
+      if (!marker) return line;
+      fence = marker;
+      return "";
+    }
+    if (marker && marker[0] === fence[0] && marker.length >= fence.length && /^\s*(`{3,}|~{3,})\s*$/.test(line)) fence = "";
+    return "";
+  }).join("\n");
+}
+export function authorFamily(body, commits = [], authorLogin = "") {
+  if (commits === null) return "";
+  const bodyFamilies = new Set();
+  for (const [, value] of proseOnly(body).matchAll(/^Author-Model:([^\r\n]*)/gim)) {
+    const family = value.trim().split(/\s+/)[0].toLowerCase();
+    if (!FAMILIES.has(family)) return "";
+    bodyFamilies.add(family);
+  }
+  if (bodyFamilies.size > 1) return "";
+  const commitFamilies = new Set();
+  for (const commit of commits) {
+    if (!commitOwnedBy(commit, authorLogin)) continue;
+    for (const { key, value } of trailerLines(commit)) {
+      if (key === "author-model") {
+        const family = value.split(/\s+/)[0].toLowerCase();
+        if (!FAMILIES.has(family)) return "";
+        commitFamilies.add(family);
+      } else {
+        const domain = String(/<([^<>]+)>\s*$/.exec(value)?.[1] ?? "").split("@")[1] ?? "";
+        for (const [family, , vendor] of FAMILY_PATTERNS) if (vendor.test(domain.toLowerCase())) commitFamilies.add(family);
+      }
+    }
+  }
+  if (commitFamilies.size > 1) return "";
+  const named = [...new Set([...bodyFamilies, ...commitFamilies])];
+  return named.length === 1 ? named[0] : "";
+}
+export function authorGate(body, commits = [], authorLogin = "") {
+  const author = authorFamily(body, commits, authorLogin);
   return author ? { stop: false, author } : { stop: true, verdict: "FAIL", notes: "author model unknown" };
 }
 const FAMILY_PATTERNS = [
-  ["claude", /claude|anthropic|opus|sonnet|haiku/i],
-  ["deepseek", /deepseek/i],
-  ["grok", /grok|x-ai|xai/i],
-  ["codex", /gpt|openai|codex|o[134]\b/i],
+  ["claude", /claude|anthropic|opus|sonnet|haiku/i, /^anthropic\.com$|^claude\.ai$/],
+  ["deepseek", /deepseek/i, /^deepseek\.com$/],
+  ["grok", /grok|x-ai|xai/i, /^x\.ai$|^xai\.com$/],
+  ["codex", /gpt|openai|codex|o[134]\b/i, /^openai\.com$/],
 ];
 export function modelFamily(model) {
   const id = String(model ?? "");
@@ -483,7 +545,7 @@ export function modelHttpError(status, body, secrets) {
   const snippet = redact(String(body ?? "").replace(/\s+/g, " ").trim(), secrets).slice(0, 200);
   return snippet ? `model HTTP ${status}: ${snippet}` : `model HTTP ${status}`;
 }
-const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/", "verification/"];
+const NON_APP_PREFIXES = [".github/", "docs/", "scripts/", "tests/", ".claude/", "e2e/", "verification/", "eslint-local-rules/", "config/", "design-system/", "evals/", "licenses/"];
 export function hasAppPath(files) {
   return (Array.isArray(files) ? files : []).some((file) => {
     const name = String(file);
@@ -868,6 +930,10 @@ export function driveViewportOptions(viewport) {
   return (VIEWPORTS.find((item) => item.name === viewport) ?? VIEWPORTS[0]).options;
 }
 async function driveLane({ browser, viewport, plan, base, shotsRoot, evidenceDir, origin, cookies, projectId, taskId, bearer, agentBearer, archivedProjectId }) {
+  const lanePlan = viewport && Array.isArray(plan.journeys)
+    ? { ...plan, journeys: plan.journeys.filter((item) => !Array.isArray(item.viewports) || item.viewports.includes(viewport)) }
+    : plan;
+  if (Array.isArray(lanePlan.journeys) && !lanePlan.journeys.length) return { journeys: [], steps: [], expects: [], navigations: [], offOrigin: [] };
   const options = driveViewportOptions(viewport);
   const video = evidenceDir ? { recordVideo: { dir: path.join(evidenceDir, "video", viewport || "plain"), size: options.viewport } } : {};
   const offOrigin = [];
@@ -881,7 +947,7 @@ async function driveLane({ browser, viewport, plan, base, shotsRoot, evidenceDir
       const request = response.request();
       if (request.isNavigationRequest() && request.frame() === page.mainFrame()) recordNav(lane.navigations, response.url(), response.status());
     });
-    const run = await runJourneys({ page, plan, base, projectId, taskId, bearer, agentBearer, archivedProjectId, shotsRoot: viewportShotsDir(shotsRoot, viewport), offOrigin, nextNavigations: () => (lane.navigations = []) });
+    const run = await runJourneys({ page, plan: lanePlan, base, projectId, taskId, bearer, agentBearer, archivedProjectId, shotsRoot: viewportShotsDir(shotsRoot, viewport), offOrigin, nextNavigations: () => (lane.navigations = []) });
     return { ...run, journeys: run.journeys.map((item) => (viewport ? { ...item, viewport } : item)), offOrigin };
   } finally {
     await context.close();
@@ -1219,7 +1285,7 @@ export function reusePayload({ item, sha, tree, diff, patchId, comments, artifac
     repo,
   });
 }
-async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
+async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId, author }) {
   const call = io.gh ?? gh;
   let comments;
   try {
@@ -1238,6 +1304,7 @@ async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId }) {
   } catch {
     return null;
   }
+  if (author && String(artifact.authorFamily ?? "") !== author) return null;
   let status = null;
   try {
     const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${artifact.head || artifact.sha}/statuses`]));
@@ -1272,16 +1339,16 @@ export async function resolveCommand(io = {}) {
   if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
+  const owned = pullCommits(call, repo, item.number, item.commits);
+  const commitsKnown = owned ?? [];
   if (BOT_LOGINS.has(item.user?.login)) {
-    const commits = JSON.parse(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/commits`]));
-    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
-    const commitsKnown = Array.isArray(commits) ? commits : [];
     const lastSha = commitsKnown.at(-1)?.sha;
     if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
+    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
     const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
     if (!trusted) {
-      const gate = authorGate(item.body);
+      const gate = authorGate(item.body, owned, item.user.login);
       if (gate.stop) {
         output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
         return;
@@ -1294,7 +1361,7 @@ export async function resolveCommand(io = {}) {
       botLogin = item.user.login;
     }
   }
-  const gate = authorGate(item.body);
+  const gate = authorGate(item.body, owned, item.user?.login);
   if (!botLogin && gate.stop) {
     output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
@@ -1308,7 +1375,7 @@ export async function resolveCommand(io = {}) {
   const headTree = String(JSON.parse(call(["api", `repos/${repo}/commits/${headSha}`]))?.commit?.tree?.sha ?? "");
   const fullDiff = call(["api", "-H", "Accept: application/vnd.github.diff", pullUrl(repo, number)]);
   const patchId = patchIdOf(fullDiff, io.spawn ?? spawnSync);
-  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId });
+  const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId, author: botLogin || gate.author });
   if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused), sha }); return; }
   if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip", sha }); return; }
   const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
@@ -1440,25 +1507,108 @@ export function readNightlyRed(call = gh) {
   console.log(`already red on production: ${red.join(", ") || "(none)"}`);
   return red;
 }
-export async function judgeJourneys({ plan, evidence, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key, work = workDir() }) {
+export function baseRedrivePlan(plan, evidence, limit = BASE_REDRIVE_LIMIT) {
+  if (!plan || !Array.isArray(plan.journeys) || !plan.journeys.length || !evidence || evidence.preview === "down") return null;
+  const cap = Number.isInteger(limit) && limit >= 0 ? limit : BASE_REDRIVE_LIMIT;
+  if (cap === 0) return null;
+  const viewports = planViewports(plan);
+  const runs = Array.isArray(evidence.journeys) ? evidence.journeys : [];
+  const selected = [];
+  for (const item of plan.journeys) {
+    if (!compareLib.areaOf(item?.journey) || !Array.isArray(item.actions) || !item.actions.length) continue;
+    const failed = viewports.filter((viewport) => {
+      const head = runs.find((run) => run.journey === item.journey && runViewport(run) === viewport) ?? null;
+      return compareLib.classifyRun(head, item).state === "failed";
+    });
+    if (!failed.length) continue;
+    const named = failed.filter(Boolean);
+    selected.push(named.length
+      ? { journey: item.journey, page: item.page ?? "", actions: item.actions, expect: item.expect ?? [], viewports: named }
+      : { journey: item.journey, page: item.page ?? "", actions: item.actions, expect: item.expect ?? [] });
+    if (selected.length >= cap) break;
+  }
+  if (!selected.length) return null;
+  const usedViewports = VIEWPORT_NAMES.filter((name) => selected.some((item) => Array.isArray(item.viewports) && item.viewports.includes(name)));
+  const next = {
+    sha: plan.sha,
+    run: plan.run,
+    attempt: plan.attempt,
+    authorFamily: plan.authorFamily || "",
+    verifierModel: plan.verifierModel || "",
+    actions: [],
+    expect: [],
+    reason: "base side journey check",
+    journeys: selected,
+  };
+  if (usedViewports.length) next.viewports = usedViewports;
+  return next;
+}
+export function basePlanCommand({ work = workDir(), binding = bindingNow() } = {}) {
+  const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
+  let evidence = null;
+  try {
+    evidence = readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding);
+  } catch {
+    evidence = null;
+  }
+  const basePlan = baseRedrivePlan(plan, evidence);
+  if (!basePlan) {
+    console.log("base side journeys: (none)");
+    output({ needed: "false" });
+    return null;
+  }
+  const dir = path.join(work, "plan");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "base-plan.json"), `${JSON.stringify(basePlan)}\n`, { mode: 0o600 });
+  console.log(`base side journeys: ${basePlan.journeys.map((item) => item.journey).join(", ")}`);
+  output({ needed: "true" });
+  return basePlan;
+}
+function judgedSoFar(head) {
+  const judged = String(head?.judged ?? "");
+  return judged === "UNEVALUATED" ? "" : judged;
+}
+export function worthAsking(plan, item, head, picked, reuseJudged = false) {
+  if (!head || plan.fail || !picked?.model || picked.model !== plan.verifierModel) return false;
+  if (reuseJudged && judgedSoFar(head)) return false;
+  return !compareLib.classifyRun(head, item).state.match(/failed|unavailable/);
+}
+async function askJourney({ plan, item, head, viewport, index, picked, ask, work }) {
+  try {
+    const { prompt, options } = judgePrompt(plan, item, head, work, viewport, index);
+    const parsed = await ask(prompt, { model: picked.model, models: picked.models, ...options }, parseAnswer);
+    console.log(`journey ${item.journey} [${viewport || "plain"}]: ${parsed.verdict} ${parsed.notes}`);
+    return parsed.verdict;
+  } catch (error) {
+    console.log(`journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
+    return "UNEVALUATED";
+  }
+}
+export async function judgeAskCommand({ work = workDir(), binding = bindingNow(), ask = askVerifier, evidence = null, picked = null } = {}) {
+  const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
+  const head = evidence ?? readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding);
+  const judge = picked ?? pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
+  let asked = 0;
+  for (const [index, item] of (plan.journeys ?? []).entries()) {
+    for (const viewport of planViewports(plan)) {
+      const run = (head.journeys ?? []).find((each) => each.journey === item.journey && runViewport(each) === viewport) ?? null;
+      if (!worthAsking(plan, item, run, judge, true)) continue;
+      run.judged = await askJourney({ plan, item, head: run, viewport, index, picked: judge, ask, work });
+      asked += 1;
+    }
+  }
+  if (!asked) return null;
+  writeFileSync(path.join(work, "evidence", "evidence.json"), `${JSON.stringify(head)}\n`, { mode: 0o600 });
+  return head;
+}
+export async function judgeJourneys({ plan, evidence, baseEvidence = null, picked, redFeatures = [], bugfixProved = false, ask = askVerifier, key, work = workDir(), reuseJudged = false }) {
   const journeys = [];
   for (const [index, item] of plan.journeys.entries()) {
     for (const viewport of planViewports(plan)) {
       const head = (evidence?.journeys ?? []).find((run) => run.journey === item.journey && runViewport(run) === viewport) ?? null;
-      let judged = head ? String(head.judged ?? "") : "";
-      const worthAsking = !plan.fail && picked.model === plan.verifierModel && !compareLib.classifyRun(head, item).state.match(/failed|unavailable/);
-      if (head && worthAsking) {
-        try {
-          const { prompt, options } = judgePrompt(plan, item, head, work, viewport, index);
-          const parsed = await ask(prompt, { key, model: picked.model, models: picked.models, ...options }, parseAnswer);
-          judged = parsed.verdict;
-          console.log(`journey ${item.journey} [${viewport || "plain"}]: ${parsed.verdict} ${parsed.notes}`);
-        } catch (error) {
-          judged = "UNEVALUATED";
-          console.log(`journey ${item.journey} [${viewport || "plain"}]: ${failureText(error, 160)}`);
-        }
-      }
-      journeys.push({ journey: item.journey, viewport, plan: item, head: head ? { ...head, judged } : null });
+      const base = (baseEvidence?.journeys ?? []).find((run) => run.journey === item.journey && runViewport(run) === viewport) ?? null;
+      const judged = worthAsking(plan, item, head, picked, reuseJudged) ? await askJourney({ plan, item, head, viewport, index, picked, ask: (prompt, options, read) => ask(prompt, { key, ...options }, read), work }) : String(head?.judged ?? "");
+      journeys.push({ journey: item.journey, viewport, plan: item, head: head ? { ...head, judged } : null, base });
     }
   }
   const hasRepro = (plan.journeys ?? []).some((item) => item.journey === "change:repro");
@@ -1493,8 +1643,12 @@ async function judgeCommand() {
     try {
       evidence = evidence ? readJourneyEvidence(evidence, binding) : null;
     } catch { evidence = null; }
+    let baseEvidence = null;
+    try {
+      baseEvidence = readJourneyEvidence(readFileSync(path.join(workDir(), "evidence", "base-evidence.json"), "utf8"), binding);
+    } catch { baseEvidence = null; }
     const bugfixProved = bugfixNoPath && noRepro ? await reproFirstProof(binding) : false;
-    compared = await judgeJourneys({ plan, evidence, picked, redFeatures: readNightlyRed(), bugfixProved });
+    compared = await judgeJourneys({ plan, evidence, baseEvidence, picked, redFeatures: readNightlyRed(), bugfixProved, reuseJudged: true });
   } else if (!plan.fail && plan.actions.length && evidence && picked.model === plan.verifierModel) {
     try {
       const parsed = await askVerifier(buildPrompt({ kind: "judge", title: plan.claim?.title, body: plan.claim?.body, diff: plan.claim?.diff, boardPath: plan.claim?.boardPath, taskPath: plan.claim?.taskPath, plan, evidence }), { model: picked.model, models: picked.models, images: imagesIn(path.join(workDir(), "evidence", "shots")) }, parseAnswer);
@@ -1592,11 +1746,13 @@ async function main() {
   const command = process.argv[2];
   if (command === "resolve") await resolveCommand();
   else if (command === "plan") await planCommand();
+  else if (command === "base-plan") await basePlanCommand();
+  else if (command === "judge-ask") await judgeAskCommand();
   else if (command === "judge") await judgeCommand();
   else if (command === "mark") await markCommand();
   else if (command === "post") await postCommand();
   else if (command === "cancel") await cancelCommand();
-  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge|mark|post|cancel");
+  else throw new Error("usage: pstack-verifier.mjs resolve|plan|judge-ask|judge|mark|post|cancel|base-plan");
 }
 const evalLaunch = process.execArgv.includes("-e") || process.execArgv.includes("--eval") || process.execArgv.some((arg) => arg.startsWith("--eval="));
 if (!evalLaunch && process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
