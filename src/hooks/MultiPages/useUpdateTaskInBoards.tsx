@@ -22,13 +22,12 @@ import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySec
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
 import { focusCardNextTo, keepBoardFocus, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
 import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/appendCreatedSection";
-import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
+import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId, taskInColumn } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
-import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG , HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG , HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_9361_BLOCKED_VIEW_DONE_FLAG } from "@/lib/flags/definitions/htpr-9361-blocked-view-done";
 import { HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG } from "@/lib/flags/definitions/htpr-8039-archive-column-boundary";
 import { HTPR_8928_BULK_ARCHIVE_INSTANT_HIDE_FLAG } from "@/lib/flags/definitions/htpr-8928-bulk-archive-instant-hide";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
@@ -164,13 +163,14 @@ const applyProjectFilters = (
   builtinViewId?: BuiltinViewId,
   currentUser?: { id?: number; displayName?: string },
   runtimeContext?: IFilterRuntimeContext,
+  leaveFinishedOut = false,
 ) => {
   let filteredSections = getAppliedSubtaskSections(project.sections, project);
   filteredSections = getFilteredSections(
     filteredSections,
     project,
     builtinViewId,
-    buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName),
+    buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName, leaveFinishedOut),
     runtimeContext,
   );
 
@@ -193,6 +193,7 @@ const UpdateKanban = () => {
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
+  const leaveFinishedOut = useFlag(HTPR_9361_BLOCKED_VIEW_DONE_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -284,6 +285,7 @@ const UpdateKanban = () => {
       isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
       _currentUser,
       filterRuntimeContext,
+      leaveFinishedOut,
     );
     const filteredSections = reconcileSections(
       previousProject.filteredSections,
@@ -331,10 +333,10 @@ const UpdateKanban = () => {
     console.timeEnd("cacheUpdate-start");
   };
 
-  const updateCache = async (newSections: ISection[]) => {
+  const updateCache = async (newSections: ISection[], tasks?: ITask[]) => {
     const { allData, projectToUpdateIndex } = await getProjectIdxAndAllData(_currentProject?.id)
     if (!allData || !allData.updatedProjects || projectToUpdateIndex === undefined || projectToUpdateIndex === -1) return console.log("returned from guard");
-    mutationHandler(projectToUpdateIndex, newSections, allData)
+    mutationHandler(projectToUpdateIndex, newSections, allData, tasks)
   }
   const updateActiveItemAndItemInView = (taskId: number | null, projectId: number, sectionId: number | null) => {
 
@@ -652,9 +654,12 @@ const UpdateKanban = () => {
           undefined,
           destinationSection.items.length > 0 ? destinationSection.items[0].ranking : undefined
         );
-    const newItem: ITask = {
-      ...taskToMove,
+    const destinationColumn = {
       sectionId: destinationSectionId,
+      section_title: destinationSection.section_title,
+    };
+    const newItem: ITask = {
+      ...taskInColumn(taskToMove, destinationColumn),
       ranking,
     };
     const destinationItems = options.insertAtEnd
@@ -694,7 +699,10 @@ const UpdateKanban = () => {
     const srcFilteredIdx = filteredSrc.findIndex((s) => s.sectionId === sourceSectionId || s.id === sourceSectionId)
     const dispItemIndex = filteredSrc[srcFilteredIdx]?.items.findIndex((i) => i.id === itemId) ?? -1
     reAdjustFocusFromCurrContext({ sections: filteredSrc, sectionIndex: srcFilteredIdx, sectionId: sourceSectionId, itemIndex: dispItemIndex, projectId: _currentProject.id })
-    updateCache(newSections)
+    const tasksForCount = projectToUpdate.tasks?.map((task) =>
+      task.id === itemId ? { ...taskInColumn(task, destinationColumn), ranking } : task,
+    );
+    updateCache(newSections, tasksForCount)
 
 
   }
