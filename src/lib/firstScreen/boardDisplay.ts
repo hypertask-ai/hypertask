@@ -25,7 +25,7 @@ export type BoardDisplay = FirstScreenDisplayPreferences & {
 
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
-const identifier = (value: string) => /^[a-zA-Z0-9_-]{1,100}$/.test(value);
+const identifier = (value: string) => /^[a-zA-Z0-9_:-]{1,100}$/.test(value);
 export function parseBoardDisplay(value: string | undefined, accountId: number, { desktopChat = false }: { desktopChat?: boolean } = {}): BoardDisplay | null {
   try {
     if (!value || value.length > 3800) return null;

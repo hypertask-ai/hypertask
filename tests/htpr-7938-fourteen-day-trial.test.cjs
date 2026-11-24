@@ -33,10 +33,10 @@ test("new duration flag never bypasses rollout eligibility, owner checks or used
   assert.equal(h.calls.length, 0);
   assert.equal((await h.checkout()).status, 200);
   assert.deepEqual(h.trialFlagReads, [6]);
-  const off = harness(); off.fourteenDayTrial = true; off.enabled = false;
-  assert.equal((await off.checkout()).status, 403);
-  assert.equal((await off.checkout(legacy())).status, 200);
-  assert.equal(off.calls[0].payload.subscription_data.trial_period_days, 14);
+  const open = harness(); open.fourteenDayTrial = true;
+  assert.equal((await open.checkout(legacy())).status, 200);
+  assert.equal(open.calls[0].payload.subscription_data.trial_period_days, 14);
+  assert.equal(open.calls[0].payload.metadata.checkoutIntent, "start-plan");
   const used = harness(); used.fourteenDayTrial = true; used.team.team_activity.hasCompletedTrial = true;
   assert.equal((await used.checkout(legacy())).status, 409);
   assert.equal((await used.checkout(signup({ action: "preview" }))).body.trialDays, 0);

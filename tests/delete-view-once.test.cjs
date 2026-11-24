@@ -51,6 +51,7 @@ async function clickDelete(status = 200, repeated = false, baseline = false) {
       "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/keys": { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG: "htpr-7097-deleted-view-leaves-tabs" },
       "@/lib/flags/definitions/htpr-9274-board-default-subtasks": { HTPR_9274_BOARD_DEFAULT_SUBTASKS_FLAG: "htpr-9274-board-default-subtasks" },
+      "@/lib/flags/definitions/htpr-9362-hide-active-view": { HTPR_9362_HIDE_ACTIVE_VIEW_FLAG: "htpr-9362-hide-active-view" },
       "@/lib/table-view/tableGroupByTag": {
         getActiveTableGroupByFromProject: () => "column",
         buildTableSectionsGroupedByTag: sections => sections,
@@ -72,7 +73,7 @@ async function clickDelete(status = 200, repeated = false, baseline = false) {
       "@/lib/smartSplits": { getSmartSplitLabel: () => null },
       "./SmartSplitModal": { default: () => null },
       "@/utils/helperFunctions/Views/ViewOrderHelperFunctions": { asViewOrder: () => undefined },
-      "@/lib/constants/builtinViews": { BUILTIN_VIEWS: [], isBuiltinView: () => false, viewTabPreferenceKey: (id, viewId) => `${id}:${viewId}` },
+      "@/lib/constants/builtinViews": { BUILTIN_VIEWS: [], isBuiltinView: () => false, getViewToActivateWhenHidden: () => undefined, viewTabPreferenceKey: (id, viewId) => `${id}:${viewId}` },
       "@/utils/helperFunctions/Views/ViewsHelperFunctions": {},
       "@/utils/helperFunctions/Views/ProjectViewState": load("src/utils/helperFunctions/Views/ProjectViewState.ts", {}),
       "@/hooks/MultiPages/useUpdateTaskInBoards": { default: () => ({ getProjectIdxAndAllData: () => ({ allData: null, projectToUpdateIndex: 0 }) }) },

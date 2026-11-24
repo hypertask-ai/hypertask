@@ -4,8 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useRecoilValue } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom } from "@/store";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import { useGetAllAccessibleBoardList } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import type { IProject } from "@/models/model";
@@ -13,17 +11,14 @@ import type { IProject } from "@/models/model";
 export function TeamStartPlanButton({ teamId }: { teamId?: string }) {
   const currentProject = useRecoilValue(currentProjectAtom);
   const currentUser = useRecoilValue(currentUserAtom);
-  const enabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-  const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const selectedTeamBoard = teamId && currentProject?.team?.id === teamId && currentProject.id
     ? currentProject : undefined;
   const boards = useGetAllAccessibleBoardList(currentUser, {
-    enabled: flagReady && enabled && Boolean(teamId) && !selectedTeamBoard,
+    enabled: Boolean(teamId) && !selectedTeamBoard,
   });
   const checkoutBoard = selectedTeamBoard ?? boards.data?.find((board) =>
     board.id && board.team?.id === teamId);
 
-  if (!flagReady || !enabled) return null;
   if (!teamId) return <span role="status">Loading team…</span>;
   if (checkoutBoard) return <StartPlanButton project={checkoutBoard} teamId={teamId} />;
   if (boards.isError) return <div role="status">Could not load this team&apos;s boards. <button type="button" onClick={() => void boards.refetch()}>Retry</button></div>;
@@ -57,7 +52,6 @@ export function StartPlanButton({ project, teamId, compact = false }: {
   const currentUser = useRecoilValue(currentUserAtom);
   const board = project ?? selectedProject;
   const billing = deriveCurrentBoardBilling(board ?? null);
-  const enabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const eligibleBoard = Boolean(currentUser?.id && board?.id && Array.isArray(board.team?.subscriptionPlan) && billing?.storePlanId === "Free" &&
     (!teamId || billing.teamId === teamId));
   const [pending, setPending] = useState(false);
@@ -72,8 +66,8 @@ export function StartPlanButton({ project, teamId, compact = false }: {
     : null;
   const body = { intent: "signup-straight-to-board", teamId: billing?.teamId, boardUrl };
   const access = useQuery<PlanAccess>({
-    queryKey: ["start-plan-access", currentUser?.id, billing?.teamId, boardUrl, enabled],
-    enabled: enabled && eligibleBoard && Boolean(boardUrl),
+    queryKey: ["start-plan-access", currentUser?.id, billing?.teamId, boardUrl],
+    enabled: eligibleBoard && Boolean(boardUrl),
     queryFn: async () => (await axios.post("/api/stripe/session/checkout", { ...body, action: "preview" })).data,
     retry: false,
     staleTime: 0,
@@ -81,13 +75,13 @@ export function StartPlanButton({ project, teamId, compact = false }: {
   });
 
   useEffect(() => {
-    if (!enabled || !access.data?.finishing) return;
+    if (!access.data?.finishing) return;
     void queryClient.invalidateQueries({ queryKey: ["projectsAll"] });
     void queryClient.invalidateQueries({ queryKey: ["projectsAllMinimal"] });
     router.refresh();
-  }, [enabled, access.data, queryClient, router]);
+  }, [access.data, queryClient, router]);
 
-  if (!enabled || !eligibleBoard) return null;
+  if (!eligibleBoard) return null;
   if (board?.team.googleAccount?.userId !== undefined && board.team.googleAccount.userId !== currentUser.id) {
     return <span className="text-content text-text-light-gray">Only the team owner can start a plan</span>;
   }

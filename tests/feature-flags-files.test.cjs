@@ -186,7 +186,27 @@ export default { key: INTERNAL_FLAG, kind: "internal", shippedOn: "2026-10-20", 
 test("owner-request metadata rejects malformed evidence but still accepts the exact checkout rollout request", async () => {
   const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
   const filename = "src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts";
-  const source = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
+  const source = `import type { FeatureFlagDefinition } from "../definitions";
+
+export const HTPR_7551_START_PLAN_CHECKOUT_FLAG = "htpr-7551-start-plan-checkout";
+
+export default {
+  key: HTPR_7551_START_PLAN_CHECKOUT_FLAG,
+  kind: "feature",
+  defaultMode: "OWNER_ONLY",
+  shippedOn: "2026-10-21",
+  releaseRisk: {
+    risk: "new",
+    reason: "Adds server-selected paid plan checkout and trial terms.",
+    highRisk: "money",
+    ownerRequest: {
+      quote: "this one goes behind a feature flag that is only on for me at first pls. Don't release to everyone right away.",
+      ticketUrl: "https://app.hypertask.ai/detail/project-15/7511",
+    },
+  },
+  description: "Owner-only preview of Start-plan checkout with server-selected monthly Pro pricing and trial terms.",
+} as const satisfies FeatureFlagDefinition;
+`;
   const parsed = parseFlagFile(source, filename).definition;
   assert.equal(parsed.defaultMode, "OWNER_ONLY");
   assert.equal(parsed.releaseRisk.highRisk, "money");

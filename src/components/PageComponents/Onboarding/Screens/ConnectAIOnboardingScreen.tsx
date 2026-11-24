@@ -16,8 +16,8 @@ import { CopyableCodeBlock } from "@/components/Modals/McpToken/components/Conne
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import type { IntegrationId } from "@/components/Modals/McpToken/utils";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { GetStartedButton } from "../GetStartedButton";
 
 interface IConnectAIOnboardingScreen {
@@ -181,9 +181,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, o
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
   const overlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
-  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-  const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-  const planMessage = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Start on Free. Choose a plan when you are ready." : "Full access free for 14 days. No credit card needed."}</>;
+  const planMessage = <>Start on Free. Choose a plan when you are ready.</>;
   return <ConnectAISetup {...props} planMessage={planMessage} overlay={overlayEnabled && props.overlay} onConnected={overlayEnabled ? props.onConnected : undefined} />;
 };
 
