@@ -25,6 +25,7 @@ function loadMove({
   ownerCanRequest = true,
   boardTeamId = "team-a",
   teamScope = null,
+  requesterSeesBoard = true,
 } = {}) {
   const calls = { moved: [], flags: [], access: 0, boardAccess: [] };
   const membership = onBoard
@@ -59,9 +60,11 @@ function loadMove({
         project: {
           findFirst: async ({ where } = {}) => {
             if (!projectExists) return null;
-            if (where.id != null && where.id !== FOREIGN_BOARD) return null;
-            const allowed = where.status?.in;
-            if (Array.isArray(allowed) && !allowed.includes(projectStatus)) return null;
+            for (const condition of [where, ...(where?.AND ?? [])]) {
+              if (typeof condition.id === "number" && condition.id !== FOREIGN_BOARD) return null;
+              if (Array.isArray(condition.id?.in) && !condition.id.in.includes(FOREIGN_BOARD)) return null;
+              if (Array.isArray(condition.status?.in) && !condition.status.in.includes(projectStatus)) return null;
+            }
             return { id: FOREIGN_BOARD, status: projectStatus };
           },
         },
@@ -90,7 +93,10 @@ function loadMove({
         return { success: true, task: { id: params.taskId, projectId: params.targetProjectId } };
       },
     },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: () => ({}),
+      projectContentAccessWhere: () => (requesterSeesBoard ? {} : { id: { in: [] } }),
+    },
     "@/lib/mcp/tasks/services": {
       validateProjectAccess: async () => {
         calls.access += 1;
@@ -168,6 +174,17 @@ test("a board outside the agent team is still refused, without the access-reques
   assert.equal(status, 403);
   assert.equal(body.message, "This agent is not a member of this board. Ask the board owner to add it.");
   assert.deepEqual(calls.boardAccess, [{ projectId: 15, userId: 6, actingAgentId: null, teamScope }]);
+  assert.deepEqual(calls.flags, []);
+  assert.deepEqual(calls.moved, []);
+});
+
+test("a board the requester cannot see is refused without the membership message", async () => {
+  const denied = { status: 403, message: "User does not have permission to create tasks in this project" };
+  const { status, body, calls } = await move({ requesterSeesBoard: false, guidance: true, accessError: denied });
+  assert.equal(status, 403);
+  assert.equal(body.error, denied.message);
+  assert.equal(calls.access, 1);
+  assert.deepEqual(calls.boardAccess, []);
   assert.deepEqual(calls.flags, []);
   assert.deepEqual(calls.moved, []);
 });

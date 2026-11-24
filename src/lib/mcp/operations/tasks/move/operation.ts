@@ -12,7 +12,7 @@ import prisma from "@/lib/prisma";
 import { mapTaskToDetail, taskDetailInclude } from "@/lib/mcp/tasks/mappers";
 import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   validateProjectAccess,
   getSectionForTask,
@@ -232,7 +232,12 @@ export async function POST(request: NextRequest) {
       const targetBoard = acceptedMembership
         ? null
         : await prisma.project.findFirst({
-            where: { id: target_project_id, status: { in: ["Normal", "Archive"] } },
+            where: {
+              AND: [
+                { id: target_project_id, status: { in: ["Normal", "Archive"] } },
+                projectContentAccessWhere(user.id),
+              ],
+            },
             select: { id: true },
           });
       if (targetBoard) {
