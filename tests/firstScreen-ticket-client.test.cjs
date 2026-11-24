@@ -60,6 +60,7 @@ const Provider = load('src/utils/Providers.tsx', {
     clients.push(client); return React.createElement(QueryClientProvider, { client }, children);
   } },
   '@/lib/state': state, '@/hooks/General/useAuth': { AuthProvider: pass },
+  '@/lib/auth/ticketAccountSwitchSlot': { TicketAccountSwitchSlot: empty },
   '@/components/ProviderGlobal/GloablProviders': { default: pass }, '@/hooks/General/useUndo': { UndoProvider: pass },
   '@/lib/contexts/deviceContext': { DeviceProvider: pass }, '@/lib/contexts/ThemeListener': { default: empty },
   '@/lib/contexts/mobileBlockingContext': { MobileBlockingProvider: pass }, '@/lib/contexts/TourContext': { TourProvider: pass },

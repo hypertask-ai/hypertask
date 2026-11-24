@@ -13,6 +13,7 @@ import {
 } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 import { taskMcpGetInclude } from "@/lib/mcp/tasks/mappers";
 import { sanitizeForJson, mapTaskToMcpGetResponse } from "@/lib/ai/tools/helpers";
+import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 
 import type { ToolContext } from "./context";
 
@@ -133,19 +134,20 @@ export function createGetTasksTool(context: ToolContext) {
           }
         }
 
+        const readTasks = tasksWithBlockers.map((task) => {
+          const mapped = mapTaskToMcpGetResponse(task, user.id);
+          if (!blockersEnabled) return mapped;
+          return {
+            ...mapped,
+            blockingTasks: mapOpenBlockingTasksForRead(
+              "blockingTasks" in task ? (task.blockingTasks ?? []) : [],
+            ),
+          };
+        });
         return sanitizeForJson({
           success: true,
           ...(navigationEmitted === undefined ? {} : { navigation_emitted: navigationEmitted }),
-          tasks: tasksWithBlockers.map((task) => {
-            const mapped = mapTaskToMcpGetResponse(task, user.id);
-            if (!blockersEnabled) return mapped;
-            return {
-              ...mapped,
-              blockingTasks: mapOpenBlockingTasksForRead(
-                "blockingTasks" in task ? (task.blockingTasks ?? []) : [],
-              ),
-            };
-          }),
+          tasks: await nameMovedTicketKeys(user.id, readTasks),
           not_found: notFound,
         });
       },
