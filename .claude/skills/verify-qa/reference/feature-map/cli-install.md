@@ -9,7 +9,7 @@
 
 - Settings, Connect, CLI: `https://app.hypertask.ai/settings/cli` (`CliSection.tsx`); the nav entry lives under the Connect group (`settingsNavigation.ts`).
 - Command menu "Install CLI" opens `CliInstallModal` (`#cliInstallModal`).
-- Onboarding's seeded task (`completeOnboardingStep.ts`), with `htpr-9530-cli-browser-signin` on, prints the same install command as Settings and says `hypertask login` opens the browser. Off restores the token sentence. The guest demo board's CLI task (`guestSeedTasks.ts`) prints the same install command and `hypertask login`, introduced as "Then sign in."
+- Onboarding's seeded task (`completeOnboardingStep.ts`), with `htpr-9530-cli-browser-signin` on, prints the same install command as Settings and says `hypertask login` opens the browser. Off restores the token sentence. That task is written only for a brand-new account (signup, then onboarding's "Skip — start with a sample board"); a board created any other way, and every board that already exists, keeps the copy it was given, so no seeded drive board carries it. The guest demo board's CLI task (`guestSeedTasks.ts`) prints the same install command and `hypertask login`, introduced as "Then sign in."
 - `https://app.hypertask.ai/llms.txt` for AI agents: `curl -fsSL https://hypertask.ai/install | sh`, then `hypertask login`, plus the PowerShell line.
 - After install the CLI signs in with `hypertask login` (browser authorize) or `hypertask login --token <agent token>` for agents; guided start uses `htpr-7519-login-guided-start` ([MCP hello checks](mcp-task-lookup.md)).
 - Settings, Connect, Management keys: `https://app.hypertask.ai/settings/management-keys` (`src/components/Modals/Settings/ManagementKeysSection.tsx`). Create and list use `GET /api/mcp/admin/keys` and `POST /api/mcp/admin/keys`; revoke uses `DELETE /api/mcp/admin/keys`.
@@ -39,6 +39,7 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 - Test fixtures in `tests/fixtures/cli-install/legacy.json` holding the old command.
 - A team-limited key (`httk_`), or an agent token that carries a team id, is refused while `htpr-6542-team-scoped-management-keys` is off.
 - Settings, the Ctrl+K modal, and the seeded onboarding task (with `htpr-9530-cli-browser-signin` on) say `hypertask login` opens the browser. `llms.txt` and the guest CLI task print bare `hypertask login` without that sentence. Off restores the onboarding token sentence.
+- The onboarding sentence has no user path on a seeded account: signup seeding is what writes it, so `/project?id={id}` never shows it and no drive route reaches it. Judge that sentence from the changed test, not from a board visit.
 
 ### What proof to collect
 
