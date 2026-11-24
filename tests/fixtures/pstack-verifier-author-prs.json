@@ -1,0 +1,136 @@
+{
+  "3806": {
+    "body": "## Why\nPrevent repeated corner-size mistakes. Product corners must be 0, 2 or 4px.\nTicket: https://app.hypertask.ai/detail/project-15/9611\n\n## Change\n- Reject arbitrary rounded utilities and radius-property overrides except `0`, `0px`, `2px`, `4px` and `var(--radius-...)`.\n- Recommend `rounded-[2px]` / `rounded-[4px]`. The existing chat radius tokens are theme-dependent; no `--radius-sm` / `--radius-md` tokens exist.\n- Add a generated per-file baseline, range-ordered overflow reporting, and a baseline-aware plugin hash.\n- Freeze **302 raw radius violations in 156 files**, including legacy large-radius utilities previously covered by bulk suppressions. The earlier 216 reported findings were not the raw total.\n- Remove overlapping/stale bulk allowances (forbidden-utility budget 166 -> 63). Do not change `src/`.\n- Generate with `node scripts/generate-radius-baseline.mjs`; test the total can never exceed 302. Generator is idempotent.\n\n## Proof\n- 26 related tests pass; changed JS/CJS/MJS files pass ESLint. Full-repository ESLint also passes (0 errors, 22 warnings). The push hook passes without bypass after warming its lint cache.\n- Full `src/` ESLint passes with the repository suppression arguments: **0 errors, 13 warnings**. Original `origin/production` also has 0 errors and the same 13 warnings: 11 location-assignment, 1 alt-text, 1 incompatible-library. Locations and messages match after normalizing checkout paths.\n- Build the Lever produced rerunnable generation/proof scripts; Test Behavior, Not Implementation led to added-violation, valid-value, per-file and bulk-suppression interaction tests.\n- Reproduce with `node scripts/prove-radius-rule.mjs`. It materializes `git show <sha>^:<path>` snapshots in `/tmp` and lints them with allowance zero, without bulk suppressions.\n```text\na51d88c970^:src/components/AI_CHAT/ChatWindow.tsx:44:9 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-t-lg'. [hypertask-style/no-forbidden-utilities]\n7b167459c5^:src/components/AI_CHAT/ChatWindow.tsx:24:9 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-t-lg'. [hypertask-style/no-forbidden-utilities]\n7b167459c5^:src/components/AI_CHAT/ChatWindow.tsx:46:7 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of '[.amoled_&]:rounded-[5px]'. [hypertask-style/no-forbidden-utilities]\n2be3533f8f^:src/components/RTE/Extensions/resizableMedia/ResizableMediaNodeView.tsx:19:8 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-lg'. [hypertask-style/no-forbidden-utilities]\n2be3533f8f^:src/components/RTE/Extensions/resizableMedia/ResizableMediaNodeView.tsx:44:5 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-[5px]'. [hypertask-style/no-forbidden-utilities]\n2be3533f8f^:src/components/RTE/Extensions/resizableMedia/ResizableMediaNodeView.tsx:387:13 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-lg'. [hypertask-style/no-forbidden-utilities]\n2be3533f8f^:src/components/RTE/Extensions/resizableMedia/ResizableMediaNodeView.tsx:403:13 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-lg'. [hypertask-style/no-forbidden-utilities]\n60dd0ed907^:src/components/AI_CHAT/ChatWindowFrame.tsx:94:7 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-[5px]'. [hypertask-style/no-forbidden-utilities]\n6423aae593^:src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx:65:7 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-[5px]'. [hypertask-style/no-forbidden-utilities]\n6423aae593^:src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx:67:12 Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of 'rounded-[5px]'. [hypertask-style/no-forbidden-utilities]\n5/5 parent versions flagged; allowance=0; snapshots=/tmp/htpr-9611-proof-BA0L3M\na51d88c970: rounded-t-lg is flagged, but the corrected var(--radius-chat-window) override is allowed by the requested token exemption.\n6423aae593: both rounded-[5px] skeleton classes are flagged; SCSS declarations are outside this JSX utility rule.\n```\nNo parent snapshot is missed. Coverage limits: `a51d88c970` flags an unrelated `rounded-t-lg`, not the corrected theme-token override, which the requested token exemption allows. `6423aae593` flags its two skeleton utilities, but SCSS declarations are outside this JSX rule.\nWorker has no board login; the orchestrator must post the ticket update. Auto-merge stays off; do not merge.\n\n\nAuthor-Model: codex\n",
+    "authorLogin": "hypertask-runners[bot]",
+    "commits": [
+      {
+        "sha": "8dfeb7bd48ab5269af66863f8c41432d9a373846",
+        "author": {
+          "login": "codex"
+        },
+        "committer": {
+          "login": "codex"
+        },
+        "parents": [
+          {
+            "sha": "4809d5d15a3d5ca1cfc53c833eea52de2fb5cbff"
+          }
+        ],
+        "commit": {
+          "message": "HTPR-9611 [INFRA] Block unapproved arbitrary corner radii\n\nAdd per-file radius allowances, actionable lint errors, regression coverage and a reproducible historical proof.\n\nCo-Authored-By: OpenAI <noreply@openai.com>",
+          "verification": {
+            "verified": false,
+            "reason": "unsigned"
+          }
+        }
+      },
+      {
+        "sha": "3b0f785bb5dabe6ec9b8d3e8e66928518ec19e33",
+        "author": null,
+        "committer": null,
+        "parents": [
+          {
+            "sha": "8dfeb7bd48ab5269af66863f8c41432d9a373846"
+          }
+        ],
+        "commit": {
+          "message": "HTPR-9611 re-evaluate after Author-Model line was added to the PR body",
+          "verification": {
+            "verified": false,
+            "reason": "unsigned"
+          }
+        }
+      },
+      {
+        "sha": "ad0faa7d9e6608eb18c2c515f41d120c0b78733b",
+        "author": {
+          "login": "hypertask-runners[bot]"
+        },
+        "committer": {
+          "login": "web-flow"
+        },
+        "parents": [
+          {
+            "sha": "3b0f785bb5dabe6ec9b8d3e8e66928518ec19e33"
+          },
+          {
+            "sha": "a1ffa33f6ad12e0b0f1d93bcf5ac34d6ce68b270"
+          }
+        ],
+        "commit": {
+          "message": "Merge branch 'production' into mp/htpr-9611-radius-lint",
+          "verification": {
+            "verified": true,
+            "reason": "valid"
+          }
+        }
+      },
+      {
+        "sha": "da0c22da4485b5ec1e10c1f827f6bd1f60894db2",
+        "author": {
+          "login": "hypertask-runners[bot]"
+        },
+        "committer": {
+          "login": "web-flow"
+        },
+        "parents": [
+          {
+            "sha": "ad0faa7d9e6608eb18c2c515f41d120c0b78733b"
+          },
+          {
+            "sha": "dffaee52033d1ec52107d34e132663df7b2ec439"
+          }
+        ],
+        "commit": {
+          "message": "Merge branch 'production' into mp/htpr-9611-radius-lint",
+          "verification": {
+            "verified": true,
+            "reason": "valid"
+          }
+        }
+      }
+    ],
+    "files": [
+      "eslint-local-rules/radius-baseline.json",
+      "eslint-local-rules/style-guide-suppressions.json",
+      "eslint-local-rules/style-guide.mjs",
+      "scripts/generate-radius-baseline.mjs",
+      "scripts/prove-radius-rule.mjs",
+      "tests/style-guide-eslint-rules.test.cjs"
+    ],
+    "author": "codex",
+    "botLogin": ""
+  },
+  "3829": {
+    "body": "Bumps [engine.io](https://github.com/socketio/socket.io) from 6.6.9 to 6.6.13.\n<details>\n<summary>Release notes</summary>\n<p><em>Sourced from <a href=\"https://github.com/socketio/socket.io/releases\">engine.io's releases</a>.</em></p>\n<blockquote>\n<h2>engine.io@6.6.13</h2>\n<p>The <code>ws</code> dependency was bumped to <code>^8.23.0</code> following <a href=\"https://github.com/websockets/ws/security/advisories/GHSA-37g9-w4hg-h9qr\">GHSA-37g9-w4hg-h9qr</a>.</p>\n<p>Note: the dependency range was updated from <code>~8.21.0</code> (only allowing patch-level updates) to <code>^8.23.0</code> (allowing compatible minor and patch updates) to include any future security fix.</p>\n<h3>Bug Fixes</h3>\n<ul>\n<li>add timeout for polling request bodies (<a href=\"https://github.com/socketio/socket.io/commit/9adc438d53231e544dc2f0007456bd1910f468c2\">9adc438</a>)</li>\n<li>bound polling request chunk buffering (<a href=\"https://github.com/socketio/socket.io/commit/f0df289212e6ff138723933e33db891796f4d3d1\">f0df289</a>)</li>\n</ul>\n<h3>Dependencies</h3>\n<ul>\n<li><a href=\"https://github.com/websockets/ws/releases/tag/8.23.0\"><code>ws@^8.23.0</code></a> (<a href=\"https://github.com/websockets/ws/compare/8.21.0...8.23.0\">diff</a>)</li>\n</ul>\n<h2>engine.io@6.6.12</h2>\n<h3>Bug Fixes</h3>\n<ul>\n<li>catch errors when destroying invalid upgrades (<a href=\"https://github.com/socketio/socket.io/commit/f8e8746492f4118c7ef6a40e51f9c26fdc3ecc31\">f8e8746</a>)</li>\n<li>catch middleware errors (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5564\">#5564</a>) (<a href=\"https://github.com/socketio/socket.io/commit/f2fb365e4fdab950106794462ce64d5eb5960dc9\">f2fb365</a>)</li>\n<li>expose EventEmitter interface on WebSocket upgrade response (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5526\">#5526</a>) (<a href=\"https://github.com/socketio/socket.io/commit/a65c0f0908e0d68b60815d86066e0a926adbd94e\">a65c0f0</a>)</li>\n<li>preserve middleware responses after failures (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5564\">#5564</a>) (<a href=\"https://github.com/socketio/socket.io/commit/b2be65d6583407e35fc06d9c4bc1464fc66d80d6\">b2be65d</a>)</li>\n<li><strong>uws:</strong> add uServer to ESM module wrapper (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5331\">#5331</a>) (<a href=\"https://github.com/socketio/socket.io/commit/87b4b43f9b0b6d2a9cabbcafb871e130928981c0\">87b4b43</a>)</li>\n<li><strong>uws:</strong> do not access the uWS request after an async middleware (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5579\">#5579</a>) (<a href=\"https://github.com/socketio/socket.io/commit/94a9bcdbdf7117bff7ce561c2879252814cc497b\">94a9bcd</a>)</li>\n<li><strong>uws:</strong> fix ArrayBuffer detached error with uWebSockets.js (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5331\">#5331</a>) (<a href=\"https://github.com/socketio/socket.io/commit/91b5f198dff46df20986a59a05acd878e3d615f8\">91b5f19</a>)</li>\n<li><strong>uws:</strong> improve the uWebSockets.js response wrapper (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5564\">#5564</a>) (<a href=\"https://github.com/socketio/socket.io/commit/685d14bec47ad54e51deb9239bb1a49407068750\">685d14b</a>)</li>\n</ul>\n<h3>New Contributors</h3>\n<ul>\n<li><a href=\"https://github.com/ninglinLiu\"><code>@\u200bninglinLiu</code></a> made their first contribution in <a href=\"https://redirect.github.com/socketio/socket.io/pull/5594\">socketio/socket.io#5594</a></li>\n<li><a href=\"https://github.com/Yahiro025\"><code>@\u200bYahiro025</code></a> made their first contribution in <a href=\"https://redirect.github.com/socketio/socket.io/pull/5564\">socketio/socket.io#5564</a></li>\n<li><a href=\"https://github.com/ruochenjia\"><code>@\u200bruochenjia</code></a> made their first contribution in <a href=\"https://redirect.github.com/socketio/socket.io/pull/5331\">socketio/socket.io#5331</a></li>\n<li><a href=\"https://github.com/b84330808\"><code>@\u200bb84330808</code></a> made their first contribution in <a href=\"https://redirect.github.com/socketio/socket.io/pull/5579\">socketio/socket.io#5579</a></li>\n<li><a href=\"https://github.com/nabsei\"><code>@\u200bnabsei</code></a> made their first contribution in <a href=\"https://redirect.github.com/socketio/socket.io/pull/5526\">socketio/socket.io#5526</a></li>\n</ul>\n<p>Thanks a lot to them!</p>\n<h3>Dependencies</h3>\n<ul>\n<li><a href=\"https://github.com/websockets/ws/releases/tag/8.21.0\"><code>ws@~8.21.0</code></a> (no change)</li>\n</ul>\n<h2>engine.io@6.6.11</h2>\n<h3>Bug Fixes</h3>\n<ul>\n<li>refresh ping timeout on incoming packets (<a href=\"https://github.com/socketio/socket.io/commit/da008a514ded71e3058a964c831c69abe417b2f5\">da008a5</a>)</li>\n</ul>\n<h3>Dependencies</h3>\n<ul>\n<li><a href=\"https://github.com/websockets/ws/releases/tag/8.21.0\"><code>ws@~8.21.0</code></a> (no change)</li>\n</ul>\n<!-- raw HTML omitted -->\n</blockquote>\n<p>... (truncated)</p>\n</details>\n<details>\n<summary>Commits</summary>\n<ul>\n<li><a href=\"https://github.com/socketio/socket.io/commit/563ba94b2a215fdee71e47e80be1290342dba0e3\"><code>563ba94</code></a> chore(release): engine.io@6.6.13</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/9adc438d53231e544dc2f0007456bd1910f468c2\"><code>9adc438</code></a> fix(eio): add timeout for polling request bodies</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/f0df289212e6ff138723933e33db891796f4d3d1\"><code>f0df289</code></a> fix(eio): bound polling request chunk buffering</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/0e247793ee17f8461a5c542c4f904a628150d30b\"><code>0e24779</code></a> refactor(eio): pass transport options through constructors</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/19a6932ebcfa7932c92f76975c283b8723fbc0a3\"><code>19a6932</code></a> chore: bump ws to version 8.23.0</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/867e75255e9fcc3b6a4626aeef80bb9c50ed17ae\"><code>867e752</code></a> docs(protocol): add missing awaits in v3 test suite</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/cd77096e057d51a6cd60fb22b73a33760e5bd22e\"><code>cd77096</code></a> chore(release): engine.io@6.6.12</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/7488dcd175811a0d4510226856c5cc19879bf64a\"><code>7488dcd</code></a> test(eio): clean up resources after tests</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/94a9bcdbdf7117bff7ce561c2879252814cc497b\"><code>94a9bcd</code></a> fix(eio): do not access the uWS request after an async middleware (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5579\">#5579</a>)</li>\n<li><a href=\"https://github.com/socketio/socket.io/commit/87b4b43f9b0b6d2a9cabbcafb871e130928981c0\"><code>87b4b43</code></a> fix(eio): add uServer to ESM module wrapper (<a href=\"https://redirect.github.com/socketio/socket.io/issues/5331\">#5331</a>)</li>\n<li>Additional commits viewable in <a href=\"https://github.com/socketio/socket.io/compare/engine.io@6.6.9...engine.io@6.6.13\">compare view</a></li>\n</ul>\n</details>\n<br />\n\n\n[![Dependabot compatibility score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=engine.io&package-manager=npm_and_yarn&previous-version=6.6.9&new-version=6.6.13)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)\n\nDependabot will resolve any conflicts with this PR as long as you don't alter it yourself. You can also trigger a rebase manually by commenting `@dependabot rebase`.\n\n[//]: # (dependabot-automerge-start)\n[//]: # (dependabot-automerge-end)\n\n---\n\n<details>\n<summary>Dependabot commands and options</summary>\n<br />\n\nYou can trigger Dependabot actions by commenting on this PR:\n- `@dependabot rebase` will rebase this PR\n- `@dependabot recreate` will recreate this PR, overwriting any edits that have been made to it\n- `@dependabot show <dependency name> ignore conditions` will show all of the ignore conditions of the specified dependency\n- `@dependabot ignore this major version` will close this PR and stop Dependabot creating any more for this major version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this minor version` will close this PR and stop Dependabot creating any more for this minor version (unless you reopen the PR or upgrade to it yourself)\n- `@dependabot ignore this dependency` will close this PR and stop Dependabot creating any more for this dependency (unless you reopen the PR or upgrade to it yourself)\nYou can disable automated security fix PRs for this repo from the [Security Alerts page](https://github.com/hypertask-ai/hypertask/network/alerts).\n\n</details>",
+    "authorLogin": "dependabot[bot]",
+    "commits": [
+      {
+        "sha": "28b9a87f4e963a49f9d96afbe7fe9043f7936316",
+        "author": {
+          "login": "dependabot[bot]"
+        },
+        "committer": {
+          "login": "web-flow"
+        },
+        "parents": [
+          {
+            "sha": "8060182010bb12013a83af04d93cf4b4f338630a"
+          }
+        ],
+        "commit": {
+          "message": "Bump engine.io from 6.6.9 to 6.6.13 in /e2e/midscene\n\nBumps [engine.io](https://github.com/socketio/socket.io) from 6.6.9 to 6.6.13.\n- [Release notes](https://github.com/socketio/socket.io/releases)\n- [Changelog](https://github.com/socketio/socket.io/blob/main/CHANGELOG.md)\n- [Commits](https://github.com/socketio/socket.io/compare/engine.io@6.6.9...engine.io@6.6.13)\n\n---\nupdated-dependencies:\n- dependency-name: engine.io\n  dependency-version: 6.6.13\n  dependency-type: indirect\n...\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+          "verification": {
+            "verified": true,
+            "reason": "valid"
+          }
+        }
+      }
+    ],
+    "files": [
+      "e2e/midscene/package-lock.json"
+    ],
+    "author": "",
+    "botLogin": "dependabot[bot]"
+  }
+}

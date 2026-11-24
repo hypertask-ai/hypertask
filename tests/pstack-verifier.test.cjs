@@ -92,6 +92,74 @@ for (const { name, body = "", messages = [], owners = [], prAuthor = RUNNER, aut
   });
 }
 
+const authorPulls = require("./fixtures/pstack-verifier-author-prs.json");
+
+for (const [number, pull] of Object.entries(authorPulls)) {
+  test(`author resolution replays PR #${number} through the no-drive judge`, async () => {
+    const { resolveCommand, planFromRequest, judgeAskCommand, decide, statusDescription } = await load();
+    const fs = require("node:fs");
+    const os = require("node:os");
+    const path = require("node:path");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), `pv-pr-${number}-`));
+    const output = path.join(dir, "output");
+    const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
+    const sha = pull.commits.at(-1).sha;
+    const bound = { sha, run: "10", attempt: "1" };
+    const item = { number: Number(number), state: "open", draft: false, user: { login: pull.authorLogin }, body: pull.body, base: { ref: "production", sha: "b".repeat(40) }, head: { sha, repo: { full_name: "acme/app" } }, commits: pull.commits.length };
+    Object.assign(process.env, { GITHUB_REPOSITORY: "acme/app", GITHUB_RUN_ID: bound.run, GITHUB_RUN_ATTEMPT: bound.attempt, WORK: dir, GITHUB_OUTPUT: output });
+    try {
+      await resolveCommand({
+        event: { workflow_run: { conclusion: "success", head_sha: sha, pull_requests: [{ number: item.number }] } },
+        gh: (args) => {
+          const url = args.join(" ");
+          if (url.includes(`/pulls/${number}/commits`)) return JSON.stringify([pull.commits]);
+          if (url.includes(`/pulls/${number}/files`)) return pull.files.map((filename) => JSON.stringify({ filename })).join("\n");
+          if (url.includes("vnd.github.diff")) return "";
+          if (url.includes(`/pulls/${number}`)) return JSON.stringify(item);
+          if (url.includes(`/commits/${sha}`)) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+          if (url.includes(`/issues/${number}/comments`)) return "[]";
+          throw new Error(url);
+        },
+      });
+      assert.match(fs.readFileSync(output, "utf8"), /stop=false/);
+      const request = JSON.parse(fs.readFileSync(path.join(dir, "request/request.json"), "utf8"));
+      assert.equal(request.author, pull.author);
+      assert.equal(request.botLogin ?? "", pull.botLogin);
+      const plan = await planFromRequest(request, { binding: bound, ask: () => { throw new Error("no model call expected"); } });
+      assert.equal(plan.authorFamily, pull.botLogin || pull.author);
+      fs.mkdirSync(path.join(dir, "plan"));
+      fs.writeFileSync(path.join(dir, "plan/plan.json"), JSON.stringify(plan));
+      assert.equal(await judgeAskCommand({ work: dir, binding: bound }), null);
+      const verdict = decide({ plan, evidence: null, binding: bound, checksPassed: true });
+      assert.equal(verdict.verdict, "PASS+NOTES");
+      assert.equal(statusDescription({ ...verdict, authorFamily: plan.authorFamily, verifierModel: plan.verifierModel }), `PASS+NOTES: author ${plan.authorFamily}, verifier ${plan.verifierModel || "none"}`);
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const family of ["deepseek", "mystery"]) {
+  test(`a PR #3806 update-branch merge cannot veto the body with ${family} trailers`, async () => {
+    const { authorFamily } = await load();
+    const pull = authorPulls[3806];
+    const commits = structuredClone(pull.commits);
+    const merge = commits.at(-1);
+    assert.equal(merge.author.login, RUNNER);
+    assert.equal(merge.parents.length, 2);
+    merge.commit.message += `\n\nAuthor-Model: ${family}`;
+    assert.equal(authorFamily(pull.body, commits, pull.authorLogin), "codex");
+    merge.parents.pop();
+    assert.equal(authorFamily(pull.body, commits, pull.authorLogin), "");
+    assert.equal(authorFamily(pull.body, null, pull.authorLogin), "");
+    assert.equal(authorFamily(`Author-Model: ${family}`, pull.commits, pull.authorLogin), "");
+  });
+}
+
 test("an unreadable commit list is unknown evidence, not an empty one", async () => {
   const { pullCommits, authorFamily } = await load();
   assert.equal(pullCommits(() => { throw new Error("HTTP 500"); }, "acme/app", 7), null);
