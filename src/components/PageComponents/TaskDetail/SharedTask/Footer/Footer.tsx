@@ -4,6 +4,8 @@ import { IUser } from "@/models/model";
 import { TaskShareType } from "@prisma/client";
 import { useRouter } from "next/navigation";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9546-share-footer-layout";
 
 export const GUEST_INVITE_MESSAGE =
   "Part of the team? You're almost there to begin working in Hypertask";
@@ -24,10 +26,11 @@ export const GuestInviteBar = ({
   onAction: () => void;
 }) => {
   const isMobile = useContext(MobileViewContext);
+  const stacked = useFlag(HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG) && isMobile;
   return (
     <div
       className={
-        isMobile
+        stacked
           ? "flex w-full max-w-md flex-col items-stretch gap-2 px-4 text-center"
           : "flex items-center gap-2"
       }
@@ -49,10 +52,11 @@ const SharedTaskPageFooter = ({
 }: Props) => {
   const router = useRouter();
   const isMobile = useContext(MobileViewContext);
+  const stacked = useFlag(HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG) && isMobile;
   return (
     <>
       {children}
-      <div aria-hidden className={isMobile ? "h-32 shrink-0" : "h-14 shrink-0"} />
+      <div aria-hidden className={stacked ? "h-32 shrink-0" : "h-14 shrink-0"} />
       <div className="relative" translate="no">
         <div
           style={{
