@@ -24,9 +24,9 @@ function bindingTarget(properties) {
   };
 }
 
-async function mountBoardRealtime(t, { realtime = false, subscribed = false, seeded = false } = {}) {
+async function mountBoardRealtime(t, { realtime = false, subscribed = false, seeded = false, url = "https://app.hypertask.ai/project?id=15", intervalMs = 10_000 } = {}) {
   const dom = new JSDOM("<div id='root'></div>", {
-    url: "https://app.hypertask.ai/project?id=15",
+    url,
     pretendToBeVisual: true,
   });
   const globals = ["window", "document", "navigator", "setInterval", "clearInterval", "IS_REACT_ACT_ENVIRONMENT"];
@@ -38,7 +38,7 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
   const timers = new Map();
   let timerStarts = 0;
   global.setInterval = (callback, delay) => {
-    assert.equal(delay, 10_000);
+    assert.equal(delay, intervalMs);
     const id = ++timerStarts;
     timers.set(id, callback);
     return id;
@@ -145,6 +145,16 @@ test("fallback startup reuses the initial board load and polls only on the inter
   assert.equal(board.scopedReconciles.length, 1, "one interval means one boardTasks reconcile");
   assert.equal(board.fullReconciles.length, 0, "fallback must not refetch getAll");
   assert.equal(board.planningRefetches.length, 1);
+});
+
+test("a local copy polls the fallback every two seconds", async (t) => {
+  const board = await mountBoardRealtime(t, {
+    url: "http://127.0.0.1:3100/project?id=38",
+    intervalMs: 2_000,
+  });
+  assert.equal(board.timers.size, 1);
+  await board.tick();
+  assert.equal(board.scopedReconciles.length, 1);
 });
 
 test("rerendering preserves the subscription and every real event uses scoped reconciliation", async (t) => {

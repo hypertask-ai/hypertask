@@ -52,6 +52,10 @@ let removeSubscriptionWatchdog: (() => void) | null = null;
 let removeAgentMarkerTrap: (() => void) | null = null;
 let connectionGeneration = 0;
 
+function localStackRealtime(): boolean {
+  return process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME === "1";
+}
+
 function updateRealtimePreference(
   storage: RealtimeBrowserContext["sessionStorage"],
   disabled: boolean,
@@ -77,7 +81,14 @@ export function realtimeDisabledForBrowser(
   const localSmokeOrigin =
     browser.location.hostname === "127.0.0.1" ||
     browser.location.hostname === "localhost";
-  if (localSmokePreference === "on" && localSmokeOrigin) {
+  if (localSmokePreference === "off") {
+    updateRealtimePreference(browser.sessionStorage, true);
+    return true;
+  }
+  if (
+    localSmokeOrigin &&
+    (localSmokePreference === "on" || localStackRealtime())
+  ) {
     updateRealtimePreference(browser.sessionStorage, false);
     return false;
   }
@@ -92,14 +103,7 @@ export function realtimeDisabledForBrowser(
     return true;
   }
 
-  const preference = new URLSearchParams(browser.location.search).get(
-    "realtime",
-  );
-  if (preference === "off") {
-    updateRealtimePreference(browser.sessionStorage, true);
-    return true;
-  }
-  if (preference === "on") {
+  if (localSmokePreference === "on") {
     updateRealtimePreference(browser.sessionStorage, false);
     return false;
   }

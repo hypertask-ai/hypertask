@@ -118,6 +118,28 @@ test("localhost browser smoke can opt an automated browser into realtime", () =>
   assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
 });
 
+test("a local verify build takes realtime in an automated browser with no query flag", () => {
+  process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
+  const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
+    "src/lib/realtime/client.ts",
+  );
+  delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+
+  const local = fakeBrowser("", true, "127.0.0.1");
+  assert.equal(realtimeDisabledForBrowser(local.browser), false);
+  assert.equal(local.values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+
+  const localhost = fakeBrowser("", true, "localhost");
+  assert.equal(realtimeDisabledForBrowser(localhost.browser), false);
+
+  const off = fakeBrowser("?realtime=off", true, "127.0.0.1");
+  assert.equal(realtimeDisabledForBrowser(off.browser), true);
+
+  const production = fakeBrowser("", true, "app.hypertask.ai");
+  assert.equal(realtimeDisabledForBrowser(production.browser), true);
+  assert.equal(production.values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+});
+
 test("headless agent-browser contexts disable realtime without webdriver", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
@@ -126,6 +148,12 @@ test("headless agent-browser contexts disable realtime without webdriver", () =>
 
   assert.equal(realtimeDisabledForBrowser(browser), true);
   assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+});
+
+test("a production build keeps realtime off for automated browsers on loopback", () => {
+  const { realtimeDisabledForBrowser } = loadTs("src/lib/realtime/client.ts");
+  const { browser } = fakeBrowser("", true, "127.0.0.1");
+  assert.equal(realtimeDisabledForBrowser(browser), true);
 });
 
 test("managed Multiprompt agent panes always disable realtime", () => {

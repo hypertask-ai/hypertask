@@ -88,7 +88,9 @@ echo $! > <run-folder>/dev.pid
 
 Build and serve, never `next dev`: in dev the inline Flight payload never resolves, no page
 hydrates, and the board sits on "Loading board..." forever. Real live board updates also need
-`REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up` starts. Write
+`REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up` starts, plus
+`NEXT_PUBLIC_HT_LOCAL_REALTIME=1` so a headless QA browser on loopback takes the realtime path
+instead of the ten-second reconcile poll. Write
 only `dev.log`. `Ready` in it is not ready: the first `/login` still compiles. Ready means
 `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.
 `CI=1` and `__NEXT_AGENT_UPGRADE=security` stop Next's agent upgrade nudge from exiting
