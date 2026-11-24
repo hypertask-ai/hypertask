@@ -505,14 +505,14 @@ test("a failed destination write rolls back its number alias", async () => {
   assert.equal(aliases.size, 0);
 });
 
-test("legacy tasks without a ticket number still preserve their old web identity", async () => {
+test("legacy tasks without a ticket number take their source board key on a move", async () => {
   const { updateTaskSingle, aliases } = loadUpdateController(OWNER_PROJECT, MEMBER_PROJECT, { initialTask: { ticketNumber: null } });
   const result = await updateTaskSingle(
     { id: TASK_ID, projectId: MEMBER_PROJECT, uniqueIndex: 2, ticketNumber: "M-2" },
     { id: USER_ID }, null, { allowProjectChange: true },
   );
   assert.equal(result.status, 200);
-  assert.equal([...aliases.values()][0].ticketNumber, null);
+  assert.equal([...aliases.values()][0].ticketNumber, "S-1");
 });
 
 test("a move cannot replace its identity when alias persistence fails", async () => {
