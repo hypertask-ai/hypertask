@@ -20,9 +20,9 @@
 
 ## How to get to it (user POV)
 
-- Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`).
-- Click Manage subscription to reach Plans (`/settings/plans`); `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
-- Billing > Payment > Update opens the Stripe customer portal. The card is titled **Payment**
+- Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`). A read-only check of this page is: open it, read the `Billing` heading and the `Plan` row, and take a shot. The heading and the `Plan` row show at 1440x900 and at 390x844 alike.
+- Plans is its own sidebar entry at `/settings/plans`, not the Manage subscription row. On phone the settings sidebar is hidden, so open `/settings/plans` by URL. `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
+- `Manage` on the Manage subscription row and Update under Billing > Payment both open the Stripe customer portal and leave the app, so a read-only check presses neither. The portal card is titled **Payment**
   and its row shows the saved card (`src/components/Modals/Settings/BillingSection.tsx:401-413`).
 
 ### Test teams for every plan
