@@ -1,6 +1,6 @@
 "use client";
 
-import { AgentBoardAccessDecision } from "../NotificationRow";
+import NotificationRow, { AgentBoardAccessDecision , Seen } from "../NotificationRow";
 
 import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
@@ -38,7 +38,6 @@ import {
 import { markAsUnseen, markNotificationSeen } from "@/utils/api/Inbox";
 import Link from "next/link";
 import { NotificationProvider } from "@/lib/contexts/NotificationContext";
-import NotificationRow, { Seen } from "../NotificationRow";
 import dynamic from "next/dynamic";
 const RemindMeComponent = dynamic(() => import("@/components/Modals/RemindMe/RemindMeComponent"));
 import SwipeableNotificationRow from "./SwipeableNotificationRow";
@@ -521,7 +520,9 @@ const InboxSplit = ({
         return;
       }
     }
+    const keyTarget = e.target instanceof Element ? e.target : null;
     if (
+      keyTarget?.closest("input, textarea, select, [contenteditable]") ||
       returnIfModalOrInputActive() ||
       showCommands.show ||
       document?.activeElement?.role === "dialog" ||

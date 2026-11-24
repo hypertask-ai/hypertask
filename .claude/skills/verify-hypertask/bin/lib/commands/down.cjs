@@ -10,8 +10,9 @@ Usage:
   --dry-run   Print what would be killed and removed, change nothing.
   --keep-db   Keep the Postgres container and volume, for a faster next run.
 
-Kills only the pid recorded in dev.pid, then removes the hypertask-verify-db
-container and volume. Never kills by process name or another session's server.
+Kills only the pid recorded in dev.pid, then removes hypertask-verify-redis,
+hypertask-verify-soketi, and unless --keep-db the Postgres container and volume.
+Never kills by process name or another session's server.
 
 Example:
   ht-verify down --keep-db`;
@@ -34,8 +35,11 @@ module.exports = {
       fail(`refusing to kill a non-positive pid from dev.pid: ${pidFile.pid}`, "Remove the file by hand, then ht-verify up.", "refused", 2);
     }
     const container = env.dbContainer || "hypertask-verify-db";
+    const redis = env.redisContainer || "hypertask-verify-redis";
+    const soketi = env.soketiContainer || "hypertask-verify-soketi";
     const steps = [];
     if (pid) steps.push(`kill ${pid}`);
+    steps.push(`docker rm -f ${redis}`, `docker rm -f ${soketi}`);
     if (!values["keep-db"]) steps.push(`docker rm -f ${container}`, `docker volume rm ${container}`);
     if (values["dry-run"]) return { target: "local", data: dryRun("down", steps, { keptDatabase: Boolean(values["keep-db"]) }).data };
     const stopped = [];
@@ -58,6 +62,8 @@ module.exports = {
         fail(`could not remove ${path.join(runDir(), "dev.pid")}`, "Remove it by hand so the next up does not reuse a dead pid.", "unreadable", 2);
       }
     }
+    run("docker", ["rm", "-f", redis]);
+    run("docker", ["rm", "-f", soketi]);
     if (!values["keep-db"]) {
       const results = [run("docker", ["rm", "-f", container]), run("docker", ["volume", "rm", container])];
       const failed = results.filter((result) => result.status !== 0 && !/no such (container|volume)/i.test(result.stderr));
