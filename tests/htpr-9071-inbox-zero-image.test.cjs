@@ -2,63 +2,15 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const React = require("react");
-const { renderToString } = require("react-dom/server");
-const ts = require("typescript");
 const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-9071-inbox-zero-image";
+const inbox = fs.readFileSync(path.join(root, "src/app/inbox/Inbox.tsx"), "utf8");
+const { hidesInboxZeroSplitTabs } = loadModule("src/lib/inboxSplitTabs.ts");
 
-function loadSplitTabs(hideOnInboxZero) {
-  const relative = "src/app/inbox/Inbox.tsx";
-  const source = fs.readFileSync(path.join(root, relative), "utf8");
-  const tree = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  let node;
-  function visit(statement) {
-    if (statement.declarationList?.declarations.some((item) => item.name.text === "SplitTabsUnlessInboxZero")) {
-      node = statement;
-    }
-    if (!node) ts.forEachChild(statement, visit);
-  }
-  visit(tree);
-  assert.ok(node, "Missing production declaration SplitTabsUnlessInboxZero");
-  const js = ts.transpileModule(`${node.getText(tree)}\nexports.component = SplitTabsUnlessInboxZero;`, {
-    compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
-  }).outputText;
-  const exports = {};
-  const dependencies = {
-    useFlag: (key) => {
-      assert.equal(key, flagKey);
-      return hideOnInboxZero;
-    },
-    HTPR_9071_INBOX_ZERO_IMAGE_FLAG: flagKey,
-  };
-  new Function("require", "exports", "useFlag", "HTPR_9071_INBOX_ZERO_IMAGE_FLAG", js)(
-    (name) => {
-      if (name === "react/jsx-runtime") return require(name);
-      throw new Error(`Unexpected dependency ${name}`);
-    },
-    exports,
-    dependencies.useFlag,
-    dependencies.HTPR_9071_INBOX_ZERO_IMAGE_FLAG,
-  );
-  return exports.component;
-}
-
-function tabs(hideOnInboxZero, isInboxZero, splitLengths = [0], unsavedCommentDrafts = 0) {
-  const SplitTabsUnlessInboxZero = loadSplitTabs(hideOnInboxZero);
-  return renderToString(React.createElement(
-    SplitTabsUnlessInboxZero,
-    { isInboxZero, splitLengths, unsavedCommentDrafts },
-    React.createElement("div", { "data-testid": "inbox-split-titles" }, "All"),
-  ));
-}
-
-function showsAll(html) {
-  assert.match(html, /All/);
-  assert.match(html, /data-testid="inbox-split-titles"/);
-}
+const hidden = (overrides = {}) =>
+  hidesInboxZeroSplitTabs({ enabled: true, isInboxZero: true, splitLengths: [0, 0], unsavedCommentDrafts: 0, ...overrides });
 
 test("the flag is a bugfix that starts on for everyone", () => {
   const { default: flag, HTPR_9071_INBOX_ZERO_IMAGE_FLAG: exported } = loadModule(
@@ -71,21 +23,27 @@ test("the flag is a bugfix that starts on for everyone", () => {
   assert.equal(flag.releaseRisk.risk, "small");
 });
 
-test("an empty inbox drops the split tabs, and an inbox with items keeps them", () => {
-  const empty = tabs(true, true, [0], 0);
-  assert.equal(empty.includes("All"), false);
-  assert.equal(empty.includes("inbox-split-titles"), false);
-
-  showsAll(tabs(true, false, [4], 0));
-  showsAll(tabs(false, true, [0], 0));
-  showsAll(tabs(false, false, [4], 0));
+test("the inbox page gates the split tabs on the flag and the gate", () => {
+  assert.match(inbox, /useFlag\(HTPR_9071_INBOX_ZERO_IMAGE_FLAG\)/);
+  assert.match(inbox, /hidesInboxZeroSplitTabs\(\{ enabled: hideInboxZeroTabs, isInboxZero, splitLengths, unsavedCommentDrafts \}\)/);
+  assert.equal((inbox.match(/<SplitTabsUnlessInboxZero/g) ?? []).length, 3);
+  assert.equal((inbox.match(/<\/SplitTabsUnlessInboxZero>/g) ?? []).length, 3);
 });
 
-test("an empty split keeps the tabs when another split or a draft still has something", () => {
-  showsAll(tabs(true, true, [0, 2], 0));
-  showsAll(tabs(true, true, [0, 0], 1));
-  showsAll(tabs(true, true, [], 0));
+test("a fully empty inbox drops the split tabs", () => {
+  assert.equal(hidden(), true);
+  assert.equal(hidden({ splitLengths: [0] }), true);
+  assert.equal(hidden({ splitLengths: [0, 0, 0, 0] }), true);
+});
 
-  const everySplitEmpty = tabs(true, true, [0, 0], 0);
-  assert.equal(everySplitEmpty.includes("All"), false);
+test("tabs stay when a split still has something, a draft remains, or the inbox is not empty", () => {
+  assert.equal(hidden({ splitLengths: [0, 2] }), false);
+  assert.equal(hidden({ unsavedCommentDrafts: 1 }), false);
+  assert.equal(hidden({ isInboxZero: false }), false);
+  assert.equal(hidden({ splitLengths: [4, 0] }), false);
+});
+
+test("tabs stay with the flag off, and stay before the split lengths are known", () => {
+  assert.equal(hidden({ enabled: false }), false);
+  assert.equal(hidden({ splitLengths: [] }), false);
 });

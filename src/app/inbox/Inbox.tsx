@@ -10,6 +10,7 @@ import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-886
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
 import { HTPR_9071_INBOX_ZERO_IMAGE_FLAG } from "@/lib/flags/definitions/htpr-9071-inbox-zero-image";
+import { hidesInboxZeroSplitTabs } from "@/lib/inboxSplitTabs";
 import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
 
 import {
@@ -1098,10 +1099,7 @@ const SplitTabsUnlessInboxZero = ({
   children?: ReactNode;
 }) => {
   const hideInboxZeroTabs = useFlag(HTPR_9071_INBOX_ZERO_IMAGE_FLAG);
-  const wholeInboxEmpty = splitLengths.length > 0
-    && splitLengths.every((length) => length === 0)
-    && unsavedCommentDrafts === 0;
-  if (hideInboxZeroTabs && isInboxZero && wholeInboxEmpty) return null;
+  if (hidesInboxZeroSplitTabs({ enabled: hideInboxZeroTabs, isInboxZero, splitLengths, unsavedCommentDrafts })) return null;
   return children;
 };
 
