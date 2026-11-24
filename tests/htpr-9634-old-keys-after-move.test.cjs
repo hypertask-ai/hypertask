@@ -84,5 +84,10 @@ test("fresh number after move, live-wins collision notice with access check, and
     [await run(db, {}, () => {}), queries.length, await run(db, { apply: true, mapping }, () => {}), await run(db, { mapping }, () => {}), gapsWithoutMapping([moved], [{ ...mapping[0], taskId: 9999 }]).length],
     [{ blanks: 1, moveGaps: 1, needsMapping: 1, candidates: 0, updated: 0, inserted: 0 }, 2, { blanks: 1, moveGaps: 1, needsMapping: 0, candidates: 1, updated: 1, inserted: 1 }, { blanks: 1, moveGaps: 1, needsMapping: 0, candidates: 1, updated: 0, inserted: 0 }, 1],
   );
-  assert.match((await import("../scripts/htpr-9634-backfill-move-aliases.mjs")).describeGap(moved), /task 5000 left board 2060 \(SOFT\).*never persisted.*--mapping/);
+  assert.match((await import("../scripts/htpr-9634-backfill-move-aliases.mjs")).describeGap(moved), /task 5000 left board 2060 \(SOFT\).*never persisted.*ticketNumber.*--mapping/);
+  const keyless = { ...mapping[0] };
+  delete keyless.ticketNumber;
+  assert.equal((await run(db, { apply: true, mapping: [keyless] }, () => {})).inserted, 1);
+  assert.deepEqual(queries.filter((q) => q.sql.includes("INSERT INTO")).at(-1).params, [2060, 3148, "SOFT-3148", 5000]);
+  await assert.rejects(run(db, { apply: true, mapping: [{ projectId: 2060, uniqueIndex: 3148, taskId: 4242 }] }, () => {}), /need a ticketNumber/);
 });

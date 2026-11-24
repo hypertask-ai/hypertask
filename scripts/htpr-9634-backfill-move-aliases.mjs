@@ -8,21 +8,31 @@ export function gapsWithoutMapping(moveGaps, mapping) {
   return moveGaps.filter((gap) => !mapping.some((m) => m.projectId === gap.fromProjectId && m.taskId === gap.taskId));
 }
 export function describeGap(gap) {
-  return `task ${gap.taskId} left board ${gap.fromProjectId} (${gap.fromPrefix}) and is now ${gap.currentTicketNumber ?? "untitled"}; its old unique index was never persisted, so add { projectId: ${gap.fromProjectId}, taskId: ${gap.taskId}, uniqueIndex: <old index> } to --mapping`;
+  return `task ${gap.taskId} left board ${gap.fromProjectId} (${gap.fromPrefix}) and is now ${gap.currentTicketNumber ?? "untitled"}; its old unique index was never persisted, so add { projectId: ${gap.fromProjectId}, taskId: ${gap.taskId}, uniqueIndex: <old index>, ticketNumber: "${gap.fromPrefix}-<old index>" } to --mapping`;
+}
+export function resolveMappedKey(entry, moveGaps) {
+  const gap = moveGaps.find((g) => g.fromProjectId === entry.projectId && g.taskId === entry.taskId);
+  if (!entry.ticketNumber && gap?.fromPrefix && Number.isSafeInteger(entry.uniqueIndex) && entry.uniqueIndex > 0) return `${gap.fromPrefix.toUpperCase()}-${entry.uniqueIndex}`;
+  return entry.ticketNumber ?? null;
+}
+export function mappedInserts(mapping, moveGaps) {
+  return mapping.map((entry) => ({ ...entry, ticketNumber: resolveMappedKey(entry, moveGaps) }));
 }
 export async function run(db, { apply = false, mapping = [] } = {}, log = console.log) {
   const blanks = (await db.query(BLANK_ALIAS_SQL)).rows, moveGaps = (await db.query(MOVE_ACTIVITY_GAPS_SQL)).rows;
-  const unmapped = gapsWithoutMapping(moveGaps, mapping);
-  log(`${blanks.length} blank aliases; ${moveGaps.length} move gaps; ${unmapped.length} gaps have no recorded key and need --mapping; ${mapping.length} mapped inserts ready`);
+  const unmapped = gapsWithoutMapping(moveGaps, mapping), inserts = mappedInserts(mapping, moveGaps);
+  const keyless = inserts.filter((entry) => !entry.ticketNumber);
+  log(`${blanks.length} blank aliases; ${moveGaps.length} move gaps; ${unmapped.length} gaps have no recorded key and need --mapping; ${inserts.length} mapped inserts ready`);
   for (const gap of unmapped) log(`needs mapping: ${describeGap(gap)}`);
-  if (!apply) { log("dry run; pass --apply to write"); return { blanks: blanks.length, moveGaps: moveGaps.length, needsMapping: unmapped.length, candidates: mapping.length, updated: 0, inserted: 0 }; }
+  if (keyless.length) throw new Error(`--mapping entries need a ticketNumber (or a uniqueIndex and a move gap on that board): ${keyless.map((entry) => `task ${entry.taskId} on board ${entry.projectId}`).join(", ")}`);
+  if (!apply) { log("dry run; pass --apply to write"); return { blanks: blanks.length, moveGaps: moveGaps.length, needsMapping: unmapped.length, candidates: inserts.length, updated: 0, inserted: 0 }; }
   await db.query("BEGIN");
   try {
     const updated = blanks.length ? (await db.query(FILL_BLANK_ALIAS_SQL)).rowCount ?? 0 : 0;
     let inserted = 0;
-    for (const r of mapping) inserted += (await db.query(INSERT_ALIAS_SQL, [r.projectId, r.uniqueIndex, r.ticketNumber, r.taskId])).rowCount ?? 0;
+    for (const r of inserts) inserted += (await db.query(INSERT_ALIAS_SQL, [r.projectId, r.uniqueIndex, r.ticketNumber, r.taskId])).rowCount ?? 0;
     await db.query("COMMIT");
-    return { blanks: blanks.length, moveGaps: moveGaps.length, needsMapping: unmapped.length, candidates: mapping.length, updated, inserted };
+    return { blanks: blanks.length, moveGaps: moveGaps.length, needsMapping: unmapped.length, candidates: inserts.length, updated, inserted };
   } catch (error) { await db.query("ROLLBACK"); throw error; }
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
