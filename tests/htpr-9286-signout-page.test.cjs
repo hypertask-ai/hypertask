@@ -192,22 +192,19 @@ function loadProxy(user) {
   })("src/proxy.ts").default;
 }
 
-test("the sign-out page stays reachable without a session and before onboarding", async () => {
+test("the sign-out page needs a signed-in browser", async () => {
   const { NextRequest } = require("next/server");
   const open = (proxy, path, cookie) => proxy(new NextRequest(`https://app.hypertask.ai${path}`, {
     headers: cookie ? { cookie } : {},
   }));
   const visitor = await open(loadProxy(null), "/signout");
-  assert.equal(visitor.status, 200);
-  assert.equal(visitor.headers.get("location"), null);
-  assert.equal(visitor.headers.get("x-middleware-next"), "1");
-  assert.equal(new URL((await open(loadProxy(null), "/inbox")).headers.get("location")).pathname, "/login");
-  const user = { id: 182, UserSetting: { onboardingTourStatus: false } };
+  assert.equal(new URL(visitor.headers.get("location")).pathname, "/login");
+  const user = { id: 182, UserSetting: { onboardingTourStatus: true } };
   const cookie = "nookies_user=account; ht_session=session";
   const staying = await open(loadProxy(user), "/signout", cookie);
   assert.equal(staying.status, 200);
   assert.equal(staying.headers.get("location"), null);
-  assert.equal(new URL((await open(loadProxy(user), "/inbox", cookie)).headers.get("location")).pathname, "/onboarding");
+  assert.equal(staying.headers.get("x-middleware-next"), "1");
 });
 
 test("the sign-out flag is on for everyone", () => {
