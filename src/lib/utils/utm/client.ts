@@ -1,48 +1,6 @@
-
 import { UTMParams } from "@/lib/types/utm";
 import { UTM_KEYS, UTM_COOKIE_NAMES } from "@/lib/constants/utm";
 import { getCookie, setCookie } from "./cookies";
-
-export async function fetchIPAddress(): Promise<string | null> {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-
-  try {
-    const response = await fetch('https://api.ipify.org?format=json', {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      return data.ip || null;
-    }
-  } catch (error) {
-    console.warn('Failed to fetch IP address from ipify:', error);
-    
-    try {
-      const fallbackResponse = await fetch('https://api.ipapi.com/api/check?access_key=free', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
-      
-      if (fallbackResponse.ok) {
-        const data = await fallbackResponse.json();
-        return data.ip || null;
-      }
-    } catch (fallbackError) {
-      console.warn('Failed to fetch IP address from fallback service:', fallbackError);
-    }
-  }
-
-  return null;
-}
-
 
 export function extractUTMFromURL(): UTMParams {
   if (typeof window === "undefined") {

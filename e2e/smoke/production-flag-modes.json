@@ -151,7 +151,6 @@
     "htpr-7547-search-lazy-closed": "EVERYONE",
     "htpr-7549-first-task-pointer": "EVERYONE",
     "htpr-7550-connect-overlay": "EVERYONE",
-    "htpr-7551-start-plan-checkout": "EVERYONE",
     "htpr-7552-agent-code-signin": "OWNER_AND_QA",
     "htpr-7553-email-straight-board": "OWNER_AND_QA",
     "htpr-7555-persist-size-once": "EVERYONE",

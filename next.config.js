@@ -110,6 +110,7 @@ const nextConfig = {
     ],
   },
   experimental: {
+    agentUpgrade: false,
     // Release each compiler's heap before page collection and file tracing.
     // Otherwise webpack stays in the main process through the peak (YPER4-184).
     webpackBuildWorker: true,
@@ -239,8 +240,8 @@ const nextConfig = {
       const { BuildMemoryPlugin } = require("./scripts/build-memory-plugin.cjs");
       config.plugins = [...(config.plugins || []), new BuildMemoryPlugin()];
     }
-    if (!options.dev && config.cache && typeof config.cache === "object") {
-      config.cache.maxMemoryGenerations = 0;
+    if (!options.dev) {
+      config.cache = false;
     }
     // react-joyride's ESM build references ReactDOM.unmountComponentAtNode /
     // unstable_renderSubtreeIntoContainer in a dead `!isReact16` branch that

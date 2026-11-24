@@ -35,7 +35,7 @@ jobs:
             exit 1
           fi
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: { repository: valentinyeo/token-ladder, ref: deb4fa6c0fd1d47576804538242a1e7f231d21dd, path: token-ladder, fetch-depth: 1, persist-credentials: false }
+        with: { repository: valentinyeo/token-ladder, ref: 33001d32edcddeb639b0c75aff234bebb57a1051, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - name: Live eval on two model families
         env:
           PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL || 'openai/gpt-5' }}"
