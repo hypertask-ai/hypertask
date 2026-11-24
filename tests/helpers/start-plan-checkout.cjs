@@ -17,7 +17,6 @@ const jiti = require("jiti")(__filename, {
 });
 const plans = jiti(path.join(root, "src/lib/subscriptionPlans.ts"));
 const billing = jiti(path.join(root, "src/lib/deriveCurrentBoardBilling.ts"));
-const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 function harness() {
   const h = {
     enabled: true, seats: 3, record: null, calls: [], expired: [], sessions: new Map(),
@@ -113,10 +112,9 @@ function harness() {
         if (h.trialFlagFailure) throw new Error("trial flag lookup unavailable");
         return Boolean(h.fourteenDayTrial);
       }
-      assert.equal(key, flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG); h.flagReads.push(id);
-      if (h.flagFailure) throw new Error("flag lookup unavailable"); return h.enabled;
+      if (key === "htpr-7980-stripe-portal-billing") return h.portalBilling !== false;
+      throw new Error(`unexpected flag ${key}`);
     } },
-    "@/lib/flags/keys": flag,
     "@/lib/flags/definitions/htpr-7938-fourteen-day-trial": { HTPR_7938_FOURTEEN_DAY_TRIAL_FLAG: "htpr-7938-fourteen-day-trial" },
     "@/lib/resolveSeatQuantity": { resolveSeatQuantity: async () => h.seats },
     "@/lib/stripe": stripeModule,

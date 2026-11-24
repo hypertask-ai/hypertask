@@ -81,10 +81,14 @@ function fixture() {
     userSetting: { findUnique: async () => null },
     $transaction: async run => run(prisma),
   };
-  prisma.member = { findMany: async args => {
-    state.grantReads++;
-    return projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id, project }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
-  } };
+  const memberRows = (args = {}) => projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id, project }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
+  prisma.member = {
+    findMany: async args => {
+      state.grantReads++;
+      return memberRows(args);
+    },
+    findFirst: async args => memberRows(args)[0] ?? null,
+  };
   const crossTeamContext = load('src/lib/auth/crossTeamContext.ts', {});
   const scope = load('src/lib/auth/agentScope.ts', {
     '@/lib/auth/crossTeamContext': crossTeamContext,

@@ -4,15 +4,14 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { loadModule: load } = require("./helpers/loadModule.cjs");
 const OVERLAY_FLAG = "htpr-7550-connect-overlay";
-const planFlag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
 
-function loadScreen(startPlanEnabled = false, planFlagReady = true) {
+function loadScreen() {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
     "@/hooks/useFlag": {
-      useFlag: (key) => key === planFlag.HTPR_7551_START_PLAN_CHECKOUT_FLAG ? startPlanEnabled : (assert.equal(key, OVERLAY_FLAG), false),
-      useFlagReady: () => planFlagReady,
+      useFlag: (key) => (assert.equal(key, OVERLAY_FLAG), false),
+      useFlagReady: () => true,
     },
-    "@/lib/flags/keys": { ...planFlag, HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
+    "@/lib/flags/keys": { HTPR_7550_CONNECT_OVERLAY_FLAG: OVERLAY_FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
       getIntegrationChipClassName: () => "text-meta",
@@ -218,14 +217,11 @@ test("connected email shares the current layout, escapes the client and has exac
 });
 
 
-test("signup checkout rollout never promises fourteen days or no card to flagged users; OFF keeps the original onboarding offer", async () => {
-  for (const [enabled, ready] of [[true, true], [false, true], [false, false]]) {
-    await withDOM(async ({ container, reactRoot, act }) => {
-      const Screen = loadScreen(enabled, ready);
-      await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
-      if (ready && !enabled) assert.match(container.textContent, /Full access free for 14 days. No credit card needed/);
-      else assert.doesNotMatch(container.textContent, /14 days|No credit card needed/);
-      if (enabled) assert.match(container.textContent, /Start on Free/);
-    });
-  }
+test("onboarding offers a free start and a later plan choice", async () => {
+  await withDOM(async ({ container, reactRoot, act }) => {
+    const Screen = loadScreen();
+    await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
+    assert.match(container.textContent, /Start on Free\. Choose a plan when you are ready\./);
+    assert.doesNotMatch(container.textContent, /14 days|No credit card needed|Checking plan access/);
+  });
 });

@@ -221,6 +221,22 @@ export const viewTabPreferenceKey = (
   viewId: string,
 ) => (isBuiltinViewId(viewId) ? `${projectId ?? 0}:${viewId}` : viewId);
 
+export const viewTabIsShown = (
+  viewId: string,
+  options: {
+    projectId: number | undefined;
+    defaultViewId: string | undefined;
+    activeViewId: string | undefined;
+    hiddenViewTabIds: Record<string, boolean | undefined>;
+    keepOpenViewVisible: boolean;
+  },
+) => {
+  if (viewId === options.defaultViewId) return true;
+  const hidden = options.hiddenViewTabIds[viewTabPreferenceKey(options.projectId, viewId)] === true;
+  if (!hidden) return true;
+  return options.keepOpenViewVisible && viewId === options.activeViewId;
+};
+
 export const getBuiltinView = (id: string | undefined) =>
   isBuiltinViewId(id) ? builtinViewsById.get(id) : undefined;
 
@@ -265,4 +281,36 @@ export const getActiveBoardViewId = (
     project.project_view?.user_project_views[0]?.appliedView?.id ??
     project.project_view?.default_view_id
   );
+};
+
+export const getViewToActivateWhenHidden = (
+  project: IProject | null | undefined,
+  activeBuiltinViews: Record<number, string>,
+  views: readonly BoardView[],
+  hiddenViewId: string,
+): BoardView | undefined => {
+  if (!project) return undefined;
+  if (getActiveBoardViewId(project, activeBuiltinViews) !== hiddenViewId) return undefined;
+  const defaultViewId = project.project_view?.default_view_id;
+  if (!defaultViewId || defaultViewId === hiddenViewId) return undefined;
+  return views.find((view) => view.id === defaultViewId);
+};
+
+export const getHiddenOpenViewToLeave = (
+  project: IProject | null | undefined,
+  activeBuiltinViews: Record<number, string>,
+  views: readonly BoardView[],
+  hiddenViewTabIds: Record<string, boolean | undefined>,
+): BoardView | undefined => {
+  const activeViewId = getActiveBoardViewId(project, activeBuiltinViews);
+  if (!project || !activeViewId) return undefined;
+  const shown = viewTabIsShown(activeViewId, {
+    projectId: project.id,
+    defaultViewId: project.project_view?.default_view_id,
+    activeViewId,
+    hiddenViewTabIds,
+    keepOpenViewVisible: false,
+  });
+  if (shown) return undefined;
+  return getViewToActivateWhenHidden(project, activeBuiltinViews, views, activeViewId);
 };
