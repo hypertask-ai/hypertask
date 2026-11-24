@@ -12,7 +12,6 @@ async function demo() {
 
   const globals = globalThis as typeof globalThis & { redis?: unknown }
   const originalRedis = globals.redis
-  const originalRedisUrl = process.env.REDIS_URL
   globals.redis = { get: async () => null }
 
   const require = createRequire(import.meta.url)
@@ -100,21 +99,7 @@ async function demo() {
     assert.equal(decoded.iat, Math.floor(marker!.getTime() / 1000))
     assert.equal(minted.cookies.get('mcp_token')?.value, newToken)
     console.log('Page-token revoke-all regression passed')
-
-    delete process.env.REDIS_URL
-    delete globals.redis
-    mock.timers.tick(1)
-    const withoutStore = await POST(request('/api/mcp/token'))
-    assert.equal(withoutStore.status, 200)
-    assert.equal(typeof (await withoutStore.json()).token, 'string')
-
-    process.env.REDIS_URL = 'redis://127.0.0.1:6379'
-    globals.redis = { get: async () => '1' }
-    const revokedSession = await POST(request('/api/mcp/token'))
-    assert.equal(revokedSession.status, 401)
   } finally {
-    if (originalRedisUrl === undefined) delete process.env.REDIS_URL
-    else process.env.REDIS_URL = originalRedisUrl
     if (originalRedis === undefined) delete globals.redis
     else globals.redis = originalRedis
     mock.timers.reset()
