@@ -16,5 +16,5 @@ export default async function SignOutPage() {
   if (!(await isFeatureEnabled(HTPR_9286_SIGNOUT_PAGE_FLAG, session?.userId ?? 0))) {
     notFound();
   }
-  return <SignOutScreen hasSession={session !== null} />;
+  return <SignOutScreen />;
 }

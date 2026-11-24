@@ -24,16 +24,16 @@ test("the flag shows the sign-out screen and hides it when off", async () => {
   const signedIn = await openPage();
   assert.equal(signedIn.error, undefined);
   assert.equal(signedIn.result.type, "screen");
-  assert.equal(signedIn.result.props.hasSession, true);
+  assert.deepEqual(signedIn.result.props, {});
   assert.deepEqual(signedIn.flags, [[key, 182]]);
   const signedOut = await openPage({ session: null });
-  assert.equal(signedOut.result.props.hasSession, false);
+  assert.deepEqual(signedOut.result.props, {});
   assert.deepEqual(signedOut.flags, [[key, 0]]);
   assert.equal((await openPage({ enabled: false })).error.message, "not found");
   assert.equal((await openPage({ session: null, enabled: false })).error.message, "not found");
 });
 
-function screen({ hasSession = true, signOutResults = [true], signInUrl = googleUrl } = {}) {
+function screen({ signOutResults = [true], signInUrl = googleUrl } = {}) {
   const view = mount();
   const events = { signouts: 0, options: [], social: [], assigned: [] };
   const load = loader({
@@ -59,7 +59,7 @@ function screen({ hasSession = true, signOutResults = [true], signInUrl = google
     buttons,
     text: () => view.container.textContent,
     async mountScreen() {
-      await React.act(async () => view.render(React.createElement(Screen, { hasSession })));
+      await React.act(async () => view.render(React.createElement(Screen)));
       await settle();
     },
     async click(index) {
@@ -84,16 +84,14 @@ function screen({ hasSession = true, signOutResults = [true], signInUrl = google
 }
 
 test("opening the page signs this browser out once and then offers Sign in again", async () => {
-  for (const hasSession of [true, false]) {
-    const s = screen({ hasSession });
-    try {
-      await s.mountScreen();
-      assert.equal(s.events.signouts, 1);
-      assert.ok(s.events.options.every((options) => options.redirectTo === null && options.hasSession === hasSession));
-      assert.ok(s.text().includes("You are signed out"));
-      assert.deepEqual(s.buttons().map((button) => button.textContent), ["Sign in again"]);
-    } finally { s.close(); }
-  }
+  const s = screen();
+  try {
+    await s.mountScreen();
+    assert.equal(s.events.signouts, 1);
+    assert.ok(s.events.options.every((options) => options.redirectTo === null));
+    assert.ok(s.text().includes("You are signed out"));
+    assert.deepEqual(s.buttons().map((button) => button.textContent), ["Sign in again"]);
+  } finally { s.close(); }
 });
 
 test("Sign in again opens Google's account chooser, or the login page when Google returns nothing", async () => {
@@ -115,17 +113,6 @@ test("Sign in again opens Google's account chooser, or the login page when Googl
       }
     } finally { s.close(); }
   }
-});
-
-test("a browser whose session is already gone still clears itself before offering Sign in again", async () => {
-  const s = screen({ hasSession: false });
-  try {
-    await s.mountScreen();
-    assert.equal(s.events.signouts, 1);
-    assert.deepEqual(s.events.options, [{ redirectTo: null, hasSession: false }]);
-    assert.ok(s.text().includes("You are signed out"));
-    assert.deepEqual(s.buttons().map((button) => button.textContent), ["Sign in again"]);
-  } finally { s.close(); }
 });
 
 test("a failed sign-out stays on the page until Try again succeeds", async () => {
@@ -182,8 +169,8 @@ test("the shared sign-out leaves for login unless this page asks it to stay", as
   }
 });
 
-test("an absent server session is already signed out, and the browser is still cleared", async () => {
-  for (const hasSession of [true, false]) {
+test("the sign-out still asks the server, so the HttpOnly cookies go, even with no live session", async () => {
+  for (const serverAccepts of [true, false]) {
     const view = mount();
     const oldStorage = global.localStorage;
     const oldWindow = global.window;
@@ -203,17 +190,17 @@ test("an absent server session is already signed out, and the browser is still c
         axios: { default: { delete: async () => {} } },
         "@/lib/constants/utm": { ALL_UTM_COOKIE_NAMES: [] }, "@/store": {},
         "@/lib/localReadModels/clear": { clearAllLocalReadModels: async () => true },
-        "@/lib/auth/accounts": { signOutAllAccounts: async () => { serverCalls.push(hasSession); return true; } },
+        "@/lib/auth/accounts": { signOutAllAccounts: async () => { serverCalls.push(Date.now()); return serverAccepts; } },
       });
       let reset;
       function Probe() {
-        reset = load("src/hooks/MultiPages/HTC/useSignout.ts").useSignout(undefined, { redirectTo: null, hasSession }).handleHardReset;
+        reset = load("src/hooks/MultiPages/HTC/useSignout.ts").useSignout(undefined, { redirectTo: null }).handleHardReset;
         return null;
       }
       await view.render(React.createElement(Probe));
-      assert.equal(await reset(), true);
-      assert.deepEqual(serverCalls, hasSession ? [true] : []);
-      assert.equal(storageCleared, true);
+      assert.equal(await reset(), serverAccepts);
+      assert.equal(serverCalls.length, 1);
+      assert.equal(storageCleared, serverAccepts);
     } finally {
       global.window = oldWindow;
       global.localStorage = oldStorage;
