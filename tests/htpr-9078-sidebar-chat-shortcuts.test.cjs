@@ -109,6 +109,41 @@ test("a purpose-opened shortcuts list sits beside the open chat", () => {
   assert.equal(typing.shortcutsPanelRight(false), undefined);
 });
 
+test("the chat composer answers to the name Message and keeps its writing assistance", () => {
+  const source = fs.readFileSync(path.join(root, "src/hooks/MultiPages/AIChat/useAiTiptap.ts"), "utf8");
+  assert.match(source, /editorProps: \{\s*\.\.\.writingAssistanceEditorProps,/);
+  assert.match(source, /attributes: \{ \.\.\.writingAssistanceEditorProps\.attributes, "aria-label": "Message" \},/);
+});
+
+test("the phone chat button is named Open AI chat like the desktop one", () => {
+  const MobileTabBar = loadComponent("src/components/Global/MobileTabBar.tsx", {
+    react: React,
+    "next/link": { __esModule: true, default: ({ href, children }) => React.createElement("a", { href }, children) },
+    "next/navigation": { usePathname: () => "/project" },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
+    "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+    "@/lib/firstScreen/display": { projectDisplayDay: () => 1 },
+    "react-icons/fa": { FaInbox: () => null },
+    "react-icons/ci": { CiSearch: () => null },
+    "lucide-react": { Calendar: () => null, Sparkles: () => null, SquareKanban: () => null },
+    "@/components/ProviderGlobal/useGlobalUIState": {
+      useGlobalUIState: () => ({ toggleAIChatInterface() {}, showAiChatInterface: false, closeAIChatInterface() {} }),
+    },
+    "@/hooks/Homepage/useAppShellSurfaceShortcuts": { __esModule: true, default: () => ({ navigateToBoard() {} }) },
+    "@/hooks/Inbox/useGetNotifications": { useGetNotificationCount: () => ({ data: { unseen: 0 } }) },
+    "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+    "./mobileShellVisibility": loadModule("src/components/Global/mobileShellVisibility.ts"),
+    "./mobileDockHeight": { clearMobileDockHeight() {}, publishMobileDockHeight() {}, releaseMobileDockHeight() {} },
+  });
+  const html = renderToStaticMarkup(React.createElement(MobileTabBar, { currentUserId: 985 }));
+  const doc = new JSDOM(html).window.document;
+  const chat = doc.querySelector('nav[aria-label="Primary navigation"] button[aria-label="Open AI chat"]');
+  assert.ok(chat, "the phone dock names its chat button Open AI chat");
+  assert.equal(chat.getAttribute("aria-pressed"), "false");
+});
+
 function loadComponent(file, dependencies) {
   const source = fs.readFileSync(path.join(root, file), "utf8");
   const js = ts.transpileModule(source, {

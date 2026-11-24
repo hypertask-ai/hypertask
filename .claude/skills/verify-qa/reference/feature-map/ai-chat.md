@@ -24,6 +24,7 @@
 - `automatic-heartbeat-step-budget` Automatic heartbeat step budget.
 - `agent-hovercard-chat-action` Agent hovercard Chat action.
 - `agent-sessions-in-the-sidebar` Agent sessions in the sidebar.
+- `sidebar-chat-typing` Keys typed in the sidebar chat stay in the message.
 - `desktop-chat-keyboard` Desktop chat keyboard.
 - `whole-inbox-triage` Whole-inbox triage.
 - `direct-anthropic-prompt-caching` Direct Anthropic prompt caching.
@@ -247,6 +248,10 @@ With `htpr-7978-ai-chip-events` on, open a new chat so suggestion chips show, cl
 ### Sidebar and floating composer
 
 With `htpr-8261-chat-cleanup` on, open the docked sidebar and the floating chat. The microphone sits to the left of a Send button that uses the word Send. While dictation is active, a Dictation pill is shown. Sparkle and purple are gone from those two surfaces. Sending, dictation and attachments behave as before. Off restores the previous look.
+
+### Sidebar chat typing
+
+With `htpr-9078-sidebar-chat-shortcuts` on, open the docked chat on a board with the `Open AI chat` button or Control+Q and type `?` in the message box named `Message`. The message keeps the `?` and no shortcuts list opens. On a phone the bottom bar chat button is also named `Open AI chat`. Opening the list on purpose still works, and with the chat open it sits left of the chat instead of over it. The key listener is `src/lib/keyboard/sidebarChatTyping.ts`, wired in `src/components/ProviderGlobal/GloablProviders.tsx`. Off restores shortcuts opening over the chat and `/` leaving for search.
 
 ### Full-screen chat cleanup
 
