@@ -186,31 +186,35 @@ export function answerFor(mode, item) {
   throw new Error(`unknown replay mode ${mode}`);
 }
 
-export async function judgeCase({ item, model, key, answer, complete = completeWithOpenRouter }) {
+export function ladderReady() {
+  return Boolean(process.env.LADDER_CALL_BIN || process.env.LADDER_CALL_ROOT || process.env.AI_GATEWAY_API_KEY || process.env.OPENCODE_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENROUTER_API_KEY);
+}
+
+export async function judgeCase({ item, model, answer, complete = completeWithOpenRouter }) {
   const live = answer === undefined;
   let parsed = item.plan;
   let failure = "";
   try {
-    const planText = live ? await complete(planPromptFor(item), { key, model }) : answer.plan;
+    const planText = live ? await complete(planPromptFor(item), { model }) : answer.plan;
     parsed = { ...parsed, ...parsePlan(planText) };
     if (!parsed.actions.length) throw new Error("the plan stage returned no actions");
     if (!planCoversFixture(parsed)) throw new Error("the plan does not exercise the fixture behaviour");
-  } catch (error) { failure = redact(error?.message ?? String(error), [key]); }
+  } catch (error) { failure = redact(error?.message ?? String(error), []); }
   let result = { verdict: "FAIL", notes: failure };
   if (!failure) {
     const judgement = answer ? answer.judge : undefined;
     const ask = live ? async (prompt, options) => parseAnswer(await complete(prompt, options)) : async () => parseAnswer(judgement);
-    result = await judgeJourneys({ plan: evalPlan(item, model, parsed), evidence: evalEvidence(item, parsed), picked: { model }, ask, key, work: "" });
+    result = await judgeJourneys({ plan: evalPlan(item, model, parsed), evidence: evalEvidence(item, parsed), picked: { model }, ask, work: "" });
   }
   return { case: item.name, model, expected: item.expected, verdict: result.verdict, notes: result.notes, ok: !failure && matches(item, result.verdict), failure, why: item.why };
 }
 
-export async function runEval({ alt, key, replay, complete = completeWithOpenRouter, cases = CASES }) {
+export async function runEval({ alt, replay, complete = completeWithOpenRouter, cases = CASES }) {
   const models = evalModels(alt);
   const results = [];
   for (const model of models) {
     for (const item of cases) {
-      results.push(await judgeCase({ item, model, key, answer: replay ? answerFor(replay, item) : undefined, complete }));
+      results.push(await judgeCase({ item, model, answer: replay ? answerFor(replay, item) : undefined, complete }));
     }
   }
   return { ok: results.every((result) => result.ok), models, results };
@@ -230,7 +234,6 @@ export async function main(argv = process.argv.slice(2), io = {}) {
   const out = outIndex >= 0 ? path.resolve(argv[outIndex + 1]) : "";
   if (!mode) throw new Error("usage: pstack-verifier-eval.mjs --live | --replay correct|blind [--out file]");
   const alt = io.alt ?? process.env.PSTACK_VERIFIER_ALT_MODEL;
-  const key = io.key ?? process.env.OPENROUTER_EVAL_KEY;
   if (!alt) throw new Error("PSTACK_VERIFIER_ALT_MODEL is missing");
   if (mode === "replay") {
     const result = await runEval({ alt, replay });
@@ -238,8 +241,8 @@ export async function main(argv = process.argv.slice(2), io = {}) {
     (io.write ?? process.stdout.write.bind(process.stdout))(text);
     return result.ok;
   }
-  if (!key) throw new Error("OPENROUTER_EVAL_KEY is missing");
-  const result = await runEval({ alt, key });
+  if (!ladderReady()) throw new Error("token ladder is not configured");
+  const result = await runEval({ alt, complete: io.complete ?? completeWithOpenRouter });
   const text = report(result, out);
   (io.write ?? process.stdout.write.bind(process.stdout))(text);
   return result.ok;

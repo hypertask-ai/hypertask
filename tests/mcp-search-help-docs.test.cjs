@@ -125,3 +125,85 @@ test("help article stays at 1500 characters when the flag is off", async () => {
   assert.match(result.articles[0].content, /^Start here documentation/);
   assert.doesNotMatch(result.articles[0].content, /Time tracking/);
 });
+
+test("a failed help article is named in a warning and the others still load", async () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnings.push(args.map((arg) => String(arg)).join(" "));
+  };
+  try {
+    const result = await searchHelpDocs(
+      { query: "billing", limit: 4 },
+      async (url) => {
+        const target = String(url);
+        if (target.includes("/api/articles/search/")) {
+          return new Response(
+            JSON.stringify([
+              {
+                title: "Billing limits",
+                slug: "billing-limits",
+                excerpt: "Short billing excerpt",
+              },
+              {
+                title: "Missing page",
+                slug: "missing-page",
+                excerpt: "Short missing excerpt",
+              },
+              {
+                title: "Keyboard shortcuts",
+                slug: "keyboard-shortcuts",
+                excerpt: "Short shortcut excerpt",
+              },
+            ]),
+            { status: 200 },
+          );
+        }
+        if (target.endsWith("/billing-limits")) {
+          throw new Error("network down");
+        }
+        if (target.endsWith("/missing-page")) {
+          return new Response("nope", { status: 404 });
+        }
+        return new Response(
+          JSON.stringify({ content: "<p>Full shortcut article body</p>" }),
+          { status: 200 },
+        );
+      },
+      flagDb("EVERYONE"),
+    );
+
+    assert.equal(result.success, true);
+    assert.equal(result.total, 3);
+    assert.deepEqual(
+      result.articles.map((article) => ({
+        title: article.title,
+        url: article.url,
+        content: article.content,
+      })),
+      [
+        {
+          title: "Billing limits",
+          url: `${HELP_DOCS_BASE_URL}/help/billing-limits`,
+          content: "Short billing excerpt",
+        },
+        {
+          title: "Missing page",
+          url: `${HELP_DOCS_BASE_URL}/help/missing-page`,
+          content: "Short missing excerpt",
+        },
+        {
+          title: "Keyboard shortcuts",
+          url: `${HELP_DOCS_BASE_URL}/help/keyboard-shortcuts`,
+          content: "Full shortcut article body",
+        },
+      ],
+    );
+    assert.deepEqual([...warnings].sort(), [
+      "[help-docs] Help article failed to load: billing-limits (network down)",
+      "[help-docs] Help article failed to load: missing-page (404)",
+    ]);
+  } finally {
+    console.warn = originalWarn;
+  }
+});

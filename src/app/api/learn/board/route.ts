@@ -49,18 +49,18 @@ export async function POST(request: NextRequest) {
 }
 
 async function learnBoard(request: NextRequest) {
-  if (!KEYBOARD_SHORTCUT_TUTORIAL_ENABLED) {
-    return NextResponse.json(
-      { error: "The keyboard shortcuts tutorial is temporarily unavailable" },
-      { status: 410 },
-    );
-  }
-
   const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json(
       { error: "Sign in to start the tutorial" },
       { status: 401 },
+    );
+  }
+
+  if (!KEYBOARD_SHORTCUT_TUTORIAL_ENABLED) {
+    return NextResponse.json(
+      { error: "The keyboard shortcuts tutorial is temporarily unavailable" },
+      { status: 410 },
     );
   }
 

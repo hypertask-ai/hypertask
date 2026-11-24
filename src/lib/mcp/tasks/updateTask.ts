@@ -8,7 +8,7 @@ import { buildFieldError } from '@/lib/mcp/fieldError'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { hasActiveTaskOnlyMutation, isActiveTaskMutationTarget } from './activeTaskMutation'
-import { linkTaskPullRequest } from '@/lib/pullRequests/taskPullRequests'
+import { linkTaskPullRequest, unlinkTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
 import { validateTaskUpdateFields } from './fields/validateFields'
 import { validateTaskUpdateIdentifiers } from './fields/validateIdentifiers'
 import { findTasksByIdentifier } from './fields/findTasks'
@@ -21,7 +21,7 @@ async function validate(options: ExecuteTaskUpdateOptions) {
     const denied = await requireRole(ctx, 'write')
     if (denied) return denied
   }
-  const fields = await validateTaskUpdateFields(requestBody, dryRun)
+  const fields = await validateTaskUpdateFields(requestBody, dryRun, ctx.user.id)
   if (fields instanceof NextResponse) return fields
   const identifiers = validateTaskUpdateIdentifiers(requestBody, dryRun, fields)
   if (identifiers instanceof NextResponse) return identifiers
@@ -95,6 +95,7 @@ async function preflight(options: ExecuteTaskUpdateOptions, plan: UpdatePlan) {
       estimateConstant: requestBody.estimate !== undefined ? EstimateConstants.find((value) => value.estimate_index === requestBody.estimate) : null,
       assignAssignees: options.assignAssignees, clearAssignees: options.clearAssignees,
       linkPullRequest: options.linkPullRequest ?? linkTaskPullRequest,
+      unlinkPullRequest: options.unlinkPullRequest ?? unlinkTaskPullRequests,
       strictSideEffectFailures: options.strictSideEffectFailures ?? false,
     },
   }
