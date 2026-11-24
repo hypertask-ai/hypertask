@@ -48,6 +48,14 @@ mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/usr/bin/env bash
 printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
+if [ "${1:-}" = --name ]; then
+  if [ "${VCC_TEST_LEGACY_NAME:-}" = 1 ]; then
+    printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+    exit 0
+  fi
+  printf '%s\n' "${VCC_TEST_DISCOVERED_NAME:-}"
+  exit 0
+fi
 printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 STUB
 chmod +x "$T/bin/"* "$HOME/.agents/skills/ship/scripts/ship-identity"
@@ -144,6 +152,18 @@ allowed env VCC_TEST_IDENTITY='RUNNER 5' SHIP_SESSION_NAME='cursor-grok-runner-5
 login_refused env VCC_TEST_IDENTITY='RUNNER 6' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
 login_refused env VCC_TEST_IDENTITY='Fixture' SHIP_SESSION_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
 printf 'ok runner slot names write as that runner, another slot or no slot is refused\n'
+login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' SHIP_SESSION_NAME='HT Pstack Boss' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' SHIP_SESSION_NAME='HTPR-1 | fix' bash "$vcc" task move X-1 --section 'In Progress'
+allowed env VCC_TEST_IDENTITY='HT Pstack Boss' SHIP_SESSION_NAME='HT Pstack Boss | HTPR-9359' bash "$vcc" comment add X-1 --text hi
+allowed env VCC_TEST_IDENTITY='Valentins Claude Code' VCC_TEST_DISCOVERED_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_IDENTITY='Valentins Claude Code' VCC_TEST_DISCOVERED_NAME='HT Pstack Boss' bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_DISCOVERED_NAME='ht-or-runner-5' bash "$vcc" task move X-1 --section 'In Progress'
+allowed env bash "$vcc" comment add X-1 --text hi
+login_refused env VCC_TEST_LEGACY_NAME=1 VCC_TEST_IDENTITY='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
+grep -q 'did not report the session name' "$T/err" || fail "legacy login script message unclear: $(cat "$T/err")"
+login_refused env HOME="$T/no-identity" bash "$vcc" comment add X-1 --text hi
+grep -q 'is missing; refusing to write as Valentins Claude Code' "$T/err" || fail "missing login lookup message unclear: $(cat "$T/err")"
+printf 'ok a named session without its own login is refused\n'
 printf ' \n\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
 [ "$status" = 2 ] || fail 'empty board login was not refused'
@@ -613,7 +633,10 @@ lint_refused 'Ticket description' task create --project 4060 --title T --descrip
 printf '<p>LINTFAIL</p>' > "$T/desc.md"
 lint_refused 'Ticket description' task create --project 4060 --title T --description-file "$T/desc.md"
 lint_refused 'Ticket description' task update YPER4-1 '--description=LINTFAIL'
-allowed bash "$vcc" task create --project 4060 --labels Bug,brain-light --title T --description '<p>Problem</p>'
+run bash "$vcc" task create --project 4060 --labels Bug,brain-light --title T --description '<p>Problem</p>'
+[ "$status" = 0 ] || fail "a described CI create was refused: $status $(< "$T/err")"
+[[ $(< "$T/err") == 'vcc: board 4060 is archived; filing this CI ticket on board 11514' ]] || fail "archived board notice missing: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--project> <11514>'* ]] || fail "described CI create stayed on 4060: $(< "$T/out")"
 [[ $(< "$VCC_TEST_TRACE") == *'ticket-lint --shape -'* ]] || fail 'description skipped shape lint'
 allowed bash "$vcc" task update YPER4-1 --title 'New title'
 [[ $(< "$VCC_TEST_TRACE") != *'ticket-lint'* ]] || fail 'title-only update ran description lint'
@@ -796,6 +819,7 @@ printf 'ok activity add accepts --text and --body in either order\n'
   printf 'fixture-token\n' > "$home/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
   cat > "$home/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/bin/sh
+[ "${1:-}" = --name ] && exit 0
 printf 'Fixture\t%s/.config/hypertask-agents/credentials/valentins-claude-code-agent-token\n' "$HOME"
 STUB
   chmod +x "$home/.agents/skills/ship/scripts/ship-identity"
@@ -897,8 +921,12 @@ brain_refused tasks create --project 4060 --labels Bug --title T --description '
 brain_refused --project 15 task create --labels brain-light,brain-hard --title T --description '<p>Problem</p>'
 brain_refused task create --project 4060 --labels brain-tiny --title T --description '<p>Problem</p>'
 brain_refused task create --project 4060 --labels=Bug --labels brain-light --labels brain-hard --title T --description '<p>Problem</p>'
-allowed bash "$vcc" task create --project 4060 --labels=Bug,brain-hard --title T --description '<p>Problem</p>'
-allowed bash "$vcc" task create --project 4060 --labels Bug --labels ' Brain-Medium ' --title T --description '<p>Problem</p>'
+run bash "$vcc" task create --project 4060 --labels=Bug,brain-hard --title T --description '<p>Problem</p>'
+[ "$status" = 0 ] || fail "one brain label on the archived board was refused: $status $(< "$T/err")"
+[[ $(< "$T/out") == *'<--project> <11514>'* ]] || fail "brain-labeled create stayed on 4060: $(< "$T/out")"
+run bash "$vcc" task create --project 4060 --labels Bug --labels ' Brain-Medium ' --title T --description '<p>Problem</p>'
+[ "$status" = 0 ] || fail "a spaced brain label on the archived board was refused: $status $(< "$T/err")"
+[[ $(< "$T/out") == *'<--project> <11514>'* ]] || fail "spaced brain label stayed on 4060: $(< "$T/out")"
 allowed bash "$vcc" --project 15 --json tasks create --labels brain-extra-hard --title T --description '<p>Problem</p>'
 allowed bash "$vcc" task create --help
 allowed bash "$vcc" task update X-1 --title 'No brain label needed on update'
@@ -913,14 +941,43 @@ filing_refused() {
 }
 filing_refused 5 'is full' task create --project 4060 --labels Infra,brain-light --title FULLBOARD
 filing_refused 6 'already open' --json tasks create --project=11514 --labels CI,brain-light --title SAMETITLE
-allowed bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
-[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- task create --project 4060'* ]] || fail "filing-gate not asked on 4060: $(< "$VCC_TEST_TRACE")"
+run bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
+[ "$status" = 0 ] || fail "archived board create did not file: $status $(< "$T/err")"
+[[ $(< "$T/err") == 'vcc: board 4060 is archived; filing this CI ticket on board 11514' ]] || fail "archived board notice missing: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--project> <11514>'* ]] || fail "archived board create stayed on 4060: $(< "$T/out")"
+[[ $(< "$T/out") != *4060* ]] || fail "archived board id reached the CLI: $(< "$T/out")"
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- task create --project 11514'* ]] || fail "filing-gate not asked on the live board: $(< "$VCC_TEST_TRACE")"
+[[ $(< "$VCC_TEST_TRACE") != *'--project 4060'* ]] || fail "filing-gate still saw board 4060: $(< "$VCC_TEST_TRACE")"
+run bash "$vcc" tasks create --project=4060 --labels Infra,brain-light --title T
+[ "$status" = 0 ] || fail "equals-form archived board create did not file: $status $(< "$T/err")"
+[[ $(< "$T/out") == *'<--project=11514>'* ]] || fail "equals-form project was not moved: $(< "$T/out")"
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- tasks create --project=11514'* ]] || fail "filing-gate missed equals-form retarget: $(< "$VCC_TEST_TRACE")"
+run bash "$vcc" --team TEAM task create --project 4060 --labels Infra,brain-light --title T
+[ "$status" = 0 ] || fail "a leading --team skipped the archived-board filing: $status $(< "$T/err")"
+[[ $(< "$T/err") == 'vcc: board 4060 is archived; filing this CI ticket on board 11514' ]] || fail "leading --team hid the archive notice: $(< "$T/err")"
+[[ $(< "$T/out") == *'<--team> <TEAM>'*'<--project> <11514>'* ]] || fail "leading --team left the create on 4060: $(< "$T/out")"
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- --team TEAM task create --project 11514'* ]] || fail "filing-gate missed a leading --team create: $(< "$VCC_TEST_TRACE")"
+run bash "$vcc" --team=TEAM --json tasks create --project=4060 --labels Infra,brain-light --title T
+[ "$status" = 0 ] || fail "equals-form --team skipped the archived-board filing: $status $(< "$T/err")"
+[[ $(< "$T/out") == *'<--team=TEAM>'*'<--project=11514>'* ]] || fail "equals-form --team left the create on 4060: $(< "$T/out")"
+[[ $(< "$VCC_TEST_TRACE") == *'filing-gate --who '*' -- --team=TEAM --json tasks create --project=11514'* ]] || fail "filing-gate missed equals-form --team: $(< "$VCC_TEST_TRACE")"
 allowed bash "$vcc" task create --project 15 --labels brain-light --title FULLBOARD
 [[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail 'filing-gate asked for board 15'
-run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title T
-[ "$status" = 5 ] && [[ $(< "$T/err") == *'filing-gate missing'*'house-rules-sync'* ]] || fail "missing filing-gate did not refuse: $status $(< "$T/err")"
+[[ $(< "$T/out") == *'<--project> <15>'* ]] || fail "board 15 create was moved: $(< "$T/out")"
+run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 4060 --labels Infra,brain-light --title 'MISSING GATE'
+[ "$status" = 0 ] || fail "a missing filing-gate stopped an archived-board filing: $status $(< "$T/err")"
+[[ $(< "$T/err") == *'board 4060 is archived; filing this CI ticket on board 11514'* ]] || fail "missing gate hid the archive notice: $(< "$T/err")"
+[[ $(< "$T/err") == *'filing-gate missing at /missing; filing without it'*'house-rules-sync'* ]] || fail "a missing filing-gate gave no warning: $(< "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") == *'hypertask task create'* ]] || fail "a missing filing-gate did not reach the CLI: $(< "$VCC_TEST_TRACE")"
+[[ $(< "$VCC_TEST_TRACE") != *filing-gate* ]] || fail "a missing path was executed: $(< "$VCC_TEST_TRACE")"
+[[ $(< "$T/out") == stub:*'<--project> <11514>'* ]] || fail "a missing filing-gate filed on 4060: $(< "$T/out")"
+run env VCC_FILING_GATE=/missing bash "$vcc" task create --project 11514 --labels CI,brain-light --title 'MISSING GATE'
+[ "$status" = 0 ] || fail "a missing filing-gate stopped a Fleet CI filing: $status $(< "$T/err")"
+[[ $(< "$T/err") == 'vcc: filing-gate missing at /missing; filing without it, run house-rules-sync' ]] || fail "a live-board missing gate gave no warning: $(< "$T/err")"
+[[ $(< "$T/out") == stub:*'<--project> <11514>'* ]] || fail "a live-board create was swallowed: $(< "$T/out")"
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title T
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task update X-1 --project 4060 --description 'please create this'
+[[ $(< "$T/out") == *'<--project> <4060>'* ]] || fail "an update was moved off board 4060: $(< "$T/out")"
 allowed env VCC_FILING_GATE=/missing bash "$vcc" task create --project 15 --labels brain-light --title 'Board 4060 create note'
 printf 'ok Fleet CI and Fleet Infra creates go through filing-gate\n'
 run bash "$vcc" task create --project 12057 --labels 'Infra,Agent Feedback,brain-light' --title T
