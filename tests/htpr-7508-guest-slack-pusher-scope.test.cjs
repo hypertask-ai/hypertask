@@ -242,6 +242,12 @@ test("learn: disabled tutorial still returns the unchanged 410 response", async 
   assert.equal(h.queries.length, 0);
 });
 
+test("learn: signed-out caller gets 401 while the tutorial is off", async () => {
+  const h = harness({ area: "learn", actor: "owner", authenticated: false, tutorialEnabled: false });
+  assert.deepEqual(await h.request(), { status: 401, body: { error: "Sign in to start the tutorial" } });
+  assert.equal(h.queries.length, 0);
+});
+
 test("learn: human return board keeps its team, membership and Normal requirements", async () => {
   for (const mutation of [{}, { ownerId: 99, members: [] }, { teamId: null }, { status: "Archive" }]) {
     const h = harness({ area: "learn", actor: "owner" });

@@ -80,6 +80,7 @@ async function main() {
   const prismaMock = prisma as any
   const originalTaskFindMany = prismaMock.task.findMany
   const originalUserFindUnique = prismaMock.user.findUnique
+  const originalFlagFindUnique = prismaMock.featureFlag.findUnique
   const request = new NextRequest(
     'http://localhost/api/mcp/tasks/update',
     { method: 'POST' }
@@ -92,6 +93,16 @@ async function main() {
   const canonicalUrl =
     'https://github.com/hypertask-ai/hypertask/pull/110'
   const linkCalls: Array<Record<string, unknown>> = []
+  const unlinkCalls: Array<Record<string, unknown>> = []
+  const unlinkPullRequest = async (input: {
+    taskId: number
+    userId: number
+    agentId?: string | null
+    teamScope?: unknown
+  }) => {
+    unlinkCalls.push(input)
+    return { removed: 1 }
+  }
   const linkPullRequest = async (input: {
     taskId: number
     userId: number
@@ -181,6 +192,52 @@ async function main() {
     assert.equal(linkedBody.task.pullRequests[0].displayState, 'green')
     assert.equal(linkedBody.task.pullRequests[0].updatedAt, '2026-09-01T12:00:00.000Z')
 
+    let flagMode = 'EVERYONE'
+    prismaMock.featureFlag.findUnique = async (args: Record<string, any>) =>
+      args.where.key === 'htpr-9276-unlink-pull-request'
+        ? { mode: flagMode }
+        : null
+
+    const cleared = await executeTaskUpdate({
+      request,
+      ctx,
+      requestBody: { task_id: 1, pull_request_url: null },
+      unlinkPullRequest,
+    })
+    assert.equal(cleared.response.status, 200)
+    assert.deepEqual(unlinkCalls, [
+      {
+        taskId: 1,
+        userId: 6,
+        agentId: null,
+        teamScope: null,
+      },
+    ])
+    assert.equal(linkCalls.length, 1)
+
+    unlinkCalls.length = 0
+    const clearedByEmpty = await executeTaskUpdate({
+      request,
+      ctx,
+      requestBody: { task_id: 1, pull_request_url: '  ' },
+      unlinkPullRequest,
+    })
+    assert.equal(clearedByEmpty.response.status, 200)
+    assert.equal(unlinkCalls.length, 1)
+
+    unlinkCalls.length = 0
+    flagMode = 'OFF'
+    const refusedClear = await executeTaskUpdate({
+      request,
+      ctx,
+      requestBody: { task_id: 1, pull_request_url: null },
+      unlinkPullRequest,
+    })
+    assert.equal(refusedClear.response.status, 400)
+    assert.equal((await refusedClear.response.json()).field, 'pull_request_url')
+    assert.equal(unlinkCalls.length, 0)
+    flagMode = 'EVERYONE'
+
     const conflict = await executeTaskUpdate({
       request,
       ctx,
@@ -238,9 +295,12 @@ async function main() {
   } finally {
     prismaMock.task.findMany = originalTaskFindMany
     prismaMock.user.findUnique = originalUserFindUnique
+    prismaMock.featureFlag.findUnique = originalFlagFindUnique
   }
 }
 
 void main().then(() => {
+  console.log('# tests 1')
+  console.log('# pass 1')
   console.log('updatePullRequest.test.ts: all assertions passed')
 })
