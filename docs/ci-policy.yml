@@ -967,7 +967,8 @@ break_it_review:
   pull_request_types: [opened, synchronize, reopened, edited, ready_for_review]
   pull_request_base: production
   signal: bugfix_title_tag
-  author_family: Author-Model_line_in_the_pull_request_body
+  # HTPR-9613: the family comes from the rule in .claude/reference/rule-checks.md.
+  author_family: body_line_or_own_commit_trailer
   other_family_model: PSTACK_VERIFIER_ALT_MODEL
   secret: OPENROUTER_EVAL_KEY
   max_generated_tests: 3

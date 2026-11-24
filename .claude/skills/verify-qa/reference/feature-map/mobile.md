@@ -78,7 +78,9 @@ Open `/new?id=<board id>` at 390x844 with an iPhone user agent and
 `htpr-8029-phone-new-task-layout` on. `#createTaskModal` has
 `data-phone-new-task-sheet="on"`. `#body` padding-top is the safe area, and at
 least 28px, so the sheet starts below the status bar. The description card has
-`data-phone-new-task-card="on"`. The bar
+`data-phone-new-task-card="on"`. With `htpr-9440-phone-sheet-editor-card` on,
+the description text stays inside that card on a tall screen and scrolls there.
+The bar
 inside `.attachment-upload-container` (Attach files, and dictate) sits
 at the bottom of that card. Open the keyboard. The modal gets
 `data-phone-new-task-keyboard="on"` and its bottom edge is the keyboard
@@ -100,6 +102,8 @@ stays the sidebar. Flag off restores the sheet, the handle, the large
 board picker, and the model line.
 
 ## Gotchas
+
+Known failing on production, tracked in [HTPR-9582](https://app.hypertask.ai/detail/project-15/9582).
 
 Mobile-only layout and interaction bugs desktop testing never catches, most
 recently: mobile Task Writer direct save locking up and new-task layout

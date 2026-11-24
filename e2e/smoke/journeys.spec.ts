@@ -70,14 +70,24 @@ test(`switch boards`, { tag: [idTag('switch-boards')] }, async ({ page, request 
   const other = teams.flatMap((t) => t.projects).find((p) => p.id !== board.projectId)
   test.skip(!other, 'account has no other board to switch to besides "QA runner board"')
 
+  const openBoard = async (projectId: number) => {
+    const entry = page.locator(`#project-${projectId}:visible`)
+    if ((await entry.count()) === 0) {
+      await page.keyboard.press('Control+b')
+      await expect(entry.first()).toBeVisible({ timeout: 5_000 })
+    }
+    await entry.first().click({ timeout: 5_000 })
+    await expect(page).toHaveURL(new RegExp(`[?&]id=${projectId}(?:&|$)`))
+  }
+
   await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' })
-  await assertColumnsStayVisible(page, '.kanban-column-title', 3_000)
+  await assertColumnsStayVisible(page, '.kanban-column-title', 3_000, 20_000, board.projectId)
 
   const guard = watchForLoops(page)
-  await page.keyboard.press('Control+B')
-  await page.locator(`#project-${other!.id}:visible`).first().click()
-  await expect(page).toHaveURL(new RegExp(`[?&]id=${other!.id}(?:&|$)`))
-  await assertColumnsStayVisible(page, '.kanban-column-title', 10_000)
+  await openBoard(other!.id)
+  await assertColumnsStayVisible(page, '.kanban-column-title', 10_000, 20_000, other!.id)
+  await openBoard(board.projectId)
+  await assertColumnsStayVisible(page, '.kanban-column-title', 10_000, 20_000, board.projectId)
   expect(guard.loads, 'switch boards performed a full page reload').toBe(0)
   assertNoLoop(guard, 'switch boards')
   guard.stop()
