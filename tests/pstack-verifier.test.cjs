@@ -1197,21 +1197,6 @@ test("the seed mints an agent token for the seeded agent and exports it", async 
   assert.match(source, /replyToMessageId: lastQuestion\.id/);
 });
 
-const apiAction = (method, apiPath, extra = {}) => ({ op: "api", method, path: apiPath, expectStatus: 200, ...extra });
-const driveAuth = async (actions, respond = () => ({ status: 200, text: "{}" })) => {
-  const { parsePlan, runPlan } = await load();
-  const sent = [];
-  const parsed = parsePlan(JSON.stringify({ actions }));
-  const result = await runPlan({
-    page: { request: { async fetch(url, options) {
-      sent.push(options.headers.Authorization);
-      const { status, text } = respond(options.headers.Authorization);
-      return { status: () => status, async text() { return text; } };
-    } } },
-    plan: parsed, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
-  });
-  return { parsed, sent, result, ok: result.steps.map((step) => step.ok) };
-};
 for (const run of ["45173881467", "45154622521"]) {
   test(`planner replay ${run} drops expectations copied from the prompt example`, async () => {
     const { parsePlan, buildPrompt } = await load();
@@ -1227,7 +1212,7 @@ for (const run of ["45173881467", "45154622521"]) {
   });
 }
 
-test("copied prompt example expectations are dropped as a whole, not word by word", async () => {
+test("an expectation copied from the prompt example is dropped whole, and real wording stays", async () => {
   const { buildPrompt, parsePlan } = await load();
   for (const kind of ["page", "plan"]) {
     const shape = JSON.parse(buildPrompt({ kind }).split("\nShape: ")[1].split("\n")[0]);
@@ -1235,88 +1220,12 @@ test("copied prompt example expectations are dropped as a whole, not word by wor
     assert.deepEqual(parsed.expect, [], kind);
     assert.equal(parsed.actions.length, 1, kind);
   }
-  const kept = parsePlan(JSON.stringify({
-    actions: [{ op: "fill", label: "Title", value: "Smoke" }, { op: "click", text: "Add field" }, apiAction("POST", "/api/mcp/tasks/{task}", { body: {}, expectText: "saved" })],
-    expect: [{ text: "saved" }, { text: "Title" }, { text: "Smoke" }, { text: "Add field" }],
-  }));
-  assert.deepEqual(kept.expect, [{ text: "saved" }, { text: "Title" }, { text: "Smoke" }, { text: "Add field" }]);
-  assert.deepEqual(kept.actions.map((action) => action.label ?? action.text ?? action.expectText), ["Title", "Add field", "saved"]);
-});
-
-test("planner replay 45173881467 retries agent-only refusals with the agent token", async () => {
-  const { parsePlan, runPlan } = await load();
-  const primary = require("./fixtures/pstack-verifier/planner-45173881467.json").journeys.find((item) => item.journey === "change:primary");
-  const paths = ["/api/mcp/tasks/lease/claim", "/api/mcp/chat/activity", "/api/mcp/chat/sessions/{task}/messages", "/api/mcp/agents/runs/{task}/activities"];
-  const plan = parsePlan(JSON.stringify({ ...primary, actions: primary.actions.filter((action) => paths.includes(action.path)), expect: [] }));
-  const sent = [];
-  const result = await runPlan({
-    page: { request: { async fetch(url, options) {
-      sent.push(options.headers.Authorization);
-      const agent = options.headers.Authorization === "Bearer seeded-agent";
-      return { status: () => agent ? 400 : 403, text: async () => agent ? "invalid" : "Task mutation leases require an agent token" };
-    } } },
-    plan, base: "http://127.0.0.1:3100", projectId: "1", taskId: "7", bearer: "seeded-user", agentBearer: "seeded-agent", navigations: [],
-  });
-  assert.deepEqual(sent, paths.flatMap(() => ["Bearer seeded-user", "Bearer seeded-agent"]));
-  assert.deepEqual(result.steps.map((step) => step.ok), paths.map(() => true));
-  assert.deepEqual(result.steps.map((step) => step.text), paths.map(() => "invalid"));
-});
-
-test("the drive sends the user token first and keeps it when the call answers", async () => {
-  const { sent, ok } = await driveAuth([apiAction("GET", "/api/mcp/inbox/list"), apiAction("GET", "/api/mcp/agents/12"), apiAction("PATCH", "/api/mcp/agents/12"), apiAction("DELETE", "/api/mcp/agents/12")]);
-  assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user", "Bearer seeded-user"]);
-  assert.deepEqual(ok, [true, true, true, true]);
-});
-
-const agentRoutes = [
-  "/api/mcp/flags",
-  "/api/mcp/flags/reviews",
-  "/api/mcp/manager-leases",
-  "/api/mcp/agents/board-access-requests",
-  "/api/mcp/agents/board-access-requests/[requestId]",
-  "/api/mcp/agents/[agentId]",
-  "/api/mcp/agents/runs/[id]",
-  "/api/mcp/agents/runs/[id]/stop",
-  "/api/mcp/agents/runtime-heartbeat",
-];
-
-test("no route refusing a non-agent caller is missing from the derived set", async () => {
-  const { agentOnlyRoutes } = await load();
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const derived = agentOnlyRoutes();
-  for (const route of agentRoutes) assert.equal(derived.includes(route), true, route);
-  const root = path.join(__dirname, "../src/app/api/mcp");
-  const caller = /requires? an agent token|agent token is required|authenticateAgentRunRequest|@\/lib\/flags\/agentAuthorization/;
-  for (const file of fs.readdirSync(root, { recursive: true }).filter((file) => file.endsWith("/route.ts") && caller.test(fs.readFileSync(path.join(root, file), "utf8")))) {
-    assert.equal(derived.includes(`/api/mcp/${file.slice(0, -"/route.ts".length)}`), true, file);
+  for (const text of ["saved", "Title", "Smoke", "Add field", "Core actions"]) {
+    const kept = parsePlan(JSON.stringify({ actions: [], expect: [{ text }] }));
+    assert.deepEqual(kept.expect, [{ text }], text);
   }
-  for (const route of ["/api/mcp/inbox/list", "/api/mcp/tasks/evidence", "/api/mcp/time/delete", "/api/mcp/assignees/assign"]) assert.equal(derived.includes(route), false, route);
-});
-
-test("a generic refusal on an agent-only route is retried and elsewhere it is not", async () => {
-  const refused = (authorization) => authorization === "Bearer seeded-agent" ? { status: 200, text: "{}" } : { status: 403, text: "Forbidden" };
-  const retried = await driveAuth([apiAction("PATCH", "/api/mcp/flags"), apiAction("POST", "/api/mcp/manager-leases")], refused);
-  assert.deepEqual(retried.sent, ["Bearer seeded-user", "Bearer seeded-agent", "Bearer seeded-user", "Bearer seeded-agent"]);
-  assert.deepEqual(retried.ok, [true, true]);
-  const kept = await driveAuth([apiAction("GET", "/api/mcp/inbox/list"), apiAction("POST", "/api/mcp/tasks/{task}")], () => ({ status: 403, text: "Forbidden" }));
-  assert.deepEqual(kept.sent, ["Bearer seeded-user", "Bearer seeded-user"]);
-  assert.deepEqual(kept.ok, [false, false]);
-});
-
-test("a plan that expects a refusal keeps the user token and is not retried", async () => {
-  const { sent, ok } = await driveAuth([apiAction("POST", "/api/mcp/tasks/lease/claim", { expectStatus: 403 })], () => ({ status: 403, text: "Task mutation leases require an agent token" }));
-  assert.deepEqual(sent, ["Bearer seeded-user"]);
-  assert.deepEqual(ok, [true]);
-});
-
-test("an explicit auth overrides the token choice and an unknown auth is refused", async () => {
-  const { parsed, sent, ok } = await driveAuth([apiAction("POST", "/api/mcp/tasks/lease/claim", { auth: "user" }), apiAction("GET", "/api/mcp/tasks/{task}", { auth: "agent" })], () => ({ status: 403, text: "Forbidden" }));
-  assert.deepEqual(parsed.actions.map((action) => action.auth), ["user", "agent"]);
-  assert.deepEqual(sent, ["Bearer seeded-user", "Bearer seeded-agent"]);
-  assert.deepEqual(ok, [false, false]);
-  const { parsePlan } = await load();
-  assert.throws(() => parsePlan(JSON.stringify({ actions: [apiAction("GET", "/api/mcp/hello", { auth: "management" })] })), /auth is not allowed/);
+  const two = parsePlan(JSON.stringify({ actions: [], expect: [{ text: "Core actions smoke" }, { text: "saved" }] }));
+  assert.deepEqual(two.expect, [{ text: "Core actions smoke" }, { text: "saved" }]);
 });
 
 for (const { expected, actual, ok } of [
@@ -1356,11 +1265,7 @@ test("an agent-only route is called with the seeded agent token", async () => {
   assert.deepEqual(action[0].path, "/api/mcp/chat/pending?unanswered=true");
   const sent = [];
   const page = {
-    request: { async fetch(url, options) {
-      sent.push({ url, headers: options.headers });
-      const agent = options.headers.Authorization === "Bearer agent-token";
-      return { status: () => agent ? 200 : 403, async text() { return agent ? '{"success":true,"messages":[]}' : '{"success":false,"error":"Agent Chat requires an agent token"}'; } };
-    } },
+    request: { async fetch(url, options) { sent.push({ url, headers: options.headers }); return { status: () => 200, async text() { return '{"success":true,"messages":[]}'; } }; } },
   };
   const run = await runPlan({
     page,
@@ -1371,10 +1276,7 @@ test("an agent-only route is called with the seeded agent token", async () => {
     ...ids,
   });
   assert.equal(run.steps[0].ok, true);
-  assert.deepEqual(sent, [
-    { url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer smoke-token" } },
-    { url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer agent-token" } },
-  ]);
+  assert.deepEqual(sent, [{ url: "http://127.0.0.1:3100/api/mcp/chat/pending?unanswered=true", headers: { Authorization: "Bearer agent-token" } }]);
   const account = plan([{ op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "ok" }]);
   const mixed = [];
   await runPlan({
@@ -1402,7 +1304,7 @@ test("an agent-only route is called with the seeded agent token", async () => {
     shotsDir: "/tmp",
     navigations: [],
   });
-  assert.equal(missing.steps[0].ok, true);
+  assert.equal(missing.steps[0].ok, false);
 });
 
 test("a real plan with no evidence file fails as evidence missing", async () => {
