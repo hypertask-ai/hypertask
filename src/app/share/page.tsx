@@ -14,6 +14,7 @@ import {
 } from "@/utils/controllers/tasks/getSharedTask";
 import SharedTaskDetailComp from "./SharedTaskDetailComp";
 import SharedTaskPageFooter from "@/components/PageComponents/TaskDetail/SharedTask/Footer/Footer";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component decides the public footer layout on every share.
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_9546_SHARE_FOOTER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9546-share-footer-layout";
 import { IUser } from "@/models/model";
