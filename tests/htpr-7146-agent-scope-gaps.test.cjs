@@ -21,8 +21,8 @@ function actor(mode, kind, board = 15) {
   if (kind === 'invited') f.projects.find(p => p.id === board).members[0].status = 'Invited';
   return f;
 }
-function miss(f, mode, kind, board, action) {
-  assert.equal(f.state.events.some(e => e.properties.projectId === board && e.properties.action === action), mode === 'WATCH' && ['outside', 'invited'].includes(kind));
+function assertNoScopeMiss(f, board, action) {
+  assert.equal(f.state.events.some(e => e.properties.projectId === board && e.properties.action === action), false);
 }
 
 for (const [mode, kind] of cases) {
@@ -40,7 +40,7 @@ for (const [mode, kind] of cases) {
       './lifecycle': {},
     }).PATCH;
     const run = (operation = 'add') => patch(request('/api/mcp/agents/target-agent', 'PATCH', { [`${operation}_project_ids`]: [15] }), { params: Promise.resolve({ agentId: target.id }) });
-    if (kind === 'outside' || kind === 'invited' && mode === 'ENFORCE') {
+    if (kind === 'outside' || kind === 'invited') {
       assert.equal((await run()).status, 403);
       assert.equal((await run('remove')).status, 403);
       assert.deepEqual(f.writes, []);
@@ -48,11 +48,11 @@ for (const [mode, kind] of cases) {
       const response = await run();
       assert.equal(response.status, 200);
       const result = await response.json();
-      assert.deepEqual(result.agent.project_ids, kind === 'human' || mode === 'WATCH' ? [15, 2128, 4060] : [15, 4060]);
+      assert.deepEqual(result.agent.project_ids, kind === 'human' ? [15, 2128, 4060] : [15, 4060]);
       assert.deepEqual(f.writes, ['add']);
       const removed = await run('remove');
       assert.equal(removed.status, 200);
-      assert.deepEqual((await removed.json()).agent.project_ids, kind === 'human' || mode === 'WATCH' ? [2128, 4060] : [4060]);
+      assert.deepEqual((await removed.json()).agent.project_ids, kind === 'human' ? [2128, 4060] : [4060]);
       assert.deepEqual(f.writes, ['add', 'remove']);
       if (mode === 'WATCH') assert.ok(f.state.events.some(e => e.properties.projectId === 2128 && e.properties.action === 'read'));
     }
@@ -98,15 +98,15 @@ for (const [mode, kind] of cases) {
       return;
     }
     assert.equal(get.status, 200);
-    const allowed = mode === 'WATCH' || kind === 'granted';
+    const allowed = kind === 'granted';
     assert.equal((await get.json()).flag.ticketTitle, allowed ? 'Task 15' : null);
     const patch = await route.PATCH(request('/api/mcp/flags', 'PATCH', { key, mode: 'OFF', reason: 'https://app.hypertask.ai/detail/project-15/7146#comment-123' }));
     assert.equal(patch.status, allowed ? 200 : 403);
     assert.equal(lockCount, allowed ? 2 : 0);
     assert.equal(f.writes.length, allowed ? 1 : 0);
     if (allowed) assert.equal((await patch.json()).flag.ticketTitle, 'Task 15');
-    miss(f, mode, kind, 15, 'read');
-    miss(f, mode, kind, 15, 'write');
+    assertNoScopeMiss(f, 15, 'read');
+    assertNoScopeMiss(f, 15, 'write');
     comment.task = f.tasks[2];
     const foreign = await route.PATCH(request('/api/mcp/flags', 'PATCH', { key, mode: 'OFF', reason: 'https://app.hypertask.ai/detail/project-15/7146#comment-123' }));
     assert.equal(foreign.status, 403);
@@ -133,12 +133,12 @@ for (const [mode, kind] of cases) {
       checkRateLimit: async () => null, validateAuth: async () => f.state.ctx, runProbe,
     });
     const result = await get(request('/api/ops/task-write-probe'));
-    const allowed = mode === 'WATCH' || ['human', 'granted'].includes(kind);
+    const allowed = ['human', 'granted'].includes(kind);
     assert.equal(result.status, allowed ? 200 : 503);
     assert.equal(locks, allowed ? 1 : 0);
     const body = await result.json();
     assert.equal(body.probe.lockedTaskId, allowed ? 150 : undefined);
-    miss(f, mode, kind, 15, 'write');
+    assertNoScopeMiss(f, 15, 'write');
   });
 
   test(`team board replay ${mode} ${kind}: principal key and fresh authorization`, async () => {
@@ -159,17 +159,18 @@ for (const [mode, kind] of cases) {
     const invoke = () => route(request('/api/mcp/teams/team/boards', 'POST', body, { 'Idempotency-Key': 'scope-key' }), { params: Promise.resolve({ teamId: 'team' }) }, dependencies);
     assert.equal((await invoke()).status, 200);
     const replay = await invoke();
-    const allowed = mode === 'WATCH' || ['granted', 'human'].includes(kind);
+    const allowed = ['granted', 'human'].includes(kind);
     assert.equal(replay.status, allowed ? 200 : 403);
     if (allowed) assert.equal((await replay.json()).idempotent_replayed, true);
     assert.deepEqual(f.writes, ['create']);
-    miss(f, mode, kind, 15, 'read');
+    assertNoScopeMiss(f, 15, 'read');
     f.user.agents.push({ ...f.agent, id: 'second-agent' });
     f.state.ctx.agentId = 'second-agent';
     const other = await invoke();
+    const sharedKey = kind === 'human' && mode === 'WATCH';
     assert.equal(other.status, 200);
-    assert.equal((await other.json()).idempotent_replayed, mode === 'WATCH' ? true : undefined);
-    assert.deepEqual(f.writes, mode === 'WATCH' ? ['create'] : ['create', 'create']);
+    assert.equal((await other.json()).idempotent_replayed, sharedKey ? true : undefined);
+    assert.deepEqual(f.writes, sharedKey ? ['create'] : ['create', 'create']);
     assert.notEqual(store.createIdempotencyRedisKey('create_board', 6, 'key', body, 'a'), store.createIdempotencyRedisKey('create_board', 6, 'key', body, 'b'));
   });
 }
@@ -214,7 +215,7 @@ test('write probe rechecks revoked grants inside its lock before writing', async
   assert.deepEqual(f.writes, []);
 });
 
-test('native tool execution adapter initializes WATCH for a dynamically selected agent', async () => {
+test('native tool execution refuses a board the agent was not given and still opens a granted board', async () => {
   const f = actor('WATCH', 'outside');
   const execution = f.load('src/lib/ai/tools/execution.ts', {
     '@/lib/mcp/tasks/agentMutationLeaseAdoption': { withAdoptedAgentMutationLease: async (_db, _actor, run) => run() },
@@ -222,10 +223,13 @@ test('native tool execution adapter initializes WATCH for a dynamically selected
     '@/app/api/ai/chat/stream/bulkTools': {},
   });
   const tools = execution.trackToolSetExecutions({ scoped: { execute: async () => {
-    assert.equal(f.scope.agentScopeEnforced(), false);
-    return f.prisma.project.findFirst({ where: { id: 15, ...f.access.projectContentAccessWhere(6, f.agent.id) } });
+    assert.equal(f.scope.agentScopeEnforced(), true);
+    const denied = await f.prisma.project.findFirst({ where: { id: 15, ...f.access.projectContentAccessWhere(6, f.agent.id) } });
+    const allowed = await f.prisma.project.findFirst({ where: { id: 4060, ...f.access.projectContentAccessWhere(6, f.agent.id) } });
+    assert.equal(denied, null);
+    return allowed;
   } } }, () => {}, undefined, { userId: 6, agentId: f.agent.id });
-  assert.equal((await tools.scoped.execute()).id, 15);
+  assert.equal((await tools.scoped.execute()).id, 4060);
   assert.equal(f.state.flagReads, 1);
 });
 
@@ -240,25 +244,28 @@ test('chat team context adapter initializes WATCH for an internal session agent'
   assert.equal(f.state.flagReads, 1);
 });
 
-test('Pages comment adapter prepares a body agent and preserves production board access in WATCH', async () => {
+test('Pages comment adapter refuses a board the body agent was not given and still returns a granted task', async () => {
   const f = actor('WATCH', 'outside');
   const audienceReads = [];
   const handler = f.load('src/pages/api/comments/create.ts', {
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6, agentId: f.agent.id }) },
     '@/lib/flags': { isFeatureEnabled: async (key) => { audienceReads.push(key); return false; } },
     '@/utils/controllers/comments/createCommentService': { createCommentService: async () => {
-      assert.equal(f.scope.agentScopeEnforced(), false);
-      return f.prisma.task.findFirst({ where: { id: 150, project: f.access.projectContentAccessWhere(6, f.agent.id) } });
+      assert.equal(f.scope.agentScopeEnforced(), true);
+      const denied = await f.prisma.task.findFirst({ where: { id: 150, project: f.access.projectContentAccessWhere(6, f.agent.id) } });
+      const allowed = await f.prisma.task.findFirst({ where: { id: 40600, project: f.access.projectContentAccessWhere(6, f.agent.id) } });
+      assert.equal(denied, null);
+      return allowed;
     } },
   }).default;
   const res = response();
   await handler({ url: '/api/comments/create', method: 'POST', headers: {}, body: { text: 'Test', creatorId: 6, taskId: 150, ownerId: 6, agentId: f.agent.id } }, res);
-  assert.equal(res.body.id, 150);
+  assert.equal(res.body.id, 40600);
   assert.deepEqual(audienceReads, ['htpr-9063-comment-audience']);
   assert.equal(f.state.flagReads, 1);
 });
 
-test('Pages delete-reminder adapter preserves WATCH access for a signed agent outside the target board', async () => {
+test('Pages delete-reminder refuses a board the signed agent was not given and still updates a granted task', async () => {
   const f = actor('WATCH', 'outside');
   f.prisma.$transaction = async () => f.tasks[0];
   const handler = f.load('src/pages/api/queues/tasks/taskDeleteReminder.ts', {
@@ -267,14 +274,18 @@ test('Pages delete-reminder adapter preserves WATCH access for a signed agent ou
     '@/lib/constants': { default: { TaskDeletePrefixKey: 'delete-' } },
     '../taskDeleteQueue': { scheduleTaskDeleteJob: async () => {} },
   }).default;
-  const res = response();
-  await handler({ url: '/api/queues/tasks/taskDeleteReminder', method: 'POST', headers: {}, cookies: {}, body: { taskId: 150, agentId: f.agent.id } }, res);
-  assert.equal(res.statusCode, 200);
-  assert.equal(res.body.id, 150);
-  assert.equal(f.state.flagReads, 1);
+  const denied = response();
+  await handler({ url: '/api/queues/tasks/taskDeleteReminder', method: 'POST', headers: {}, cookies: {}, body: { taskId: 150, agentId: f.agent.id } }, denied);
+  assert.equal(denied.statusCode, 404);
+  f.prisma.$transaction = async () => f.tasks[1];
+  const allowed = response();
+  await handler({ url: '/api/queues/tasks/taskDeleteReminder', method: 'POST', headers: {}, cookies: {}, body: { taskId: 40600, agentId: f.agent.id } }, allowed);
+  assert.equal(allowed.statusCode, 200);
+  assert.equal(allowed.body.id, 40600);
+  assert.equal(f.state.flagReads, 2);
 });
 
-test('proposal adapter prepares its session agent before checking the target board in WATCH', async () => {
+test('proposal adapter refuses a target board the session agent was not given', async () => {
   const f = actor('WATCH', 'outside');
   const proposal = { id: 'proposal', status: 'PENDING', targetProjectId: 15, targetSectionId: 15, ticketTitle: 'New' };
   f.prisma.chatTicketProposal = { findFirst: async () => proposal, findUnique: async () => proposal, updateMany: async () => ({ count: 1 }) };
@@ -286,17 +297,19 @@ test('proposal adapter prepares its session agent before checking the target boa
     '@/lib/mcp/agents/scopes': { getAgentRole: async () => 'write' },
     '@/lib/agents/chatTicketProposal': { chatTicketProposalSelect: {}, serializeChatTicketProposal: row => row },
     '@/utils/controllers/tasks/createTaskCore': {},
-    '@/lib/mcp/tasks/services': { validateProjectAccess: async (_project, userId, agentId) => {
+    '@/lib/mcp/tasks/services': { validateProjectAccess: async (projectId, userId, agentId) => {
       checked = true;
-      assert.equal(f.scope.agentScopeEnforced(), false);
-      const project = await f.prisma.project.findFirst({ where: { id: 15, ...f.access.projectContentAccessWhere(userId, agentId) } });
-      assert.equal(project.id, 15);
-      return { project };
+      assert.equal(f.scope.agentScopeEnforced(), true);
+      const denied = await f.prisma.project.findFirst({ where: { id: projectId, ...f.access.projectContentAccessWhere(userId, agentId) } });
+      const allowed = await f.prisma.project.findFirst({ where: { id: 4060, ...f.access.projectContentAccessWhere(userId, agentId) } });
+      assert.equal(denied, null);
+      assert.equal(allowed.id, 4060);
+      return { error: { message: 'Project not found or access denied', status: 404 } };
     } },
     '@/lib/realtime/server': { broadcast: async () => {}, userChannel: () => 'user' },
   });
   const result = await route.POST(request('/api/agent-chat/session/proposals/proposal', 'POST', { action: 'confirm' }), { params: Promise.resolve({ sessionId: 'session', proposalId: 'proposal' }) });
-  assert.equal(result.status, 400);
+  assert.equal(result.status, 404);
   assert.equal(checked, true);
   assert.equal(f.state.flagReads, 1);
 });
@@ -313,26 +326,32 @@ test('mention adapter prepares the internal bridge body agent even with an owner
   const res = response();
   await handler({ url: '/api/comments/createMention', method: 'POST', headers: {}, body: { taskId: 150, projectId: 15, userId: 99, fromAgentId: f.agent.id } }, res);
   assert.equal(f.state.flagReads, 1);
-  assert.ok(f.state.events.some(e => e.properties.projectId === 15));
-  assert.notEqual(res.statusCode, 500);
+  assert.equal(res.statusCode, 404);
+  assert.deepEqual(f.state.events, []);
+  const allowed = response();
+  await handler({ url: '/api/comments/createMention', method: 'POST', headers: {}, body: { taskId: 40600, projectId: 4060, userId: 99, fromAgentId: f.agent.id } }, allowed);
+  assert.notEqual(allowed.statusCode, 404);
+  assert.notEqual(allowed.statusCode, 500);
 });
 
-test('shared task-write adapter prepares a production body agent on a human-owned request', async () => {
+test('shared task-write adapter refuses an ungranted board and still writes a granted board', async () => {
   const f = actor('WATCH', 'outside');
   const { taskWriteRoute } = f.load('src/lib/api/task-writes/route.ts', {
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
   });
   const { z } = require('zod');
   const route = taskWriteRoute({ schema: z.any(), validationMessage: 'Invalid', operation: async () => {
-    assert.equal(f.scope.agentScopeEnforced(), false);
-    const board = await f.prisma.project.findFirst({ where: { id: 15, ...f.access.taskWriteAccessWhere(6, f.agent.id) } });
-    return Response.json({ id: board.id });
+    assert.equal(f.scope.agentScopeEnforced(), true);
+    const denied = await f.prisma.project.findFirst({ where: { id: 15, ...f.access.taskWriteAccessWhere(6, f.agent.id) } });
+    const allowed = await f.prisma.project.findFirst({ where: { id: 4060, ...f.access.taskWriteAccessWhere(6, f.agent.id) } });
+    assert.equal(denied, null);
+    return Response.json({ id: allowed.id });
   } });
   const result = await route(request('/api/section/resetRanks', 'POST', { agentId: f.agent.id }));
-  assert.equal((await result.json()).id, 15);
+  assert.equal((await result.json()).id, 4060);
 });
 
-test('bound MCP adapter prepares WATCH even when the operation reuses an authenticated principal directly', async () => {
+test('bound MCP adapter limits a principal that already has boards when the operation reuses it', async () => {
   const f = actor('WATCH', 'outside');
   const wrapper = f.load('src/lib/mcp/routeWrapper.ts', {
     '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} },
@@ -341,8 +360,10 @@ test('bound MCP adapter prepares WATCH even when the operation reuses an authent
     './operationCrashReport': { reportUnexplainedMcpServerError: () => {} },
   });
   const result = await wrapper.wrapMcpRoute(async () => {
-    assert.equal(f.scope.agentScopeEnforced(), false);
-    return f.prisma.project.findFirst({ where: { id: 15, ...f.access.projectContentAccessWhere(6, f.agent.id) } });
+    assert.equal(f.scope.agentScopeEnforced(), true);
+    const denied = await f.prisma.project.findFirst({ where: { id: 15, ...f.access.projectContentAccessWhere(6, f.agent.id) } });
+    assert.equal(denied, null);
+    return f.prisma.project.findFirst({ where: { id: 4060, ...f.access.projectContentAccessWhere(6, f.agent.id) } });
   })(request('/api/mcp/projects'));
-  assert.equal(result.id, 15);
+  assert.equal(result.id, 4060);
 });
