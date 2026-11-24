@@ -1324,13 +1324,15 @@ return (
             )}
 
           {_currentProject && (
-            <CycleBoardMeta
-              activeViewId={getActiveBoardViewId(
-                _currentProject,
-                activeBuiltinViews,
-              )}
-              project={_currentProject}
-            />
+            <div className={appShellRailOn ? 'ml-[var(--app-shell-rail-w,48px)] pl-[calc(1.5%+9px)] pr-[1.5%]' : undefined}>
+              <CycleBoardMeta
+                activeViewId={getActiveBoardViewId(
+                  _currentProject,
+                  activeBuiltinViews,
+                )}
+                project={_currentProject}
+              />
+            </div>
           )}
 
           <div
