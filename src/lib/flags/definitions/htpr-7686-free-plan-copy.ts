@@ -18,7 +18,6 @@ export default {
     "htpr-7922-unlimited-free-boards",
     "htpr-7923-unlimited-free-tickets",
     "htpr-7924-free-file-25mb",
-    "htpr-7924-free-storage-2gb",
     "htpr-7919-allowance-percent",
   ],
 } as const satisfies FeatureFlagDefinition;

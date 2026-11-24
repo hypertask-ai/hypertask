@@ -12,7 +12,6 @@ const generousOn = {
   unlimitedTickets: true,
   unlimitedBoards: true,
   raisedFileLimit: true,
-  storageCap: true,
 };
 
 test("generous Free copy stays truthful from entitlement flags", () => {
@@ -23,7 +22,8 @@ test("generous Free copy stays truthful from entitlement flags", () => {
     "Keep everything; you just can't add more until you're under it or upgrade",
     "Up to 2 GB attachment storage per team",
   ]);
-  assert.equal(limits.freePlanLimitCopy({ ...generousOn, storageCap: false }).some((line) => line.includes("2 GB")), false);
+  assert.equal(limits.freePlanLimitCopy(generousOn).includes("Up to 2 GB attachment storage per team"), true);
+  assert.equal(limits.freePlanLimitCopy({ planLimits: false, unlimitedTickets: true }).some((line) => line.includes("2 GB")), false);
 });
 
 test("corrected positioning sells Pro on more AI and keeps dollars off", () => {
