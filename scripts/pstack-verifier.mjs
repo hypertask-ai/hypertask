@@ -619,11 +619,24 @@ export function selectPlan(files, filesTruncated = false) {
 }
 const APP_CODE_PREFIXES = ["src/", "app/", "pages/", "public/"];
 const APP_CODE_FILES = new Set(["next.config.js", "postcss.config.js", "tailwind.config.ts", "tokens.css"]);
+const isAppCodeFile = (name) => APP_CODE_PREFIXES.some((prefix) => name.startsWith(prefix)) || APP_CODE_FILES.has(name);
+export function appFiles(files) {
+  return (Array.isArray(files) ? files : []).map(String).filter(isAppCodeFile);
+}
 export function hasAppCode(files) {
-  return (Array.isArray(files) ? files : []).some((file) => {
-    const name = String(file);
-    return APP_CODE_PREFIXES.some((prefix) => name.startsWith(prefix)) || APP_CODE_FILES.has(name);
-  });
+  return appFiles(files).length > 0;
+}
+const DIFF_SECTION = /^(?=diff --git )/m;
+const DIFF_PATHS = /^diff --git a\/(.+?) b\/(.+)$/m;
+export function appDiff(diff, files) {
+  const keep = new Set(appFiles(files));
+  return String(diff ?? "")
+    .split(DIFF_SECTION)
+    .filter((section) => {
+      const paths = DIFF_PATHS.exec(section);
+      return Boolean(paths) && keep.has(paths[2]);
+    })
+    .join("");
 }
 export function harnessOnlyBugfix(title, files) {
   const list = Array.isArray(files) ? files : [];
@@ -1571,7 +1584,8 @@ export async function planFromRequest(request, deps = {}) {
 }
 export async function planJourneys({ request, pages, ask, key, model, models, bugfix = false, reach = [], feedback = "", changeOnly = false }) {
   const items = [];
-  const matched = changeOnly ? [] : journeyLib.pagesForFiles({ files: request.files, diff: request.diff, pages });
+  const files = appFiles(request.files);
+  const matched = changeOnly ? [] : journeyLib.pagesForFiles({ files, diff: appDiff(request.diff, files), pages });
   const chosen = matched.slice(0, AREA_JOURNEY_LIMIT);
   for (const item of chosen) {
     const page = pages.find((candidate) => candidate.name === item.page);
