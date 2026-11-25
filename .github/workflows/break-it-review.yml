@@ -44,7 +44,7 @@ jobs:
           command -v bwrap >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y bubblewrap; }
           npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: { repository: valentinyeo/token-ladder, ref: 496860909aae1692948589cf94c915d58018b774, path: token-ladder, fetch-depth: 1, persist-credentials: false }
+        with: { repository: valentinyeo/token-ladder, ref: 26f7770e33e397ed850e73fa6116e1f3beeb7b27, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - name: Ask another model family to break the fix
         if: ${{ !cancelled() }}
         working-directory: trusted
