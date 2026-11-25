@@ -94,10 +94,18 @@ async function render() {
   await React.act(async () => mounted.render(React.createElement(BillingSection)));
 }
 
-function rowValue(label) {
+function labelSpan(label) {
   const span = [...document.querySelectorAll("span")].find((candidate) => candidate.textContent === label);
   assert.ok(span, `Missing row ${label}`);
-  return span.nextElementSibling?.textContent;
+  return span;
+}
+
+function rowValue(label) {
+  return labelSpan(label).nextElementSibling?.textContent;
+}
+
+function actionRowValue(label) {
+  return labelSpan(label).parentElement.querySelector("div span")?.textContent;
 }
 
 test("a comped Pro team never reads Free Plan on any billing row", async () => {
@@ -110,7 +118,7 @@ test("a comped Pro team never reads Free Plan on any billing row", async () => {
   assert.equal(rowValue("Billing cycle"), "Comped");
   assert.equal(rowValue("Renewal"), expectedDate(compedUntil.getTime() / 1000));
   assert.equal(rowValue("Next invoice"), "Not billed");
-  assert.equal(rowValue("Invoice total"), "—");
+  assert.equal(actionRowValue("Invoice total"), "—");
   assert.match(document.body.textContent, /No invoices needed on a comped plan/);
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
 });
@@ -137,7 +145,7 @@ test("a paid Pro team outranks a BYOK comp and keeps every subscription row", as
   assert.equal(rowValue("Billing cycle"), "month");
   assert.equal(rowValue("Renewal"), expectedDate(upcomingPeriodEnd));
   assert.equal(rowValue("Next invoice"), expectedDate(upcomingPeriodEnd));
-  assert.equal(rowValue("Invoice total"), "$20.00");
+  assert.equal(actionRowValue("Invoice total"), "$20.00");
   assert.doesNotMatch(document.body.textContent, /Comped/);
   assert.doesNotMatch(document.body.textContent, /Not billed/);
 });
@@ -152,7 +160,7 @@ test("a comped Pro team that also pays keeps its paid cycle on screen", async ()
 
   assert.equal(rowValue("Plan"), "Pro");
   assert.equal(rowValue("Billing cycle"), "month");
-  assert.equal(rowValue("Invoice total"), "$20.00");
+  assert.equal(actionRowValue("Invoice total"), "$20.00");
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
 });
 
@@ -191,7 +199,7 @@ test("a paid Pro team keeps its subscription rows", async () => {
   assert.equal(rowValue("Plan"), "Pro");
   assert.equal(rowValue("Billing cycle"), "month");
   assert.equal(rowValue("Renewal"), expectedDate(upcomingPeriodEnd));
-  assert.equal(rowValue("Invoice total"), "$20.00");
+  assert.equal(actionRowValue("Invoice total"), "$20.00");
   assert.equal(document.querySelector('a[href="https://stripe.test/invoice"]').textContent, "View");
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
 });
