@@ -63,6 +63,33 @@ export const KanbanTipsConstants: ITips[] = [
   },
 ];
 
+export const KanbanTipsTidyConstants: ITips[] = [
+  {
+    key: ["CTRL", "K"],
+    hint: "command center",
+  },
+  {
+    key: ["J", "K"],
+    hint: "move",
+  },
+  {
+    key: ["C"],
+    hint: "add task",
+  },
+  {
+    key: ["N"],
+    hint: "quick add",
+  },
+  {
+    key: ["CTRL", "E"],
+    hint: "archive",
+  },
+  {
+    key: ["/"],
+    hint: "search",
+  },
+];
+
 export const TaskDetailTipsConstants: ITips[] = [
   {
     key: ["CTRL", "K"],

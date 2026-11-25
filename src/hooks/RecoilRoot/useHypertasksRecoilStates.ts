@@ -6,6 +6,7 @@ import { useRecoilState, useResetRecoilState } from "@/lib/state";
 
 const useHypertasksRecoilStates = () => {
     const [_, setShowCommands] = useRecoilState(showCommandsAtom);
+    const [__, setShowShortcuts] = useRecoilState(showShortcutsAtom);
     const [showCreateTaskModal, setCreateTaskModal] = useRecoilState(showCreateTaskModalAtom);
 
     const resetshowSidebar = useResetRecoilState(showSidebarAtom)
@@ -15,6 +16,7 @@ const useHypertasksRecoilStates = () => {
 
     const resetShowCommands = useResetRecoilState(showCommandsAtom)
     const toggleShowCommands =()=> setShowCommands((prev)=>({show:!prev.show, mode:CommandMode.Command}))
+    const openShortcuts = () => setShowShortcuts(true)
 
     const resetCreateTaskGlobally = useResetRecoilState(showCreateTaskModalAtom)
     const toggleCreateTaskGlobally = (column_payload?:TSectionPayload, defaultEditFocus?:TDefaultEditFocus, duplicate?:any)=>{
@@ -32,6 +34,7 @@ const useHypertasksRecoilStates = () => {
     return {
         resetShowCommands,
         toggleShowCommands,
+        openShortcuts,
         resetCreateTaskGlobally,
         toggleCreateTaskGlobally,
         GlobalProvidersEscapeHandler
