@@ -39,7 +39,7 @@ test('mobile design ratchet compares stable violation identities and catches sub
 })
 test('mobile-verify workflow follows CI contract and gates on prod-health-gate', async () => {
   const wf = yaml.load(readFileSync(path.join(root, '.github/workflows/mobile-verify.yml'), 'utf8')), steps = wf.jobs['mobile-verify'].steps, gateStep = steps.find((s) => s.id === 'gate'), pwStep = steps.find((s) => /playwright test/.test(s.run || ''))
-  assert.equal(wf.concurrency.group, 'mobile-verify'); assert.equal(wf.concurrency['cancel-in-progress'], true); assert.equal(wf.jobs['mobile-verify']['runs-on'], 'ubuntu-latest')
+  assert.equal(wf.concurrency.group, 'mobile-verify'); assert.equal(wf.concurrency['cancel-in-progress'], yaml.load(readFileSync(path.join(root, 'docs/ci-policy.yml'), 'utf8')).policies.concurrency.cancel_production_push_runs, 'production pushes queue, never cancel'); assert.equal(wf.jobs['mobile-verify']['runs-on'], 'ubuntu-latest')
   assert.match(gateStep.run, /wait-prod-health-gate\.mjs/); assert.equal(pwStep.if, "steps.gate.outputs.ok == 'true'"); assert.match(pwStep.run, /--project=mobile-design/); assert.match(pwStep.run, /--project=mobile-journeys/)
   const { waitForProdHealthGate } = await import(path.join(root, '.github/scripts/wait-prod-health-gate.mjs')), mkFetch = (runs, statuses) => async (u) => ({ ok: true, json: async () => (u.includes('/runs?') ? { workflow_runs: runs } : statuses) })
   assert.equal((await waitForProdHealthGate({ eventName: 'workflow_dispatch', repo: 'o/r', sha: 'abc', token: 't' })).ok, true)

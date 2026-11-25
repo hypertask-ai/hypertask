@@ -3,7 +3,7 @@ on:
   push: { branches: [production] }
   workflow_dispatch:
 permissions: { contents: read, actions: read, statuses: read }
-concurrency: { group: mobile-verify, cancel-in-progress: true }
+concurrency: { group: mobile-verify, cancel-in-progress: false }
 jobs:
   mobile-verify:
     runs-on: ubuntu-latest
