@@ -339,7 +339,7 @@ export function authorFamily(body, commits = [], authorLogin = "") {
   if (bodyFamilies.size > 1) return "";
   const commitFamilies = new Set();
   for (const commit of commits) {
-    if (!commitOwnedBy(commit, authorLogin)) continue;
+    if (commit?.parents?.length > 1 || !commitOwnedBy(commit, authorLogin)) continue;
     for (const { key, value } of trailerLines(commit)) {
       if (key === "author-model") {
         const family = value.split(/\s+/)[0].toLowerCase();
@@ -1025,11 +1025,13 @@ export function modelAcceptsImages(model, lane = {}) {
   if (!id || /deepseek-v4-pro|deepseek-chat|deepseek-reasoner/.test(full)) return false;
   if (deepseekApiLane(lane)) return DEEPSEEK_API_VISION.has(id);
   if (/deepseek-v4\.1-flash|deepseek-flash|deepseek-v4-flash|vision/.test(full)) return true;
+  if (/^(?:zai\/)?glm-5\.3-flash$/.test(full)) return true;
   if (/gpt-4o|gpt-4\.1|gpt-5|claude|sonnet|opus|haiku|gemini|grok/.test(full)) return true;
   return false;
 }
 function laneModel(lane, chosen) {
-  if (modelFamily(lane?.model) === modelFamily(chosen)) return lane.model;
+  const family = modelFamily(chosen);
+  if (lane?.model === chosen || (family !== "other" && modelFamily(lane?.model) === family)) return lane.model;
   if (routerLane(lane) && String(chosen).includes("/")) return String(chosen);
   return "";
 }
