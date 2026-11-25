@@ -126,6 +126,8 @@ for (const flag of [true, false]) {
     assert.deepEqual(flagReads, [[key, 77], [key, 78]]);
     if (flag) {
       for (const text of [onboardingText, cliText]) assertCurrent(text);
+      assert.match(cliText, /hypertask login/);
+      assert.doesNotMatch(cliText, /login --token|--token|does not sign in today/);
       assert.ok(mcpText.split(/<[^>]*>/).some((value) => value === commands.MCP_ADD_COMMAND));
     } else {
       assert.equal(onboardingText, legacy.onboarding);

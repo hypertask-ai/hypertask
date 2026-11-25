@@ -10,8 +10,9 @@ const cliKey = "htpr-7033-cli-install-command";
 const browserKey = "htpr-9530-onboarding-cli-browser-login";
 const commands = load("src/lib/onboarding/installCommands.ts");
 
-async function seed(enabled, cliEnabled, browserLoginEnabled = true) {
+async function seed(enabled, cliEnabled, browserLoginEnabled = true, { sample = false } = {}) {
   const tasks = [];
+  const manifests = [];
   const markers = [];
   const assignments = [];
   const reads = [];
@@ -19,11 +20,11 @@ async function seed(enabled, cliEnabled, browserLoginEnabled = true) {
   const prisma = {
     section: { create: async ({ data }) => ({ id: nextSection++, ...data }) },
     user: { findUnique: async () => ({ id: 900 }) },
-    project: { update: async ({ where, data }) => { assert.equal(where.id, 7); markers.push(data); return data; } },
+    project: { update: async ({ where, data }) => { assert.equal(where.id, 7); markers.push(data); return data; }, findUniqueOrThrow: async () => ({ id: 7 }) },
   };
   const { createOnboardingSampleBoardProject } = load("src/utils/controllers/users/completeOnboardingStep.ts", {
-    "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
-    "@/lib/mcp/boards/createBoardFromManifest": {},
+    "@/lib/planLimits": { isPlanLimitsEnabled: async () => sample, isPlanLimitReachedError: () => false },
+    "@/lib/mcp/boards/createBoardFromManifest": { createBoardFromManifest: async (options) => { manifests.push(options.manifest); return { board: { id: 7 }, tasks: [{ id: 71 }] }; } },
     "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "seed", processAnalyticsIntentSoon() {} },
     "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "MYB" },
     "@/utils/controllers/logs/createLog": { __esModule: true, default() {} },
@@ -50,12 +51,17 @@ async function seed(enabled, cliEnabled, browserLoginEnabled = true) {
     },
   });
   await createOnboardingSampleBoardProject({ exist_user: { id: 2343 }, boardTitle: "MyBoard", Team: { id: "team", title: "MyTeam" }, googleAccount: { id: "google" } });
-  assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].sectionId, 10);
-  assert.equal(tasks[0].userId, 900);
-  assert.equal(tasks[0].projectId, 7);
+  if (sample) {
+    assert.equal(manifests.length, 1);
+    assert.equal(manifests[0].tasks.at(-1).title, "Connect your AI to Hypertask");
+  } else {
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].sectionId, 10);
+    assert.equal(tasks[0].userId, 900);
+    assert.equal(tasks[0].projectId, 7);
+  }
   assert.equal(assignments[0][2], 71);
-  return { task: tasks[0], markers, reads };
+  return { task: sample ? manifests[0].tasks.at(-1) : tasks[0], markers, reads };
 }
 
 for (const cliEnabled of [false, true]) {
@@ -83,12 +89,13 @@ for (const cliEnabled of [false, true]) {
   });
 
   test(`normal user with flag off is still refused new copy and preserves old CLI ${cliEnabled} bytes`, async () => {
-    const { task, markers } = await seed(false, cliEnabled);
+    const { task, markers, reads } = await seed(false, cliEnabled);
     const expected = cliEnabled
       ? legacy.onboarding.replace("<li><strong>npm install -g @hypertask/hypertask_cli</strong></li>", `<li><code>${commands.CLI_INSTALL_COMMAND}</code></li>`) + `<p>${commands.CLI_WINDOWS_NOTE}</p>`
       : legacy.onboarding;
     assert.equal(task.title, "Connect Hypertask to Claude or ChatGPT");
     assert.equal(task.description, expected);
+    assert.deepEqual(reads, [cliKey]);
     assert.deepEqual(markers, []);
   });
 }
@@ -141,6 +148,17 @@ test("HTPR-9530 no onboarding sign-in step prescribes a token", async () => {
     assert.ok(source.includes("hypertask login"), file);
     assert.doesNotMatch(source, /login --token/, file);
   }
+});
+
+test("HTPR-9530 sample-board path follows the flag off and on", async () => {
+  const off = await seed(true, true, false, { sample: true });
+  const offText = new JSDOM(off.task.description).window.document.body.textContent;
+  assert.match(offText, /hypertask login --token <your-agent-token>/);
+  assert.match(offText, /https:\/\/app\.hypertask\.ai\/agents/);
+  const on = await seed(true, true, true, { sample: true });
+  const onText = new JSDOM(on.task.description).window.document.body.textContent;
+  assert.match(onText, /hypertask login: it opens your browser to authorize/);
+  assert.doesNotMatch(onText, /--token/);
 });
 
 test("legacy factory remains byte-identical to the production baseline", () => {
