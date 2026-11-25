@@ -62,6 +62,14 @@ test("the stack offset and dock offset are unchanged by the ring switch", () => 
   );
 });
 
+test("every render asks the flag hook again and keeps the same ring", () => {
+  const control = ringControl(true);
+  const first = control.render();
+  const second = control.render();
+  assert.deepEqual(control.reads, [FLAG, FLAG]);
+  assert.equal(classes(second).join(" "), classes(first).join(" "));
+});
+
 test("switching the flag off restores the plain border and moves nothing else", () => {
   const props = { size: "secondary", stackOffset: 60 };
   const on = ringControl(true).render(props);
