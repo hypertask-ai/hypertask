@@ -674,7 +674,7 @@ test("Compose timeout queues one generic intro, resumes normal questions and nev
   });
 });
 
-test("client discards writer metadata on HTTP, stream or parse failure; invalid metadata never fails a successful save", async () => {
+test("HTPR-9684 client rejects writer failures despite skill metadata; invalid metadata never fails a successful save", async () => {
   const oldFetch = global.fetch, oldParser = global.DOMParser;
   const dom = new JSDOM("");
   global.DOMParser = dom.window.DOMParser;
@@ -687,10 +687,8 @@ test("client discards writer metadata on HTTP, stream or parse failure; invalid 
     ]) {
       global.fetch = async () => response;
       const writes = [];
-      const result = await composeApi(writes).createComposedTask({ text: note, files: [], project: { id: 15 }, userId: 985 });
-      assert.equal(result.writerFailed, true);
-      assert.equal(result.skills, undefined);
-      assert.equal(writes[0].title, note);
+      await assert.rejects(composeApi(writes).createComposedTask({ text: note, files: [], project: { id: 15 }, userId: 985 }), /The task writer failed/);
+      assert.deepEqual(writes, []);
     }
     global.fetch = async () => new Response('<h1 id="ai-generated-task-title">Retry checkout</h1><p>Retry boundary</p>', { headers: { [metadata.TASK_WRITER_SKILLS_HEADER]: "%malformed" } });
     const result = await composeApi().createComposedTask({ text: note, files: [], project: { id: 15 }, userId: 985 });
