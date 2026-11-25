@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { checklistFromBrief, failColumn, isPurple, isRoundMarker, radiusVerdict } from './design-lib.mjs';
 test('brief scope and fallback', () => {
   const x = checklistFromBrief('<h2>Change</h2><p>Show cards. Hide clutter.</p><h2>Not in scope</h2><p>Other work.</p>');
@@ -34,4 +35,12 @@ test('failed design review uses the intake column the board already has', () => 
   assert.equal(board.status, 0, board.stderr);
   assert.equal(board.stdout, 'Todo\n');
   assert.equal(run('Done').status, 1);
+});
+test('design checks reach the colocated QA helpers', () => {
+  const script = new URL('./design-check', import.meta.url);
+  for (const name of ['qa-login', 'qa-identity']) assert.equal(existsSync(new URL(`./${name}`, import.meta.url)), true, name);
+  const doctor = spawnSync('bash', [script.pathname, 'doctor', '--state', '/nonexistent/state.json'], { encoding: 'utf8' });
+  assert.equal(doctor.status, 1, doctor.stderr);
+  assert.match(doctor.stderr, /state failed: file missing/);
+  assert.doesNotMatch(doctor.stderr, /qa-login: No such file/);
 });

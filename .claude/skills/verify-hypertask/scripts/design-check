@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-QA=""
+QA="$DIR"
 help() { cat <<'HELP'
 Usage:
   design-check doctor [--state PATH]

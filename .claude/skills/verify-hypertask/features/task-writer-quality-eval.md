@@ -122,4 +122,4 @@ that already carry a brain label, and scores exact match, the confident subset,
 latency and cost. It is offline: no workflow, no app behaviour, no production
 data written. `node scripts/brain-tag-eval.cjs --replay=<scores.json>` rebuilds
 the report from a saved run. Method and the first result are in
-[docs/brain-tag-eval.md](../../../../../docs/brain-tag-eval.md).
+[docs/brain-tag-eval.md](../../../../docs/brain-tag-eval.md).
