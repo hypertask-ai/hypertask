@@ -88,6 +88,8 @@ function fullScreenNewChat(chat, { enabled = false, sessions = [], activeSession
     "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
     "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer": { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" },
     "@/lib/flags/definitions/htpr-8963-sidebar-sections": { HTPR_8963_SIDEBAR_SECTIONS_FLAG: "htpr-8963-sidebar-sections" },
+    "@/lib/flags/definitions/htpr-9079-older-rail-folded": { HTPR_9079_OLDER_RAIL_FOLDED_FLAG: "htpr-9079-older-rail-folded" },
+    "@/lib/aiChat/railSectionFold": require("./helpers/loadModule.cjs").loadModule("src/lib/aiChat/railSectionFold.ts"),
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/lib/aiChat/chatShortcuts": { chatShortcutHint: () => "" },
     "@/components/Modals/OptionPicker": { default: "OptionPicker" },
