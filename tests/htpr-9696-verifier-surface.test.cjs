@@ -15,6 +15,8 @@ const WELCOME = "src/components/AI_CHAT/WelcomeScreen.tsx";
 const FILES = [WELCOME, "src/lib/flags/definitions/htpr-9031-chip-starters.ts"];
 const sources = [
   WELCOME,
+  "src/app/chat/page.tsx",
+  "src/app/detail/[...slug]/page.tsx",
   "src/components/AI_CHAT/AI_Chat_Sidebar.tsx",
   "src/app/chat/Chat.tsx",
   "src/app/detail/[...slug]/TaskDetailPanels.tsx",
@@ -87,6 +89,51 @@ test("a re-plan that misses again is not sure, and says which screen it missed",
   const verdict = decide({ model: { verdict: "PASS", notes: "" }, plan, evidence: null, binding });
   assert.equal(verdict.verdict, "UNEVALUATED");
   assert.match(verdict.notes, /plan missed changed surface/);
+});
+
+test("a colocated component folder is not a route, and the page above it is", async () => {
+  const { changedSurfaces } = await load();
+  const routes = (files, sourceList, read) => changedSurfaces({ files, sources: sourceList, readSource: read, boardPath: BOARD, taskPath: TASK }).map((item) => item.route);
+  const colocated = ["src/app/reset/page.tsx", "src/app/reset/components/UserSearch.tsx", "src/components/UserSearchField.tsx"];
+  const colocatedRead = () => '';
+  assert.deepEqual(routes(["src/app/reset/components/UserSearch.tsx"], colocated, colocatedRead), ["/reset"]);
+  const orphan = ["src/app/reset/page.tsx", "src/app/reset/ResetScreen.tsx", "src/app/widgets/search/UserSearch.tsx"];
+  const orphanRead = (file) => ({
+    "src/app/reset/ResetScreen.tsx": 'import { UserSearch } from "../widgets/search/UserSearch";',
+  }[file] ?? "");
+  assert.deepEqual(routes(["src/app/widgets/search/UserSearch.tsx"], orphan, orphanRead), ["/reset"]);
+});
+
+test("an empty plan, or a plan with no goto, misses every changed screen", async () => {
+  const { missedSurfaces, planFromRequest, decide } = await load();
+  const screens = ["/chat"];
+  assert.deepEqual(missedSurfaces({ actions: [] }, screens), screens);
+  assert.deepEqual(missedSurfaces({ actions: [{ op: "click", text: "Save" }, { op: "shot", name: "after" }] }, screens), screens);
+  assert.deepEqual(missedSurfaces({ actions: [{ op: "api", method: "GET", path: "/api/x", body: {}, expectStatus: 200, expectText: "ok" }] }, screens), []);
+  let asked = 0;
+  const plan = await planFromRequest(request([WELCOME]), { binding, pages: [], sources, readSource, ask() { asked += 1; return { actions: [], expect: [], reason: "no user path: nothing to open" }; } });
+  assert.equal(asked, 2);
+  assert.equal(plan.unevaluated, "plan missed changed surface: /chat, /detail/project-{id}/1");
+  const verdict = decide({ model: { verdict: "PASS", notes: "" }, plan, evidence: null, binding, checksPassed: true });
+  assert.equal(verdict.verdict, "UNEVALUATED");
+  assert.match(verdict.notes, /plan missed changed surface/);
+});
+
+test("a url expectation seeds the agent id too", async () => {
+  const { runPlan } = await load();
+  const agent = "0b8f6f2e-1f3f-4a4e-9a1e-2c3d4e5f6a7b";
+  const page = {
+    href: `http://127.0.0.1:3100/agents/${agent}`,
+    url() { return this.href; },
+    async screenshot() {},
+    async waitForURL(match, options) {
+      assert.ok(Number(options?.timeout) > 0);
+      if (!match(new URL(this.href))) throw new Error("timeout");
+    },
+  };
+  const body = { ...binding, actions: [{ op: "shot", name: "agent" }], expect: [{ path: "/agents/{agent}" }] };
+  const landed = await runPlan({ page, plan: body, base: "http://127.0.0.1:3100", projectId: "1", agentId: agent, shotsDir: mkdtempSync(join(tmpdir(), "agent-url-")), navigations: [] });
+  assert.deepEqual(landed.expects.map((item) => [item.ok, item.error]), [[true, ""]]);
 });
 
 test("a screen below a changed route counts, an ancestor list page does not", async () => {

@@ -593,8 +593,10 @@ export function sameScreen(left, right) {
 export function missedSurfaces(plan, surfaces = []) {
   const routes = routesOf(surfaces);
   if (!routes.length) return [];
-  const gotos = (Array.isArray(plan?.actions) ? plan.actions : []).filter((action) => action?.op === "goto").map((action) => String(action.path ?? ""));
-  if (!gotos.length) return [];
+  const actions = Array.isArray(plan?.actions) ? plan.actions : [];
+  if (actions.length && actions.every((action) => action?.op === "api")) return [];
+  const gotos = actions.filter((action) => action?.op === "goto").map((action) => String(action.path ?? ""));
+  if (!gotos.length) return routes;
   return gotos.some((path) => routes.some((route) => sameScreen(path, route))) ? [] : routes;
 }
 export function surfaceFeedback(missed) {
@@ -975,7 +977,7 @@ export async function runPlan({ page, plan, base, projectId, taskId, bearer, age
         try { await page.getByText(item.text, { exact: false }).first().waitFor({ timeout: 8000 }); }
         catch { throw new Error("text not visible"); }
       } else {
-        const path = seedPath(item.path, projectId);
+        const path = seedPath(item.path, projectId, agentId);
         try { await page.waitForURL((url) => { const want = new URL(path, url); return url.pathname === want.pathname && url.search === want.search; }, { timeout: 8000 }); } catch { throw new Error("url did not match"); }
       }
     } catch (caught) { ok = false; error = failureText(caught); }
@@ -1548,7 +1550,7 @@ export async function planFromRequest(request, deps = {}) {
     plan.expect = journeys.expect;
     plan.reason = journeys.reason;
     if (journeys.unevaluated) plan.unevaluated = journeys.unevaluated;
-    const missed = missedSurfaces(plan, screens);
+    const missed = plan.unevaluated ? [] : missedSurfaces(plan, screens);
     if (missed.length) {
       const retry = await planJourneys({ request, pages, reach, ask, key: deps.key, model: picked.model, models: picked.models, bugfix, changeOnly: true, feedback: surfaceFeedback(missed) });
       if (!retry.unevaluated && retry.items.length && !missedSurfaces(retry, screens).length) {

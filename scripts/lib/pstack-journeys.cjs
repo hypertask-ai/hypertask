@@ -44,6 +44,7 @@ const ROUTE_HOPS = 4;
 const HUB_IMPORTERS = 30;
 const TRACE_LIMIT = 6;
 const APP_ROUTE = /^src\/app\/(?!api\/)/;
+const PAGE_FILE = /^page\.(?:tsx|ts|jsx|js)$/;
 const NOT_A_SCREEN = /^(?:layout|template|error|global-error|not-found|loading|default)\.(?:tsx|ts|jsx|js)$/;
 const ROUTE_GROUP = /^\(.*\)$/;
 const CATCH_ALL = /^\[\[\.\.\..*\]\]$|^\[\.\.\..*\]$/;
@@ -115,10 +116,32 @@ function importSpecifiers(text) {
   return [...specs];
 }
 
-function routeSegments(file) {
-  const parts = String(file).slice("src/app/".length).split("/");
-  parts.pop();
-  return parts.filter((part) => part && !ROUTE_GROUP.test(part));
+function appDirKey(dir) {
+  const parts = String(dir).slice("src/app".length).split("/").filter((part) => part && !ROUTE_GROUP.test(part));
+  return ["src/app", ...parts].join("/");
+}
+
+function pageRouteDirs(sources) {
+  const dirs = new Set();
+  for (const entry of Array.isArray(sources) ? sources : []) {
+    const file = String(entry);
+    if (!APP_ROUTE.test(file) || !PAGE_FILE.test(file.slice(file.lastIndexOf("/") + 1))) continue;
+    dirs.add(appDirKey(path.posix.dirname(file)));
+  }
+  return dirs;
+}
+
+function routeBase(dir, pageDirs) {
+  let current = String(dir);
+  while (current === "src/app" || current.startsWith("src/app/")) {
+    if (pageDirs.has(appDirKey(current))) return current;
+    current = path.posix.dirname(current);
+  }
+  return "";
+}
+
+function routeSegments(dir) {
+  return String(dir).slice("src/app/".length).split("/").filter((part) => part && !ROUTE_GROUP.test(part));
 }
 
 function seededPath(prefix, boardPath, taskPath, optional) {
@@ -133,10 +156,12 @@ function seededPath(prefix, boardPath, taskPath, optional) {
   return optional ? `/${prefix.join("/")}` : "";
 }
 
-function appRoute(file, { boardPath = "", taskPath = "" } = {}) {
+function appRoute(file, { boardPath = "", taskPath = "", pageDirs = new Set() } = {}) {
   if (!APP_ROUTE.test(file) || NOT_A_SCREEN.test(String(file).slice(String(file).lastIndexOf("/") + 1))) return "";
+  const dir = routeBase(path.posix.dirname(file), pageDirs);
+  if (!dir) return "";
   const parts = [];
-  for (const segment of routeSegments(file)) {
+  for (const segment of routeSegments(dir)) {
     if (CATCH_ALL.test(segment)) return seededPath(parts, boardPath, taskPath, segment.startsWith("[["));
     const named = DYNAMIC.test(segment) ? SEED_PARAM[segment.replace(/[[\]]/g, "").toLowerCase()] : null;
     if (DYNAMIC.test(segment) && !named) return "";
@@ -180,8 +205,8 @@ function reverseImports(sources, readSource) {
   return reverse;
 }
 
-function routeEntries({ changed, reverse, pages, boardPath, taskPath }) {
-  const seeded = { boardPath, taskPath };
+function routeEntries({ changed, reverse, pages, boardPath, taskPath, pageDirs }) {
+  const seeded = { boardPath, taskPath, pageDirs };
   const named = normalizePages(pages);
   const found = new Map();
   const seen = new Set();
@@ -218,7 +243,8 @@ function routeEntries({ changed, reverse, pages, boardPath, taskPath }) {
 function traceImports({ files, pages = [], sources, readSource = defaultReadSource, boardPath = "", taskPath = "" } = {}) {
   const changed = uniqueSorted((Array.isArray(files) ? files : []).map(String))
     .filter((file) => file.startsWith("src/") && !TEST_PATH.test(file) && SOURCE_EXT.includes(path.extname(file)));
-  const reverse = changed.length ? reverseImports(Array.isArray(sources) ? sources : defaultSources(), readSource) : new Map();
+  const listed = Array.isArray(sources) ? sources : changed.length ? defaultSources() : [];
+  const reverse = changed.length ? reverseImports(listed, readSource) : new Map();
   const surfaces = new Map();
   for (const file of changed) {
     if (SURFACE_FILE.test(file)) surfaces.set(file, { via: [file], depth: 0 });
@@ -245,7 +271,7 @@ function traceImports({ files, pages = [], sources, readSource = defaultReadSour
   }
   const ordered = [...surfaces.entries()].sort((left, right) => left[1].depth - right[1].depth || left[0].localeCompare(right[0]));
   const named = normalizePages(pages);
-  const routes = changed.length ? routeEntries({ changed, reverse, pages: named, boardPath, taskPath }) : [];
+  const routes = changed.length ? routeEntries({ changed, reverse, pages: named, boardPath, taskPath, pageDirs: pageRouteDirs(listed) }) : [];
   return {
     routes,
     surfaces: ordered.slice(0, TRACE_LIMIT).map(([file, entry]) => ({
