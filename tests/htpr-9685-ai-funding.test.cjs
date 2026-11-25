@@ -87,6 +87,8 @@ function createHarness({
   const reportedErrors = [];
   const usageRows = [];
   const pending = [];
+  const fundingOrder = [];
+  const allowanceCalls = [];
 
   const prisma = {
     team: {
@@ -123,6 +125,7 @@ function createHarness({
     modelId,
     supportedUrls: {},
     doGenerate: async (params) => {
+      fundingOrder.push(providerName);
       providerCalls.push({ provider: providerName, apiKey, modelId, mode: "generate", params });
       if (providerName === "anthropic" && anthropicError) throw anthropicError;
       if (providerName === "gateway" && gatewayError) throw gatewayError;
@@ -133,6 +136,7 @@ function createHarness({
       };
     },
     doStream: async (params) => {
+      fundingOrder.push(providerName);
       providerCalls.push({ provider: providerName, apiKey, modelId, mode: "stream", params });
       if (providerName === "anthropic" && anthropicStreamChunks) {
         return {
@@ -217,7 +221,20 @@ function createHarness({
     "@/app/api/ai/_lib/aiFunding": aiFunding,
     "@/app/api/ai/_lib/sharedAllowance": {
       createImageAllowanceMiddleware: () => ({ specificationVersion: "v4" }),
-      createSharedAllowanceMiddleware: () => ({ specificationVersion: "v4" }),
+      createSharedAllowanceMiddleware: (args) => {
+        allowanceCalls.push(args);
+        return {
+          specificationVersion: "v4",
+          wrapGenerate: async ({ doGenerate }) => {
+            fundingOrder.push("allowance");
+            return doGenerate();
+          },
+          wrapStream: async ({ doStream }) => {
+            fundingOrder.push("allowance");
+            return doStream();
+          },
+        };
+      },
       gatewayCatalogModelSlug: (slug) => slug,
       modelPricing: async () => ({ inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000005 }),
       modelCostUsd: (p, i, o) => i * p.inputUsdPerToken + o * p.outputUsdPerToken,
@@ -259,6 +276,8 @@ function createHarness({
     providerCalls,
     reportedErrors,
     usageRows,
+    fundingOrder,
+    allowanceCalls,
     redis,
     restore: restoreEnv,
     flush: async () => {
@@ -535,6 +554,76 @@ test("direct Anthropic runtime error falls back automatically to Vercel Gateway,
   }
 });
 
+test("the team allowance caps direct Anthropic calls, runs before the call, and is reserved exactly once", async () => {
+  const h = createHarness({
+    plan: "Pro",
+    byokRows: { managed_gateway: MANAGED_KEY },
+    anthropicSpentUsd: 10,
+  });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+      trustedTeamId: "team-1",
+      userId: 985,
+    });
+    assert.equal(h.aiFunding.isPlatformAnthropicCredential(cred), true);
+    const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+    const providerOptions = h.modelProvider.providerOptionsForAiModel(model, "chat", {
+      teamId: "team-1",
+      projectId: 15,
+      userId: 985,
+    });
+    const result = await model.doGenerate({ prompt: [], providerOptions });
+    await h.flush();
+
+    assert.match(result.content[0].text, /^ok:anthropic:/);
+    assert.equal(h.allowanceCalls.length, 1, "one reservation must cover the direct Anthropic call");
+    assert.equal(h.allowanceCalls[0].gatewayApiKey, MANAGED_KEY);
+    assert.equal(h.allowanceCalls[0].fundingSource, "managed");
+    assert.equal(h.fundingOrder[0], "allowance", "the cap must run before the direct Anthropic call");
+    assert.equal(h.providerCalls.filter((call) => call.provider === "gateway").length, 0);
+  } finally {
+    h.restore();
+  }
+});
+
+test("a Hypertask-paid Claude credential tags the gateway fallback with the owning team and reserves the allowance once", async () => {
+  const h = createHarness({
+    plan: "Pro",
+    byokRows: { managed_gateway: MANAGED_KEY },
+    anthropicSpentUsd: 10,
+    anthropicError: Object.assign(new Error("Anthropic 529 overloaded"), { statusCode: 529 }),
+  });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+      trustedTeamId: "team-1",
+      userId: 985,
+    });
+    const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+    const providerOptions = h.modelProvider.providerOptionsForAiModel(model, "chat", {
+      teamId: "team-1",
+      projectId: 15,
+      userId: 985,
+    });
+    assert.ok(
+      providerOptions.gateway.tags.includes("team:team-1"),
+      "platform Anthropic models must carry the owning team tag so the fallback stays funded",
+    );
+
+    const result = await model.doGenerate({ prompt: [], providerOptions });
+    await h.flush();
+
+    assert.match(result.content[0].text, /^ok:gateway:/);
+    const gatewayCall = h.providerCalls.find((call) => call.provider === "gateway");
+    assert.deepEqual(gatewayCall.params.providerOptions.gateway.tags, providerOptions.gateway.tags);
+    assert.equal(h.allowanceCalls.length, 1, "the gateway fallback must not reserve the allowance twice");
+    assert.equal(h.fundingOrder[0], "allowance");
+  } finally {
+    h.restore();
+  }
+});
+
 test("direct Anthropic stream error after initial metadata chunk falls back seamlessly to Vercel Gateway and reports urgently", async () => {
   const h = createHarness({
     plan: "Pro",
@@ -714,6 +803,7 @@ test("missing ANTHROPIC_API_KEY falls back to gateway, succeeds, and reports onc
       const model = missing.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
       const res = await model.doGenerate({ prompt: [] });
       assert.match(res.content[0].text, /^ok:gateway:/);
+      assert.equal(missing.fundingOrder[0], "allowance", "the funded gateway model must reserve the allowance before the Anthropic-first attempt");
     }
     await missing.flush();
     const missingReports = missing.reportedErrors.filter((r) => r.extra?.cause === "anthropic_key_missing");

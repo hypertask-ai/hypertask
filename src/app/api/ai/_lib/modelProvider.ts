@@ -146,6 +146,7 @@ export function gatewayFundingSourceForApiKey(
 
 const allowanceFundedModels = new WeakMap<object, number>();
 const runtimeProviderOverrides = new WeakMap<object, { provider?: string }>();
+const platformAnthropicFundedModels = new WeakSet<object>();
 
 const USER_VISIBLE_STREAM_CHUNK_TYPES = new Set([
   "text-delta",
@@ -328,7 +329,7 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
   };
   const fallbackModel = () => {
     runtimeProvider.provider = "gateway";
-    return gatewayLanguageModel(gatewaySlug, credential.fallbackGatewayApiKey!, false) as ReturnType<typeof wrapLanguageModel>;
+    return gatewayLanguageModel(gatewaySlug, credential.fallbackGatewayApiKey!, false, false) as ReturnType<typeof wrapLanguageModel>;
   };
   return {
     specificationVersion: "v4",
@@ -424,35 +425,48 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
   };
 }
 
+function fundedAllowanceUsd(fundingSource: "managed" | "shared") {
+  return fundingSource === "shared"
+    ? FREE_TEAM_AI_ALLOWANCE_USD
+    : PAID_TEAM_AI_ALLOWANCE_USD;
+}
+
+function fundedAllowanceMiddleware(
+  fundingSource: "managed" | "shared",
+  gatewayApiKey: string,
+  modelSlug: string,
+): LanguageModelMiddleware {
+  return createSharedAllowanceMiddleware({
+    allowanceUsd: fundedAllowanceUsd(fundingSource),
+    fundingSource,
+    resolvePolicy: async (teamId) => {
+      const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+      return resolveTeamAllowancePolicy(teamId, fundingSource);
+    },
+    gatewayApiKey,
+    modelSlug,
+  });
+}
+
 function gatewayLanguageModel(
   modelSlug: string,
   gatewayApiKey: string,
   preferDirectAnthropic = true,
+  enforceAllowance = true,
 ) {
   const catalogSlug = gatewayCatalogModelSlug(modelSlug);
   const model = createFundingGatewayLanguageModel(catalogSlug, gatewayApiKey);
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   if (fundingSource === "customer") return model;
-  const allowanceUsd =
-    fundingSource === "shared"
-      ? FREE_TEAM_AI_ALLOWANCE_USD
-      : PAID_TEAM_AI_ALLOWANCE_USD;
   const runtimeProvider: { provider?: string } = {};
-  const middlewares: LanguageModelMiddleware[] = [
-    createSharedAllowanceMiddleware({
-      allowanceUsd,
-      fundingSource,
-      resolvePolicy: async (teamId) => {
-        const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
-        return resolveTeamAllowancePolicy(teamId, fundingSource);
-      },
-      gatewayApiKey,
-      modelSlug,
-    }),
-    createGatewayFailureReportingMiddleware(catalogSlug, fundingSource),
-  ];
+  const middlewares: LanguageModelMiddleware[] = [];
+  if (enforceAllowance) {
+    middlewares.push(
+      fundedAllowanceMiddleware(fundingSource, gatewayApiKey, modelSlug),
+    );
+  }
   if (preferDirectAnthropic && isAnthropicModelId(catalogSlug)) {
-    middlewares.unshift(
+    middlewares.push(
       createHypertaskGatewayAnthropicFirstMiddleware(
         catalogSlug,
         gatewayApiKey,
@@ -461,12 +475,15 @@ function gatewayLanguageModel(
       ),
     );
   }
+  middlewares.push(
+    createGatewayFailureReportingMiddleware(catalogSlug, fundingSource),
+  );
   const funded = wrapLanguageModel({
     model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
     providerId: "gateway",
     middleware: middlewares,
   });
-  allowanceFundedModels.set(funded, allowanceUsd);
+  allowanceFundedModels.set(funded, fundedAllowanceUsd(fundingSource));
   runtimeProviderOverrides.set(funded, runtimeProvider);
   return funded;
 }
@@ -567,16 +584,34 @@ function resolveUntracedAiModel(
     const runtimeProvider: { provider?: string } = {
       provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
     };
-    const wrapped = wrapLanguageModel({
-      model: directModel as Parameters<typeof wrapLanguageModel>[0]["model"],
-      middleware: createDirectAnthropicWithGatewayFallbackMiddleware(
+    const fallbackGatewayKey = byokCredential.fallbackGatewayApiKey;
+    const fundingSource = byokCredential.gatewayFundingSource;
+    const middlewares: LanguageModelMiddleware[] = [];
+    if (fallbackGatewayKey && fundingSource) {
+      middlewares.push(
+        fundedAllowanceMiddleware(
+          fundingSource,
+          fallbackGatewayKey,
+          toGatewayAnthropicModelSlug(directModelId, modelOption),
+        ),
+      );
+    }
+    middlewares.push(
+      createDirectAnthropicWithGatewayFallbackMiddleware(
         directModelId,
         byokCredential,
         runtimeProvider,
         modelOption,
       ),
+    );
+    const wrapped = wrapLanguageModel({
+      model: directModel as Parameters<typeof wrapLanguageModel>[0]["model"],
+      middleware: middlewares,
     });
     runtimeProviderOverrides.set(wrapped, runtimeProvider);
+    if (fallbackGatewayKey && fundingSource) {
+      allowanceFundedModels.set(wrapped, fundedAllowanceUsd(fundingSource));
+    }
     return wrapped;
   }
 
@@ -1037,6 +1072,9 @@ function traceLanguageModel(
       },
     });
   }
+  if (provider === PLATFORM_ANTHROPIC_USAGE_PROVIDER) {
+    platformAnthropicFundedModels.add(traced);
+  }
   modelUsageContexts.set(traced, context);
   return traced;
 }
@@ -1148,10 +1186,11 @@ export function gatewayProviderOptionsForModel(
   tags?: AiGatewayTags,
 ): GatewayTaggedProviderOptions | undefined {
   configureAiModelUsage(model as LanguageModel, { feature, ...tags });
-  if (
+  const gatewayRouted =
     typeof model !== "string" &&
-    (model as { provider?: unknown }).provider !== "gateway"
-  ) {
+    ((model as { provider?: unknown }).provider === "gateway" ||
+      platformAnthropicFundedModels.has(model as object));
+  if (!gatewayRouted) {
     return undefined;
   }
 
