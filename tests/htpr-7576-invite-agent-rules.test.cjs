@@ -8,7 +8,7 @@ const siblingAgentId = "22222222-2222-4222-8222-222222222222";
 const owner = { id: 6, email: "owner@example.test", displayName: "Owner" };
 const person = { id: 7, email: "person@example.test", displayName: "Person" };
 const outsideScope = /This agent is not a member of this board\. Ask the board owner to add it\./;
-const selfRefusal = /cannot change (?:its|their) own board access/i;
+const selfRefusal = /project invite/;
 const insufficientScope = /requires 'admin' or higher/;
 
 function harness(mode, options = {}) {
@@ -218,7 +218,7 @@ async function allowed(h, target = siblingAgentId) {
 for (const mode of ["WATCH", "ENFORCE"]) {
   test(`${mode}: now refused write-role agent inviting itself`, async () => {
     const h = harness(mode, { role: "write" });
-    const body = await refused(h, actingAgentId, /cannot change (?:its|their) own board access|requires 'admin' or higher/i);
+    const body = await refused(h, actingAgentId, /project invite|requires 'admin' or higher/i);
     if (!selfRefusal.test(body.error)) assert.equal(body.code, "insufficient_scope");
   });
   test(`${mode}: still allowed human board owner adding their own agent`, async () => {

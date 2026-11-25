@@ -43,6 +43,43 @@ interface CheckSuiteWebhookUpdate {
 
 type Transaction = Prisma.TransactionClient;
 
+function activityData(activity: unknown): Record<string, unknown> | null {
+  if (!activity || typeof activity !== "object" || Array.isArray(activity)) return null;
+  const data = (activity as { data?: unknown }).data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  return data as Record<string, unknown>;
+}
+
+async function explicitUnlink(
+  transaction: Transaction,
+  taskId: number,
+  input: Pick<PullRequestWebhookUpdate, "repositoryOwner" | "repositoryName" | "number">,
+): Promise<boolean> {
+  const latest = await transaction.comment.findFirst({
+    where: {
+      taskId,
+      AND: [
+        { activity: { path: ["type"], equals: "TaskPullRequest" } },
+        {
+          activity: {
+            path: ["data", "pullRequest", "repository"],
+            equals: `${input.repositoryOwner}/${input.repositoryName}`,
+          },
+        },
+        {
+          activity: {
+            path: ["data", "pullRequest", "number"],
+            equals: input.number,
+          },
+        },
+      ],
+    },
+    orderBy: { id: "desc" },
+    select: { activity: true },
+  });
+  return activityData(latest?.activity)?.action === "unlinked";
+}
+
 async function writePullRequestActivity(
   transaction: Transaction,
   input: {
@@ -84,7 +121,12 @@ async function writePullRequestActivity(
 
 export async function syncPullRequestFromWebhook(
   input: PullRequestWebhookUpdate,
-): Promise<{ linked: number; updated: number; taskIds: number[] }> {
+): Promise<{
+  linked: number;
+  updated: number;
+  taskIds: number[];
+  suppressed: boolean;
+}> {
   return prisma.$transaction(async (transaction) => {
     const existingLinks = await transaction.taskPullRequest.findMany({
       where: {
@@ -112,7 +154,9 @@ export async function syncPullRequestFromWebhook(
         },
         select: { id: true },
       });
-      if (globallyLinked) return { linked: 0, updated: 0, taskIds: [] };
+      if (globallyLinked) {
+        return { linked: 0, updated: 0, taskIds: [], suppressed: false };
+      }
     }
     if (taskIds.length === 0 && input.ticketNumber) {
       const task = await transaction.task.findFirst({
@@ -123,9 +167,16 @@ export async function syncPullRequestFromWebhook(
         },
         select: { id: true },
       });
-      if (task) taskIds = [task.id];
+      if (task) {
+        if (await explicitUnlink(transaction, task.id, input)) {
+          return { linked: 0, updated: 0, taskIds: [], suppressed: true };
+        }
+        taskIds = [task.id];
+      }
     }
-    if (taskIds.length === 0) return { linked: 0, updated: 0, taskIds: [] };
+    if (taskIds.length === 0) {
+      return { linked: 0, updated: 0, taskIds: [], suppressed: false };
+    }
 
     const actor = await transaction.user.findUnique({
       where: { id: input.actorUserId },
@@ -133,9 +184,14 @@ export async function syncPullRequestFromWebhook(
     });
     let linked = 0;
     let updated = 0;
+    let suppressed = false;
 
     for (const taskId of taskIds) {
       await lockAgentMutationFence(transaction, taskId);
+      if (await explicitUnlink(transaction, taskId, input)) {
+        suppressed = true;
+        continue;
+      }
       const identity = {
         taskId_repositoryOwner_repositoryName_number: {
           taskId,
@@ -249,7 +305,12 @@ export async function syncPullRequestFromWebhook(
       else updated += 1;
     }
 
-    return { linked, updated, taskIds: [...new Set(affectedTaskIds)] };
+    return {
+      linked,
+      updated,
+      taskIds: [...new Set(affectedTaskIds)],
+      suppressed: suppressed && affectedTaskIds.length === 0,
+    };
   });
 }
 

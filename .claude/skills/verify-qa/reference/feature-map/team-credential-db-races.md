@@ -16,6 +16,16 @@ The CI Tests check runs `tests/htpr-7660-team-races-postgres.test.cjs`. These ar
 4. Require delayed board and agent sends to cancel after a team move. Retries must also refuse a formerly delivered source after movement, not only an already cancelled source.
 5. After merge, require successful Production deployment. Use QA 985 for signed-in My Tasks screenshots and the core inbox cycle. Use the runner's own agent for read-only MCP task lookup. Never reproduce destructive team moves against production or preview databases.
 
+Read-only evidence, 2026-11-20: CI Tests run
+[44721544002](https://github.com/hypertask-ai/hypertask/actions/runs/44721544002)
+succeeded at head `45ca818c2e591ecc85f10744b6ac1a81df9cd581`, and its log holds
+62 `real PG` case lines. The production `/my-tasks` page loaded as QA 985 and
+`node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <dir>` printed
+`inbox-cycle ok`. Re-running the race suite at this branch's head is
+`verified-unreachable: needs a PR CI Tests run with HT_REQUIRE_PG_TESTS=1 and a
+Docker runner; tried reading the newest production and PR ci-tests runs and the
+62-case log`.
+
 ## Gotchas
 
 - Faked lock traces or skipped database cases mistaken for PostgreSQL proof.

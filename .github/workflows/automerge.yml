@@ -109,12 +109,10 @@ jobs:
           retry() { local a; for a in 1 2 3; do "$@" && return 0; sleep $((a*4)); done; return 1; }
 
           # Required checks that must ALL be green before an auto-merge.
-          # A MISSING result counts as not-green below, so every name here
-          # must belong to a job that reports on EVERY pull request
-          # (visual-regression reports success when it skips, HTPR-5652).
-          REQUIRED="app-smoke ci-tests ai-review next-public-secrets pr-title"
-          REQUIRED="$REQUIRED feature-flag-gate"
-          REQUIRED="$REQUIRED browser-smoke"
+          # HTPR-9450: the independent verifier is the only required context.
+          # A MISSING result counts as not-green below, so the one name here
+          # must belong to a job that reports on EVERY pull request.
+          REQUIRED="pstack-verifier"
 
           # Any changed file matching this (case-insensitive) parks the PR for a
           # human: auth/identity, billing, security
@@ -328,6 +326,14 @@ jobs:
             # exact-head APPROVE marker below remains the trusted review defense.
             ok=1
             for c in $required_for_pr; do
+              if [ "$c" = "pstack-verifier" ]; then
+                fetch_verifier() { gh api --paginate --slurp "repos/$REPO/commits/$headOid/statuses" >"$AUTOMERGE_TMP/verifier-statuses.json"; }
+                state=MISSING login=""
+                retry fetch_verifier && read -r state login <<<"$(jq -r '[.[][]] | map(select(.context=="pstack-verifier" and .creator.login=="hypertask-runners[bot]")) | first | if . == null then "MISSING" else "\(.state | ascii_upcase) \(.creator.login)" end' "$AUTOMERGE_TMP/verifier-statuses.json")" || true
+                if [ "$state" = "SUCCESS" ]; then echo "check $c = SUCCESS $login"
+                else echo "check $c = $state $login"; ok=0; fi
+                continue
+              fi
               state=$(jq -r --arg n "$c" '
                 ([.statusCheckRollup[]
                   | ((.name // .context)) as $cn
@@ -349,6 +355,7 @@ jobs:
               [.statusCheckRollup[]
                 | {name: (.name // .context), state: ((.conclusion // .state) // ""), at: (.startedAt // .createdAt // "")}]
               | sort_by(.at) | group_by(.name) | map(last)[] as $entry
+              | select($entry.name != "pstack-verifier")
               | select((($required + " ci-build claude-review") | split(" ") | index($entry.name)) == null)
               | select($entry.state | test("FAILURE|CANCELLED|TIMED_OUT|ERROR|STARTUP_FAILURE|ACTION_REQUIRED"))
               | $entry.name

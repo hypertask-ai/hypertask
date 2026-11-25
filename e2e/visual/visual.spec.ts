@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
 const SETTLE_JUMP_WARNING_PX = 20
+const rewardImageUrls = [...readFileSync(path.join(__dirname, '../../src/lib/firstScreen/inboxZero.ts'), 'utf8').matchAll(/https:\/\/[^"'`\s]+/g)].map(match => match[0])
+const fixedRewardImage = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
 
 const fixture = JSON.parse(readFileSync(path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE!), 'card-fixture.json'), 'utf8')) as {
   taskId: number
@@ -164,6 +166,11 @@ for (const screen of screens) {
       await expect(page.getByRole('textbox', { name: 'Describe the task' })).toBeVisible()
       landmarks = [writer, page.getByRole('textbox', { name: 'Describe the task' })]
     } else {
+      await page.route(url => rewardImageUrls.some(image => url.href.includes(image) || url.href.includes(encodeURIComponent(image))), route => route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: fixedRewardImage,
+      }))
       await navigate(page, '/inbox')
       await expect(page.locator('[data-tutorial-inbox-loaded="true"]')).toBeAttached()
       landmarks = [page.getByTestId('inbox-panel'), page.locator('[data-testid="inbox-list"]:visible')]

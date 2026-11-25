@@ -1,1 +1,1 @@
-| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | no smoke id; delete one QA fixture, recover it, delete it again, permanent delete it, then drive the two refusals |
+| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | `ht-verify` taskDeleteReminder > /trash/<board> > recover > deleteTask, then the 409 and 404 refusals |

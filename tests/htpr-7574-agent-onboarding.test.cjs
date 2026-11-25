@@ -7,7 +7,7 @@ const ts = require("typescript");
 const { z } = require("zod");
 
 const root = path.resolve(__dirname, "..");
-const selfRefusal = "An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.";
+const selfRefusal = "Ask a member of board 15 to run: hypertask project invite 15 --user acting";
 const genericHint = "Access denied. Use a credential with the required scope and confirm membership in the target board.";
 const nextServer = { NextResponse: { json: (body, init) => Response.json(body, init) } };
 
@@ -29,6 +29,7 @@ function load(relativePath, mocks = {}) {
     if (specifier === "next/server") return nextServer;
     if (specifier === "@/lib/auth/crossTeamContext") return { crossTeamRequestFence: () => null };
     if (specifier === "@/lib/agents/crossTeam") return { crossTeamAgentsEnabled: async () => false };
+    if (specifier === "@/lib/mcp/agents/selfJoin") return { allowAgentSelfJoin: async () => ({ ok: false, projectId: 15 }) };
     throw new Error(`Unexpected import in ${relativePath}: ${specifier}`);
   };
   loaded._compile(javascript, filename);
@@ -87,7 +88,7 @@ function delegation(role, actingBoards = [15], enforce = false) {
   } };
   const ctx = { user: { id: 6 }, agentId: "acting" };
   return {
-    check: (target, context = ctx) => checkAgentBoardDelegation(context, target),
+    check: (target, context = ctx) => checkAgentBoardDelegation(context, target, { projectId: 15 }),
     change: (projectId) => updates.updateOwnedAgentBoards(
       database, async (id) => ({ id, teamId: "team" }), 6,
       { agentId: "other", addProjectIds: [projectId], removeProjectIds: [] },

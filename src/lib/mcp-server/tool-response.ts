@@ -28,7 +28,6 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   'Only the board owner or a project admin can add members',
   'Agent not found or you do not own this agent',
   'This agent belongs to another team',
-  'An agent cannot change its own board access. Ask the person who owns this agent to open Agents, pick this agent, and add the board under Board access.',
   'This agent is not a member of this board. Ask the board owner to add it.',
   ...['read', 'write', 'admin'].flatMap((role) =>
     ['read', 'write', 'admin'].map((required) =>
@@ -39,6 +38,8 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
 
 const SAFE_AUTHORIZATION_PATTERNS = [
   /^This agent is not a member of this board\. Request access with the hypertask_request_board_access tool \(project_id \d+\);/,
+  /^Ask a member of board \d+ to run: hypertask project invite \d+ --user \S+$/,
+  /^Ask a member of the board to run: hypertask project invite <board> --user \S+$/,
 ]
 
 export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; nearestField?: boolean; fields?: readonly string[] }

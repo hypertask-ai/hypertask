@@ -8,8 +8,6 @@ const { loadModule: load, root } = require("./helpers/loadModule.cjs");
 const { harness, plans } = require("./helpers/start-plan-checkout.cjs");
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const billing = jiti(path.join(root, "src/lib/deriveCurrentBoardBilling.ts"));
-const flag = load("src/lib/flags/definitions/htpr-7551-start-plan-checkout.ts");
-const key = flag.HTPR_7551_START_PLAN_CHECKOUT_FLAG;
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const freeBoard = () => ({ id: 7, teamId: "team-owned", team: {
   id: "team-owned", stripe_customer_id: "cus_owned", subscriptionPlan: [],
@@ -49,9 +47,7 @@ async function withButton(fn, backend) {
       || name === "htpr-7922-unlimited-free-boards"
       || name === "htpr-7923-unlimited-free-tickets"
       || name === "htpr-7924-free-file-25mb"
-      || name === "htpr-7924-free-storage-2gb"
     ) return false;
-    if (name === key) return state.enabled;
     assert.fail(`unexpected flag ${name}`);
   }, useFlagReady: () => state.flagReady };
   const buttonModule = load("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx", {
@@ -63,7 +59,7 @@ async function withButton(fn, backend) {
     },
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board }, "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/keys": flag,
+    "@/lib/flags/keys": {},
     "@/hooks/MultiPages/useGetAllAccessibleBoardList": { useGetAllAccessibleBoardList: (user, options) => {
       state.boardsQuery = { user, options };
       const isPending = state.boards === undefined;
@@ -84,7 +80,7 @@ async function withButton(fn, backend) {
     "@/lib/flags/definitions/htpr-7919-allowance-percent": { HTPR_7919_ALLOWANCE_PERCENT_FLAG: "htpr-7919-allowance-percent" },
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/keys": flag,
+    "@/lib/flags/keys": {},
     "next/navigation": { useRouter: () => router },
   });
   const trialHook = load("src/hooks/General/useTrial.ts", {
@@ -102,7 +98,7 @@ async function withButton(fn, backend) {
   const TrialCard = load("src/components/PageComponents/Trial/TrialCard.tsx", {
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
     "@/hooks/useFlag": flagMock,
-    "@/lib/flags/keys": flag,
+    "@/lib/flags/keys": {},
     "@/hooks/General/useTrial": trialHook,
     "@/lib/state": { useRecoilValue: (atom) => atom === "user" ? (state.userId ? { id: state.userId } : null) : state.board },
     "@/store": { currentProjectAtom: "project", currentUserAtom: "user" },
@@ -111,7 +107,7 @@ async function withButton(fn, backend) {
   const passthrough = ({ children }) => React.createElement("div", null, children);
   const TrialModal = load("src/components/Modals/TrialPlan/TrialModalV2.tsx", {
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": buttonModule,
-    "@/hooks/useFlag": flagMock, "@/lib/flags/keys": flag,
+    "@/hooks/useFlag": flagMock, "@/lib/flags/keys": {},
     "@/components/Common/CommonModalComponents": { ModalContainerCustom: passthrough },
     "@/styles/AttachmentView.scss": {},
     reactstrap: { ModalHeader: passthrough, ModalBody: passthrough, ModalFooter: passthrough, Carousel: passthrough, CarouselItem: passthrough },
@@ -148,15 +144,19 @@ async function withButton(fn, backend) {
   }
 }
 
-test("no button or trial-copy flash while unknown/loading or flag OFF; Free owner is still allowed after server capability resolves", async () => {
+test("compact Start plan stays hidden until the server allows a Free board", async () => {
   await withButton(async ({ state, render, container, getQuery }) => {
-    await render(); assert.equal(container.querySelector("button"), null);
-    assert.doesNotMatch(container.textContent, /7|14|\$20/);
-    state.data = { canStartPlan: true, trialDays: 7 }; state.enabled = false;
-    await render(); assert.equal(container.querySelector("button"), null); assert.equal(getQuery().enabled, false);
-    state.enabled = true; state.board = { id: 7, teamId: "team-owned" };
-    await render(); assert.equal(container.querySelector("button"), null); assert.equal(getQuery().enabled, false);
-    state.board = freeBoard(); await render();
+    await render();
+    assert.equal(container.querySelector("button"), null);
+    assert.equal(getQuery().enabled, true);
+    assert.doesNotMatch(container.textContent, /\$20/);
+    state.data = { canStartPlan: true, trialDays: 7 };
+    state.board = { id: 7, teamId: "team-owned" };
+    await render();
+    assert.equal(container.querySelector("button"), null);
+    assert.equal(getQuery().enabled, false);
+    state.board = freeBoard();
+    await render();
     assert.equal(container.querySelector("button").textContent, "Start a Hypertask plan");
     assert.match(container.textContent, /\$20 per user\/month after 7 days/);
   });
@@ -268,31 +268,30 @@ test("completed checkout shows finishing state and refreshes authoritative board
   });
 });
 
-test("legacy labels wait for flags, flagged legacy buttons reuse StartPlanButton, and OFF retains fourteen-day copy", async () => {
+test("trial comparison and the trial button keep the start-plan offer", async () => {
   await withButton(async ({ state, renderLegacy, container }) => {
-    state.flagReady = false; state.enabled = false;
-    await renderLegacy("PlansTable"); assert.doesNotMatch(container.textContent, /14 days/);
-    state.flagReady = true; await renderLegacy("PlansTable"); assert.match(container.textContent, /free for 14 days/);
-    state.enabled = true; await renderLegacy("PlansTable"); assert.doesNotMatch(container.textContent, /14/);
+    await renderLegacy("PlansTable");
+    assert.match(container.textContent, /Start a Hypertask plan/);
+    assert.doesNotMatch(container.textContent, /free for 14 days|Checking plan access|Start 14 Day Pro Trial/);
     state.data = { canStartPlan: true, trialDays: 7 };
-    await renderLegacy("TrialsButton"); assert.match(container.textContent, /after 7 days/);
-    state.enabled = false; await renderLegacy("TrialsButton"); assert.match(container.textContent, /Start 14 Day Pro Trial/);
+    await renderLegacy("TrialsButton");
+    assert.match(container.textContent, /Start a Hypertask plan/);
+    assert.match(container.textContent, /after 7 days/);
   });
 });
 
-test("header mounts action beside title under the ticket flag; alternate trial entry uses the same owner capability", () => {
+test("header, trial entry and settings keep the start-plan offer", () => {
   const header = read("src/components/PageComponents/Kanban/HeaderComponents/header.tsx");
-  assert.match(header, /TitleKanbanHeader project=\{project\}[\s\S]*?startPlanEnabled && <StartPlanButton project=\{currentProject\} compact/);
-  assert.match(header, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
+  assert.match(header, /TitleKanbanHeader project=\{project\}[\s\S]*?<StartPlanButton project=\{currentProject\} compact \/>/);
+  assert.doesNotMatch(header, /7551|startPlanEnabled/);
   const alternate = read("src/components/Modals/TrialPlan/TrialModalV2.tsx");
-  assert.match(alternate, /if \(!flagReady\) return null/);
-  assert.match(alternate, /<TrialBody team=\{currTeam\} callback=\{callback\} startPlanCheckout=\{startPlanEnabled\s*\? <TeamStartPlanButton teamId=\{currTeam\?\.id\}/);
-  assert.match(alternate, /if \(startPlanCheckout !== undefined\) return startPlanCheckout/);
+  assert.match(alternate, /<TeamStartPlanButton teamId=\{currTeam\?\.id\} \/>/);
+  assert.doesNotMatch(alternate, /7551|flagReady|Get Started|14 day FREE/);
   const settings = read("src/components/Modals/Settings/PlansSection.tsx");
-  assert.match(settings, /useFlag\(HTPR_7551_START_PLAN_CHECKOUT_FLAG\)/);
-  assert.match(settings, /const freePlanDescription = <>\{!planFlagReady \? "Checking plan access…" : startPlanEnabled \? "Free plan" : null\}<\/>/);
-  assert.match(settings, /plan.id === "Free"\s*\? !planFlagReady \|\| startPlanEnabled \? freePlanDescription : selectedType.description\s*: selectedType.description/);
-  assert.doesNotMatch(read("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx"), /trialStatus|hasSubscription/);
+  assert.match(settings, /const freePlanDescription = <>Free plan<\/>/);
+  assert.match(settings, /plan\.id === "Free" \? freePlanDescription : selectedType\.description/);
+  assert.doesNotMatch(settings, /7551|planFlagReady|Checking plan access/);
+  assert.doesNotMatch(read("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx"), /trialStatus|hasSubscription|useFlag/);
 });
 
 
@@ -306,8 +305,7 @@ test("the standalone legacy trial card also refuses flagged members and still al
     state.board.team.googleAccount.userId = 6;
     await renderCard();
     assert.equal(container.querySelector("button").textContent, "Start a Hypertask plan");
-    state.enabled = false;
-    await renderCard(); assert.match(container.textContent, /Begin Hypertask Trial/);
+    assert.doesNotMatch(container.textContent, /Begin Hypertask Trial/);
   });
 });
 
@@ -388,11 +386,11 @@ test("standalone trial card does not reuse another team's board when the explici
     assert.equal(container.querySelector("button"), null);
     assert.match(container.textContent, /Open a board in this team/);
     assert.deepEqual(requests, []);
-    const previousBoardsQuery = state.boardsQuery;
-    state.enabled = false;
+    assert.equal(state.boardsQuery.options.enabled, true);
     await renderCard();
-    assert.equal(state.boardsQuery, previousBoardsQuery);
-    assert.match(container.textContent, /Begin Hypertask Trial/);
+    assert.equal(state.boardsQuery.options.enabled, true);
+    assert.match(container.textContent, /Open a board in this team/);
+    assert.doesNotMatch(container.textContent, /Begin Hypertask Trial/);
   });
 });
 
@@ -423,8 +421,9 @@ for (const selection of ["none", "different team"]) {
       assert.match(requests.at(-1).body.boardUrl, /project\?id=7/);
       assert.equal(backend.calls.length, 1);
       assert.deepEqual(pushes, ["https://checkout.stripe.test/cs_1"]);
-      state.enabled = false; await renderModal();
-      assert.match(container.textContent, /14 day FREE trial/);
+      await renderModal();
+      assert.match(container.textContent, /\$20 per user\/month after 7 days/);
+      assert.doesNotMatch(container.textContent, /14 day FREE trial|Get Started/);
     }, backend);
   });
 }

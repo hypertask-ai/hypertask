@@ -59,7 +59,7 @@ export function parseTaskReference(
     };
   }
 
-  const ticketNumberMatch = trimmed.match(/^[A-Z0-9]+-\d+$/i);
+  const ticketNumberMatch = trimmed.match(/^[A-Z][A-Z0-9_-]*-\d+$/i);
   if (ticketNumberMatch) {
     return {
       ticketNumber: trimmed.toUpperCase(),

@@ -355,11 +355,11 @@ test("the workflow is one event-driven run with a best-effort sweep", () => {
   }
   assert.match(workflow, /schedule:/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /cancel-in-progress: false/, "a run that files a ticket must not be cancelled halfway");
-  assert.match(workflow, /concurrency:\n  group: dependabot-lane\n  queue: max\n  cancel-in-progress: false/, 
-    "the sweep and the PR events share one queue, so two runs cannot file a ticket each");
+  assert.match(workflow, /cancel-in-progress: true/, "a newer event cancels the older run of the same pull request");
+  assert.match(workflow, /concurrency:\n  group: dependabot-lane-\$\{\{ github\.event\.pull_request\.number \|\| 'schedule' \}\}\n  cancel-in-progress: true/,
+    "a sweep uses its own group, so it does not cancel a pull request that is filing a ticket");
   assert.match(workflow, /timeout-minutes: \d+/);
-  assert.match(workflow, /permissions:\n  contents: read\n  pull-requests: write/);
+  assert.match(workflow, /permissions:\n  actions: read\n  contents: read\n  pull-requests: write/);
   assert.match(workflow, /require\('\.\/\.github\/scripts\/dependabot-lane\.cjs'\)/);
   assert.doesNotMatch(workflow, /^\s*- labeled/m, "no label event may gate the ticket any more");
   const executable = workflow.split("\n").filter(line => !/^\s*#/.test(line)).join("\n");

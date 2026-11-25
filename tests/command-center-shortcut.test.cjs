@@ -101,7 +101,7 @@ test("modified and unrelated keys do not trigger the Command Center", () => {
 const publicRoutes = [
   "/login", "/qa/login", "/invite", "/reset", "/pricing", "/oauth", "/cli-auth", "/share",
   "/verify-email", "/trial", "/trial-plan-confirmation", "/full-plan-confirmation",
-  "/unauthorized", "/onboarding", "/interactive-onboarding", "/new", "/learn", "/demo",
+  "/unauthorized", "/signout", "/onboarding", "/interactive-onboarding", "/new", "/learn", "/demo",
 ];
 
 for (const route of publicRoutes) {

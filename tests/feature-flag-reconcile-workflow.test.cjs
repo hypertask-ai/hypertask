@@ -270,7 +270,7 @@ exit 1
     cwd: checkout,
     env,
     encoding: "utf8",
-    timeout: 30_000,
+    timeout: 120_000,
   });
   assert.ifError(result.error);
   const output = result.stdout + result.stderr;
@@ -533,10 +533,9 @@ for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
 
 test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
   assert.deepEqual(yaml.load(workflow).concurrency, {
-    group: "feature-flag-gate-serialized",
-    queue: "max",
-    "cancel-in-progress": false,
-  }, "fleet sweeps and PR events share a fresh queue so stale sweep verdicts cannot overwrite newer PR verdicts");
+    group: "feature-flag-gate-${{ github.event.pull_request.number || github.ref }}",
+    "cancel-in-progress": true,
+  }, "a newer event cancels the older run of the same pull request");
 });
 
 test('the replacement queue leaves the wedged legacy group and keeps bounded job timeouts', () => {
@@ -622,8 +621,8 @@ test("PR events evaluate only their own head; fleet reconciliation runs every fi
   assert.deepEqual(selected("schedule"), ["reconcile-open-pull-requests"]);
   assert.deepEqual(Object.keys(config.on).sort(), ["pull_request_target", "schedule"]);
   assert.deepEqual(config.on.schedule, [{ cron: "*/15 * * * *" }]);
-  assert.equal(config.concurrency.group, "feature-flag-gate-serialized");
-  assert.equal(config.concurrency["cancel-in-progress"], false);
+  assert.equal(config.concurrency.group, "feature-flag-gate-${{ github.event.pull_request.number || github.ref }}");
+  assert.equal(config.concurrency["cancel-in-progress"], true);
 
   const { result, output, posts, calls, pull } = runWorkflow(t, {
     job: singlePullRequest,

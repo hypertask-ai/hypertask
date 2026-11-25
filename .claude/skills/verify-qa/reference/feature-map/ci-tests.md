@@ -14,35 +14,53 @@ This is infrastructure; application screens do not change.
 
 ## Driving it with agent-browser
 
-1. Open a normal production pull request.
-2. Read the preparation job and shard artifact.
-3. Confirm code checks and both shards start independently after preparation.
-4. Confirm scope guard, Typecheck, `Lint (oxlint)` and `Lint (eslint, rules Oxlint lacks)` succeed in `ci-checks`.
-5. Confirm both test shards execute successfully.
-6. Confirm the summary proves every planned file ran once.
-7. Confirm the required `ci-tests` result succeeds only after all producers.
-8. On a docs-only change, confirm preparation succeeds and both heavy producers skip explicitly.
-9. For speed claims, collect ten completed successful hosted runs, including step timestamps.
-10. For timing diagnostics, open each production shard’s summary and download `test-durations`. Each shard folder contains its own `test-durations.json`; verify its descending top twenty against the summary.
-11. Compare each JSON’s `totalFileDurationMs / concurrency` against that shard’s Test step timestamps. If outside 20%, distinguish serial lanes (`laneAdjustedDurationMs`), worker idle slots and npm startup. Failed assertions can produce partial reports; cancellation can leave reports missing.
+No browser. Read hosted runs with `gh`. The unit fixtures in `tests/` prove the
+logic; only a hosted run proves scheduling.
+
+1. `RID=$(gh run list --workflow=ci-tests.yml --branch production --limit 1
+   --json databaseId --jq '.[0].databaseId')` picks the newest production push.
+   A PR run carries 4 `test-shard` jobs (3 pool + 1 serial); a push carries 8
+   (6 + 2). Read the count, never assume 2.
+2. `gh api repos/hypertask-ai/hypertask/actions/runs/$RID/jobs --paginate --jq
+   '.jobs[]|"\(.name)\t\(.conclusion)\t\(.started_at)"'` shows
+   `ci-prepare`, `ci-checks`, the `test-shard` matrix, `ci-fixtures` and the
+   `ci-tests` gate. All shards start after `ci-prepare` finishes, in parallel.
+3. `gh run view $RID --json jobs --jq '.jobs[]|select(.name=="ci-checks")|.steps[]|.name+" "+.conclusion'`
+   shows one `Run independent static checks` step (success) and no separate
+   `Typecheck`, `Lint (oxlint)` or `scope guard` step.
+4. Read the `ci-tests` job's log: the `Prove every test file ran once` step runs
+   `node .github/scripts/shard-tests.mjs --prove` and prints
+   `shard-proof files=<N> sizes=… union=full duplicates=0`; the gate publishes
+   `ci-tests` only after that.
+5. On a docs-only PR, `ci-prepare` succeeds and `ci-checks`, the test matrix and
+   `ci-fixtures` skip explicitly.
+6. For timing, download `-n test-durations` from a production push run; it holds
+   one folder per shard, each with its own `test-durations.json`. PR runs do not
+   upload it.
 
 Never change required statuses to manufacture negative controls.
-Execute the workflow's summary shell with isolated inputs locally.
+Execute the workflow's inline summary gate with isolated inputs locally; there
+is no standalone summary shell file.
 
 ## Gotchas
 
 - Test shards accidentally depend on static checks.
 - Static failure or cancellation escapes the summary.
-- A cache hit skips checks rather than installation.
+- A cache hit skips installation, not checks.
 - Pull requests publish untrusted cache contents.
 - A shard omits or repeats a planned test file.
 - Queue or cache differences masquerade as speedups.
+- Docs written against an older layout cite "both shards" and a `Typecheck`
+  step that do not exist; the matrix is 4 shards on a PR and 8 on a push, and
+  `Run independent static checks` is a single step.
 
 ### What proof to collect
 
 Save workflow run URLs, head SHAs and job/step timestamps.
-Record successful scope guard, Typecheck, both lint steps and both shards.
-Record the summary's exact-file execution proof.
+Record the `Run independent static checks` step and every `test-shard` job (4 on
+a PR, 8 on a push).
+Record the summary's exact-file execution proof (`shard-proof files=<N> …
+duplicates=0`).
 Compare preparation and shard-start timings against historical runs.
 Separate avoided serial work from overall CI wall time.
 `tests/ci-parallel-checks.test.cjs` executes the real summary shell across producer outcomes.
@@ -51,7 +69,7 @@ These isolated checks do not prove hosted scheduling.
 
 ### CI App API pool
 
-Confirm CI Tests' single review precheck uses `github.token` and its
+Confirm CI Tests' prepare job asks for no `statuses` permission and its
 PR-controlled workflow does not receive the App private key. For the current
 head, inspect mint and fallback logs in trusted App Smoke, Feature Flag Gate, and
 UX Signoff runs. Record evidence of actual App-authenticated requests without

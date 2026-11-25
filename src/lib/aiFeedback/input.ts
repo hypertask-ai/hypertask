@@ -63,6 +63,24 @@ export function scrubFeedbackNote(value: string): string {
   return note
 }
 
+export function repeatNoteShape(note: string): { prefix: string; suffix: string } | undefined {
+  const match = /^(.*\b(?:PR|pull request)\s+#?)(\d+)\b(.*)$/i.exec(note)
+  if (!match || match[1].trim().length < 24) return undefined
+  return { prefix: match[1], suffix: match[3] }
+}
+
+export function repeatJoinKey(input: { errorCode?: string; surface: string; tool?: string; status?: number; category?: string; field?: string }, stored?: { kind?: string; note?: string }): bigint | undefined {
+  const shape = stored?.note ? repeatNoteShape(stored.note) : undefined
+  if (!shape || !input.errorCode) return undefined
+  const material = [
+    input.errorCode, input.surface, input.tool ?? '', input.status ?? '',
+    input.category ?? 'other', input.field ?? '', stored?.kind ?? '',
+    shape.prefix, shape.suffix,
+  ].join('\n')
+  const hash = createHash('sha256').update(material).digest('hex')
+  return BigInt.asIntN(64, BigInt(`0x${hash.slice(0, 16)}`))
+}
+
 export function feedbackFingerprint(input: AutomaticFeedbackInput, stored?: { kind?: string; note?: string }): string {
   const parts = [input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? '', input.category ?? 'other']
   if (input.field) parts.push(input.field)

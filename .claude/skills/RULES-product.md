@@ -8,7 +8,7 @@ Reads go through the plain `hypertask` CLI. Never assign userId 6.
 ## Done means verified on production
 
 A ticket is done when the production deployment for the merge sha is
-`success` and `verify-qa` passed with evidence. A merge or a local commit
+`success` and `verify-hypertask` passed with evidence. A merge or a local commit
 is not done.
 
 ## Flags

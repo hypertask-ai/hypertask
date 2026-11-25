@@ -1,6 +1,6 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { findIdParamOutOfRange } from '@/lib/mcp/listParams';
-import { TaskIdentifierOutOfRangeError } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, TaskIdentifierOutOfRangeError } from '@/lib/mcp/tasks/resolveTask';
 import prisma from '@/lib/prisma';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
@@ -60,8 +60,16 @@ export async function findTasksByIdentifier(
             OR: orConditions,
             project: getProjectWhere(user.id, agentId, teamScope)
         },
-        select: { id: true, sectionId: true, projectId: true, status: true }
+        select: { id: true, sectionId: true, projectId: true, status: true, ticketNumber: true }
     })
+    const missing = (ticket_number ? (Array.isArray(ticket_number) ? ticket_number : [ticket_number]) : [])
+        .filter((t): t is string => typeof t === 'string' && t.length > 0 && !tasks.some((r) => r.ticketNumber?.toLowerCase() === t.toLowerCase()))
+    const aliasTargets = [...missing.map((key) => ({ ticket_number: key, project_id: project_id ?? null })), ...(unique_index != null && project_id != null && !tasks.length ? [{ unique_index, project_id }] : [])]
+    if (aliasTargets.length && typeof findTaskByIdentifier === 'function') {
+        const resolved = await Promise.all(aliasTargets.map((target) => findTaskByIdentifier(user, target, agentId, undefined, teamScope)))
+        const aliasIds = [...new Set(resolved.flatMap((m) => (m && !tasks.some((t) => t.id === m.id) ? [m.id] : [])))]
+        if (aliasIds.length) tasks.push(...await prisma.task.findMany({ where: { id: { in: aliasIds }, status: { not: 'Deleted' }, project: getProjectWhere(user.id, agentId, teamScope) }, select: { id: true, sectionId: true, projectId: true, status: true, ticketNumber: true } }))
+    }
 
-    return tasks
+    return tasks.map(({ id, sectionId, projectId, status }) => ({ id, sectionId, projectId, status }))
 }

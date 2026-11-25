@@ -61,7 +61,8 @@ stub("src/utils/controllers/notifications/digest.ts", { enqueueDigest: async () 
 stub("src/utils/controllers/notifications/projectMute.ts", { isTaskProjectMuted: async () => false });
 stub("src/lib/email/unsubscribe.ts", { unsubscribeHeaders: () => ({}) });
 stub("src/lib/email/inboundReply.ts", { createNotificationReplyAddress: () => "reply@example.test" });
-stub("src/utils/controllers/invite/getInvite.ts", { default: async () => ({ json: { projectId: board.id } }) });
+let inviteLookup = async () => ({ json: { projectId: board.id } });
+stub("src/utils/controllers/invite/getInvite.ts", { default: (...args) => inviteLookup(...args) });
 stub("src/utils/controllers/members/invite.ts", { default: async (...args) => { redeemed = args; return { status: 200 }; } });
 stub("src/app/invite/InviteComp.tsx", { default: () => null });
 const headersPath = require.resolve("next/headers");
@@ -101,6 +102,7 @@ test.beforeEach(() => {
   flagCalls = [];
   sessionCookie = undefined;
   redeemed = undefined;
+  inviteLookup = async () => ({ json: { projectId: board.id } });
   inviter = { id: 7, displayName: body.sender, email: body.senderEmail, userPicture: null };
   existingInvite = { id: "invite&#+?日本語", project: board };
   boardMemberIds = [7];
@@ -267,4 +269,42 @@ test("HTPR-7176: resend takes the viewer from the session, not the request body"
   assert.deepEqual(viewUserIds, [7]);
   assert.equal(cancelled.length, 1);
   assert.equal(sent.length, 1);
+});
+
+test("HTPR-9534: a signed-out invitee is sent to sign in and does not join", async () => {
+  await assert.rejects(invitePage({ searchParams: Promise.resolve({}) }), { message: "/login" });
+  assert.equal(redeemed, undefined);
+  inviteLookup = async () => ({ json: null });
+  await assert.rejects(
+    invitePage({ searchParams: Promise.resolve({ project: "QA", key: "missing", projectId: "42", view: "kanban" }) }),
+    { message: "/login?project=QA&key=missing&projectId=42&view=kanban" },
+  );
+  assert.equal(redeemed, undefined);
+});
+
+test("HTPR-9534: a guest demo cookie cannot redeem an invite", async () => {
+  sessionCookie = { value: JSON.stringify({ id: 50, uid: "guest_demo", email: "guest@demo.hypertask.ai", displayName: "Guest" }) };
+  const page = await invitePage({
+    searchParams: Promise.resolve({ project: board.title, key: existingInvite.id, projectId: "42", view: "kanban" }),
+  });
+  assert.equal(page.props.inviteKey, existingInvite.id);
+  assert.equal(page.props.projectInvited, JSON.stringify({ projectId: board.id }));
+  assert.equal(redeemed, undefined);
+});
+
+test("HTPR-9534: a signed-in member still joins the invited board", async () => {
+  sessionCookie = { value: JSON.stringify({ id: 99 }) };
+  const view = "kanban";
+  await assert.rejects(
+    invitePage({ searchParams: Promise.resolve({ project: board.title, key: existingInvite.id, projectId: "42", view }) }),
+    { message: `/project?id=42&view=${encodeURIComponent(view)}` },
+  );
+  assert.deepEqual(redeemed, [99, 42, existingInvite.id]);
+  inviteLookup = async () => undefined;
+  redeemed = undefined;
+  await assert.rejects(
+    invitePage({ searchParams: Promise.resolve({ key: "missing", projectId: "42" }) }),
+    { message: "/" },
+  );
+  assert.equal(redeemed, undefined);
 });

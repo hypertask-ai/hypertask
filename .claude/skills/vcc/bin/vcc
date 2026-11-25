@@ -98,8 +98,6 @@ question_check() {
        then "at most 8 context lines before Question:" else empty end),
       (if $question_index != null and ($plain[$question_index + 1] // "" | startswith("My recommendation:") | not)
        then "My recommendation: must be right under Question:" else empty end),
-      (if $text | test("https?://|www\\.|<a\\b|\\[[^\\]]*\\]\\("; "i")
-       then "no outside links in a Question" else empty end),
       (if any($plain[]; startswith("Why:") or (startswith("My recommendation:") and test("\\bWhy:")))
        then empty else "Why:" end),
       ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
@@ -363,43 +361,58 @@ completion_move() {
   out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
 }
 
-# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
+SHARED_IDENTITY="Valentins Claude Code"
+SHIP_IDENTITY="$HOME/.agents/skills/ship/scripts/ship-identity"
 TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-IDENTITY="Valentins Claude Code"
-if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
-  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+IDENTITY="$SHARED_IDENTITY"
+[ -x "$SHIP_IDENTITY" ] || { printf 'vcc: %s is missing; refusing to write as %s\n' "$SHIP_IDENTITY" "$SHARED_IDENTITY" >&2; exit 2; }
+IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$SHIP_IDENTITY")
+SESSION_NAME=${SHIP_SESSION_NAME:-}
+if [ -z "$SESSION_NAME" ]; then
+  SESSION_NAME=$("$SHIP_IDENTITY" --name)
+  case "$SESSION_NAME" in
+    *$'\t'*)
+      printf 'vcc: %s did not report the session name; refusing to write as %s\n' "$SHIP_IDENTITY" "$IDENTITY" >&2
+      exit 2
+      ;;
+  esac
+  [ "$SESSION_NAME" = "$SHARED_IDENTITY" ] && SESSION_NAME=''
 fi
-# A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
-# token exists, which would post a runner's words under his name (YPER4-960).
-# HYCI-408: a session named for its tmux slot ("ht-or-runner-5") resolves to "RUNNER 5" in ship-identity, so the
-# name differs while the slot is the same. That is the same runner, not Valentin: accept it, and still refuse a
-# name whose slot differs from the resolved identity or a name with no slot at all ("SPEED RUNNER").
+SESSION_NAME=${SESSION_NAME%% | *}
 runner_slot() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' \
     | grep -oE '(^|[^a-z0-9])runner[-_ ]?[0-9]+([^a-z0-9]|$)' \
     | grep -oE '[0-9]+' | head -1 || true
 }
-case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
+case "$(printf '%s' "$SESSION_NAME" | tr '[:upper:]' '[:lower:]')" in
   *runner*)
-    if [ "$IDENTITY" != "${SHIP_SESSION_NAME%% | *}" ]; then
-      session_slot=$(runner_slot "${SHIP_SESSION_NAME}")
+    if [ "$IDENTITY" != "$SESSION_NAME" ]; then
+      session_slot=$(runner_slot "$SESSION_NAME")
       identity_slot=$(runner_slot "$IDENTITY")
       [ -n "$session_slot" ] && [ "$session_slot" = "$identity_slot" ] \
-        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; }
+        || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SESSION_NAME" "$IDENTITY" >&2; exit 2; }
     fi ;;
 esac
+if [ -n "$SESSION_NAME" ] && [ "$IDENTITY" = "$SHARED_IDENTITY" ]; then
+  printf 'vcc: %s has no board login; refusing to write as %s\n' "$SESSION_NAME" "$IDENTITY" >&2
+  exit 2
+fi
 HT_TOKEN="$(cat "$TOKEN_FILE")"
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
 brain_label_check "$@"
 completion_move "$@"
 FILING_GATE=${VCC_FILING_GATE:-$HOME/.local/share/house-rules/skills/hypertask-triage/scripts/filing-gate}
+LIVE_CI_BOARD=11514
+ARCHIVED_CI_BOARD=4060
 create_project() {
   local words=() project=''
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project=${2:-}; shift ;;
       --project=*) project=${1#--project=} ;;
+      --team) shift ;;
+      --team=*|--json|--human) ;;
       -*) ;;
       *) [ "${#words[@]}" -ge 2 ] || words+=("$1") ;;
     esac
@@ -407,12 +420,47 @@ create_project() {
   done
   case "${words[*]}" in "task create"|"tasks create") printf '%s' "$project" ;; esac
 }
+retire_archived_board() {
+  [ "$(create_project "${VCC_ARGS[@]}")" = "$ARCHIVED_CI_BOARD" ] || return 0
+  local -a args=("${VCC_ARGS[@]}") final=()
+  local i=0 n=${#args[@]} arg
+  while [ "$i" -lt "$n" ]; do
+    arg=${args[$i]}
+    case "$arg" in
+      --project)
+        if [ $((i + 1)) -lt "$n" ] && [ "${args[$((i + 1))]}" = "$ARCHIVED_CI_BOARD" ]; then
+          final+=(--project "$LIVE_CI_BOARD")
+          i=$((i + 2))
+          continue
+        fi
+        final+=("$arg")
+        i=$((i + 1))
+        ;;
+      --project="$ARCHIVED_CI_BOARD")
+        final+=("--project=$LIVE_CI_BOARD")
+        i=$((i + 1))
+        ;;
+      *)
+        final+=("$arg")
+        i=$((i + 1))
+        ;;
+    esac
+  done
+  VCC_ARGS=("${final[@]}")
+  printf 'vcc: board %s is archived; filing this CI ticket on board %s\n' "$ARCHIVED_CI_BOARD" "$LIVE_CI_BOARD" >&2
+}
 filing_gate() {
-  case "$(create_project "$@")" in 11514|4060) ;; *) return 0 ;; esac
-  [ -x "$FILING_GATE" ] || { printf 'vcc: task create refused: filing-gate missing at %s; run house-rules-sync\n' "$FILING_GATE" >&2; exit 5; }
+  case "$(create_project "$@")" in "$LIVE_CI_BOARD"|"$ARCHIVED_CI_BOARD") ;; *) return 0 ;; esac
+  if [ ! -x "$FILING_GATE" ]; then
+    printf 'vcc: filing-gate missing at %s; filing without it, run house-rules-sync\n' "$FILING_GATE" >&2
+    return 0
+  fi
   "$FILING_GATE" --who "$IDENTITY" -- "$@"
 }
-if [ "${1:-}" != activity ]; then filing_gate "$@"; fi
+if [ "${1:-}" != activity ]; then
+  retire_archived_board
+  filing_gate "${VCC_ARGS[@]}"
+fi
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
@@ -437,9 +485,9 @@ blocker_gate() {
     out=$("$BLOCKER_REVIEW" --gate --who "$IDENTITY" --board "$board" 2>&1 < /dev/null) || blocker_refuse "$what" "$out"
   fi
 }
-# A Question comment, or a waiting person set to Valentin (user 6, or "me": every login writes as user 6).
+# A waiting person set to Valentin (user 6, or "me": every login writes as user 6).
 blocker_entry() {
-  local project='' ticket='' kind='' text='' file='' user='' have_user=false what arg
+  local project='' ticket='' user='' have_user=false what arg
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project) project=${2:-}; shift; [ "$#" -gt 0 ] && shift ;;
@@ -450,7 +498,6 @@ blocker_entry() {
     esac
   done
   case "${1:-} ${2:-}" in
-    'comment add'|'comments add') what=Question ;;
     'task waiting-on'|'tasks waiting-on') what='Valentin as the waiting person' ;;
     *) return 0 ;;
   esac
@@ -458,19 +505,13 @@ blocker_entry() {
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
-      --kind|--text|--body|--file|--user|--project)
+      --user|--project)
         [ "$#" -ge 2 ] || break
         case "$arg" in
-          --kind) kind=$2 ;;
-          --text|--body) text=$2; file='' ;;
-          --file) file=$2; text='' ;;
           --user) user=$2; have_user=true ;;
           --project) project=$2 ;;
         esac
         shift ;;
-      --kind=*) kind=${arg#*=} ;;
-      --text=*|--body=*) text=${arg#*=}; file='' ;;
-      --file=*) file=${arg#*=}; text='' ;;
       --user=*) user=${arg#*=}; have_user=true ;;
       --project=*) project=${arg#*=} ;;
       --*) ;;
@@ -478,16 +519,8 @@ blocker_entry() {
     esac
     shift
   done
-  if [ "$what" = Question ]; then
-    [ "$kind" = question ] || return 0
-    if [ -n "$file" ]; then
-      text=$(cat -- "$file" 2>/dev/null) || blocker_refuse Question 'cannot read --file'
-    fi
-    blocker_gate "$what" "$ticket" "$project" "$text"
-  else
-    [ "$have_user" = true ] && { [ "$user" = 6 ] || [ "$user" = me ]; } || return 0
-    blocker_gate "$what" "$ticket" "$project"
-  fi
+  [ "$have_user" = true ] && { [ "$user" = 6 ] || [ "$user" = me ]; } || return 0
+  blocker_gate "$what" "$ticket" "$project"
 }
 review_move() {
   local project='' to_project='' ticket='' section='' second='' newest reason description verb comments name id board

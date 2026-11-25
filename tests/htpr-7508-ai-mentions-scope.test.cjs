@@ -215,7 +215,7 @@ for (const enforce of [true, false]) {
   test(`named mention producer IDs survive the real Turbopuffer adapter, enforce=${enforce}`, async () => {
     const h = harness({ enforce, grant: "accepted" });
     const res = await allowed(h, variants[1]);
-    const projectIds = enforce ? [h.project.id] : h.projects.map(project => project.id);
+    const projectIds = [h.project.id];
     assert.deepEqual(h.searches, [{ searchQuery: "Board", projectIds, topK: 25, keywordOnly: true }]);
     assert.deepEqual(res.body.filter(item => item.type === "task").map(item => item.project_id).toSorted(), projectIds.toSorted());
   });

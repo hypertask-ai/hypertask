@@ -1306,6 +1306,46 @@ test('new elements need normalized names in approved wireframes or approving hum
   assert.equal((await decision({ files: [added], comments: [wireframe({ text: approved.text }), yes({ text: 'maybe ExamplePanel' })] })).state, 'failure');
 });
 
+test('only /wireframes/ evidence counts for comments added after the cutover', async () => {
+  const explorations = wireframe({ text: '<p>https://hypertask.app/explorations/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z', reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-11-23T10:05:00Z' }] });
+  assert.equal((await decision({ comments: [explorations] })).state, 'failure');
+  assert.equal((await decision({ comments: [explorations, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
+  const artifact = wireframe({ text: '<p>https://claude.ai/artifact/NewDesign123</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z' });
+  assert.equal((await decision({ comments: [artifact, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
+  const editedLegacy = wireframe({ text: '<p>https://hypertask.app/explorations/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z', editedAt: '2026-11-23T10:00:00Z' });
+  assert.equal((await decision({ comments: [editedLegacy, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'failure');
+  const wireframes = wireframe({ text: '<p>https://hypertask.app/wireframes/newdesign</p><p>New elements: ExamplePanel</p>', createdAt: '2026-11-23T10:00:00Z' });
+  assert.equal((await decision({ comments: [wireframes, yes({ createdAt: '2026-11-23T10:06:00Z' })] })).state, 'success');
+});
+
+test('approvals recorded on legacy explorations and artifacts still count', async () => {
+  const explorations = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
+  assert.equal((await decision({ comments: [explorations, yes({ createdAt: '2026-10-10T12:05:00Z' })] })).state, 'success');
+  const artifact = wireframe({ text: '<p>https://claude.ai/artifact/LegacyDesign1</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
+  assert.equal((await decision({ comments: [artifact, yes({ createdAt: '2026-10-10T12:05:00Z' })] })).state, 'success');
+  const lateYes = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z' });
+  assert.equal((await decision({ comments: [lateYes, yes({ createdAt: '2026-11-23T10:05:00Z' })] })).state, 'failure');
+  const lateReaction = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', createdAt: '2026-10-10T12:00:00Z', reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-11-23T10:05:00Z' }] });
+  assert.equal((await decision({ comments: [lateReaction] })).state, 'failure');
+});
+
+test('later yes comments preserve legacy approval but a later no still withdraws it', async () => {
+  const design = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: ExamplePanel</p>', reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-10-10T12:05:00Z' }] });
+  const later = yes({ createdAt: '2026-11-23T10:05:00Z' });
+  assert.equal((await decision({ comments: [design, later] })).state, 'success');
+  const unreacted = { ...design, reactions: [] };
+  assert.equal((await decision({ comments: [unreacted, yes(), later] })).state, 'success');
+  assert.equal((await decision({ comments: [design, { ...later, text: 'no, change it' }] })).state, 'failure');
+  assert.equal((await decision({ comments: [unreacted, yes({ editedAt: '2026-11-23T10:05:00Z', editedBy: { userId: 6 } })] })).state, 'failure');
+});
+
+test('a legacy question reacted to only after cutover cannot approve new elements', async () => {
+  const design = wireframe({ text: '<p>https://hypertask.app/explorations/legacy_design</p><p>New elements: none</p>' });
+  const question = wireframe({ id: 12, createdAt: '2026-10-11T12:00:00Z', text: 'Question: May this ship with the new parts named here: ExamplePanel?\nYes: #comment-1', reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-11-23T10:05:00Z' }] });
+  assert.equal((await decision({ comments: [design, question] })).state, 'failure');
+  assert.equal((await decision({ comments: [design, { ...question, reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-10-11T12:05:00Z' }] }] })).state, 'success');
+});
+
 test('copied components need names; renamed components, CSS and app files need no names and no wireframe', async () => {
   assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [{ ...added, status: 'copied' }] })).state, 'failure');
   for (const file of [{ ...added, status: 'renamed' }, { ...added, filename: 'src/components/Panel.css' }, { ...added, filename: 'src/app/inbox/page.tsx' }]) {

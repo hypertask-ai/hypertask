@@ -1,6 +1,6 @@
 # Skills for Valentin's Claude Code sessions
 
-**Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
+**Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-hypertask`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
 
 Together these skills, their scripts, the hooks and the rule files (CLAUDE.md, AGENTS.md) are the **Agent Kit**: how every Hypertask session works (Valentin, 2026-10-02). It lives in this repo, next to the code it works on. Changes to it are tickets on the Fleet CI & Infra board (project 11514) and PRs, like any other change. (Not to be confused with Product Bot, the retired farm agent.)
 
@@ -14,6 +14,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 |---|---|---|
 | ship | Start of every session (`/ship <ticket>`): the map of steps, the proof checklist, the merge and Done block | .claude/skills/ship/SKILL.md |
 | maintain-verification-skill | Weekly source-only timer and GitHub feature-map check; runner-owned live QA (pstack by Lauren Tan, MIT) | .claude/skills/maintain-verification-skill/SKILL.md |
+| formal-verification | Seat-billing or webhook retry code changed, before opening the PR: TLC model checks for money and retry state machines | .claude/skills/formal-verification/SKILL.md |
 | scriptify | Weekly routine discovery, deterministic scripts and runner handoff | .claude/skills/scriptify/SKILL.md |
 | update-ai-models | Model-watch tickets or catalog refresh: automatic existing-class OpenAI/Anthropic updates, new-class approval and premium holds | .claude/skills/update-ai-models/SKILL.md |
 | setup-runner | `/setup-runner [number]` in a fresh session: set up its runner login and identity, then follow /ship without a ticket | .claude/skills/setup-runner/SKILL.md |
@@ -34,14 +35,18 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | no-comments | Before the PR, inside simplify-before-pr: Comment Sicko (`.claude/agents/comment-sicko.md`) on the PR diff kills comments, lint and TypeScript suppressions and workaround code, also outside `src/` (pstack by Lauren Tan, MIT) | .claude/skills/no-comments/SKILL.md |
 | design-compliance | Before the PR (UI) | .claude/skills/design-compliance/SKILL.md |
 | update-docs | Before the PR (user-visible change) | .claude/skills/update-docs/SKILL.md |
-| verify-on-phone | Before the PR (UI) | .claude/skills/verify-on-phone/SKILL.md |
-| verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
-| verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
-| verify-design | Design QA for design-pass, Figma or visible UI tickets: live screen next to the frame per theme, scored, reviewer checklist | .claude/skills/verify-design/SKILL.md |
+| verify-on-phone | Retired name: load verify-hypertask for the pre-PR 390x844 shot. The retired file at `.claude/skills/verify-on-phone/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| verify-visual | Retired name: load verify-hypertask for the Visual Regression result before a UI merge. The retired file at `.claude/skills/verify-visual/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| verify-qa | Retired name: load verify-hypertask for the production proof after deploy. The retired file at `.claude/skills/verify-qa/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| verify-design | Retired name: load verify-hypertask for design QA on design-pass, Figma and visible UI tickets. The retired file at `.claude/skills/verify-design/SKILL.md` is not an entry point | .claude/skills/verify-hypertask/SKILL.md |
+| figma-design | Before any Figma mockup, wireframe, icon, design system or design hand-off: connect through the claude.ai Figma connector, work in Yeo UX, rebuild real captures, keep each app's design system page current | .claude/skills/figma-design/SKILL.md |
+| artifact-wireframe | Any wireframe or redesign shown as a clickable claude.ai Artifact: one self-contained HTML file, republished to the same link per change, with light and dark QA | .claude/skills/artifact-wireframe/SKILL.md |
+| design-lead | A manager session told it is the design lead: audit the live app, file design problem tickets, prepare wireframes for Valentin's sign-off, review UI PRs Before / After / Why. Never codes | .claude/skills/design-lead/SKILL.md |
+| verify-hypertask | The one verification skill: local before the PR (390x844 shot), Visual Regression before a UI merge, production after deploy, design QA against the ticket frame | .claude/skills/verify-hypertask/SKILL.md |
 
 Performance reviews use the official shared pstack installation, not repository copies. Before reporting measurements, load `~/.agents/skills/principle-explain-the-number/SKILL.md` and `~/.agents/skills/benchmark-checklist/SKILL.md`. Install or repair pstack from its official source if either path is missing; never copy its contents into this repository.
 
-Design work uses the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
+Design work uses `figma-design` and `artifact-wireframe` in this repo's `.claude/skills/`. A design lead session loads `design-lead`, which points at both. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 
 `wireframe` is required before new or changed visible UI code, except a `[BUGFIX]` restoring intended behaviour: build options from the live app (Ctrl+K for menus, no invented UI), publish a clickable link, then move to **UX Sign-off** (board 15 column 22502). The last comment has the wireframe link, `New elements: <ComponentName>, ...` (or `New elements: none`), and one yes/no `Question:` @mentioning Valentin. Wait for his yes before code; every new component file still needs his yes naming it, including in a `[BUGFIX]`. The `ux-signoff` check enforces this (Valentin, 2026-10-10).
 

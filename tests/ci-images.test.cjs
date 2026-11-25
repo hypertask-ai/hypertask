@@ -96,7 +96,7 @@ test("weekly and dispatch mirror preserves official pinned digests and proves re
   const copy = workflow("ci-images");
   assert.ok(Object.hasOwn(copy.on, "workflow_dispatch"));
   assert.equal(copy.on.schedule[0].cron, "23 4 * * 1");
-  assert.deepEqual(copy.on.push.branches, ["yper4-231-ghcr-ci-images"]);
+  assert.equal(copy.on.push, undefined);
   assert.deepEqual(copy.permissions, {});
   assert.equal(copy.jobs.mirror.permissions.packages, "write");
   assert.equal(copy.jobs["verify-read"].permissions.packages, "read");

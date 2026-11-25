@@ -1,17 +1,17 @@
 "use client";
 
 import axios from "axios";
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7686_FREE_PLAN_COPY_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-copy";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG } from "@/lib/flags/definitions/htpr-7922-unlimited-free-boards";
 import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
 import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
-import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-storage-2gb";
 import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7919-allowance-percent";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { visibleFreePlanCopy } from "@/lib/freePlanLimits";
-import { subscriptionPlansFor } from "@/lib/subscriptionPlans";
+import { subscriptionPlansFor ,
+  ISubscriptionPlan,
+} from "@/lib/subscriptionPlans";
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -25,9 +25,6 @@ import {
   buildPricingCheckoutCancelUrl,
   buildPricingCheckoutSuccessUrl,
 } from "@/lib/pricingCheckoutUrls";
-import {
-  ISubscriptionPlan,
-} from "@/lib/subscriptionPlans";
 import type { IPricingSearchParams } from "@/models/model";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import {
@@ -44,8 +41,6 @@ import { currentUserAtom } from "@/store";
 type BillingIntervalIndex = 0 | 1;
 
 const PlansSection = () => {
-  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
-  const planFlagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const showFreePlanCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
   const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
   const unlimitedBoards = useFlag(HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG);
@@ -53,16 +48,14 @@ const PlansSection = () => {
     planLimits: useFlag(HTPR_7686_FREE_PLAN_LIMITS_FLAG),
     unlimitedTickets: useFlag(HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG),
     raisedFileLimit: useFlag(HTPR_7924_FREE_FILE_25MB_FLAG),
-    storageCap: useFlag(HTPR_7924_FREE_STORAGE_2GB_FLAG),
   };
-  const { planLimits, unlimitedTickets, raisedFileLimit, storageCap } = freePlanLimits;
+  const { planLimits, unlimitedTickets, raisedFileLimit } = freePlanLimits;
   const entitlementFlags = {
     ...freePlanLimits,
     unlimitedBoards: unlimitedBoards ? true : undefined,
-    storageCap: planLimits && storageCap ? true : undefined,
   };
   const freePlanCopy = visibleFreePlanCopy(showFreePlanCopy, entitlementFlags);
-  const freePlanDescription = <>{!planFlagReady ? "Checking plan access…" : startPlanEnabled ? "Free plan" : null}</>;
+  const freePlanDescription = <>Free plan</>;
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -84,7 +77,7 @@ const PlansSection = () => {
       [...subscriptionPlansFor(entitlementFlags, percentageAllowance, showFreePlanCopy)].sort(
         (left, right) => STORE_PLAN_RANK[left.id] - STORE_PLAN_RANK[right.id],
       ),
-    [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit, storageCap, percentageAllowance, showFreePlanCopy],
+    [planLimits, unlimitedBoards, unlimitedTickets, raisedFileLimit, percentageAllowance, showFreePlanCopy],
   );
 
   useEffect(() => {
@@ -220,9 +213,7 @@ const PlansSection = () => {
               action={
                 <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
                   <span className="min-w-0 text-right text-dense font-medium text-text-light-gray">
-                    {selectedType.price} {plan.id === "Free"
-                      ? !planFlagReady || startPlanEnabled ? freePlanDescription : selectedType.description
-                      : selectedType.description}
+                    {selectedType.price} {plan.id === "Free" ? freePlanDescription : selectedType.description}
                     {plan.id === "Free" && freePlanCopy.map((line) => (
                       <span key={line} className="block text-dense font-medium text-text-light-gray">
                         {line}

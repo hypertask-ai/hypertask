@@ -38,23 +38,32 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 | Review high-risk design | [interrogate](../interrogate/SKILL.md), only for the valentin-review lane | Review blockers resolved; required human decision recorded |
 | Implement | [fix-bug](../fix-bug/SKILL.md), [fix-slow-page](../fix-slow-page/SKILL.md), or [ship-feature-behind-flag](../ship-feature-behind-flag/SKILL.md) | Smallest complete change; targeted behavior checks pass in CI |
 | Simplify | [simplify-before-pr](../simplify-before-pr/SKILL.md); [blast-radius](../blast-radius/SKILL.md) outside the usual lane | Own diff reviewed; shared behavior preserved |
-| Check UI | [design-compliance](../design-compliance/SKILL.md), [verify-on-phone](../verify-on-phone/SKILL.md) | Before/after evidence; unrelated layout unchanged |
+| Check UI | [design-compliance](../design-compliance/SKILL.md), [verify-hypertask](../verify-hypertask/SKILL.md) | Before/after evidence; unrelated layout unchanged |
 | Document behavior | [update-docs](../update-docs/SKILL.md) | Changed behavior documented or justified no-change record |
-| Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge |
+| Open PR | One existing-ticket PR targeting the proper base; bind with `ship-check bind` | `ship-check pr` passes; no auto-merge; one open PR per runner, `open-pr.sh` refuses a second while one is open |
 | Merge | vcc merge routine and `ship-check guard` | Current-head required checks and production health green |
 | Deploy | vcc deployment routine | `ship-check deployed` passes for the merge SHA |
-| Verify live | [verify-qa](../verify-qa/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
+| Verify live | [verify-hypertask](../verify-hypertask/SKILL.md), matching feature-map page | Real entry-point behavior and side effects; `ship-check proof` for app tickets |
 | Close | Plain-language outcome, QA report, then Done | `ship-check docs` and `ship-check done` pass |
 | Clean | [clean-up](../clean-up/SKILL.md) | `ship-check cleaned` passes |
 | Reflect | [reflect](../reflect/SKILL.md), once after the last ticket | Accepted proposals handled, or skip reason in activity |
 
-Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Design QA for any design-pass, Figma or visible UI ticket uses [verify-design](../verify-design/SKILL.md); a different runner marks its checklist. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
+Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Design QA for any design-pass, Figma or visible UI ticket uses [verify-hypertask](../verify-hypertask/SKILL.md); a different runner marks its checklist. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
 
 ## Stay active until Done
 
 Nobody prompts a runner again after its turn ends. Ending the turn while CI, review bots, merge, deploy, or QA are pending stops the ticket. Keep working from claim to Done. To wait, run one bounded watcher, such as `gh pr checks <pr> --watch --interval 300`, then act on what it reports. Stop early only for a blocker or a Valentin Question from the exceptions below.
 
 The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
+
+## The autonomous-run loop
+
+An agent driving more than one PR owns its loop from this repo. No lead session nudges it.
+
+1. Write the exit predicate before the first round: a check a machine can run, such as "these N PRs are merged, the verifier is green, the live behaviour is proven". Keep iterating until it passes. A plateau is not the end; change approach instead.
+2. Wake mechanism: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/autonomous-run.md. Hypertask uses a background watcher on merges and ref moves, an hourly heartbeat when nothing can wake it, and never polls a successful merge more often than that.
+3. Write one decision row per round in the ticket's checkpoint file: what changed, whether the predicate moved, what runs next.
+4. Merge gating: https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/shipping.md. Hypertask uses the queue merger in `.claude/skills/ship/scripts/` with `--queue <file>` or `--label <label>` on the pinned head, never with `--admin`, printing one JSON document per round. The merger consults the repository's configured verifier GitHub status before each squash.
 
 ## Scripted chores
 
@@ -97,7 +106,7 @@ Write agent activity at claim, fix, PR, checks green, merge, deploy, and QA; at 
 
 Human comments are for decisions, QA, and completion. Claims, releases, handoffs, status, session names, and resume commands belong in agent activity only. Use the shared `tickets` rules and the appropriate `--kind`. Before waiting on CI, a helper, deployment, or a person, post the required agent activity record through `vcc activity add` with separate **Next**, **Helpers**, **Branch/PR**, and **Outputs** lines. Include the resume command. Do not message another session.
 
-Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Mark each case PASS, FAIL, or UNREACHABLE with evidence; failures include steps and actual behavior. Record account ID and role, never credentials. Use verify-qa's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA verdict with the report link and key attachments. No bare "tests pass" claims.
+Save every QA run, including failures, under the ticket's evidence folder outside the worktree. Write the checklist first. Evidence checklist: https://github.com/cursor/plugins/blob/main/pstack/skills/show-me-your-work/SKILL.md. Mark each case green, red, or UNREACHABLE with evidence; reds include steps and actual behavior. Record account ID and role, never credentials. Use verify-hypertask's screenshot, video, and proof contract. Publish a self-contained HTML report as a ticket page, never on hypertask.app. Post one QA summary with the report link and key attachments. No bare "tests green" claims.
 
 After successful live proof, explain the user-visible problem and changed result before Done. Link the PR and report. Put the flag's dedicated link last in its ticket description, preserving other text; use the same link whenever naming it. Make the required release announcement with Valentin's mention. Follow [flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior), not historical defaults in old comments.
 
@@ -120,9 +129,9 @@ For a broken tool or server after two failed attempts, record the exact error an
 ## Handle exceptions without inventing completion
 
 - **Blocked after two attempts:** a killed local test is not an attempt; push and let CI decide. Otherwise record what failed and why on the ticket, then route it by reason; Agent Blocked is not a general waiting column. Needs a design: UX needed. Valentin's own call: Valentin Review with one Question. Waiting on another ticket or a date: its home column, with a link. Merged and waiting for a live check: QA. Only a broken tool or server stays in Agent Blocked. Keep evidence and a resumable state. Follow the current dispatch limit before choosing more work. `blocker-review` prints every ticket parked over a day with the column it belongs in.
-- **Human decision:** use Valentin Review only for a real decision about money, access, security, or irreversible actions. Write the Question exactly in the house-rules tickets skill format (`~/.local/share/house-rules/skills/tickets/SKILL.md`): max 3 plain bullets of context, then Question, My recommendation and Why right under it, then Yes and No, a blank line between each. No outside links or product precedents. Preserve any existing question instead of reposting it.
+- **Human decision:** use Valentin Review only for a real decision about money, access, security, or irreversible actions. Write the Question exactly in the house-rules tickets skill format (`~/.local/share/house-rules/skills/tickets/SKILL.md`): max 3 plain bullets of context, then Question, My recommendation and Why right under it, then Yes and No, a blank line between each. No product precedents. Preserve any existing question instead of reposting it.
 - **Already fixed:** use `ship-check duplicate` to bind the fixing ticket's merged PR. Record this session's branch, or none. Prove the result live before closing. A partial fix is not a duplicate.
-- **No change needed:** use `ship-check nochange` only after a `Resolved without a change:` comment with evidence. No open/bound PR or unmerged ticket branch may remain.
+- **No change needed:** use `ship-check nochange` only after a `Resolved without a change:` comment with evidence and a `Control:` line. The line names a search or a drive, including one described in ordinary words, and that same search or drive found the fault on a known bad build in that same clause: a bad, previous, prior, old, or earlier build, the build before the fix, or a build id. The thing found is the fault, an error, a match, a hit, or the same kind of defect. A line that found zero, none, or nothing does not count, and neither does a line that says the fault was not found. No open/bound PR or unmerged ticket branch may remain.
 - **Decided against:** quote Valentin's dated decision in the required `Decided against: Valentin, YYYY-MM-DD:` comment, close the PR unmerged, and use `ship-check dropped`. Never claim it deployed.
 - **Archived:** read the archive state first. Done means verify the existing live result. Otherwise restore through the product surface before working. Search Normal, Archive, and Deleted before declaring a ticket missing; board moves can change its number.
 

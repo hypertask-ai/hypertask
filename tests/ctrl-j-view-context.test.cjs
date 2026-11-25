@@ -92,7 +92,7 @@ async function send(api, { currentProject = project(), destinationProject, pathn
   const mounted = { current: true };
   const calls = [];
   const context = {
-    enabled: true, targetBoardId: destinationProject?.id ?? 15, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, aiStepTimingEnabled: false, completeTaskCreatePerformanceTrace() {}, completeTaskCreatePerformanceTraceAfterPaint() {}, writerModelPicker: true, writerModel: { id: "claude-sonnet-5-5-instant", source: "anthropic" }, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
+    enabled: true, targetBoardId: destinationProject?.id ?? 15, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, aiStepTimingEnabled: false, fastComposeOpen: false, completeTaskCreatePerformanceTrace() {}, completeTaskCreatePerformanceTraceAfterPaint() {}, writerModelPicker: true, writerModel: { id: "claude-sonnet-5-5-instant", source: "anthropic" }, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
     text, files: [], showProgress: false, composer: { current: null },
     setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {}, setError(error) { if (error) throw new Error(error); },
     taskContextRef: { current: null }, newTaskWindow: Boolean(existingTaskId), destinationProject,
@@ -224,6 +224,7 @@ test("existing create validation rejects foreign labels, users and agents before
       "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
       "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
       "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+      "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
       "@/lib/mcp/tasks/services": { validateProjectMemberIds: async (projectId, ids) => {
         assert.equal(projectId, 15);
         assert.deepEqual(ids, [42, 42]);

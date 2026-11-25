@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Offline CLI tests. HTTP and board calls are stubs; link checks and one capture use local Playwright.
 set -euo pipefail
 cd "$(dirname "$0")"
 D=$(mktemp -d "$PWD/.wireframe-test.XXXXXX"); trap 'rm -rf "$D"' EXIT
@@ -97,13 +96,20 @@ chmod +x "$D/bin/stub"
 for cmd in hypertask vcc npx; do ln -s stub "$D/bin/$cmd"; done
 export PATH="$D/bin:$PATH"
 python3 - <<'PY'
-import html, json, os, struct, subprocess
-from datetime import date
+import atexit, base64, hashlib, html, json, os, re, struct, subprocess, zlib
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 D, home, script = Path(os.environ["TEST_DIR"]), Path(os.environ["WIREFRAME_HOME"]), os.environ["WIREFRAME_SCRIPT"]
+fixtures = Path(os.environ["TEST_DIR"]).parent / "fixtures"
 logfile = D / "log"
 passes = 0
+PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+TURL = "https://app.hypertask.ai/detail/project-15/255"
+TOKENS = f"publish refused: this page uses fonts, colours, sizes or radii outside the app's design system; start from `wireframe new <TICKET>` (the live-app base kit) and reuse its classes"
+TODAY = "publish refused: live captures of the changed screen are missing; run: wireframe capture <TICKET> <app URL path> to take 390x844 and 1440x900 screenshots in Porcelain, Graphite, AMOLED and Dia and show them in a Today section"
+BASE_IDENTITY = "publish refused: base.html changed after it was recorded, or has no base.json beside it; the base is what exempts copied live CSS, so rerun `wireframe new <TICKET> --mobile <app URL path>` in a fresh folder instead of editing it"
+CAPTURE_ORIGIN = "publish refused: today.json says the captures came from {origin}, not https://app.hypertask.ai; WIREFRAME_APP_BASE is for local capture tests only, so take the eight screenshots from the live app"
 
 def invoke(*args, fail=False, **env):
     logfile.write_text("")
@@ -130,6 +136,50 @@ def uploaded(log, status, ticket="HTPR-255", project=15):
     f = home / ("base/base-kit.html" if ticket == "BASE" else ticket + "/index.html")
     assert (D / "uploaded").read_bytes() == f.read_bytes()
     return calls
+
+def png_for(width, height):
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress((b"\0" + b"\xff" * (width * 3)) * height)) + chunk(b"IEND", b""))
+
+def record_base(folder):
+    """Write the base identity publish checks, as `wireframe new` does."""
+    (folder / "base.json").write_text(json.dumps({"sha256": hashlib.sha256((folder / "base.html").read_bytes()).hexdigest()}))
+
+def live_captures(folder, route="/screen.html"):
+    """Point captured evidence at the production origin publish trusts."""
+    manifest = folder / "today.json"
+    data = json.loads(manifest.read_text())
+    for entry in data:
+        entry["sourceUrl"] = "https://app.hypertask.ai" + route
+    manifest.write_text(json.dumps(data))
+    (folder / "screen.json").write_text(json.dumps({"sourceUrl": "https://app.hypertask.ai" + route}))
+
+def add_today(folder):
+    screen = folder / "screen.json"
+    if not screen.exists():
+        screen.write_text(json.dumps({"sourceUrl": TURL}))
+    source = json.loads(screen.read_text())["sourceUrl"]
+    shots = folder / "today"
+    shots.mkdir(exist_ok=True)
+    manifest = []
+    for theme in ("porcelain", "graphite", "amoled", "dia"):
+        for name, viewport in (("mobile", "390x844"), ("desktop", "1440x900")):
+            shot = f"today/{name}-{theme}.png"
+            (folder / shot).write_bytes(png_for(*map(int, viewport.split("x"))))
+            manifest.append({"file": shot, "viewport": viewport, "theme": theme, "sourceUrl": source, "capturedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")})
+    (folder / "today.json").write_text(json.dumps(manifest))
+    figures = "".join(f'<figure><img alt="{e["theme"]} {e["viewport"]}" src="data:image/png;base64,{base64.b64encode((folder / e["file"]).read_bytes()).decode()}" data-capture="{e["file"]}"><figcaption>{e["theme"]} {e["viewport"]}</figcaption></figure>' for e in manifest)
+    section = f'<section data-wireframe-today id="today"><h2>Today</h2>{figures}</section>'
+    page = folder / "index.html"
+    body = page.read_text()
+    start = body.find('<section data-wireframe-today')
+    if start >= 0:
+        end = body.index('</section>', start) + len('</section>')
+        body = body[:start] + body[end:]
+    page.write_text(body.replace("</body>", section + "</body>"))
+    return manifest
 
 def full_publish(ticket="HTPR-255", move=True, **env):
     question = 'Build <this> & "that"?'
@@ -166,20 +216,23 @@ def full_publish(ticket="HTPR-255", move=True, **env):
     return log
 
 kit = D / "kit.html"
-kit.write_text('<!doctype html><html><head><title>Local kit</title></head><body><a href="#option">Today</a><button onclick="document.getElementById(\'option\').textContent=\'Approved\'">Option</button><p id="option">Wireframe</p></body></html>')
+kit.write_text('<!doctype html><html><head><title>Local kit</title><style>html,body{margin:0;background-color:#1a1d21;color:#ececec;font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;font-size:14px}a{color:inherit}button{font:inherit;color:inherit;background-color:#262a30;border:0;border-radius:4px;padding:8px}</style></head><body><a href="#option">Today</a><button onclick="document.getElementById(\'option\').textContent=\'Approved\'">Option</button><p id="option">Wireframe</p></body></html>')
 (D / "uploaded").write_bytes(b"remote kit")
 p, log = invoke("new", "HTPR-300")
 assert [(e["method"], e["url"]) for e in events(log, "http")] == [("GET", "https://hypertask.app/wireframes/base")]
-assert (home / "base/base-kit.html").read_bytes() == b"remote kit" == (home / "HTPR-300/index.html").read_bytes()
+assert (home / "base/base-kit.html").read_bytes() == b"remote kit"
+assert "remote kit" in (home / "HTPR-300/index.html").read_text()
+assert (home / "HTPR-300/base.html").read_bytes() == (home / "HTPR-300/index.html").read_bytes()
 ok("new downloads the published base kit when none is installed")
 invoke("base", str(kit))
 p, _ = invoke("new", "htpr-255")
 assert Path(p.stdout.strip()) == home / "HTPR-255/index.html"
-assert Path(p.stdout.strip()).read_bytes() == kit.read_bytes()
+assert 'data-wireframe-base="' in Path(p.stdout.strip()).read_text()
+assert (home / "HTPR-255/base.html").read_bytes() == Path(p.stdout.strip()).read_bytes()
 invoke("new", "YPER4-255")
 p, _ = invoke("new", "HTPR-255", fail=True)
 assert "already exists" in p.stderr
-ok("new copies the full kit without overwriting")
+ok("new copies the full kit and its base without overwriting")
 
 for args, message in [((), "--question is required"), (("--question", "Build this"), "must end with"), (("--question", "   "), "must end with"), (("--question", "Build this?"), "--why is required"), (("--question", "Build this?", "--why", "  "), "--why is required")]:
     p, log = invoke("publish", "HTPR-255", *args, fail=True)
@@ -188,16 +241,17 @@ ok("missing or invalid question fails before any upload or CLI call")
 
 page = home / "HTPR-255/index.html"
 record = page.with_name("live-styles.json")
-turl = "https://app.hypertask.ai/detail/project-15/255"
-link = f'<a href="{turl}">HTPR-255</a>'
-valid_page = kit.read_text().replace("<body>", "<body><header>" + link + "</header>")
+link = f'<a href="{TURL}">HTPR-255</a>'
+card = '<div style="font-size:14px;background-color:#262a30;border-radius:4px;padding:8px">Changed card</div>'
+valid_page = kit.read_text().replace("<body>", "<body>" + link + card)
 styles = [{"sourceUrl": "https://app.hypertask.ai/detail/project-15/6894", "styles": {"outline-width": "1px", "outline-style": "solid"}}]
 record.write_text(json.dumps(styles))
-link_message = f"publish refused: add a visible link to {turl} at the top of <body>, before the main wireframe frame (within the first 200px)"
+add_today(page.parent)
+link_message = f"publish refused: add a visible link to {TURL} at the top of <body>, before the main wireframe frame (within the first 200px)"
 for content in [
     kit.read_text(),
-    '<body>' + turl + '</body>',
-    '<head><link href="' + turl + '"></head><body>Wireframe</body>',
+    '<body>' + TURL + '</body>',
+    '<head><link href="' + TURL + '"></head><body>Wireframe</body>',
     '<body><!-- ' + link + ' --><main>Wireframe</main></body>',
     '<body><script type="text/plain">' + link + '</script></body>',
     '<body><template>' + link + '</template></body>',
@@ -219,14 +273,14 @@ ok("absent, wrong-ticket, hidden, empty and late links fail before upload or boa
 
 page.write_text(valid_page)
 styles_message = f"publish refused: create {record} beside index.html using headless Playwright getComputedStyle on every existing live element as QA user 985; save non-empty JSON entries with sourceUrl on https://app.hypertask.ai and styles (or the HTPR-7724 sourceTicket/themes format)"
-for content in [None, '', '{', '{}', '[]', 'null', '[null]', json.dumps([{**styles[0], "invalid": float("nan")}]), json.dumps([{"sourceUrl": turl}]),
+for content in [None, '', '{', '{}', '[]', 'null', '[null]', json.dumps([{**styles[0], "invalid": float("nan")}]), json.dumps([{"sourceUrl": TURL}]),
                 json.dumps([{"styles": {"color": "red"}}]),
                 json.dumps([{"sourceUrl": "https://app.hypertask.ai.evil.test", "styles": {"color": "red"}}]),
-                json.dumps([{"sourceUrl": turl, "styles": {}}]),
-                json.dumps([{"sourceUrl": turl, "styles": {"color": ""}}]),
-                json.dumps(styles + [{"sourceUrl": turl}]),
-                json.dumps({"sourceTicket": turl, "themes": {}}),
-                json.dumps({"sourceTicket": turl, "themes": {"porcelain": {"pinned": {"styles": {}}}}})]:
+                json.dumps([{"sourceUrl": TURL, "styles": {}}]),
+                json.dumps([{"sourceUrl": TURL, "styles": {"color": ""}}]),
+                json.dumps(styles + [{"sourceUrl": TURL}]),
+                json.dumps({"sourceTicket": TURL, "themes": {}}),
+                json.dumps({"sourceTicket": TURL, "themes": {"porcelain": {"pinned": {"styles": {}}}}})]:
     record.unlink(missing_ok=True)
     if content is not None:
         record.write_text(content)
@@ -235,12 +289,282 @@ for content in [None, '', '{', '{}', '[]', 'null', '[null]', json.dumps([{**styl
     assert not events(log, "http") and not events(log, "vcc") and not events(log, "npx")
 ok("missing, invalid, empty or incomplete live styles fail before upload or board writes")
 
+record.write_text(json.dumps(styles))
+add_today(page.parent)
+manifest_path = page.with_name("today.json")
+manifest = json.loads(manifest_path.read_text())
+today_variants = [None, '', '{}', '[]', json.dumps(manifest[:-1]),
+                  json.dumps(manifest[:4]),
+                  json.dumps(manifest + [manifest[0]]),
+                  json.dumps([{**manifest[0], "theme": "midnight"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "viewport": "1024x768"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "sourceUrl": "https://example.test/detail/project-15/255"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "sourceUrl": "https://app.hypertask.ai/project?id=7049"}] + manifest[1:]),
+                  json.dumps([{**entry, "sourceUrl": "https://app.hypertask.ai/project?id=7049"} for entry in manifest]),
+                  json.dumps([{**manifest[0], "capturedAt": "yesterday"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "capturedAt": "2026-01-02T03:04:05Z"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "capturedAt": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "capturedAt": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "file": "today/missing.png"}] + manifest[1:])]
+for content in today_variants:
+    manifest_path.unlink(missing_ok=True)
+    if content is not None:
+        manifest_path.write_text(content)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.strip() == TODAY, p.stderr
+    assert not events(log, "http") and not events(log, "vcc") and not events(log, "npx")
+page.write_text(valid_page)
+add_today(page.parent)
+text = page.read_text()
+start = text.index('<section data-wireframe-today')
+end = text.index('</section>', start) + len('</section>')
+page.write_text(text[:start] + text[end:])
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+ok("a Today section missing from the page fails publish")
+ok("missing, partial, mixed-screen or wrong-screen capture manifests fail before upload or board writes")
+add_today(page.parent)
+shot = page.parent / manifest[0]["file"]
+shot.write_bytes(PNG)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+ok("a 1x1 image cannot substitute for a declared mobile or desktop capture")
+shared = [{**entry, "file": "today/mobile-porcelain.png" if entry["viewport"] == "390x844" else "today/desktop-porcelain.png"} for entry in manifest]
+body = page.read_text()
+for original, replacement in zip(manifest, shared):
+    body = body.replace(original["file"], replacement["file"])
+page.write_text(body)
+manifest_path.write_text(json.dumps(shared))
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+ok("theme entries cannot share just one image per viewport even with a matching Today section")
+add_today(page.parent)
+body = page.read_text()
+payloads = re.findall(r'src="data:image/png;base64,([A-Za-z0-9+/=]+)"', body)
+assert len(payloads) == 8 and payloads[0] != payloads[1]
+page.write_text(body.replace(payloads[0], "\x00").replace(payloads[1], payloads[0]).replace("\x00", payloads[1]))
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+body = page.read_text()
+for payload in payloads[1:]:
+    body = body.replace(payload, payloads[0])
+page.write_text(body)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+ok("embedded Today images must be the declared capture files, not swapped or duplicated ones")
+
+add_today(page.parent)
+shot = page.parent / manifest[0]["file"]
+complete = shot.read_bytes()
+cut = complete[:33]
+shot.write_bytes(cut)
+page.write_text(page.read_text().replace(base64.b64encode(complete).decode(), base64.b64encode(cut).decode()))
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+shot.write_bytes(complete)
+add_today(page.parent)
+ok("a capture truncated after its header cannot pass as a PNG")
+
+for fixture in ("rejected-ai-chat.html", "rejected-task-entry.html"):
+    rejected = (fixtures / fixture).read_text()
+    page.write_text(rejected.replace("<body>", "<body>" + link))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS), p.stderr
+    assert not events(log, "http") and not events(log, "vcc") and not events(log, "npx")
+ok("both rejected prototypes are refused for using their own fonts, colours, sizes or radii")
+
+page.write_text(valid_page.replace("border-radius:4px", "border-radius:5px"))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and not events(log, "http")
+ok("a wireframe that adds an off-token radius is refused")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;border-radius:4px/19px">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "radius" in p.stderr and not events(log, "http")
+ok("an elliptical clause on a token radius is refused")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;border:2px solid #ff0000">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "border" in p.stderr.lower() and not events(log, "http")
+ok("a wireframe that adds an off-token border colour is refused")
+
+for family, fail in (("'__IBM_Plex_Sans_1a2b3c'", False), ("'__IBM_Plex_Sans_Fallback_1a2b3c'", False), ("'__Karla_1a2b3c'", True)):
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;font-family:{family}">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+    if fail:
+        assert p.stderr.startswith(TOKENS) and "font" in p.stderr and not events(log, "http")
+    else:
+        assert len(uploaded(log, "waiting")) == 1
+ok("next/font generated families on a cloned live screen count as the live font")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;color:#4455bb">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment")
+assert len(uploaded(log, "waiting")) == 1
+ok("a Tailwind design token colour from tailwind.config.ts passes")
+
+for color, fail in (("rgba(68,85,187,0.01)", True), ("#4455bb03", True), ("rgba(255,255,255,0.8)", False), ("#ffffffcc", False)):
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;color:{color}">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+    if fail:
+        assert p.stderr.startswith(TOKENS) and not events(log, "http")
+    else:
+        assert len(uploaded(log, "waiting")) == 1
+ok("alpha variants stay distinct and literal translucent app tokens pass in rgba and hex forms")
+
+for accent in ("text-decoration:underline;text-decoration-color:#ff0000", "text-emphasis:filled dot #ff0000", "-webkit-text-stroke:1px #ff0000", "-webkit-text-fill-color:#ff0000", "border:1px solid hsl(0, 100%, 50%)"):
+    for css, fail in ((accent, True), (accent.replace("#ff0000", "#ececec").replace("hsl(0, 100%, 50%)", "hsl(216, 8%, 23%, 0.2)"), False)):
+        page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{css}">Changed card</div>'))
+        add_today(page.parent)
+        p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+        if fail:
+            assert p.stderr.startswith(TOKENS) and not events(log, "http")
+        else:
+            assert len(uploaded(log, "waiting")) == 1
+ok("painted text decorations, emphasis, strokes, fills and literal hsl tokens use app token colours")
+
+page.write_text(valid_page.replace("<body>", '<body style="background-color:#ff0000">'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "background" in p.stderr and not events(log, "http")
+ok("an off-token body background is refused")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;background-image:linear-gradient(#ff0000,#00ff00)">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "gradient" in p.stderr and not events(log, "http")
+ok("an off-token gradient is refused")
+
+for property in ("box-shadow", "text-shadow"):
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{property}:0 0 8px #ff0000">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and property in p.stderr and not events(log, "http")
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{property}:0 0 8px #ececec">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment")
+    assert len(uploaded(log, "waiting")) == 1
+ok("box and text shadows reject off-token colours and accept app token colours")
+
+for pseudo in ("::before", "::after"):
+    for content, color, radius, fail in (("'Badge'", "#ff0000", 19, True), ("'Badge'", "#ececec", 4, False), ("none", "#ff0000", 19, False)):
+        css = f'body{pseudo}{{content:{content};color:{color};border-radius:{radius}px}}'
+        page.write_text(valid_page.replace("</style>", css + "</style>"))
+        add_today(page.parent)
+        p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+        if fail:
+            assert p.stderr.startswith(TOKENS) and pseudo in p.stderr and not events(log, "http")
+        else:
+            assert len(uploaded(log, "waiting")) == 1
+ok("visible pseudo-elements obey tokens while token-coloured and non-painted pseudo-elements pass")
+
+for markup in ('<div hidden style="color:#ff0000">Graphite variant</div>',
+               '<style>.variant{display:none}</style><div class="variant" style="border-radius:19px">Dia variant</div>'):
+    page.write_text(valid_page.replace("</body>", markup + "</body>"))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and not events(log, "http")
+page.write_text(valid_page)
+add_today(page.parent)
+ok("styles inside hidden variant panels are refused, so a switcher cannot hide off-token values")
+
+bad_panel = '<div style="color:#ff0000;border-radius:19px">Runtime option B</div>'
+runtime_variant = ('<button data-option="b">Option B</button><div id="runtime-panel"></div><script>'
+                   'document.addEventListener("click", function (event) { if (event.target.dataset.option) '
+                   'document.getElementById("runtime-panel").innerHTML = ' + json.dumps(bad_panel) + '; });</script>')
+page.write_text(valid_page.replace("</body>", runtime_variant + "</body>"))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "radius 19px" in p.stderr and not events(log, "http")
+good_variant = runtime_variant.replace("#ff0000", "#4455bb").replace("19px", "4px")
+page.write_text(valid_page.replace("</body>", good_variant + "</body>"))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment")
+assert len(uploaded(log, "waiting")) == 1
+page.write_text(valid_page)
+add_today(page.parent)
+ok("a variant panel a click handler builds at runtime is checked, so a switcher cannot add off-token values after load")
+
+for viewport, media in (("390x844", "max-width:600px"), ("1440x900", "min-width:1000px")):
+    page.write_text(valid_page.replace("</style>", "@media (" + media + "){body{background-color:#ff0000}}</style>"))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and viewport in p.stderr and not events(log, "http")
+ok("responsive off-token styles are refused at both mobile and desktop widths")
+
+live = home / "HTPR-402"
+invoke("new", "HTPR-402")
+cloned = (kit.read_text().replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:5px;background-color:#262a30">Live 5px</div></body>'))
+(live / "index.html").write_text(cloned.replace("<body>", "<body>" + link))
+(live / "base.html").write_text(cloned)
+record_base(live)
+(live / "live-styles.json").write_text(json.dumps(styles))
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-402")) == 1
+ok("copied live CSS radii pass because the token check skips what the base already has")
+(live / "index.html").write_text((live / "index.html").read_text().replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:5px;background-color:#262a30">Added 5px</div></body>'))
+p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "radius 5px" in p.stderr and not events(log, "http")
+ok("new elements cannot borrow a copied live element's off-token exemption")
+
+forged = cloned.replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:19px;background-color:#262a30">Forged</div></body>')
+(live / "base.html").write_text(forged)
+(live / "index.html").write_text(forged.replace("<body>", "<body>" + link))
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
+assert p.stderr.strip() == BASE_IDENTITY and not events(log, "http")
+(live / "base.html").write_text(cloned)
+(live / "base.json").unlink()
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
+assert p.stderr.strip() == BASE_IDENTITY and not events(log, "http")
+record_base(live)
+(live / "index.html").write_text(cloned.replace("<body>", "<body>" + link))
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-402")) == 1
+ok("a rewritten base.html or a missing base.json is refused as design-token evidence")
+
+frame_kit = D / "frame-kit.html"
+inner = kit.read_text().replace('</body>', '<div style="border-radius:8px">Copied live radius</div></body>').replace('</style>', 'body::before{content:"Copied live pseudo";border-radius:8px}</style>')
+frame_kit.write_text(kit.read_text().replace('</body>', '<iframe title="Live app" srcdoc="' + html.escape(inner, quote=True) + '"></iframe></body>'))
+invoke("base", str(frame_kit))
+invoke("new", "HTPR-404")
+framed = home / "HTPR-404/index.html"
+framed.write_text(re.sub(r'(<body[^>]*>)', lambda match: match.group(1) + link, framed.read_text(), count=1))
+framed.with_name("live-styles.json").write_text(json.dumps(styles))
+add_today(framed.parent)
+p, log = invoke("publish", "HTPR-404", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-404")) == 1
+framed_page = framed.read_text()
+original_doc = re.search(r'srcdoc="([^"]*)"', framed_page).group(1)
+for markup in ('<div style="color:#ff0000;border-radius:19px">Added off-token</div>', '<style>@media(max-width:600px){body{color:#ff0000}}</style>'):
+    modified_doc = html.escape(html.unescape(original_doc).replace('</body>', markup + '</body>'), quote=True)
+    framed.write_text(framed_page.replace(original_doc, modified_doc, 1))
+    p, log = invoke("publish", "HTPR-404", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and "390x844" in p.stderr and not events(log, "http")
+ok("inline app frames preserve copied radii but reject added and responsive off-token styles")
+invoke("base", str(kit))
+
 redo = {"sourceTicket": "https://app.hypertask.ai/detail/project-15/6894", "viewport": {"width": 1440, "height": 900},
         "themes": {"porcelain": {"htmlClass": "light porcelain", "destructive": "0 72.22% 50.59%",
                                  "pinned": {"id": "comment-2", "styles": styles[0]["styles"]},
                                  "normal": {"id": "comment-14", "styles": {"outline-width": "1px"}}}}}
 if (D / "live-styles-redo.json").is_file():
     redo = json.loads((D / "live-styles-redo.json").read_text())
+page.write_text(valid_page)
+add_today(page.parent)
 record.write_text(json.dumps(redo))
 p, log = invoke("publish", "HTPR-255", "--no-comment")
 assert len(uploaded(log, "waiting")) == 1
@@ -250,6 +574,7 @@ record.write_text(json.dumps(styles))
 other = home / "YPER4-255/index.html"
 other.write_text(valid_page.replace("project-15", "project-4060"))
 other.with_name("live-styles.json").write_text(json.dumps(styles))
+add_today(other.parent)
 p, log = invoke("publish", "YPER4-255", "--no-comment", fail=True, PROJECT_ID="99")
 assert "https://app.hypertask.ai/detail/project-99/255" in p.stderr
 assert not events(log, "http") and not events(log, "vcc")
@@ -288,6 +613,97 @@ p, log = invoke("status", "HTPR-255", "invalid", fail=True)
 assert "invalid choice" in p.stderr and not log
 ok("status of an unpublished wireframe or an invalid state never uploads")
 page.write_text(valid_page)
+add_today(page.parent)
+
+app = D / "app"
+app.mkdir()
+(app / "screen.html").write_text((fixtures / "live-screen.html").read_text())
+server = subprocess.Popen(["python3", "-u", "-c", r'''
+import http.server, json, sys
+from pathlib import Path
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+    def do_GET(self):
+        cookies = dict(item.strip().split("=", 1) for item in self.headers.get("Cookie", "").split(";") if "=" in item)
+        if self.path == "/api/users/getById":
+            user = int(cookies.get("qa-user", "0"))
+            self.send_response(200 if user else 401)
+            self.end_headers()
+            self.wfile.write(json.dumps({"id": user}).encode())
+        elif self.path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
+        elif self.path.split("?")[0] == "/screen.html":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            body = Path(sys.argv[1]).read_text().replace('<html lang="en">', '<html lang="en" data-theme="' + cookies.get("theme", "porcelain") + '">')
+            self.wfile.write(body.encode())
+        else:
+            self.send_response(500 if self.path == "/error" else 200)
+            self.end_headers()
+            self.wfile.write(b"Sign in")
+httpd = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+print(httpd.server_port, flush=True)
+httpd.serve_forever()
+''', str(app / "screen.html")], env={**os.environ, "PYTHONPATH": ""}, stdout=subprocess.PIPE, text=True)
+atexit.register(lambda: (server.terminate(), server.wait(timeout=10)))
+app_url = "http://127.0.0.1:" + server.stdout.readline().strip()
+state = D / "qa.json"
+state.write_text(json.dumps({"cookies": [{"name": "qa-user", "value": "985", "domain": "127.0.0.1", "path": "/", "expires": -1, "httpOnly": True, "secure": False, "sameSite": "Lax"}], "origins": []}))
+qa_env = {"WIREFRAME_APP_BASE": app_url, "WIREFRAME_QA_STATE": str(state)}
+invoke("new", "HTPR-400")
+app_page = home / "HTPR-400/index.html"
+app_page.write_text(re.sub(r'(<body[^>]*>)', lambda match: match.group(1) + link, app_page.read_text(), count=1))
+(app_page.parent / "live-styles.json").write_text(json.dumps(styles))
+p, log = invoke("capture", "HTPR-400", "/screen.html", **qa_env)
+manifest = json.loads((app_page.parent / "today.json").read_text())
+assert len(manifest) == 8 and {(e["theme"], e["viewport"]) for e in manifest} == {(t, v) for t in ("porcelain", "graphite", "amoled", "dia") for v in ("390x844", "1440x900")}
+assert all((app_page.parent / e["file"]).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n" for e in manifest)
+assert app_page.read_text().count('data-capture="') == 8
+p, log = invoke("publish", "HTPR-400", "--no-comment", fail=True, **qa_env)
+assert p.stderr.strip() == CAPTURE_ORIGIN.format(origin=app_url) and not events(log, "http")
+live_captures(app_page.parent)
+p, log = invoke("publish", "HTPR-400", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-400")) == 1
+ok("capture takes eight live screenshots in today.json, and publish refuses them until sourceUrl reads the live app origin")
+
+invoke("new", "HTPR-401", "--mobile", "/screen.html", **qa_env)
+cloned = home / "HTPR-401/index.html"
+body = cloned.read_text()
+assert (home / "HTPR-401/base.html").read_text() == body
+assert "<script" not in body.lower()
+assert f'href="{TURL}"' in body and "HTPR-401" in body
+assert "Live task entry" in body
+(cloned.parent / "live-styles.json").write_text(json.dumps(styles))
+add_today(cloned.parent)
+p, log = invoke("publish", "HTPR-401", "--no-comment", fail=True, **qa_env)
+assert p.stderr.strip() == CAPTURE_ORIGIN.format(origin=app_url) and not events(log, "http")
+live_captures(cloned.parent)
+p, log = invoke("publish", "HTPR-401", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-401")) == 1
+assert "Phone layout" in body and "Desktop layout" not in body
+assert 'font-family:"IBM Plex Sans"' in body or 'font-family: "IBM Plex Sans"' in body
+ok("new --mobile clones the live phone page, keeps real CSS and fonts, strips scripts, adds the ticket link and publishes")
+
+app_page.with_name("screen.json").write_text(json.dumps({"sourceUrl": app_url + "/screen.html"}))
+for bad_state, message in ((D / "missing-state.json", "QA storage state is missing"), (D / "expired-state.json", "QA session required"), (D / "wrong-user.json", "QA session required")):
+    if bad_state.name != "missing-state.json":
+        data = json.loads(state.read_text())
+        data["cookies"][0]["value"] = "0" if "expired" in bad_state.name else "6"
+        bad_state.write_text(json.dumps(data))
+    for args in (("new", "HTPR-403", "--mobile", "/screen.html"), ("capture", "HTPR-400", "/screen.html")):
+        p, log = invoke(*args, fail=True, **{**qa_env, "WIREFRAME_QA_STATE": str(bad_state)})
+        assert message in p.stderr and not events(log, "http")
+        assert not (home / "HTPR-403/index.html").exists()
+for route in ("/redirect", "/error", "/screen.html?id=7049"):
+    for args in (("new", "HTPR-403", "--mobile", route), ("capture", "HTPR-400", route)):
+        p, log = invoke(*args, fail=True, **qa_env)
+        assert ("QA screen did not load" in p.stderr or "capture source does not match" in p.stderr) and not events(log, "http")
+        assert not (home / "HTPR-403/index.html").exists()
+ok("capture and phone cloning refuse missing, expired, wrong-user, redirected and error sessions")
 
 p, log = invoke("publish", "BASE")
 assert len(uploaded(log, "waiting", "BASE", 4060)) == 1
@@ -308,7 +724,5 @@ p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True, FAIL_TICKET="1
 assert "cannot read ticket" in p.stderr and not events(log, "http")
 ok("CLI failures are loud and a failed comment never moves the ticket")
 
-full_publish(REAL_SCREENSHOT="1")
-ok("installed Playwright captures real local PNG at 1440x900 with npm offline")
 print(f"{passes} passed, 0 failed")
 PY

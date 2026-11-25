@@ -1,7 +1,7 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
-import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByIdentifier as resolveTaskByIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, withMcpRouteMutationLease as withAdoptedAgentMutationLease } from '@/lib/mcp/routeWrapper'
@@ -10,13 +10,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { getMcpSessionAgentSummary } from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
 import { mapTaskToDetail, taskDetailInclude } from "@/lib/mcp/tasks/mappers";
+import { nameMovedTicketKeys } from "@/lib/mcp/tasks/previousTicketNumbers";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   validateProjectAccess,
   getSectionForTask,
 } from "@/lib/mcp/tasks/services";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { getAccessibleAgentBoard } from "@/utils/controllers/agents/boardMembers";
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
+import { buildFieldError } from '@/lib/mcp/fieldError';
 
 
 interface MoveTaskBody {
@@ -77,7 +82,9 @@ async function findTaskByIdentifier(
       });
     }
 
-    return null;
+    return typeof resolveTaskByIdentifier === "function"
+      ? resolveTaskByIdentifier(user, { ticket_number: reference, project_id: project_id ?? null }, agentId, undefined, teamScope)
+      : null;
   }
 
   if (
@@ -93,7 +100,10 @@ async function findTaskByIdentifier(
       },
       select: { id: true, projectId: true },
     });
-    return task;
+    if (task) return task;
+    return typeof resolveTaskByIdentifier === "function"
+      ? resolveTaskByIdentifier(user, { unique_index, project_id }, agentId, undefined, teamScope)
+      : null;
   }
 
   return null;
@@ -214,7 +224,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const targetAccess = await validateProjectAccess(target_project_id, user.id, ctx.agentId, ctx.teamScope);
+    if (ctx.agentId) {
+      const acceptedMembership = await prisma.member.findFirst({
+        where: {
+          projectId: target_project_id,
+          agentId: ctx.agentId,
+          status: "Accepted",
+          agent: { revokedAt: null },
+        },
+        select: { id: true },
+      });
+      const targetBoard = acceptedMembership
+        ? null
+        : await prisma.project.findFirst({
+            where: {
+              AND: [
+                { id: target_project_id, status: { in: ["Normal", "Archive"] } },
+                {
+                  OR: [
+                    projectContentAccessWhere(user.id),
+                    {
+                      members: {
+                        some: { agentId: ctx.agentId, agent: { userId: user.id, revokedAt: null } },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            select: { id: true },
+          });
+      if (targetBoard) {
+        const requestableBoard = await getAccessibleAgentBoard(target_project_id, user.id, null, ctx.teamScope);
+        const canRequestAccess = Boolean(
+          requestableBoard?.teamId && (!ctx.teamScope || ctx.teamScope.teamId === requestableBoard.teamId),
+        );
+        const boardAccessGuidance = canRequestAccess && await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id);
+        return NextResponse.json(
+          {
+            ...buildFieldError("forbidden", "target_project_id", "Permission error"),
+            message: boardAccessGuidance
+              ? `This agent is not a member of this board. Request access with the hypertask_request_board_access tool (project_id ${target_project_id}); your owner approves it in Inbox → Decisions.`
+              : "This agent is not a member of this board. Ask the board owner to add it.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    const targetAccess = await validateProjectAccess(target_project_id, user.id, ctx.agentId, ctx.teamScope, { refuseArchivedBoard: true });
     if (targetAccess.error) {
       return NextResponse.json(
         {
@@ -305,23 +363,13 @@ export async function POST(request: NextRequest) {
 
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
     const agentField = sessionAgent ? { agent: sessionAgent } : {};
-
-    if (!fullTask) {
-      return NextResponse.json(
-        {
-          success: true,
-          task: mapTaskToDetail(result.task!, user.id),
-          message: "Task moved successfully",
-          ...agentField,
-        },
-        { status: 200 }
-      );
-    }
+    const mapped = mapTaskToDetail(fullTask ?? result.task!, user.id);
+    const [task] = await nameMovedTicketKeys(user.id, [mapped]);
 
     return NextResponse.json(
       {
         success: true,
-        task: mapTaskToDetail(fullTask, user.id),
+        task,
         message: "Task moved successfully",
         ...agentField,
       },

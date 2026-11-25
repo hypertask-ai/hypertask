@@ -113,9 +113,9 @@ test("draft requests stop before status publication with or without a pull-reque
   for (const job of ["report", "app-smoke"]) {
     const shouldRun = new Function("needs", "github", "always", "cancelled",
       `return ${workflow.jobs[job].if.replaceAll(".docs-only", '["docs-only"]')};`);
-    const github = { event_name: "workflow_run", event: { workflow_run: { conclusion: "success" } } };
+    const github = { event_name: "workflow_run", event: { workflow_run: { event: "workflow_dispatch", conclusion: "success" } } };
     for (const superseded of ["true", "false"]) {
-      const needs = { validate: { outputs: { superseded, "docs-only": "false" } } };
+      const needs = { validate: { result: "success", outputs: { superseded, "docs-only": "false" } } };
       assert.equal(shouldRun(needs, github, () => true, () => false), superseded === "false", job);
     }
   }
