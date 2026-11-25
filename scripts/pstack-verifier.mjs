@@ -649,6 +649,25 @@ export function commitTrusted(commit) {
   if (!BOT_LOGINS.has(author) || !BOT_COMMITTERS.has(committer)) return false;
   return verification.verified === true && verification.reason === "valid";
 }
+export function botAccount(login) {
+  const name = String(login ?? "");
+  return /\[bot\]$/.test(name) || name.startsWith("app/");
+}
+export function refreshMerge(commit) {
+  const verification = commit?.commit?.verification;
+  if (!botAccount(commit?.author?.login) || commit?.committer?.login !== "web-flow") return false;
+  if (!Array.isArray(commit?.parents) || commit.parents.length !== 2) return false;
+  return verification?.verified === true && verification.reason === "valid";
+}
+export function commitsTrusted(commits, mergedInBase = () => false) {
+  const list = Array.isArray(commits) ? commits : [];
+  return list.length > 0 && list.every((commit) => {
+    if (commitTrusted(commit)) return true;
+    if (!refreshMerge(commit)) return false;
+    const incoming = String(commit.parents[1]?.sha ?? "");
+    return /^[0-9a-f]{40}$/.test(incoming) && mergedInBase(incoming);
+  });
+}
 function botPlanPass(parsed, checksPassed) {
   const files = Array.isArray(parsed?.files) ? parsed.files : [];
   return BOT_LOGINS.has(parsed?.botLogin) && checksPassed === true && !listWasTruncated(parsed, files) && botFilesAllowed(files) && confirmsNoUserPath(parsed?.reason);
@@ -1333,6 +1352,22 @@ async function reuseVerdict(io, { repo, item, sha, tree, diff, patchId, author }
   return { verdict: decision.verdict, authorFamily: artifact.authorFamily, verifierModel: artifact.verifierModel };
 }
 
+export function baseBranchMembership(call, repo, item) {
+  const base = String(item?.base?.sha ?? "");
+  const seen = new Map();
+  return (sha) => {
+    if (!/^[0-9a-f]{40}$/.test(base)) return false;
+    if (!seen.has(sha)) {
+      try {
+        const status = JSON.parse(call(["api", `repos/${repo}/compare/${sha}...${base}`]))?.status;
+        seen.set(sha, status === "ahead" || status === "identical");
+      } catch {
+        seen.set(sha, false);
+      }
+    }
+    return seen.get(sha);
+  };
+}
 export async function resolveCommand(io = {}) {
   const call = io.gh ?? gh;
   const event = io.event ?? JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
@@ -1358,7 +1393,8 @@ export async function resolveCommand(io = {}) {
     const lastSha = commitsKnown.at(-1)?.sha;
     if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
     listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
-    const trusted = commitsKnown.length > 0 && commitsKnown.every(commitTrusted);
+    const onBaseBranch = baseBranchMembership(call, repo, item);
+    const trusted = commitsTrusted(commitsKnown, onBaseBranch);
     if (!trusted) {
       const gate = authorGate(item.body, owned, item.user.login);
       if (gate.stop) {
