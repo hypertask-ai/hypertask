@@ -7,6 +7,7 @@ const { spawnSync } = require("node:child_process");
 const root = path.join(__dirname, "..");
 const covered = [
   "src/hooks/MultiPages/AIChat/aiChatSend.ts",
+  "src/hooks/MultiPages/AIChat/useAiChatAttachments.ts",
   "src/hooks/MultiPages/AIChat/useAiChatSessions.ts",
   "src/lib/aiChat/sessionMessageQueue.ts",
   "src/lib/aiChat/queuedMessageOrder.ts",
