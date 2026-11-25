@@ -50,6 +50,8 @@ function snapshotRows(rows) {
 
 function fakeTx() {
   return {
+    featureFlag: { findUnique: async () => ({ mode: "OWNER_AND_QA" }) },
+    featureFlagChange: { findFirst: async () => null },
     $queryRaw: async () => { lookups.push("lock"); return [{ id: 1 }]; },
     $executeRaw: async () => { lookups.push("advisory"); duringLock?.(); return 0; },
     comment: {

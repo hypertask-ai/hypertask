@@ -23,4 +23,5 @@ or when a row names a check file that is not in the repository.
 | Wireframes use only live app tokens. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Wireframes need eight fresh theme captures. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Sign-off needs a `/wireframes/` link. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `tests/ux-signoff-gate.test.cjs` |
+| Flagged failures hold at Owner + QA. An agent's Off returns on a link to the agent's comment, never Everyone; Valentin's Off needs his yes, and Off is his safety switch. | `tests/mcp-flags-route.test.cjs` |
 | Hypertask board: 15 (https://app.hypertask.ai/project?id=15). | `tests/board-sync-stop-hook.test.cjs` |
