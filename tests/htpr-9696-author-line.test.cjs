@@ -15,6 +15,9 @@ test("both author lines are read, and family/model maps to the family", async ()
   }
   assert.equal(authorGate("Author  model: grok").notes, "author model unknown");
   assert.equal(authorGate("Author model: mystery/whatever").notes, "author model unknown");
+  assert.equal(authorGate("Author model: openai/gpt-6.1-sol").author, "codex");
+  assert.equal(authorGate("Author model: anthropic/claude-opus-5-5").author, "claude");
+  assert.equal(authorGate("Author model: nonsense").notes, "author model unknown");
   assert.equal(authorGate("Author model: claude/claude-opus-5\n\nAuthor-Model: codex").notes, "author model unknown");
   const commit = { author: { login: "hypertask-runners[bot]" }, committer: { login: "hypertask-runners[bot]" }, commit: { message: "Fix the chat\n\nAuthor model: codex/gpt-6.1-sol" } };
   assert.equal(authorFamily("", [commit], "hypertask-runners[bot]"), "codex");
