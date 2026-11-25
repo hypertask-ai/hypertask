@@ -246,10 +246,8 @@ test('chat team context adapter initializes WATCH for an internal session agent'
 
 test('Pages comment adapter refuses a board the body agent was not given and still returns a granted task', async () => {
   const f = actor('WATCH', 'outside');
-  const audienceReads = [];
   const handler = f.load('src/pages/api/comments/create.ts', {
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6, agentId: f.agent.id }) },
-    '@/lib/flags': { isFeatureEnabled: async (key) => { audienceReads.push(key); return false; } },
     '@/utils/controllers/comments/createCommentService': { createCommentService: async () => {
       assert.equal(f.scope.agentScopeEnforced(), true);
       const denied = await f.prisma.task.findFirst({ where: { id: 150, project: f.access.projectContentAccessWhere(6, f.agent.id) } });
@@ -259,10 +257,9 @@ test('Pages comment adapter refuses a board the body agent was not given and sti
     } },
   }).default;
   const res = response();
-  await handler({ url: '/api/comments/create', method: 'POST', headers: {}, body: { text: 'Test', creatorId: 6, taskId: 150, ownerId: 6, agentId: f.agent.id } }, res);
+  await handler({ url: '/api/comments/create', method: 'POST', headers: {}, body: { text: 'Test', creatorId: 6, taskId: 150, ownerId: 6, agentId: f.agent.id, kind: 'qa' } }, res);
   assert.equal(res.body.id, 40600);
-  assert.deepEqual(audienceReads, ['htpr-9063-comment-audience']);
-  assert.equal(f.state.flagReads, 1);
+  assert.equal(f.state.flagReads, 0);
 });
 
 test('Pages delete-reminder refuses a board the signed agent was not given and still updates a granted task', async () => {

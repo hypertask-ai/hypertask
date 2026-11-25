@@ -24,9 +24,9 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
   assert.equal(response.status, 201)
   assert.equal(response.body.routedTo, 'log')
   assert.equal(response.body.visibleToPeople, false)
-  assert.match(response.body.notice, /agent log, not the ticket thread/)
+  assert.match(response.body.notice, /^Saved to the agent log/)
   assert.match(response.body.notice, /people do not see it/)
-  assert.match(response.body.notice, /Resend with kind \(question\|qa\|done\)/)
+  assert.match(response.body.notice, /Add kind question, qa or done to post for people/)
   assert.equal(response.body.url, 'https://app.hypertask.ai/detail/project-15/7341')
   assert.ok(response.body.activity.id)
   assert.equal(response.body.activity.type, 'thought')
@@ -37,7 +37,7 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
   assert.equal(calls.urls.length, 0)
   assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', teamScope: null, displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
   assert.equal(calls.activities[0][2].type, 'THOUGHT')
-  assert.deepEqual(calls.flags, [{ key: 'yper4-910-agent-writing', userId: 6 }, { key: 'htpr-9063-comment-audience', userId: 6 }, { key: 'htpr-8344-log-post-status', userId: 6 }])
+  assert.deepEqual(calls.flags, [{ key: 'yper4-910-agent-writing', userId: 6 }, { key: 'htpr-8344-log-post-status', userId: 6 }])
 })
 
 for (const kind of routing.COMMENT_KINDS) {

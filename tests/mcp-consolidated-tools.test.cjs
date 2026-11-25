@@ -615,12 +615,12 @@ test('legacy and consolidated comment catalogs explain hidden logs and human-fac
       ? tool.inputSchema.oneOf.find((variant) => variant.properties.action.const === 'add').properties.input
       : tool.inputSchema
     for (const text of [tool.description, schema.properties.kind.description]) {
-      assert.match(text, /(?:An agent comment with no kind is refused and nothing is saved|Untyped agent notes stay hidden)/)
-      assert.match(text, /(?:even for replies or mentions|including replies and mentions)/)
+      assert.match(text, /An agent comment with no kind is saved to the agent log/)
+      assert.match(text, /(?:not the ticket thread|including replies and mentions)/)
       assert.match(text, /question for (?:a decision by a person|decisions)/)
       assert.match(text, /qa for (?:a QA verdict|verdicts)/)
       assert.match(text, /done for (?:the closing summary|summaries)/)
-      assert.match(text, /(?:Attachments require an explicit kind|Files require kind)/)
+      assert.match(text, /(?:Attachments require an explicit kind|Files require kind|attachments require an explicit kind)/i)
       assert.match(text, /(?:People comments use short plain sentences|technical details and status belong in the agent log)/)
     }
   }

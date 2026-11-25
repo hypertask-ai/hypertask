@@ -1,6 +1,5 @@
-import { MISSING_COMMENT_AUDIENCE, parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from '@/lib/flags/keys'
+import { parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
+import { AGENT_LOG_NOTE, AGENT_LOG_UNAVAILABLE, agentLogText, writeAgentLogEntry } from '@/lib/mcp/operations/comments/agentLog'
 import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
@@ -46,13 +45,34 @@ const handler: NextApiHandler = async (
         } catch (error) {
           return res.status(400).json({ message: error instanceof Error ? error.message : "Invalid comment kind", code: "invalid_field", field: "kind" });
         }
-        if (!kind && await isFeatureEnabled(HTPR_9063_COMMENT_AUDIENCE_FLAG, currentUser.id)) {
-          return res.status(400).json({ message: MISSING_COMMENT_AUDIENCE, code: "missing_field", field: "kind" });
-        }
+      }
+
+      const storedText = agentId
+        ? await inlineAgentImagesForUser(text, currentUser.id, { inlineImages: req.body.inline_images })
+        : text;
+
+      if (agentId && kind === undefined) {
+        const note = await agentLogText(storedText);
+        const activity = note
+          ? await writeAgentLogEntry({
+              principal: {
+                userId: currentUser.id,
+                agentId,
+                teamScope: null,
+                displayName: currentUser.displayName?.trim() || 'Hypertask agent',
+                source: 'agent',
+              },
+              taskId,
+              text: note,
+              idempotencyKey: null,
+            })
+          : null;
+        if (!activity) return res.status(503).json({ success: false, message: AGENT_LOG_UNAVAILABLE });
+        return res.json({ success: true, routedTo: 'log', visibleToPeople: false, notice: AGENT_LOG_NOTE, activity });
       }
 
       const comment = await createCommentService({
-        text: agentId ? await inlineAgentImagesForUser(text, currentUser.id, { inlineImages: req.body.inline_images }) : text,
+        text: storedText,
         kind,
         creatorId,
         taskId,

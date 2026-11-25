@@ -10,9 +10,7 @@ import { convertPlainTextMentionsToHtml, resolveTextMentions } from "@/utils/con
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_9063_COMMENT_AUDIENCE_FLAG } from "@/lib/flags/keys";
-import { MISSING_COMMENT_AUDIENCE } from "@/lib/mcp/operations/comments/agentChatterRouting";
+import { AGENT_LOG_NOTE, AGENT_LOG_UNAVAILABLE, agentLogText, writeAgentLogEntry } from "@/lib/mcp/operations/comments/agentLog";
 import { buildMcpImageUrls, persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { COMMENT_TASK_LINK_RULE } from "@/lib/ai/chatStream/prompt";
@@ -49,7 +47,7 @@ export function createAddCommentTool(context: ToolContext) {
           unique_index: z.coerce.number().int().positive().optional(),
           project_id: z.coerce.number().int().positive().optional(),
           text: z.string().min(1).max(5000),
-          kind: z.enum(['question', 'qa', 'done']).optional().describe('Required when acting as an agent. An agent comment with no kind is refused and nothing is saved. Choose question, qa or done for people, or use hypertask activity add for the agent log.'),
+          kind: z.enum(['question', 'qa', 'done']).optional().describe('Optional. An agent comment with no kind is saved to the agent log, not the ticket thread. Pass question for a decision by a person, qa for a QA verdict, or done for the closing summary to post for people.'),
           ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
           images: z.array(z.string()).optional(),
           mentions: z
@@ -76,9 +74,6 @@ export function createAddCommentTool(context: ToolContext) {
         ),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_add_comment");
-        if (actingAgentId && !input.kind && await isFeatureEnabled(HTPR_9063_COMMENT_AUDIENCE_FLAG, user.id)) {
-          return { success: false, error: MISSING_COMMENT_AUDIENCE };
-        }
         const targets = resolveBulkTaskTargets(input);
         const resolvedTargets = await Promise.all(
           targets.map(async (identifier) => ({
@@ -193,6 +188,38 @@ export function createAddCommentTool(context: ToolContext) {
             actingAgentId
           );
 
+          if (actingAgentId && input.kind === undefined) {
+            const note = await agentLogText(sanitizedText);
+            const activity = note
+              ? await writeAgentLogEntry({
+                principal: {
+                  userId: user.id,
+                  agentId: actingAgentId,
+                  teamScope: context.teamScope ?? null,
+                  displayName: userObj.displayName?.trim() || 'Hypertask agent',
+                  source: 'agent',
+                },
+                taskId: task.id,
+                text: note,
+                idempotencyKey: null,
+              })
+              : null;
+            if (!activity) return { success: false, error: AGENT_LOG_UNAVAILABLE };
+            return sanitizeForJson({
+              success: true,
+              routedTo: 'log',
+              visibleToPeople: false,
+              notice: AGENT_LOG_NOTE,
+              task: {
+                id: taskWithOwner.id,
+                title: taskWithOwner.title,
+                url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
+              },
+              url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
+              activity,
+            });
+          }
+
           const comment = await createCommentService({
             text: sanitizedText,
             kind: input.kind,
@@ -254,7 +281,7 @@ export function createAddCommentTool(context: ToolContext) {
         if (results.length === 1) return results[0];
 
         const tasks = results.flatMap((result) =>
-          result.success && "task" in result
+          result.success && "task" in result && "comment" in result
             ? [{ ...result.task, comment: result.comment }]
             : []
         );

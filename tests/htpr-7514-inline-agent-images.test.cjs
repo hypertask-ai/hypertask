@@ -243,7 +243,7 @@ const surfaces = [
   ["src/lib/api/task-writes/create-global.ts", /content: storedDescription/],
   ["src/lib/api/task-writes/create.ts", /description: agentId \? await inlineAgentImagesForUser/],
   ["src/lib/api/task-writes/update.ts", /newTask.description = await inlineAgentImagesForUser/],
-  ["src/pages/api/comments/create.ts", /text: agentId \? await inlineAgentImagesForUser/],
+  ["src/pages/api/comments/create.ts", /agentId\s*\?\s*await inlineAgentImagesForUser/],
   ["src/pages/api/comments/updateComment.ts", /text: session.agentId \? await inlineAgentImagesForUser/],
 ];
 for (const [file, pattern] of surfaces) test(`write surface uses shared rule: ${file}`, () => assert.match(read(file), pattern));

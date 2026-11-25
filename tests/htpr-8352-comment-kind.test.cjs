@@ -98,6 +98,10 @@ function loadRoute(comments, listQuery = null) {
     "src/lib/mcp/operations/comments/agentChatterRouting.ts",
     {},
   );
+  stubs["./agentLog"] = require("./task-route-loader.cjs").load(
+    "src/lib/mcp/operations/comments/agentLog.ts",
+    {},
+  );
   stubs["@/lib/agents/writing"] = require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {});
   stubs["@/lib/agents/writingEnforcement"] = require("./helpers/stub-map.cjs").enforcementFor(
     stubs["@/lib/agents/writing"],

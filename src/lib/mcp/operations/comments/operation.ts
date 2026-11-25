@@ -3,10 +3,9 @@ import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { agentWritingPolicyEnabled, enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
-import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
-import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG, HTPR_8811_AGENT_NOTE_IMAGE_LINKS_FLAG, HTPR_9063_COMMENT_AUDIENCE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG, HTPR_8811_AGENT_NOTE_IMAGE_LINKS_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -59,7 +58,8 @@ import {
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
-import { COMMENT_KINDS, MISSING_COMMENT_AUDIENCE, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
+import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
+import { AGENT_LOG_NOTE, prepareAgentLogEntry, writeAgentLogEntry, type AgentLogPrincipal } from './agentLog'
 import {
   assertKnownProjectionFields,
   ListQueryParseError,
@@ -173,40 +173,11 @@ export type AddCommentResponse = {
   }
 }
 
-type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
+type AgentLogEntry = { principal: AgentLogPrincipal; text: string }
 
 class AgentLogUnavailableError extends Error {}
 
 class AgentLogBoardMemberError extends Error {}
-
-async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
-  const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH } = await import('@/lib/agentRuns/model')
-  const text = (await htmlToLogText(html)).slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
-  return text ? { principal, text } : null
-}
-
-async function htmlToLogText(html: string) {
-  const { parse } = await import('node-html-parser')
-  const root = parse(html)
-  for (const anchor of root.querySelectorAll('a')) {
-    const href = anchor.getAttribute('href')?.trim()
-    const label = anchor.text.trim()
-    if (!href || href === label) continue
-    anchor.set_content(escapeHtmlText(label ? `${label} (${href})` : href))
-  }
-  const text = root.structuredText.split('\n').map((line) => line.trim()).filter((line) => line.length > 0).join('\n')
-  const imageLines = root.querySelectorAll('img').flatMap((image) => {
-    const src = image.getAttribute('src')?.trim()
-    if (!src || text.includes(src)) return []
-    const alt = image.getAttribute('alt')?.trim()
-    return [alt && alt !== src ? `${alt} (${src})` : src]
-  })
-  return [text, ...imageLines].filter((part) => part.length > 0).join('\n')
-}
-
-function escapeHtmlText(value: string) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 const COMMENT_LIST_FIELDS = [
   'id',
@@ -1040,16 +1011,7 @@ export async function POST(request: NextRequest) {
       hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
         (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
     }
-    if (ctx.agentId && kind === undefined && await isFeatureEnabled(HTPR_9063_COMMENT_AUDIENCE_FLAG, user.id)) {
-      return NextResponse.json(
-        {
-          ...buildFieldError('missing_field', 'kind', MISSING_COMMENT_AUDIENCE),
-          ...(dryRun && { valid: false })
-        },
-        { status: 400 }
-      )
-    }
-    const agentLogEntry = routeComment({
+    const agentLogEntry: AgentLogEntry | null = routeComment({
       agentId: ctx.agentId,
       kind,
       legacy: legacyRouting,
@@ -1062,7 +1024,7 @@ export async function POST(request: NextRequest) {
           ...buildFieldError(
             'missing_field',
             'kind',
-            'Choose kind (question|qa|done) to post for people: the agent log cannot take this post, so nothing was posted.'
+            'Nothing was saved: this post has no text the agent log can hold. Add text, or choose kind (question|qa|done) to post for people.'
           ),
           ...(dryRun && { valid: false })
         },
@@ -1107,21 +1069,20 @@ export async function POST(request: NextRequest) {
       idempotencyBody,
       async (): Promise<AddCommentResponse> => {
         if (agentLogEntry) {
-          const { createRuntimeAgentRun, createAgentRunActivity } = await import('@/lib/agentRuns/service')
-          const { parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
-          const run = await createRuntimeAgentRun(agentLogEntry.principal, { taskId: task.id, title: null, source: 'runtime' })
-          const result = run
-            ? await createAgentRunActivity(agentLogEntry.principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: agentLogEntry.text }), clientIdempotencyKey)
-            : null
-          if (result) {
-            const { id, runId, type, text, createdAt } = result.activity
+          const activity = await writeAgentLogEntry({
+            principal: agentLogEntry.principal,
+            taskId: task.id,
+            text: agentLogEntry.text,
+            idempotencyKey: clientIdempotencyKey,
+          })
+          if (activity) {
             return {
               success: true,
               routedTo: 'log' as const,
               visibleToPeople: false,
-              notice: 'Saved to the agent log, not the ticket thread; people do not see it. Resend with kind (question|qa|done) to post for people.',
+              notice: AGENT_LOG_NOTE,
               url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-              activity: { id, runId, type, text, createdAt },
+              activity,
             }
           }
           if (writingPolicy) {
