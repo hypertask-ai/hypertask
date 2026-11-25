@@ -69,6 +69,7 @@ exit 1
 MOCK
   chmod +x "$E/fresh-bin/gh"
   local base_notes='{"files":[{"filename":"src/app/notes.ts"}]}' base_page='{"files":[{"filename":"src/app/page.tsx"}]}'
+  local base_renamed='{"files":[{"filename":"src/app/b.ts","previous_filename":"src/app/a.ts"}]}'
   local base_many; base_many=$(jq -cn '{files: [range(0; 300) | {filename: "src/gen/f\(.).ts"}]}')
   upto() { SHIP_MERGE_PIN= BEHIND_FIXTURE="$1" ./ship-check fresh 4242 2>&1; }
   hit() {
@@ -86,6 +87,9 @@ MOCK
   hit 1 'a shared file refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_page" FRESH_PR_FILES='src/app/page.tsx'
   [[ $out == *'src/app/page.tsx'* && $out == *'update the branch'* && $out == *'3 commit(s) behind production'* ]] \
     && ok 'fresh: the overlap refusal names the file, the distance and the update' || bad "fresh: overlap message <- $out"
+  hit 1 'a file production renamed still overlaps the PR edit of its old path' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_renamed" FRESH_PR_FILES='src/app/a.ts'
+  [[ $out == *'src/app/a.ts'* && $out == *'update the branch'* ]] \
+    && ok 'fresh: a rename on the production side still refuses' || bad "fresh: renamed overlap message <- $out"
   hit 1 'a failed compare read refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_STATUS=fail FRESH_PR_FILES='src/app/page.tsx'
   hit 1 'a failed PR files read refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_notes" FRESH_PR_STATUS=fail
   hit 1 'a comparison GitHub cuts short refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_many" FRESH_PR_FILES='src/gen/f7.ts'

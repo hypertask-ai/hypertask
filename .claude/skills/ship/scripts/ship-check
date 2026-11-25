@@ -193,20 +193,17 @@ fresh_update_advice() {
   echo "update the branch (gh api -X PUT repos/$REPO/pulls/$1/update-branch), wait for fresh checks, then merge"
 }
 
-# Files both this PR and BASE's newer commits touch, at most five, one per line.
-# Prints the refusal reason and returns 1 when either side cannot be read in full.
 fresh_shared_files() {
   local pr=$1 head=$2 json count files
   json=$(gh api "repos/$REPO/compare/$head...$BASE" 2>/dev/null) \
     || { echo "cannot read the files $BASE changed since ${head:0:7} branched; retry"; return 1; }
   count=$(jq -er 'if (.files | type) == "array" then (.files | length) else error("no files") end' <<<"$json" 2>/dev/null) \
     || { echo "cannot read the files $BASE changed since ${head:0:7} branched; retry"; return 1; }
-  # GitHub lists at most 300 files in a comparison, so a full list may be cut short.
   [ "$count" -lt 300 ] \
     || { echo "$BASE changed $count files since ${head:0:7} branched, more than GitHub lists in full, so the overlap cannot be checked; $(fresh_update_advice "$pr")"; return 1; }
-  files=$(gh api "repos/$REPO/pulls/$pr/files" --paginate --jq '.[].filename' 2>/dev/null) \
+  files=$(gh api "repos/$REPO/pulls/$pr/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)' 2>/dev/null) \
     || { echo "cannot read the files of PR $pr; retry"; return 1; }
-  comm -12 <(jq -r '.files[].filename' <<<"$json" | sort -u) <(printf '%s\n' "$files" | sort -u) \
+  comm -12 <(jq -r '.files[] | .filename, (.previous_filename // empty)' <<<"$json" | sort -u) <(printf '%s\n' "$files" | sort -u) \
     | awk 'NF && NR <= 5'
 }
 
