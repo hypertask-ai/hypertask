@@ -217,7 +217,7 @@ function filesCommand(files) {
 }
 
 function budgetWithinDeadline(budgetMs) {
-  return Math.max(MIN_BUDGET_MS, Math.min(budgetMs, deadline - Date.now()));
+  return Math.min(budgetMs, Math.max(MIN_BUDGET_MS, deadline - Date.now()));
 }
 
 async function runTool(name, command, args, budgetMs, retryBudgetMs) {
@@ -344,7 +344,8 @@ function confirmationPassed(run) {
   return !run.result.signal && run.result.status === 0 && !/\berror TS\d+/.test(run.output);
 }
 
-function outcome(result, name, files, budgetMs, rerun) {
+function outcome(run, name, files, rerun) {
+  const { result, output, budgetMs } = run;
   if (result.error) {
     if (result.error.code === "ENOENT") {
       blocked(`${name} is not installed in this checkout; run npm install and push again`);
@@ -352,7 +353,7 @@ function outcome(result, name, files, budgetMs, rerun) {
     blocked(`${name} could not run: ${result.error.message}`);
   }
   if (result.timedOut) {
-    if (reportedErrors(result.output)) return "failed";
+    if (reportedErrors(output)) return "failed";
     console.log(
       `quick check: NOT FULLY ${name === "tsc" ? "TYPE CHECKED" : "LINTED"}: ${files} (${name} was still running when its ${Math.round(budgetMs / 1000)}s budget ran out and had reported no errors, so this machine is too slow for it; the full ${name === "tsc" ? "type check" : "lint"} runs in CI). Rerun when the machine is quieter: ${rerun}`,
     );
@@ -375,7 +376,7 @@ for (const [index, run] of lintRuns.entries()) {
   const pass = lintPlan[index];
   lintSeconds += Number(run.seconds);
   process.stdout.write(run.output);
-  const lintOutcome = outcome(run.result, "eslint", pass.files.join(", "), run.budgetMs, filesCommand(pass.files));
+  const lintOutcome = outcome(run, "eslint", pass.files.join(", "), filesCommand(pass.files));
   const rewritten = uncommitted(root, pass.files);
   if (rewritten.length) {
     blocked(`formatting fixes applied to ${rewritten.join(", ")}; commit them and push again (${elapsed(started)}s)`);
@@ -391,7 +392,7 @@ for (const [index, run] of lintRuns.entries()) {
 }
 
 let typeRun = typePromise ? await typePromise : null;
-let typeOutcome = typeRun ? outcome(typeRun.result, "tsc", typeLabel(), typeRun.budgetMs, filesCommand(typeTargets)) : "skipped";
+let typeOutcome = typeRun ? outcome(typeRun, "tsc", typeLabel(), filesCommand(typeTargets)) : "skipped";
 if (typeOutcome === "failed" && !fullTypecheck) {
   console.log("quick check: confirming partial type errors with the full project");
   const confirmFiles = [...new Set([...projectFiles, ...typeTargets.map((file) => join(root, file))])]

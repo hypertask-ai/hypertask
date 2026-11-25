@@ -30,9 +30,10 @@ it never replaces a required check and adds no required context.
 
 Every run is killed, with its process group, at 10 seconds per lint pass and per
 type check, or at the longer limit when the full type check is asked for. A run
-that overruns reruns once with a longer limit, and no run starts with less than a
-second. A 60 second deadline for the whole check caps the retries, so the hook
-returns on any diff however busy the machine is; `QUICK_CHECK_DEADLINE_MS`
+that overruns reruns once with a longer limit. A 60 second deadline for the whole
+check caps every run and every retry, and never leaves a late run less than a
+second, so the hook returns on any diff however busy the machine is;
+`QUICK_CHECK_DEADLINE_MS`
 changes that deadline, and the lint and type budgets take
 `QUICK_CHECK_LINT_BUDGET_MS`, `QUICK_CHECK_TYPE_BUDGET_MS` and
 `QUICK_CHECK_FULL_TYPE_BUDGET_MS` for tests. No environment variable switches the
