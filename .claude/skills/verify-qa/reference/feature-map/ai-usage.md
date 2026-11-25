@@ -15,7 +15,7 @@
 
 ## How to get to it (user POV)
 
-Open a team board, then Settings > Team > AI usage (`/settings/ai-usage`). The selected settings team controls the request to `/api/settings/ai-usage?teamId=...`; board admins also send `projectId`.
+Open `/settings/ai-usage` directly and wait for the section title `AI usage`. A direct open is the reliable path: the settings page renders its own section without a board, while clicking Settings on a loading board finds the shortcut hints before the panel. The selected settings team controls the request to `/api/settings/ai-usage?teamId=...`; board admins also send `projectId`. When the report cannot load, the section says `AI usage is currently unavailable.`, which is not a failed open.
 
 Bring your own key is Settings > Team > AI > Bring your own key. The Baseten row, the Always use this key switch, and the Alibaba test live on that screen. The named own-key rejection appears in the chat transcript, not on the usage page.
 

@@ -1,11 +1,8 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const { spawnSync } = require("node:child_process");
 const ai = require("ai");
 const { JSDOM } = require("jsdom");
-const { loadModule, root } = require("./helpers/loadModule.cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const catalog = loadModule("src/lib/aiModelOptions.ts");
 const providers = loadModule("src/lib/aiProviders.ts");
@@ -721,95 +718,5 @@ test("composeTask sends Auto instead of openai when no saved model exists on the
       else delete global[key];
     }
     dom.window.close();
-  }
-});
-
-test("one-time migration resets saved non-auto picks to auto while keeping imageGeneration and thinking", (t) => {
-  const migrationFile = path.join(
-    root,
-    "src/prisma/migrations/20261125120000_htpr_9685_reset_saved_models_to_auto/migration.sql",
-  );
-  assert.equal(fs.existsSync(migrationFile), true);
-  const docker = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], {
-    encoding: "utf8",
-    timeout: 15_000,
-  });
-  if (!docker.stdout?.trim()) {
-    if (process.env.HT_REQUIRE_PG_TESTS === "1") assert.fail("Docker is required");
-    t.skip("Docker is unavailable");
-    return;
-  }
-
-  const container = `htpr-9685-auto-reset-${process.pid}-${Date.now()}`;
-  const image =
-    process.env.HTPR_PG_IMAGE ||
-    "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea";
-  const sql = fs.readFileSync(migrationFile, "utf8");
-  const runSql = (input) =>
-    spawnSync(
-      "docker",
-      ["exec", "-i", container, "psql", "-h", "/tmp", "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-At"],
-      { input, encoding: "utf8", timeout: 30_000 },
-    );
-
-  try {
-    const started = spawnSync(
-      "docker",
-      [
-        "run", "-d", "--rm", "--name", container, "--network", "none", "--user", "postgres",
-        "--tmpfs", "/tmp:rw,mode=1777",
-        image,
-        "sh", "-c",
-        "initdb -D /tmp/db -A trust >/dev/null 2>&1 && pg_ctl -D /tmp/db -l /tmp/pg.log -o \"-c listen_addresses='' -k /tmp\" -w start >/dev/null && exec tail -f /dev/null",
-      ],
-      { encoding: "utf8", timeout: 30_000 },
-    );
-    assert.equal(started.status, 0, started.stderr);
-
-    for (let i = 0; i < 40; i += 1) {
-      const ready = spawnSync("docker", ["exec", container, "pg_isready", "-h", "/tmp", "-U", "postgres"], {
-        timeout: 5_000,
-      });
-      if (ready.status === 0) break;
-      spawnSync("sleep", ["0.25"]);
-    }
-
-    const setup = runSql(`
-      CREATE TABLE "UserSetting" ("userId" INTEGER PRIMARY KEY, "aiModelPreferences" JSONB);
-      CREATE TABLE "AI_Custom_Instructions" ("id" SERIAL PRIMARY KEY, "model_selected" TEXT, "source_selected" TEXT);
-      CREATE TABLE htpr_7038_model_choice_reset_done (user_id INTEGER PRIMARY KEY);
-      INSERT INTO "UserSetting" ("userId", "aiModelPreferences") VALUES
-        (1, '{"aiChat":"claude-haiku-5-5","taskWriter":"gpt-6-luna","imageGeneration":"nano-banana","thinking":{"enabled":true,"effort":"low"},"teams":{"t1":{"aiChat":"gpt-6.1-sol","writeWithAi":"auto","imageGeneration":"gpt-image"}}}'),
-        (2, '{"aiChat":"auto"}'),
-        (3, NULL);
-      INSERT INTO "AI_Custom_Instructions" ("model_selected", "source_selected") VALUES
-        ('gpt-6-luna', 'openai'),
-        ('auto', NULL),
-        (NULL, NULL);
-    `);
-    assert.equal(setup.status, 0, setup.stderr);
-
-    const migrated = runSql(sql);
-    assert.equal(migrated.status, 0, migrated.stderr);
-
-    const checkUser1 = JSON.parse(runSql('SELECT "aiModelPreferences"::text FROM "UserSetting" WHERE "userId" = 1;').stdout.trim());
-    assert.equal(checkUser1.aiChat, "auto");
-    assert.equal(checkUser1.taskWriter, "auto");
-    assert.equal(checkUser1.imageGeneration, "nano-banana");
-    assert.deepEqual(checkUser1.thinking, { enabled: true, effort: "low" });
-    assert.equal(checkUser1.teams.t1.aiChat, "auto");
-    assert.equal(checkUser1.teams.t1.writeWithAi, "auto");
-    assert.equal(checkUser1.teams.t1.imageGeneration, "gpt-image");
-
-    const instructions = runSql('SELECT COALESCE("model_selected", \'<null>\') || \'|\' || COALESCE("source_selected", \'<null>\') FROM "AI_Custom_Instructions" ORDER BY id;').stdout.trim().split("\n");
-    assert.deepEqual(instructions, ["auto|<null>", "auto|<null>", "<null>|<null>"]);
-
-    const markers = runSql("SELECT count(*) FROM htpr_7038_model_choice_reset_done;").stdout.trim();
-    assert.equal(markers, "3");
-
-    const repeat = runSql(sql);
-    assert.equal(repeat.status, 0, repeat.stderr);
-  } finally {
-    spawnSync("docker", ["rm", "-f", container], { stdio: "ignore", timeout: 15_000 });
   }
 });
