@@ -84,3 +84,48 @@ test("a failing api step records the response status and body text in the eviden
   assert.equal(step.text, raw);
   assert.doesNotMatch(step.text, /token-value/);
 });
+
+test("a verification step keeps its safe query string and the drive asks that exact path", async () => {
+  const { verificationCandidates, withVerificationSteps, runPlan } = await load();
+  const body = `## Verification
+1. \`GET /api/mcp/chat/pending?unanswered=true\`. Require 200, response text \`questions\`.
+2. \`GET /api/mcp/chat/messages?limit=20&agent={agent}\`. Require 200, response text \`messages\`.
+`;
+  const candidates = verificationCandidates(body);
+  assert.deepEqual(candidates.map((item) => `${item.method} ${item.path}`), [
+    "GET /api/mcp/chat/pending?unanswered=true",
+    "GET /api/mcp/chat/messages?limit=20&agent={agent}",
+  ]);
+  const routes = ["src/pages/api/mcp/chat/pending.ts", "src/pages/api/mcp/chat/messages.ts"];
+  const documented = withVerificationSteps({ actions: [{ op: "api", method: "GET", path: "/api/mcp/chat/pending", body: {}, expectStatus: 200, expectText: "ok" }], expect: [] }, body, { routes, corpus: "" });
+  assert.deepEqual(documented.actions.map((item) => item.path), ["/api/mcp/chat/pending?unanswered=true", "/api/mcp/chat/messages?limit=20&agent={agent}"]);
+  const asked = [];
+  const page = { request: { async fetch(url) { asked.push(url); return { status: () => 200, text: async () => "questions" }; } } };
+  const plan = { actions: [{ op: "api", method: "GET", path: "/api/mcp/chat/pending?unanswered=true", body: {}, expectStatus: 200, expectText: "questions" }], expect: [] };
+  const result = await runPlan({ page, plan, base: "http://127.0.0.1:9", projectId: "1", taskId: "2", bearer: "token-value", agentBearer: "agent-token", archivedProjectId: "3", agentId: "11111111-1111-4111-8111-111111111111", shotsDir: "/tmp", navigations: [] });
+  assert.equal(result.steps[0].ok, true);
+  assert.deepEqual(asked, ["http://127.0.0.1:9/api/mcp/chat/pending?unanswered=true"]);
+});
+
+test("distinct documented calls to one endpoint are all kept and planner copies are dropped", async () => {
+  const { verificationCandidates, withVerificationSteps } = await load();
+  const body = `## Verification
+1. \`POST /api/mcp/tasks/update\`, body \`{"task_id": "{task}", "status": "Bogus"}\`. Require 400, response text \`allowed_values\`.
+2. \`POST /api/mcp/tasks/update\`, body \`{"task_id": "{task}", "priority": "Nope"}\`. Require 400, response text \`allowed_values\`.
+3. \`POST /api/mcp/tasks/update\`, body \`{"task_id": "{task}", "status": "Bogus"}\`. Require 400, response text \`allowed_values\`.
+`;
+  const candidates = verificationCandidates(body);
+  assert.deepEqual(candidates.map((item) => `${item.method} ${item.path} ${JSON.stringify(item.body)}`), [
+    'POST /api/mcp/tasks/update {"task_id":"{task}","status":"Bogus"}',
+    'POST /api/mcp/tasks/update {"task_id":"{task}","priority":"Nope"}',
+  ]);
+  const planner = [
+    { op: "api", method: "POST", path: "/api/mcp/tasks/update", body: { task_id: "{task}", status: "Normal" }, expectStatus: 200, expectText: "saved" },
+    { op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "ok" },
+  ];
+  const merged = withVerificationSteps({ actions: planner, expect: [] }, body, { corpus: "", routes: [] });
+  assert.equal(merged.actions.length, 3);
+  assert.equal(merged.actions.some((action) => action.path === "/api/mcp/tasks/update" && action.expectStatus === 200), false);
+  assert.deepEqual(merged.actions.slice(0, 2), candidates);
+  assert.deepEqual(merged.actions[2], planner[1]);
+});

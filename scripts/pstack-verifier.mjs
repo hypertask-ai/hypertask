@@ -1222,8 +1222,9 @@ export function callLadder(payload, spawnImpl = spawnSync) {
 }
 export const SEEDED_FIXTURES = "active board {id}\ntask {task}\narchived board {archived}\nagent {agent}: seeded agent, owned by the seeded user, a new feature flag is off for that user, and an agent route takes {agent}, never {task}\nagent token: seeded agent (agent-only routes)\nagent chat: two questions, the newer one answered, the agent inbox is empty";
 const VERIFY_HEADING = /^\s{0,3}#{1,6}\s+(?:verification(?:\s+steps)?|how\s+to\s+verify|verify|test\s+plan|testing)\b/i;
-const API_CALL = /\b(GET|POST|PUT|PATCH|DELETE)\s+`?(\/api\/[A-Za-z0-9_\-./{}]*[A-Za-z0-9_\-{}])`?/g;
+const API_CALL = /\b(GET|POST|PUT|PATCH|DELETE)\s+`?(\/api\/[A-Za-z0-9_\-./{}]*[A-Za-z0-9_\-{}](?:\?[A-Za-z0-9_\-.=&%{}]*[A-Za-z0-9_\-{}])?)`?/g;
 const NOT_A_STEP = /\b(?:do not|don't|never|must not|avoid)\b/i;
+const apiRoute = (apiPath) => String(apiPath ?? "").split("?")[0].toLowerCase();
 export function verificationSection(body) {
   const lines = String(body ?? "").split("\n");
   const at = lines.findIndex((line) => VERIFY_HEADING.test(line));
@@ -1277,7 +1278,13 @@ export function verificationCandidates(body) {
     const shaped = { op: "api", method: match[1], path: match[2], body: (at >= 0 ? firstJsonObject(step.slice(at)) : null) ?? {}, expectStatus: status, expectText, ...(status >= 400 ? { force: `the PR body's own step ${index + 1} request` } : {}) };
     try { found.push(allowApi(shaped)); } catch { continue; }
   }
-  return found.filter((item, index) => found.findIndex((each) => each.method === item.method && each.path === item.path) === index).slice(0, 6);
+  const seen = new Set();
+  return found.filter((item) => {
+    const key = JSON.stringify([item.method, item.path, item.body, item.expectStatus, item.expectText]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 12);
 }
 export function bodyErrorPaths(body) {
   const section = verificationSection(body);
@@ -1298,11 +1305,11 @@ export function withVerificationSteps(parsed, body, ground = {}) {
     .filter((item) => !routes.length || groundLib.routeIn(routes, item.path))
     .map((item) => (item.expectText && corpus && !corpus.includes(item.expectText.replace(/\s+/g, " ").trim().toLowerCase()) ? { ...item, expectText: "" } : item));
   if (!candidates.length) return parsed;
-  const errorPaths = [...new Set([...candidates.filter((item) => item.expectStatus >= 400).map((item) => item.path.toLowerCase()), ...bodyErrorPaths(body)])];
+  const errorPaths = [...new Set([...candidates.filter((item) => item.expectStatus >= 400).map((item) => apiRoute(item.path)), ...bodyErrorPaths(body)].map(apiRoute))];
   const kept = (parsed.actions ?? []).filter((action) => {
     if (action?.op !== "api") return true;
-    if (candidates.some((item) => item.method === action.method && item.path === action.path)) return false;
-    return !(Number(action.expectStatus) < 400 && errorPaths.includes(String(action.path).toLowerCase()));
+    if (candidates.some((item) => item.method === action.method && apiRoute(item.path) === apiRoute(action.path))) return false;
+    return !(Number(action.expectStatus) < 400 && errorPaths.includes(apiRoute(action.path)));
   });
   return { ...parsed, actions: [...candidates, ...kept].slice(0, 12) };
 }
