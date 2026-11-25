@@ -331,7 +331,9 @@ function proseOnly(body) {
 export function authorFamilyOf(value) {
   const head = String(value ?? "").trim().split(/[\s(]+/)[0] ?? "";
   const family = head.split("/")[0].toLowerCase();
-  return FAMILIES.has(family) ? family : "";
+  if (FAMILIES.has(family)) return family;
+  const mapped = modelFamily(head);
+  return mapped === "other" ? "" : mapped;
 }
 const AUTHOR_LINE = /^\s*Author[- ]Model:[ \t]*(.*)$/i;
 export function authorFamily(body, commits = [], authorLogin = "") {
