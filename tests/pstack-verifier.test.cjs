@@ -1122,6 +1122,9 @@ test("an api action passes from the preview response with no page navigation", a
 
 test("an all-api plan matches a text expect against the response text", async () => {
   const { runPlan } = await load();
+  const savedToken = process.env.GH_TOKEN;
+  process.env.GH_TOKEN = "actions-token";
+  try {
   const actions = [
     { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 403, expectText: "not a member" },
     { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "moved" },
@@ -1146,6 +1149,10 @@ test("an all-api plan matches a text expect against the response text", async ()
   const both = await runPlan({ page: pageFor('{"a":"not a member","b":"moved"}', [403, 200]), plan: two, ...drive });
   assert.equal(both.steps.every((step) => step.ok), true, JSON.stringify(both.steps));
   assert.equal(both.expects.every((item) => item.ok), true, JSON.stringify(both.expects));
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = savedToken;
+  }
 });
 
 test("the drive fills archived, board and task ids in an api body", async () => {
