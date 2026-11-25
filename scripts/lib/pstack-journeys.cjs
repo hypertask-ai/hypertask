@@ -40,8 +40,14 @@ const TEST_PATH = /^tests?\//;
 const SOURCE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const SURFACE_FILE = /^src\/(?:pages\/|app\/)/;
 const TRACE_HOPS = 2;
+const ROUTE_HOPS = 4;
 const HUB_IMPORTERS = 30;
 const TRACE_LIMIT = 6;
+const APP_ROUTE = /^src\/app\/(?!api\/)/;
+const NOT_A_SCREEN = /^(?:layout|template|error|global-error|not-found|loading|default)\.(?:tsx|ts|jsx|js)$/;
+const ROUTE_GROUP = /^\(.*\)$/;
+const CATCH_ALL = /^\[\[\.\.\..*\]\]$|^\[\.\.\..*\]$/;
+const DYNAMIC = /^\[\[?.+?\]\]?$/;
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort();
@@ -108,6 +114,36 @@ function importSpecifiers(text) {
   return [...specs];
 }
 
+function routeSegments(file) {
+  const parts = String(file).slice("src/app/".length).split("/");
+  parts.pop();
+  return parts.filter((part) => part && !ROUTE_GROUP.test(part));
+}
+
+function seededPath(prefix, boardPath, taskPath) {
+  const usable = (value) => typeof value === "string" && value.startsWith("/");
+  const fallback = `/${[...prefix, "{id}"].join("/")}`;
+  if (!usable(boardPath) && !usable(taskPath)) return fallback;
+  if (!prefix.length) return usable(boardPath) ? boardPath : taskPath;
+  const want = prefix.join("/").toLowerCase();
+  for (const value of [taskPath, boardPath]) {
+    if (!usable(value)) continue;
+    const parts = value.split("?")[0].replace(/^\//, "").toLowerCase().split("/");
+    if (parts.length > prefix.length && parts.slice(0, prefix.length).join("/") === want) return value;
+  }
+  return fallback;
+}
+
+function appRoute(file, { boardPath = "", taskPath = "" } = {}) {
+  if (!APP_ROUTE.test(file) || NOT_A_SCREEN.test(String(file).slice(String(file).lastIndexOf("/") + 1))) return "";
+  const parts = [];
+  for (const segment of routeSegments(file)) {
+    if (CATCH_ALL.test(segment)) return seededPath(parts, boardPath, taskPath);
+    parts.push(DYNAMIC.test(segment) ? "{id}" : segment);
+  }
+  return `/${parts.join("/")}`;
+}
+
 function importKey(from, spec) {
   const value = String(spec);
   if (value.startsWith("@/")) return moduleKey(path.posix.join("src", value.slice(2)));
@@ -143,7 +179,42 @@ function reverseImports(sources, readSource) {
   return reverse;
 }
 
-function traceImports({ files, pages = [], sources, readSource = defaultReadSource } = {}) {
+function routeEntries({ changed, reverse, pages, boardPath, taskPath }) {
+  const seeded = { boardPath, taskPath };
+  const named = normalizePages(pages);
+  const found = new Map();
+  const seen = new Set();
+  let frontier = [];
+  for (const file of changed) {
+    const route = appRoute(file, seeded);
+    if (route) found.set(route, { file, route });
+    seen.add(moduleKey(file));
+    frontier.push(file);
+  }
+  for (let hop = 1; hop <= ROUTE_HOPS && frontier.length; hop += 1) {
+    const next = [];
+    for (const file of frontier) {
+      const importers = reverse.get(moduleKey(file)) ?? [];
+      if (importers.length > HUB_IMPORTERS) continue;
+      for (const importer of importers) {
+        const key = moduleKey(importer);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const route = appRoute(importer, seeded);
+        if (route) {
+          if (!found.has(route)) found.set(route, { file: importer, route });
+          continue;
+        }
+        if (SURFACE_FILE.test(importer)) continue;
+        next.push(importer);
+      }
+    }
+    frontier = next;
+  }
+  return [...found.values()].map((entry) => ({ ...entry, pages: pagesForFiles({ files: [entry.file], pages: named }).map((item) => item.page).slice(0, 3) }));
+}
+
+function traceImports({ files, pages = [], sources, readSource = defaultReadSource, boardPath = "", taskPath = "" } = {}) {
   const changed = uniqueSorted((Array.isArray(files) ? files : []).map(String))
     .filter((file) => file.startsWith("src/") && !TEST_PATH.test(file) && SOURCE_EXT.includes(path.extname(file)));
   const reverse = changed.length ? reverseImports(Array.isArray(sources) ? sources : defaultSources(), readSource) : new Map();
@@ -173,7 +244,9 @@ function traceImports({ files, pages = [], sources, readSource = defaultReadSour
   }
   const ordered = [...surfaces.entries()].sort((left, right) => left[1].depth - right[1].depth || left[0].localeCompare(right[0]));
   const named = normalizePages(pages);
+  const routes = changed.length ? routeEntries({ changed, reverse, pages: named, boardPath, taskPath }) : [];
   return {
+    routes,
     surfaces: ordered.slice(0, TRACE_LIMIT).map(([file, entry]) => ({
       file,
       via: entry.via,

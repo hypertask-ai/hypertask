@@ -52,11 +52,22 @@ function classifyRun(run, plan) {
   return { state: "ok", failIndex: -1 };
 }
 
+function screenNote(run) {
+  const screen = run?.errorScreen;
+  if (!screen || typeof screen !== "object") return "";
+  const route = String(screen.route ?? "");
+  const where = route ? ` on ${route}` : "";
+  if (screen.changed === true) return `, with an error screen${where} this change touches`;
+  if (screen.changed === false) return `, with an error screen${where} this change does not touch`;
+  return `, with an error screen${where}`;
+}
+
 function failureNote(run, failIndex) {
   const stepsPassed = (run?.steps ?? []).every((step) => step?.ok === true) && (run?.expects ?? []).every((expect) => expect?.ok === true);
   const judged = judgedVerdict(run);
   const judgedFail = judged !== "" && judged !== "UNEVALUATED" && !PASS_VERDICTS.includes(judged);
-  return stepsPassed && judgedFail ? "the judge failed it" : `failed at step ${failIndex + 1}`;
+  const note = stepsPassed && judgedFail ? "the judge failed it" : `failed at step ${failIndex + 1}`;
+  return `${note}${screenNote(run)}`;
 }
 
 function areaOf(journey) {
