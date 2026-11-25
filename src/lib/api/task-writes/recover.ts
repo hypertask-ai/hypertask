@@ -4,6 +4,7 @@ import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import { cancelTaskDeleteJob } from "@/pages/api/queues/taskDeleteQueue"
 import prisma from '@/lib/prisma'
+import { anyStatus } from '@/lib/db/softDeleteReads'
 import {
   TaskHardDeleteInProgressError,
   updateTaskAndSubtasks,
@@ -28,6 +29,7 @@ const route = taskWriteRoute({
           where: {
               id: Number(taskId),
               project: taskWriteAccessWhere(session.userId, actingAgentId),
+              ...anyStatus,
           },
           select: { id: true },
       }),

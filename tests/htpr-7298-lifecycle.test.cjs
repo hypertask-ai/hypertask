@@ -210,6 +210,7 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
     "@/lib/mcp/tasks/agentMutationFence": fence,
     "./invokeTaskDelete": {},
+    "@/lib/db/softDeleteReads": { anyStatus: { status: { in: ["Normal", "Archive", "Deleted"] } } },
     "@/lib/mcp/webhooks/outbox": { persistBoardWebhookEvent: async () => [], publishBoardWebhookDeliveries: noop },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: noop },
     "@/lib/mcp/tasks/humanMutationOverride": {

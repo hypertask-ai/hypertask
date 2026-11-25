@@ -8,6 +8,7 @@ import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
 import { callerRefusalsLintConfig } from "./eslint-local-rules/caller-refusals.mjs";
 import { flagStubsLintConfig } from "./eslint-local-rules/flag-stubs.mjs";
+import { softDeleteReadsLintConfig } from "./eslint-local-rules/soft-delete-reads.mjs";
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -52,6 +53,7 @@ export default defineConfig([
   testHarnessLintConfig,
   callerRefusalsLintConfig,
   flagStubsLintConfig,
+  softDeleteReadsLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
     // component importing it breaks the production build with `Can't resolve 'tls'`.

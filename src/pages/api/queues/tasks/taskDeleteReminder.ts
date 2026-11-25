@@ -8,6 +8,7 @@ import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import { scheduleTaskDeleteJob } from "../taskDeleteQueue";
 import Sugar from "sugar";
 import prisma from "@/lib/prisma";
+import { anyStatus } from "@/lib/db/softDeleteReads";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import globalConstants from "@/lib/constants";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -63,6 +64,7 @@ async function handler(
         where: {
           id: taskId,
           project: taskWriteAccessWhere(session.userId, actingAgentId),
+          ...anyStatus,
         },
         select: { id: true },
       }),
@@ -197,7 +199,7 @@ async function updateTaskTreeStatus(
     trashedTaskIds.push(...taskIds)
     if (targetAlreadyApplied) {
       return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
-        where: { id: rootTaskId },
+        where: { id: rootTaskId, ...anyStatus },
         select: {
           id: true,
           projectId: true,
@@ -253,7 +255,7 @@ async function updateTaskTreeStatus(
       where: { taskId: { in: taskIds } },
     })
     return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
-      where: { id: rootTaskId },
+      where: { id: rootTaskId, ...anyStatus },
       select: {
         id: true,
         projectId: true,

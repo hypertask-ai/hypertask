@@ -20,6 +20,7 @@ or when a row names a check file that is not in the repository.
 | Verify the successful production deployment and live behavior before Done. | `.github/workflows/prod-health.yml` |
 | Clean only your own finished worktree and branch. | nothing yet |
 | No explanatory code comments. Express intent in code. | `eslint-local-rules/no-comments.mjs` |
+| Trashed tickets and boards never appear in a read. Only a trash or restore read spreads `anyStatus`. | `eslint-local-rules/soft-delete-reads.mjs`, `tests/htpr-9718-deleted-reads.test.cjs` |
 | Wireframes use only live app tokens. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Wireframes need eight fresh theme captures. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Sign-off needs a `/wireframes/` link. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `tests/ux-signoff-gate.test.cjs` |

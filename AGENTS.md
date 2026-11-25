@@ -23,6 +23,7 @@ Reference command paths are repo-relative.
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Trashed tickets and boards never appear in a read. Only a trash or restore read spreads `anyStatus`.
 - Wireframes use only live app tokens.
 - Wireframes need eight fresh theme captures.
 - Sign-off needs a `/wireframes/` link.
