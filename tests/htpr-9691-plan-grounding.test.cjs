@@ -87,6 +87,49 @@ test("a plan whose only step is an unforceable failure is not sure, not a failur
 });
 
 
+test("a parsed error expectation keeps its force and can be evaluated", async () => {
+  const { planFromRequest, parsePlan } = await load();
+  const ground = CASES["pr-3846-forceable-error"];
+  const answer = ground.journeys[0];
+  const plan = await planFromRequest(request(["src/lib/tasks/writer.ts"]), {
+    binding, pages: [], ground, ask() { return parsePlan(JSON.stringify(answer)); },
+  });
+  assert.deepEqual(plan.expect, answer.expect);
+  assert.deepEqual(plan.actions, answer.actions);
+  assert.equal(plan.unevaluated, "");
+});
+
+test("a grounding retry that drops a failure assertion is unevaluated", async () => {
+  const { planFromRequest, decide } = await load();
+  for (const failure of [
+    { actions: [{ op: "goto", path: "/chat" }], expect: [{ text: "Could not save" }] },
+    { actions: [{ op: "goto", path: "/chat" }, { op: "api", method: "POST", path: "/api/chat", expectStatus: 400 }], expect: [] },
+  ]) {
+    let calls = 0;
+    const plan = await planFromRequest(request(["src/lib/tasks/writer.ts"]), {
+      binding, pages: [], ground: { corpus: '"Could not save"', routes: ["src/pages/api/chat.ts"] },
+      ask() { calls += 1; return calls === 1 ? { actions: [{ op: "click", text: "Invented" }], expect: [] } : failure; },
+    });
+    assert.equal(calls, 2);
+    assert.match(plan.unevaluated, /^plan used text\/selector not in source:/);
+    assert.equal(decide({ plan, evidence: null, binding }).verdict, "UNEVALUATED");
+  }
+});
+
+test("control names cannot be grounded by typed values or fixture prose", async () => {
+  const { review } = await import("../scripts/lib/pstack-ground.cjs");
+  const actions = [
+    { op: "fill", label: "Title", value: "Invented Button" },
+    { op: "click", text: "Invented Button" },
+    { op: "fill", label: "Invented Button", value: "Title" },
+    { op: "click", text: "seeded agent" },
+    { op: "fill", label: "seeded agent", value: "Title" },
+  ];
+  const checked = review({ journeys: [{ journey: "change:primary", actions, expect: [{ text: "Invented Button" }] }], corpus: '<input aria-label="Title" />', fixtures: "seeded agent" });
+  assert.deepEqual(checked.problems, actions.slice(1).map((action, index) => `change:primary step ${index + 2} ${action.op}: "${action.text ?? action.label}" is not in the head source`));
+  assert.deepEqual(checked.dropped, []);
+});
+
 test("the head source is read from the pull request's own commit", async () => {
   const { headGrounding, groundingFiles } = await load();
   const sha = "c".repeat(40);

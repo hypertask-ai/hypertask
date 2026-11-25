@@ -74,7 +74,7 @@ function corpusOf(texts) {
   return Object.values(texts ?? {}).filter((text) => typeof text === "string").join("\n").slice(0, CORPUS_LIMIT);
 }
 
-function checkControl(action, { corpus, extra, readable }) {
+function checkControl(action, { corpus, readable }) {
   const name = action.op === "click" ? action.text : action.label;
   const testid = String(action.testid ?? "");
   if (!readable) return "";
@@ -82,7 +82,7 @@ function checkControl(action, { corpus, extra, readable }) {
     if (String(corpus).includes(`data-testid="${testid}"`)) return "";
     return `testid "${testid}" is not in the head source`;
   }
-  if (name && grounded(corpus, name, extra)) return "";
+  if (name && grounded(corpus, name)) return "";
   return `"${name}" is not in the head source`;
 }
 

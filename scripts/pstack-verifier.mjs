@@ -120,7 +120,7 @@ function readExpects(list, limit) {
   for (const item of Array.isArray(list) ? list : []) {
     if (expects.length >= limit) break;
     const shaped = typeof item === "string" ? { text: item } : item;
-    try { expects.push(allowExpect(shaped?.text ? { text: shaped.text } : shaped)); }
+    try { expects.push(allowExpect(shaped?.text ? { text: shaped.text, force: shaped.force } : shaped)); }
     catch (error) { dropped.push(String(error?.message ?? error)); }
   }
   if (dropped.length) console.log(`plan dropped ${dropped.length} of ${dropped.length + expects.length} expects: ${dropped[0]}`);
@@ -1567,7 +1567,7 @@ export async function settleGrounding({ plan, request, pages, reach, ask, picked
     console.log(`grounding: ${changeProblems.join("; ")}`);
     const retry = await planJourneys({ request, pages, reach, ask, key: deps.key, model: picked.model, models: picked.models, bugfix, changeOnly: true, feedback: `The head source holds only these names. ${changeProblems.join("; ")}` });
     const fixed = retry.items.length ? groundLib.review({ journeys: retry.items.slice(0, 1), corpus: ground.corpus, routes: ground.routes, fixtures: SEEDED_FIXTURES }) : null;
-    const repaired = fixed && !fixed.problems.length ? fixed.journeys[0] : null;
+    const repaired = fixed && !fixed.problems.length && !fixed.dropped.length ? fixed.journeys[0] : null;
     if (repaired?.actions?.length) plan.journeys = [repaired, ...plan.journeys.filter((item) => !String(item.journey).startsWith("change:"))];
     else plan.unevaluated = `plan used text/selector not in source: ${changeProblems.join("; ")}`.slice(0, 500);
   }
