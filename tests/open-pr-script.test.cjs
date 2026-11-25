@@ -9,10 +9,17 @@ const script = path.resolve(__dirname, '../.claude/skills/fix-bug/scripts/open-p
 const prUrl = 'https://github.com/hypertask-ai/hypertask/pull/123';
 
 function runScript(t, args = [], env = {}) {
+  const { CHAT_NAME = 'HT Pstack Boss', NO_LOGIN = '', ...extraEnv } = env;
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'open-pr-test-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const log = path.join(root, 'commands');
   const body = path.join(root, 'body.md');
+  const credentials = path.join(root, 'credentials');
+  fs.mkdirSync(credentials, { recursive: true });
+  if (!NO_LOGIN) {
+    const slug = CHAT_NAME.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    fs.writeFileSync(path.join(credentials, `${slug}-agent-token`), 'session-token\n');
+  }
   fs.writeFileSync(log, '');
   fs.writeFileSync(body, '# Summary for non-engineers\nReview this fix.\nWhat went wrong\nWhat changes\nWhat you will see\nWatch out for\n');
   for (const command of ['git', 'gh', 'hypertask', 'vcc']) {
@@ -42,7 +49,7 @@ esac
   const result = spawnSync('bash', [script, env.TICKET || 'HTPR-6706', 'BUGFIX', 'Keep PR handoffs in review', '--body-file', body, ...args], {
     encoding: 'utf8',
     timeout: 10_000,
-    env: { ...process.env, PATH: `${root}:${process.env.PATH}`, COMMAND_LOG: log, BOARD_SECTION: 'AI Review', OPEN_PR_ROOT: path.resolve(__dirname, '..'), SHIP_SESSION_NAME: 'HT Pstack Boss', ...env },
+    env: { ...process.env, PATH: `${root}:${process.env.PATH}`, COMMAND_LOG: log, BOARD_SECTION: 'AI Review', OPEN_PR_ROOT: path.resolve(__dirname, '..'), SHIP_SESSION_NAME: CHAT_NAME, VCC_SESSION_CREDENTIALS_DIR: credentials, ...extraEnv },
   });
   assert.ifError(result.error);
   return { ...result, commands: fs.readFileSync(log, 'utf8').trim().split('\n') };
@@ -84,6 +91,17 @@ for (const lane of ['supervisor-review', 'ht-manager-review']) {
     assert.deepEqual(result.commands, ['']);
   });
 }
+
+test('a chat with no board login of its own is refused before the push', (t) => {
+  const result = runScript(t, [], { NO_LOGIN: '1' });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /HT Pstack Boss has no board login of its own/);
+  assert.match(result.stderr, /ht-pstack-boss-agent-token/);
+  assert.match(result.stderr, /nothing was pushed/);
+  assert.doesNotMatch(result.stdout, /PR opened\./);
+  assert.equal(result.commands.length, 3);
+  assert.ok(!result.commands.some((command) => command.startsWith('git push')));
+});
 
 test('dry run leaves auto-merge off without executing external commands', (t) => {
   const result = runScript(t, ['--dry-run']);
@@ -162,7 +180,7 @@ for (const [who, branch] of [
 ]) {
   test(`${who} is refused a second PR while ${branch} is open`, (t) => {
     const result = runScript(t, [], {
-      SHIP_SESSION_NAME: who,
+      CHAT_NAME: who,
       OPEN_PRS: openPrs({ number: 3712, isDraft: false, headRefName: branch }),
     });
     assert.notEqual(result.status, 0);
@@ -180,7 +198,7 @@ for (const [who, branch] of [
 ]) {
   test(`${who} is not blocked by ${branch}`, (t) => {
     const result = runScript(t, [], {
-      SHIP_SESSION_NAME: who,
+      CHAT_NAME: who,
       OPEN_PRS: openPrs({ number: 3701, isDraft: false, headRefName: branch }),
     });
     assert.equal(result.status, 0, result.stderr);
