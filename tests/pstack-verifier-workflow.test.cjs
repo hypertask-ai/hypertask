@@ -372,6 +372,7 @@ test("a smoke boot that never writes ready records a down preview", (t) => {
   copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(scripts, "pstack-verifier.mjs"));
   copyFileSync(join(root, "scripts/lib/pstack-journeys.cjs"), join(scripts, "lib", "pstack-journeys.cjs"));
   copyFileSync(join(root, "scripts/lib/pstack-compare.cjs"), join(scripts, "lib", "pstack-compare.cjs"));
+  copyFileSync(join(root, "scripts/lib/pstack-ground.cjs"), join(scripts, "lib", "pstack-ground.cjs"));
   symlinkSync(playwrightModules(), join(trusted, "node_modules"));
   writeFileSync(join(scripts, "run-app-smoke-isolated.sh"), "#!/bin/bash\nexit 1\n", { mode: 0o755 });
   const result = spawnSync("bash", [join(root, "scripts/pstack-verifier-job.sh"), trusted, join(dir, "candidate"), work], {
