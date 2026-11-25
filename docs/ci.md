@@ -974,6 +974,8 @@ Verdicts:
 - a change that reaches a screen but whose plan found no user path: the run could not evaluate the change, so the status is error, never FAIL on the change itself.
 - non-app files only, and a `[BUGFIX]` with no app code: PASS+NOTES, no app path.
 
+The drive waits for a known loading state to clear before each screenshot and each text check, bounded at eight seconds. A step captured while the page was still loading carries `page still loading` in its note, and a run whose only failure is that note is unevaluated rather than a failed change.
+
 An identical diff is not an identity: a rebase onto a new base can bring production files the diff never shows, and `git patch-id --stable` ignores whitespace inside a value. Reuse is therefore anchored on the head tree, and the recheck re-runs a green head whose base has moved.
 
 ## Task writer and chip quality baseline
