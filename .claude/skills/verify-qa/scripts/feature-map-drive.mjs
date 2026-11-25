@@ -381,7 +381,7 @@ const featureRuns = {
       await open(page, `/project?id=${SBX}`, 4000);
       const chatButton = page.locator('[aria-label="Open AI chat"]').first();
       if (await chatButton.count()) {
-        await chatButton.click();
+        await chatButton.click({ timeout: 15_000 }).catch(() => null);
         await page.waitForTimeout(3500);
         step("the board sidebar opens AI chat with a composer", (await page.locator("textarea, [contenteditable=true]").count()) > 0, {});
         await shot(page, dir, "chat-board-sidebar-1440x900.png");
