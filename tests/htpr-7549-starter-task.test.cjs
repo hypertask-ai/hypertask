@@ -95,7 +95,7 @@ for (const cliEnabled of [false, true]) {
       : legacy.onboarding;
     assert.equal(task.title, "Connect Hypertask to Claude or ChatGPT");
     assert.equal(task.description, expected);
-    assert.deepEqual(reads, [cliKey]);
+    assert.deepEqual(reads, [key, cliKey]);
     assert.deepEqual(markers, []);
   });
 }
