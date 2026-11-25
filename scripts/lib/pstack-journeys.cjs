@@ -48,6 +48,7 @@ const NOT_A_SCREEN = /^(?:layout|template|error|global-error|not-found|loading|d
 const ROUTE_GROUP = /^\(.*\)$/;
 const CATCH_ALL = /^\[\[\.\.\..*\]\]$|^\[\.\.\..*\]$/;
 const DYNAMIC = /^\[\[?.+?\]\]?$/;
+const SEED_PARAM = { agentid: "{agent}", projectid: "{id}" };
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort();
@@ -120,26 +121,26 @@ function routeSegments(file) {
   return parts.filter((part) => part && !ROUTE_GROUP.test(part));
 }
 
-function seededPath(prefix, boardPath, taskPath) {
+function seededPath(prefix, boardPath, taskPath, optional) {
   const usable = (value) => typeof value === "string" && value.startsWith("/");
-  const fallback = `/${[...prefix, "{id}"].join("/")}`;
-  if (!usable(boardPath) && !usable(taskPath)) return fallback;
-  if (!prefix.length) return usable(boardPath) ? boardPath : taskPath;
+  if (!prefix.length) return usable(boardPath) ? boardPath : usable(taskPath) ? taskPath : "";
   const want = prefix.join("/").toLowerCase();
   for (const value of [taskPath, boardPath]) {
     if (!usable(value)) continue;
     const parts = value.split("?")[0].replace(/^\//, "").toLowerCase().split("/");
     if (parts.length > prefix.length && parts.slice(0, prefix.length).join("/") === want) return value;
   }
-  return fallback;
+  return optional ? `/${prefix.join("/")}` : "";
 }
 
 function appRoute(file, { boardPath = "", taskPath = "" } = {}) {
   if (!APP_ROUTE.test(file) || NOT_A_SCREEN.test(String(file).slice(String(file).lastIndexOf("/") + 1))) return "";
   const parts = [];
   for (const segment of routeSegments(file)) {
-    if (CATCH_ALL.test(segment)) return seededPath(parts, boardPath, taskPath);
-    parts.push(DYNAMIC.test(segment) ? "{id}" : segment);
+    if (CATCH_ALL.test(segment)) return seededPath(parts, boardPath, taskPath, segment.startsWith("[["));
+    const named = DYNAMIC.test(segment) ? SEED_PARAM[segment.replace(/[[\]]/g, "").toLowerCase()] : null;
+    if (DYNAMIC.test(segment) && !named) return "";
+    parts.push(named || segment);
   }
   return `/${parts.join("/")}`;
 }

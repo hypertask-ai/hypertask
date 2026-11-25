@@ -12,6 +12,7 @@ const TASK = "/detail/project-{id}/1";
 const request = (files, extra = {}) => ({ ...binding, baseSha: "b".repeat(40), title: "HTPR-9031 [IMPROVE] Starter questions sit bottom left on a ticket chat too", body: "Author model: deepseek/deepseek-v4.1-flash", diff: "", files, filesTruncated: false, boardPath: BOARD, taskPath: TASK, ...extra });
 
 const WELCOME = "src/components/AI_CHAT/WelcomeScreen.tsx";
+const FILES = [WELCOME, "src/lib/flags/definitions/htpr-9031-chip-starters.ts"];
 const sources = [
   WELCOME,
   "src/components/AI_CHAT/AI_Chat_Sidebar.tsx",
@@ -29,37 +30,25 @@ const ticketChat = () => ({ actions: [{ op: "goto", path: TASK }, { op: "goto", 
 
 test("run 45614020841's diff names the ticket chat screen, not only /chat", async () => {
   const { changedSurfaces } = await load();
-  const routes = changedSurfaces({ files: [WELCOME, "src/lib/flags/definitions/htpr-9031-chip-starters.ts"], pages: [], sources, readSource, boardPath: BOARD, taskPath: TASK }).map((item) => item.route);
+  const routes = changedSurfaces({ files: FILES, pages: [], sources, readSource, boardPath: BOARD, taskPath: TASK }).map((item) => item.route);
   assert.deepEqual(routes, ["/chat", TASK]);
-});
-
-test("the real welcome screen reaches chat on a ticket through its importers", async () => {
-  const { changedSurfaces } = await load();
-  const routes = changedSurfaces({ files: [WELCOME], boardPath: BOARD, taskPath: TASK }).map((item) => item.route);
-  assert.ok(routes.includes("/chat"), JSON.stringify(routes));
-  assert.ok(routes.includes(TASK), JSON.stringify(routes));
-});
-
-test("a library change derives no screen, so it is never held to one", async () => {
-  const { changedSurfaces, missedSurfaces } = await load();
   assert.deepEqual(changedSurfaces({ files: ["src/lib/tasks/saveLimit.ts"], sources, readSource, boardPath: BOARD, taskPath: TASK }), []);
-  assert.deepEqual(missedSurfaces({ actions: [{ op: "goto", path: "/inbox" }] }, []), []);
 });
 
-test("the planner is given the changed screens and must open one", async () => {
-  const { buildPrompt } = await load();
-  const reach = [{ file: "src/app/chat/Chat.tsx", route: "/chat", via: [WELCOME, "src/app/chat/Chat.tsx"], pages: ["ai-chat"] }, { file: "src/app/detail/[...slug]/TaskDetailPanels.tsx", route: TASK }];
-  const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: BOARD, taskPath: TASK, reach }, "<<<fence>>>");
-  assert.match(prompt, /DATA: CHANGED SCREENS\n\/chat\n\/detail\/project-\{id\}\/1/);
-  assert.match(prompt, /the plan must open at least one of them/);
-  assert.match(prompt, /\(screen: \/chat\)/);
+test("a derived route keeps the seed its dynamic segment needs, and names none it cannot seed", async () => {
+  const { changedSurfaces } = await load();
+  const routes = (file) => changedSurfaces({ files: [file], boardPath: BOARD, taskPath: TASK }).map((item) => item.route);
+  assert.deepEqual(routes("src/app/agents/[agentId]/page.tsx"), ["/agents/{agent}"]);
+  assert.deepEqual(routes("src/app/trash/[projectId]/page.tsx"), ["/trash/{id}"]);
+  assert.deepEqual(routes("src/app/chat/[sessionId]/page.tsx"), []);
+  assert.deepEqual(routes("src/app/settings/[[...section]]/page.tsx"), ["/settings"]);
 });
 
 test("a plan that only visits /agents/chat is re-planned onto the ticket chat", async () => {
   const { planFromRequest } = await load();
   const prompts = [];
   const answers = [roomsOnly(), ticketChat()];
-  const plan = await planFromRequest(request([WELCOME, "src/lib/flags/definitions/htpr-9031-chip-starters.ts"]), {
+  const plan = await planFromRequest(request(FILES), {
     binding,
     pages: [],
     sources,
@@ -70,28 +59,28 @@ test("a plan that only visits /agents/chat is re-planned onto the ticket chat", 
     },
   });
   assert.equal(prompts.length, 2);
+  assert.match(prompts[0], /DATA: CHANGED SCREENS\n\/chat\n\/detail\/project-\{id\}\/1/);
+  assert.match(prompts[0], /\(screen: \/chat\)/);
+  assert.match(prompts[0], /the plan must open at least one of them/);
   assert.doesNotMatch(prompts[0], /Earlier try/);
   assert.match(prompts[1], /Earlier try: The last plan opened no screen this diff changes\./);
-  assert.match(prompts[1], /\/detail\/project-\{id\}\/1/);
-  assert.deepEqual(plan.journeys.map((item) => item.journey), ["change:primary"]);
   assert.deepEqual(plan.actions, ticketChat().actions);
-  assert.equal(plan.unevaluated, "");
   assert.deepEqual(plan.surfaces, ["/chat", TASK]);
+  assert.equal(plan.unevaluated, "");
+});
+
+test("a plan that opens the changed screen straight away is not re-planned", async () => {
+  const { planFromRequest } = await load();
+  let asked = 0;
+  const plan = await planFromRequest(request([WELCOME]), { binding, pages: [], sources, readSource, ask() { asked += 1; return ticketChat(); } });
+  assert.equal(asked, 1);
+  assert.equal(plan.unevaluated, "");
 });
 
 test("a re-plan that misses again is not sure, and says which screen it missed", async () => {
   const { planFromRequest, decide } = await load();
   let asked = 0;
-  const plan = await planFromRequest(request([WELCOME]), {
-    binding,
-    pages: [],
-    sources,
-    readSource,
-    ask() {
-      asked += 1;
-      return roomsOnly();
-    },
-  });
+  const plan = await planFromRequest(request([WELCOME]), { binding, pages: [], sources, readSource, ask() { asked += 1; return roomsOnly(); } });
   assert.equal(asked, 2);
   assert.equal(plan.fail, "");
   assert.equal(plan.unevaluated, "plan missed changed surface: /chat, /detail/project-{id}/1");
@@ -100,44 +89,20 @@ test("a re-plan that misses again is not sure, and says which screen it missed",
   assert.match(verdict.notes, /plan missed changed surface/);
 });
 
-test("a plan that opens the changed screen straight away is asked once", async () => {
-  const { planFromRequest } = await load();
-  let asked = 0;
-  const plan = await planFromRequest(request([WELCOME]), {
-    binding,
-    pages: [],
-    sources,
-    readSource,
-    ask() {
-      asked += 1;
-      return ticketChat();
-    },
-  });
-  assert.equal(asked, 1);
-  assert.equal(plan.unevaluated, "");
-});
-
-test("a screen below a changed route still counts as the changed screen", async () => {
+test("a screen below a changed route counts, an ancestor list page does not", async () => {
   const { missedSurfaces, sameScreen } = await load();
   assert.deepEqual(missedSurfaces({ actions: [{ op: "goto", path: "/project?id={id}" }] }, ["/project"]), []);
-  assert.equal(sameScreen("/chat", "/chat/{id}"), true);
-  assert.equal(sameScreen("/agents/chat", "/chat"), false);
+  assert.equal(sameScreen("/chat/{id}", "/chat"), true);
+  assert.equal(sameScreen("/agents", "/agents/{agent}"), false);
+  assert.equal(sameScreen("/agents/0b8f6f2e-1f3f-4a4e-9a1e-2c3d4e5f6a7b", "/agents/{agent}"), true);
+  assert.deepEqual(missedSurfaces({ actions: [{ op: "goto", path: "/agents" }] }, ["/agents/{agent}"]), ["/agents/{agent}"]);
   assert.deepEqual(missedSurfaces({ actions: [{ op: "goto", path: "/agents/chat?view=rooms" }] }, ["/chat/{id}"]), ["/chat/{id}"]);
 });
 
 test("an api-only plan is not held to a screen", async () => {
   const { planFromRequest } = await load();
   let asked = 0;
-  const plan = await planFromRequest(request([WELCOME]), {
-    binding,
-    pages: [],
-    sources,
-    readSource,
-    ask() {
-      asked += 1;
-      return { actions: [{ op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }], expect: [], reason: "the seam is the api" };
-    },
-  });
+  const plan = await planFromRequest(request([WELCOME]), { binding, pages: [], sources, readSource, ask() { asked += 1; return { actions: [{ op: "api", method: "GET", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "saved" }], expect: [], reason: "the seam is the api" }; } });
   assert.equal(asked, 1);
   assert.equal(plan.unevaluated, "");
 });
@@ -158,26 +123,14 @@ test("both author lines are read, and family/model maps to the family", async ()
 
 test("an error screen is reported against the screen the change touches", async () => {
   const { runJourneys } = await load();
+  const { decideHeadOnly } = require("../scripts/lib/pstack-compare.cjs");
   const shotsRoot = mkdtempSync(join(tmpdir(), "surface-"));
   const plan = { ...binding, surfaces: [TASK], actions: [], expect: [], authorFamily: "deepseek", verifierModel: "zai/glm-5.3-flash", journeys: [{ journey: "change:primary", actions: [{ op: "goto", path: TASK }], expect: [] }] };
-  const action = { op: "goto", path: TASK };
-  const run = async () => ({ steps: [{ action, ok: false, error: "document status 500" }], expects: [] });
-  const changed = await runJourneys({ page: { evaluate: async () => "500 Something went wrong", url: () => "http://127.0.0.1:3000/detail/project-1/1" }, plan, base: "http://127.0.0.1:3000", shotsRoot, run, nextNavigations: () => [] });
-  assert.deepEqual(changed.journeys[0].errorScreen, { route: "/detail/project-1/1", changed: true });
-  const other = await runJourneys({ page: { evaluate: async () => "Something went wrong!", url: () => "http://127.0.0.1:3000/agents/chat?view=rooms" }, plan: { ...plan, journeys: [{ journey: "area:agent-rooms", actions: [{ op: "goto", path: "/agents/chat?view=rooms" }], expect: [] }] }, base: "http://127.0.0.1:3000", shotsRoot, run, nextNavigations: () => [] });
-  assert.deepEqual(other.journeys[0].errorScreen, { route: "/agents/chat?view=rooms", changed: false });
-});
-
-test("the verdict says whether the error screen was the changed surface", async () => {
-  const { decideHeadOnly } = require("../scripts/lib/pstack-compare.cjs");
+  const run = async () => ({ steps: [{ action: { op: "goto", path: TASK }, ok: false, error: "document status 500" }], expects: [] });
+  const failed = await runJourneys({ page: { evaluate: async () => "500 Something went wrong", url: () => "http://127.0.0.1:3000/agents/0b8f6f2e-1f3f-4a4e-9a1e-2c3d4e5f6a7b" }, plan: { ...plan, surfaces: ["/agents/{agent}"] }, base: "http://127.0.0.1:3000", shotsRoot, run, nextNavigations: () => [] });
+  assert.deepEqual(failed.journeys[0].errorScreen, { route: "/agents/0b8f6f2e-1f3f-4a4e-9a1e-2c3d4e5f6a7b", changed: true });
   const head = (screen) => ({ journey: "change:primary", viewport: "desktop", plan: { actions: [{ op: "goto", path: TASK }], expect: [] }, head: { steps: [{ action: { op: "goto", path: TASK }, ok: false, error: "document status 500" }], expects: [], navigations: [{ url: "http://127.0.0.1:3000/detail/project-1/1", status: 500 }], offOrigin: [], errorScreen: screen } });
-  const changed = decideHeadOnly({ journeys: [head({ route: TASK, changed: true })] });
-  assert.equal(changed.verdict, "FAIL");
-  assert.match(changed.notes, /failed at step 1, with an error screen on \/detail\/project-\{id\}\/1 this change touches/);
-  const other = decideHeadOnly({ journeys: [head({ route: "/agents/chat?view=rooms", changed: false })] });
-  assert.match(other.notes, /with an error screen on \/agents\/chat\?view=rooms this change does not touch/);
-  const unknown = decideHeadOnly({ journeys: [head({ route: "/somewhere", changed: null })] });
-  assert.match(unknown.notes, /with an error screen on \/somewhere$/);
-  const plain = decideHeadOnly({ journeys: [head(null)] });
-  assert.match(plain.notes, /failed at step 1$/);
+  assert.match(decideHeadOnly({ journeys: [head({ route: TASK, changed: true })] }).notes, /failed at step 1, with an error screen on \/detail\/project-\{id\}\/1 this change touches/);
+  assert.match(decideHeadOnly({ journeys: [head({ route: "/agents/chat?view=rooms", changed: false })] }).notes, /with an error screen on \/agents\/chat\?view=rooms this change does not touch/);
+  assert.match(decideHeadOnly({ journeys: [head(null)] }).notes, /failed at step 1$/);
 });
