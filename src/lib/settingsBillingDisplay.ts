@@ -1,5 +1,10 @@
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
-import { teamCompPlan } from "@/lib/teamComp";
+import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
+import {
+  pickEntitlingSubscriptionRow,
+  subscriptionStatusGrantsAccess,
+} from "@/lib/subscriptionAccess";
+import { applyTeamComp, teamCompPlan } from "@/lib/teamComp";
 import type { ITeam } from "@/models/model";
 
 export const COMPED_BILLING_CYCLE = "Comped";
@@ -27,19 +32,29 @@ export function settingsBillingDisplay(
   billing: TeamBillingSnapshot | null | undefined
 ): SettingsBillingDisplay {
   const comp = teamCompPlan(team);
-  const compDrivesPlan = comp !== null && billing?.storePlanId === comp;
-  const comped =
-    compDrivesPlan ||
-    (billing != null &&
-      billing.storePlanId !== "Free" &&
-      billing.billingInterval === null);
+  const row = pickEntitlingSubscriptionRow(
+    team?.subscriptionPlan,
+    team?.activeSubscriptionPlanId
+  );
+  const paid = subscriptionStatusGrantsAccess(row?.subscriptionStatus)
+    ? planKindFromStripePriceId(row?.priceId)
+    : null;
+  const paidPlan = paid?.storePlanId ?? "Free";
+  const compLoses = applyTeamComp(team, paidPlan) === paidPlan;
+  const plan = billing?.storePlanId ?? applyTeamComp(team, paidPlan);
+  const billedInterval = billing
+    ? billing.billingInterval
+    : compLoses
+      ? paid?.billingInterval ?? null
+      : null;
+  const comped = plan !== "Free" && billedInterval === null;
   return {
     billingCycle: comped
       ? COMPED_BILLING_CYCLE
-      : billing?.billingInterval ?? "Free Plan",
+      : billedInterval ?? "Free Plan",
     comped,
     compedUntil:
-      compDrivesPlan && team?.compedUntil ? new Date(team.compedUntil) : null,
-    plan: comped && comp ? comp : billing?.storePlanId ?? "Free",
+      comped && comp && team?.compedUntil ? new Date(team.compedUntil) : null,
+    plan,
   };
 }

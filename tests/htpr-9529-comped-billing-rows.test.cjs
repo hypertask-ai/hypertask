@@ -20,6 +20,7 @@ const expectedDate = (seconds) =>
 
 let team, dom, mounted, billingData, compedRows;
 const { deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
+const { settingsBillingDisplay } = loadModule("src/lib/settingsBillingDisplay.ts");
 const { default: BillingSection } = loadModule("src/components/Modals/Settings/BillingSection.tsx", {
   "@/components/Modals/OptionPicker": { default: () => null },
   "@/hooks/useFlag": { useFlag: (key) => (key === COMPED_ROWS_FLAG ? compedRows : false) },
@@ -247,4 +248,22 @@ test("a paid Pro team keeps its subscription rows", async () => {
   assert.equal(actionRowValue("Invoice total"), "$20.00");
   assert.equal(document.querySelector('a[href="https://stripe.test/invoice"]').textContent, "View");
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
+});
+
+test("a comped team keeps its comp before the billing snapshot loads", () => {
+  const comped = settingsBillingDisplay(
+    { id: "team_comped", compedPlan: "Pro", compedUntil, subscriptionPlan: [] },
+    null
+  );
+  assert.equal(comped.plan, "Pro");
+  assert.equal(comped.comped, true);
+  assert.equal(comped.billingCycle, "Comped");
+
+  const paying = settingsBillingDisplay(
+    subscribed(),
+    null
+  );
+  assert.equal(paying.plan, "Pro");
+  assert.equal(paying.comped, false);
+  assert.equal(paying.billingCycle, "month");
 });
