@@ -327,6 +327,7 @@ docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${c
   "${database_client_mounts[@]}" \
   -e CORE_SMOKE_APP_ROOT=/trusted \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
+  -e CORE_SMOKE_FLAG_KEYS="${CORE_SMOKE_FLAG_KEYS:-}" \
   -v "$state:/state" \
   "$runtime_image" timeout --signal=KILL 2m node /trusted/scripts/seed-core-actions-smoke.mjs
 
