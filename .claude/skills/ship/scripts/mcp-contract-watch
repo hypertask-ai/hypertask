@@ -395,8 +395,8 @@ def board_writer(env):
     identity = env.get('MCP_CONTRACT_WATCH_IDENTITY', str(HOME / '.agents/skills/ship/scripts/ship-identity'))
     code, output = command([identity], env, timeout=5)
     fields = output.strip().split('\t')
-    # Only agent identities write to the board: the dedicated watcher login, else the shared Valentins Claude Code agent.
-    return code == 0 and len(fields) == 2 and fields[0] in ('MCP Contract Watcher', 'Valentins Claude Code') and Path(fields[1]).is_file()
+    # Only the watcher's own dedicated login writes to the board; the shared Valentins Claude Code agent never does (HTPR-9710).
+    return code == 0 and len(fields) == 2 and fields[0] == 'MCP Contract Watcher' and Path(fields[1]).is_file()
 
 
 def unfinished(incident):

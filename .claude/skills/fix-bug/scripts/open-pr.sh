@@ -186,7 +186,8 @@ preflight() {
 owner_name() {  # who this session is, the way the rest of the repo names it
   local name=${SHIP_SESSION_NAME:-}
   if [ -z "$name" ]; then
-    name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity" 2>/dev/null | cut -f1) || return 1
+    name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity") || return 1
+    name=${name%%$'\t'*}
   fi
   printf '%s' "${name%% | *}"
 }

@@ -37,7 +37,10 @@ log = home / 'commands.jsonl'
 with log.open('a') as out:
     out.write(json.dumps(dict(name=name, args=args, id=os.environ.get('RUNNER_DELIVER_ID'))) + '\n')
 if name == 'ship-identity':
-    print(('RUNNER 5' if fixture.get('wrong_identity') else 'MCP Contract Watcher') + '\t' + str(home / 'report-token'))
+    if fixture.get('shared_identity'):
+        print('Valentins Claude Code\t' + str(home / 'report-token'))
+    else:
+        print(('RUNNER 5' if fixture.get('wrong_identity') else 'MCP Contract Watcher') + '\t' + str(home / 'report-token'))
     sys.exit(0)
 if name == 'runner-deliver':
     assert args == ['ht-product-lead']
@@ -775,7 +778,11 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(self.h.records('bugs.json'), [])
         self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
         self.assertEqual(self.h.state()['create_state'], 'pending')
-        self.h.fixture['wrong_identity'] = False
+        self.h.fixture.update(wrong_identity=False, shared_identity=True)
+        self.h.run()
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assertEqual(self.h.state()['create_state'], 'pending')
+        self.h.fixture['shared_identity'] = False
         self.h.run()
         self.assertEqual(len(self.h.records('bugs.json')), 1)
 
