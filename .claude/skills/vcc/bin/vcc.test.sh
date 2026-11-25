@@ -48,6 +48,10 @@ mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/usr/bin/env bash
 printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
+if [ "${VCC_TEST_REFUSE_IDENTITY:-}" = 1 ]; then
+  printf 'ship-identity: Fixture has no board login of its own; refusing to write as Valentins Claude Code. Add %s/.config/hypertask-agents/credentials/sessions/fixture-agent-token for this chat.\n' "$HOME" >&2
+  exit 3
+fi
 if [ "${1:-}" = --name ]; then
   if [ "${VCC_TEST_LEGACY_NAME:-}" = 1 ]; then
     printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
@@ -164,6 +168,12 @@ grep -q 'did not report the session name' "$T/err" || fail "legacy login script 
 login_refused env HOME="$T/no-identity" bash "$vcc" comment add X-1 --text hi
 grep -q 'is missing; refusing to write as Valentins Claude Code' "$T/err" || fail "missing login lookup message unclear: $(cat "$T/err")"
 printf 'ok a named session without its own login is refused\n'
+run env VCC_TEST_REFUSE_IDENTITY=1 bash "$vcc" comment add X-1 --text hi
+[ "$status" = 2 ] || fail "a refusing ship-identity was not refused by vcc ($status): $(cat "$T/err")"
+grep -qF "$HOME/.config/hypertask-agents/credentials/sessions/fixture-agent-token" "$T/err" || fail "vcc hid the token file the chat needs: $(cat "$T/err")"
+tail -n 1 "$T/err" | grep -q '^vcc: ' || fail "vcc did not refuse in its own voice: $(cat "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'a chat with no board login reached the board'
+printf 'ok a chat with no board login of its own is refused before any write\n'
 printf ' \n\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
 [ "$status" = 2 ] || fail 'empty board login was not refused'

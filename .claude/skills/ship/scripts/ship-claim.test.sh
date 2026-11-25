@@ -274,9 +274,16 @@ grep -q '^task assign HYCI-30 --self' "$D/log" && grep -q '^task move HYCI-30 --
 out=$(SHIP_CLAIM_GH=$D/hold-gh HOLD_OPEN='[]' SHIP_CLAIM_HYPERTASK=$D/hold-ht HOLD_BOARD=$D/board.json ./ship-claim hold HYCI-30 2>&1); rc=$?
 [[ $out != *'usage: ship-claim hold'* ]] && ok "hold reads a CI ticket" || bad "hold refused a CI ticket: $out"
 
-# A board that refuses the member names the board and the member, and writes nothing else.
+# A chat with no board login of its own is refused before it can name a member.
 mk
 : > "$D/log"; out=$(FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
+eq "a chat with no login refuses the member refusal" "$rc" 2
+[[ $out == *"cannot read this chat's board login"* ]] && ok "no-login refusal says why" || bad "unclear no-login refusal: $out"
+grep -qE '^(comment|activity) add |^task move ' "$D/log" && bad "a chat with no login published a claim" || ok "a chat with no login writes nothing"
+
+# A board that refuses the member names the board and the member, and writes nothing else.
+mk
+: > "$D/log"; out=$(SHIP_SESSION_NAME='CI Boss' FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
 eq "member refusal stops the claim" "$rc" 4
 [[ $out == *'board 11514 (Fleet CI & Infra)'* && $out == *'does not list member'* ]] \
   && ok "refusal names the board and the missing member" || bad "unclear refusal: $out"

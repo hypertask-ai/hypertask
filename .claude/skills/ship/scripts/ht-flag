@@ -100,11 +100,10 @@ if [ "$dry_run" = true ]; then
   exit 0
 fi
 
-TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-IDENTITY='Valentins Claude Code'
-if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
-  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
-fi
+SHIP_IDENTITY="$HOME/.agents/skills/ship/scripts/ship-identity"
+[ -x "$SHIP_IDENTITY" ] || fail "$SHIP_IDENTITY is missing; refusing to switch a flag as another identity"
+resolved=$("$SHIP_IDENTITY") || fail 'this chat has no board login of its own; refusing to switch a flag as another identity'
+TOKEN_FILE=${resolved#*$'\t'}
 [ -r "$TOKEN_FILE" ] || fail 'agent identity credential is unavailable'
 token=$(cat "$TOKEN_FILE")
 [[ $token =~ ^[A-Za-z0-9._-]+$ ]] || fail 'invalid agent identity credential'
