@@ -20,7 +20,13 @@ export async function waitForProdHealthGate({ eventName, repo, sha, token, budge
   }
   return unread ? { ok: false, unreadable: true, reason: unread } : { ok: false, unreadable: false, reason: `prod-health did not conclude for ${sha} within budget` }
 }
+export const gateOutcome = (res) => res.ok
+  ? { level: 'info', code: 0, message: res.reason }
+  : { level: 'error', code: 1, message: `Mobile verification did not run: ${res.reason}` }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const res = await waitForProdHealthGate({ eventName: process.env.EVENT_NAME || process.env.GITHUB_EVENT_NAME || '', repo: process.env.GITHUB_REPOSITORY || '', sha: process.env.SHA || process.env.GITHUB_SHA || '', token: process.env.GITHUB_TOKEN || '', budgetMs: Number(process.env.GATE_BUDGET_SECONDS || 1980) * 1000, pollMs: Number(process.env.GATE_POLL_SECONDS || 20) * 1000, maxPolls: Number(process.env.GATE_MAX_POLLS || 1000) })
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ok=${res.ok}\nreason=${res.reason}\n`); if (res.unreadable) { console.error(`::error::${res.reason}`); process.exit(1) } else console.log(res.ok ? res.reason : `::warning::Mobile verification skipped: ${res.reason}`)
+  const outcome = gateOutcome(res)
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ok=${res.ok}\nreason=${res.reason}\n`)
+  console[outcome.code ? 'error' : 'log'](`::${outcome.level}::${outcome.message}`)
+  process.exit(outcome.code)
 }

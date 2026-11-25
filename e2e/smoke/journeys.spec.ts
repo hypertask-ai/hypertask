@@ -72,7 +72,7 @@ test(`open task`, { tag: [idTag('open-task'), '@mobile'] }, async ({ page, reque
 test(`switch boards`, { tag: [idTag('switch-boards'), '@mobile'] }, async ({ page, request }) => {
   const board = requireBoard()
   const { teams } = await fetchBootstrapWithTeams(request)
-  const other = teams.flatMap((t) => t.projects).find((p) => p.id !== board.projectId)
+  const fixture = Number(new URL(process.env.SMOKE_BOARD_PATH ?? 'http://localhost', 'http://localhost').searchParams.get('id')), other = teams.flatMap((t) => t.projects).filter((p) => p.id !== board.projectId).sort((a, b) => (a.id === fixture ? -1 : b.id === fixture ? 1 : a.id - b.id))[0]
   test.skip(!other, 'account has no other board to switch to besides "QA runner board"')
 
   const openBoard = async (projectId: number) => {
@@ -325,10 +325,10 @@ test(`ai chat replies`, { tag: [idTag('ai-chat'), '@mobile'] }, async ({ page })
   else await page.keyboard.press('Enter')
 
   const delivered = page.locator('.submessage-container.delivered [data-chat-content-html]')
-  await expect(delivered, 'no AI reply arrived within the timeout').toHaveCount(2, { timeout: 45_000 })
-  const text = (await delivered.last().innerText()).trim()
-  expect(text.length, 'AI reply was empty').toBeGreaterThan(0)
-  expect(text, 'last message is the prompt, not an AI reply').not.toBe(prompt)
+  await expect.poll(async () => {
+    const texts = (await delivered.allInnerTexts()).map((entry) => entry.trim()).filter(Boolean), at = texts.lastIndexOf(prompt)
+    return at >= 0 && texts.length > at + 1 && texts[at + 1] !== prompt
+  }, { message: 'a delivered AI reply never followed the prompt', timeout: 45_000 }).toBe(true)
 })
 
 test(`plan shows correctly`, { tag: [idTag('plan-check')] }, async ({ page }) => {
