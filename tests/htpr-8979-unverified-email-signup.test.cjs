@@ -119,6 +119,9 @@ function memoryRedis() {
     async get(key) {
       return values.get(key) ?? null
     },
+    async mget(...keys) {
+      return keys.map((key) => values.get(key) ?? null)
+    },
   }
 }
 
@@ -138,6 +141,7 @@ test('confirming the address ends the earlier sign-in and keeps a later one', as
   const session = load('src/lib/auth/session.ts')
   const revocation = load('src/lib/auth/sessionRevocation.ts', {
     '@/lib/redis': { getRedis: async () => redis },
+    react: require('react'),
   })
 
   const earlierSignIn = await atOffset(-600, async () => session.signSession({ id: 6, email: 'signup@example.com' }))
@@ -155,6 +159,7 @@ test('another account keeps its sign-in when one account confirms', async () => 
   const session = load('src/lib/auth/session.ts')
   const revocation = load('src/lib/auth/sessionRevocation.ts', {
     '@/lib/redis': { getRedis: async () => redis },
+    react: require('react'),
   })
 
   const otherAccount = await atOffset(-600, async () => session.signSession({ id: 7, email: 'teammate@example.com' }))
@@ -173,8 +178,12 @@ test('ending the earlier sessions reports failure when the store refuses', async
         async get() {
           throw new Error('redis unavailable')
         },
+        async mget() {
+          throw new Error('redis unavailable')
+        },
       }),
     },
+    react: require('react'),
   })
 
   assert.equal(await revocation.revokeOtherUserSessions(6), false)

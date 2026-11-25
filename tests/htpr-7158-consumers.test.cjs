@@ -36,13 +36,13 @@ async function harness(state) {
   const store = new Map()
   const events = []
   const redis = {
-    get: async (key) => {
+    mget: async (...keys) => {
       if (state === 'outage') throw new Error('fake outage')
-      return store.get(key) ?? null
+      return keys.map((key) => store.get(key) ?? null)
     },
     set: async (key, value) => { store.set(key, value); return 'OK' },
   }
-  const dependencies = { '@/lib/auth/session': session, '@/lib/redis': { getRedis: async () => redis } }
+  const dependencies = { '@/lib/auth/session': session, '@/lib/redis': { getRedis: async () => redis }, react: require('react') }
   const revocation = load('src/lib/auth/sessionRevocation.ts', dependencies)
   if (state === 'revoked') await load('src/lib/auth/sessionRevocation.ts', dependencies).revokeSessionToken(token)
   const values = { ht_session: token, nookies_user: JSON.stringify({ id: 7 }) }
