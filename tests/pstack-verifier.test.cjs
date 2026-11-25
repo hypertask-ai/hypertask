@@ -147,6 +147,111 @@ for (const [number, pull] of Object.entries(authorPulls)) {
   });
 }
 
+const refreshed3829 = authorPulls[3829];
+const refreshHead = "e679f41f205aefeeb0b44c2373da38069de4e9ca";
+const refreshBase = "cc3556d779545616630573e9d5b894fb990da608";
+const refreshMerge = {
+  sha: refreshHead,
+  author: { login: "hypertask-runners[bot]" },
+  committer: { login: "web-flow" },
+  parents: [{ sha: refreshed3829.commits[0].sha }, { sha: refreshBase }],
+  commit: { message: "Merge branch 'production' into dependabot/npm_and_yarn/e2e/midscene/engine.io-6.6.13", verification: { verified: true, reason: "valid" } },
+};
+
+test("a Dependabot pull request refreshed by the update-branch API resolves as dependabot[bot]", async () => {
+  const { resolveCommand } = await load();
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  assert.equal(refreshMerge.parents[0].sha, refreshed3829.commits.at(-1).sha);
+  assert.equal(refreshMerge.parents[0].sha, refreshed3829.headSha);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pv-refresh-"));
+  const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", WORK: dir, GITHUB_OUTPUT: path.join(dir, "output") });
+  const resolve = async ({ commits = [refreshed3829.commits[0], refreshMerge], login = "dependabot[bot]", body = refreshed3829.body, files = refreshed3829.files, baseSha = refreshBase, onBase = [refreshBase], commitsUnreadable = false } = {}) => {
+    fs.rmSync(path.join(dir, "request"), { recursive: true, force: true });
+    fs.writeFileSync(process.env.GITHUB_OUTPUT, "");
+    const calls = [];
+    const pull = { number: 3829, state: "open", draft: false, user: { login }, title: "Bump engine.io from 6.6.9 to 6.6.13 in /e2e/midscene", body, base: { ref: "production", sha: baseSha }, head: { sha: refreshHead, repo: { full_name: "hypertask-ai/hypertask" } }, commits: commits.length };
+    await resolveCommand({
+      event: { workflow_run: { conclusion: "success", head_sha: refreshHead, pull_requests: [{ number: 3829 }] } },
+      gh: (args) => {
+        calls.push(args.join(" "));
+        const url = args.join(" ");
+        if (url.includes("/pulls/3829/commits")) {
+          if (commitsUnreadable) return "{}";
+          return JSON.stringify(args.includes("--slurp") ? [commits] : commits);
+        }
+        if (url.includes("/compare/")) {
+          const sha = /compare\/([0-9a-f]{40})\.\.\.([0-9a-f]{40})/.exec(url)?.[1];
+          return JSON.stringify({ status: onBase.includes(sha) ? "identical" : "diverged" });
+        }
+        if (url.includes("/pulls/3829/files")) return files.map((filename) => JSON.stringify({ filename })).join("\n");
+        if (url.includes("vnd.github.diff")) return "";
+        if (url.includes("/pulls/3829")) return JSON.stringify(pull);
+        if (url.includes(`/commits/${refreshHead}`)) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+        if (url.includes("/issues/3829/comments")) return "[]";
+        throw new Error(url);
+      },
+    });
+    const output = fs.readFileSync(process.env.GITHUB_OUTPUT, "utf8");
+    const requestPath = path.join(dir, "request/request.json");
+    return { calls, output, request: fs.existsSync(requestPath) ? JSON.parse(fs.readFileSync(requestPath, "utf8")) : null };
+  };
+  try {
+    const live = await resolve();
+    assert.match(live.output, /stop=false/);
+    assert.equal(live.request.botLogin, "dependabot[bot]");
+    assert.equal(live.request.author, "");
+    assert.equal(live.calls.filter((call) => call.includes("/compare/")).length, 1);
+    const plain = await resolve({ commits: [{ ...refreshed3829.commits[0], sha: refreshHead }] });
+    assert.match(plain.output, /stop=false/);
+    assert.equal(plain.request.botLogin, "dependabot[bot]");
+    assert.equal(plain.calls.filter((call) => call.includes("/compare/")).length, 0);
+    const advanced = await resolve({ onBase: ["a".repeat(40)] });
+    assert.match(advanced.output, /stop=true/);
+    assert.equal(advanced.request, null);
+    assert.match(advanced.output, /mark=failure/);
+    assert.match(advanced.output, /description=FAIL: author model unknown/);
+    for (const [name, patch] of [
+      ["unsigned refresh merge", { commit: { message: refreshMerge.commit.message, verification: { verified: false, reason: "unsigned" } } }],
+      ["refresh merge committed by an app instead of GitHub", { committer: { login: "hypertask-runners[bot]" } }],
+      ["refresh merge authored by a person", { author: { login: "valentinyeo" } }],
+      ["refresh merge authored by an agent account", { author: { login: "codex" } }],
+      ["refresh merge with one parent", { parents: [{ sha: refreshBase }] }],
+      ["refresh merge from a branch that is not on production", { parents: [{ sha: refreshed3829.commits[0].sha }, { sha: "b".repeat(40) }] }],
+    ]) {
+      const spoofed = await resolve({ commits: [refreshed3829.commits[0], { ...refreshMerge, ...patch }] });
+      assert.match(spoofed.output, /stop=true/, name);
+      assert.equal(spoofed.request, null, name);
+      assert.match(spoofed.output, /description=FAIL: author model unknown/, name);
+    }
+    const unsignedBump = await resolve({ commits: [{ ...refreshed3829.commits[0], commit: { ...refreshed3829.commits[0].commit, verification: { verified: false, reason: "unsigned" } } }, refreshMerge] });
+    assert.match(unsignedBump.output, /stop=true/);
+    assert.equal(unsignedBump.request, null);
+    const userPath = await resolve({ files: [...refreshed3829.files, "src/app/page.tsx"] });
+    assert.match(userPath.output, /stop=true/);
+    assert.match(userPath.output, /bot changed a user path/);
+    const unreadable = await resolve({ commitsUnreadable: true });
+    assert.match(unreadable.output, /stop=true/);
+    assert.equal(unreadable.request, null);
+    const agent = await resolve({ login: "valentinyeo", body: refreshed3829.body });
+    assert.match(agent.output, /stop=true/);
+    assert.equal(agent.request, null);
+    assert.match(agent.output, /description=FAIL: author model unknown/);
+    const signedAgent = await resolve({ login: "valentinyeo", body: "Author-Model: codex (gpt-6.1-sol)" });
+    assert.match(signedAgent.output, /stop=false/);
+    assert.equal(signedAgent.request.author, "codex");
+    assert.equal(signedAgent.request.botLogin, undefined);
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 for (const family of ["deepseek", "mystery"]) {
   test(`a PR #3806 update-branch merge cannot veto the body with ${family} trailers`, async () => {
     const { authorFamily } = await load();
