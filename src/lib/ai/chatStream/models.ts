@@ -126,7 +126,7 @@ export function selectModel(
         requestedModel && CLAUDE_MODELS.has(requestedModel)
           ? requestedModel
           : DEFAULT_CLAUDE_MODEL;
-      const directModel = isPlatformAnthropicCredential(byokCredential) ||
+      const directModel = (typeof isPlatformAnthropicCredential === "function" && isPlatformAnthropicCredential(byokCredential)) ||
         (typeof byokCredential === "string" && !isVercelAiGatewayKey(byokCredential))
         ? modelOption?.directModel ?? model
         : model;

@@ -2,25 +2,17 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const vm = require("node:vm");
 const { spawnSync } = require("node:child_process");
-const ts = require("typescript");
 const ai = require("ai");
 const { JSDOM } = require("jsdom");
-const { createJiti } = require("jiti");
+const { loadModule, root } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const load = require("jiti")(__filename, {
-  alias: { "@": path.join(root, "src") },
-  fsCache: false,
-});
-const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
-const providers = load(path.join(root, "src/lib/aiProviders.ts"));
-const ladder = load(path.join(root, "src/lib/systemModelLadder.ts"));
-const policy = load(path.join(root, "src/lib/aiAllowancePolicy.ts"));
-const fallback = load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts"));
-const forcedTeamKey = load(path.join(root, "src/lib/ai/forcedTeamKey.ts"));
-const auto = load(path.join(root, "src/app/api/ai/_lib/autoModel.ts"));
+const catalog = loadModule("src/lib/aiModelOptions.ts");
+const providers = loadModule("src/lib/aiProviders.ts");
+const policy = loadModule("src/lib/aiAllowancePolicy.ts");
+const fallback = loadModule("src/app/api/ai/chat/stream/modelFallback.ts");
+const forcedTeamKey = loadModule("src/lib/ai/forcedTeamKey.ts");
+const auto = loadModule("src/app/api/ai/_lib/autoModel.ts");
 
 const SHARED_KEY = "vck_fixture_shared_gateway";
 const MANAGED_KEY = "vck_fixture_managed_gateway";
@@ -28,6 +20,25 @@ const CUSTOMER_CLAUDE_KEY = "sk-ant-customer-fixture";
 const CUSTOMER_OPENAI_KEY = "sk-openai-customer-fixture";
 const FORCED_OPENAI_KEY = "sk-openai-forced-fixture";
 const PLATFORM_ANTHROPIC_KEY = "sk-ant-platform-fixture";
+
+const ENV_KEYS = [
+  "NODE_ENV",
+  "VERCEL_ENV",
+  "AI_GATEWAY_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "ANTHROPIC_MONTHLY_CREDIT_USD",
+  "ERROR_BOARD_PROJECT_ID",
+];
+
+function saveEnv() {
+  const snapshot = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+  return () => {
+    for (const [key, value] of Object.entries(snapshot)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
 
 function createFakeRedis() {
   const store = new Map();
@@ -56,24 +67,25 @@ function createFakeRedis() {
 function createHarness({
   plan = "Pro",
   comped = false,
+  creditFirstEnabled = true,
   anthropicApiKey = PLATFORM_ANTHROPIC_KEY,
   anthropicSpentUsd = 0,
   anthropicLimitUsd = 200,
   byokRows = {},
   forcedRow = null,
   anthropicError = null,
+  anthropicStreamChunks = null,
   gatewayError = null,
   redis = createFakeRedis(),
-  now = new Date("2026-11-25T10:00:00Z"),
 } = {}) {
-  const env = {
-    NODE_ENV: "production",
-    VERCEL_ENV: "production",
-    AI_GATEWAY_API_KEY: SHARED_KEY,
-    ANTHROPIC_MONTHLY_CREDIT_USD: String(anthropicLimitUsd),
-    ...(anthropicApiKey ? { ANTHROPIC_API_KEY: anthropicApiKey } : {}),
-  };
-  let currentNow = now;
+  const restoreEnv = saveEnv();
+  process.env.NODE_ENV = "production";
+  process.env.VERCEL_ENV = "production";
+  process.env.AI_GATEWAY_API_KEY = SHARED_KEY;
+  process.env.ANTHROPIC_MONTHLY_CREDIT_USD = String(anthropicLimitUsd);
+  if (anthropicApiKey) process.env.ANTHROPIC_API_KEY = anthropicApiKey;
+  else delete process.env.ANTHROPIC_API_KEY;
+
   const providerCalls = [];
   const reportedErrors = [];
   const usageRows = [];
@@ -89,10 +101,7 @@ function createHarness({
       }),
     },
     teamByokApiKey: {
-      findFirst: async ({ where }) => {
-        if (where?.alwaysUse) return forcedRow;
-        return null;
-      },
+      findFirst: async ({ where }) => (where?.alwaysUse ? forcedRow : null),
       findUnique: async ({ where }) => {
         const provider = where.teamId_provider.provider;
         const row = byokRows[provider];
@@ -128,6 +137,16 @@ function createHarness({
     },
     doStream: async (params) => {
       providerCalls.push({ provider: providerName, apiKey, modelId, mode: "stream", params });
+      if (providerName === "anthropic" && anthropicStreamChunks) {
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              for (const chunk of anthropicStreamChunks) controller.enqueue(chunk);
+              controller.close();
+            },
+          }),
+        };
+      }
       if (providerName === "anthropic" && anthropicError) throw anthropicError;
       if (providerName === "gateway" && gatewayError) throw gatewayError;
       return {
@@ -153,74 +172,42 @@ function createHarness({
       tools: { webSearch_20250305: () => ({}), webSearch: () => ({}) },
     });
 
-  const sharedContext = {
-    process: { env },
-    Date: class extends Date {
-      constructor(...args) {
-        super(...(args.length === 0 ? [currentNow.getTime()] : args));
-      }
-      static now() {
-        return currentNow.getTime();
-      }
+  const flagsStub = {
+    isFeatureEnabled: async (key) => {
+      if (key === "htpr-9685-anthropic-credit-first") return creditFirstEnabled;
+      if (key === "htpr-8049-always-use-this-key") return Boolean(forcedRow);
+      return false;
     },
-    performance,
-    setTimeout,
-    clearTimeout,
-    ReadableStream,
-    URL,
-    Error,
-    Math,
-    Number,
-    console: { log() {}, warn() {}, error() {}, info() {} },
   };
 
-  function compile(file, stubs) {
-    const filename = path.join(root, file);
-    const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-    }).outputText;
-    const mod = { exports: {} };
-    vm.runInNewContext(
-      code,
-      {
-        ...sharedContext,
-        module: mod,
-        exports: mod.exports,
-        require: (id) => (Object.hasOwn(stubs, id) ? stubs[id] : require(id)),
-      },
-      { filename },
-    );
-    return mod.exports;
-  }
-
-  const aiFunding = compile("src/app/api/ai/_lib/aiFunding.ts", {
+  const aiFunding = loadModule("src/app/api/ai/_lib/aiFunding.ts", {
     "@ai-sdk/anthropic": { createAnthropic: makeClient("anthropic") },
     "@ai-sdk/openai": { createOpenAI: makeClient("openai") },
     "@openrouter/ai-sdk-provider": { createOpenRouter: makeClient("openrouter") },
     ai: { ...ai, createGateway: makeClient("gateway") },
-    "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/prisma": { default: prisma },
     "@/lib/redis": { getRedis: async () => redis },
     "@/lib/errors/reportError": {
       reportError: async (report) => {
         reportedErrors.push(report);
       },
     },
+    "@/lib/flags": flagsStub,
     "@/lib/aiProviders": providers,
   });
 
-  const planGate = compile("src/app/api/ai/_lib/planGate.ts", {
-    "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/planFromStripePriceId": load(path.join(root, "src/lib/planFromStripePriceId.ts")),
+  const planGate = loadModule("src/app/api/ai/_lib/planGate.ts", {
+    "@/lib/prisma": { default: prisma },
+    "@/lib/planFromStripePriceId": loadModule("src/lib/planFromStripePriceId.ts"),
     "@/lib/internalCompTeams": { isInternalCompTeam: () => false },
     "@/lib/teamComp": { applyTeamComp: (_team, base) => base },
     "@/lib/subscriptionAccess": { pickEntitlingSubscriptionRow: () => null, subscriptionStatusGrantsAccess: () => false },
-    "@/lib/flags/keys": load(path.join(root, "src/lib/flags/keys.ts")),
     "@/lib/aiModelOptions": catalog,
     "@/app/api/ai/_lib/aiFunding": aiFunding,
   });
   planGate.storePlanIdForProject = async () => plan;
 
-  const modelProvider = compile("src/app/api/ai/_lib/modelProvider.ts", {
+  const modelProvider = loadModule("src/app/api/ai/_lib/modelProvider.ts", {
     "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("no network"); } },
     "@vercel/functions": { waitUntil: (promise) => pending.push(promise) },
     "./aiUsage": { logAiUsage: async (row) => usageRows.push(row) },
@@ -241,21 +228,15 @@ function createHarness({
     "@/lib/aiModelOptions": catalog,
     "@/lib/aiProviders": providers,
     "@/lib/aiAllowancePolicy": policy,
-    "@/lib/aiUsageClassification": load(path.join(root, "src/lib/aiUsageClassification.ts")),
-    "@/lib/ai/customEndpoint": load(path.join(root, "src/lib/ai/customEndpoint.ts")),
+    "@/lib/aiUsageClassification": loadModule("src/lib/aiUsageClassification.ts"),
+    "@/lib/ai/customEndpoint": loadModule("src/lib/ai/customEndpoint.ts"),
     "@/app/api/ai/_lib/planGate": planGate,
   });
 
-  const byokKeys = compile("src/app/api/ai/_lib/byokKeys.ts", {
+  const byokKeys = loadModule("src/app/api/ai/_lib/byokKeys.ts", {
     ai,
-    "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags": {
-      isFeatureEnabled: async (key) => key === "htpr-8049-always-use-this-key" && Boolean(forcedRow),
-    },
-    "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" },
-    "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" },
-    "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
-    "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" },
+    "@/lib/prisma": { default: prisma },
+    "@/lib/flags": flagsStub,
     "@/lib/ai/forcedTeamKey": forcedTeamKey,
     "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false },
     "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => value },
@@ -263,7 +244,7 @@ function createHarness({
     "@/app/api/ai/_lib/modelProvider": modelProvider,
     "@/lib/aiModelOptions": catalog,
     "@/lib/aiProviders": providers,
-    "@/lib/ai/customEndpoint": load(path.join(root, "src/lib/ai/customEndpoint.ts")),
+    "@/lib/ai/customEndpoint": loadModule("src/lib/ai/customEndpoint.ts"),
     "@/app/api/ai/_lib/autoModel": auto,
     "@/app/api/ai/_lib/aiFunding": aiFunding,
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
@@ -280,9 +261,7 @@ function createHarness({
     reportedErrors,
     usageRows,
     redis,
-    setNow: (next) => {
-      currentNow = next;
-    },
+    restore: restoreEnv,
     flush: async () => {
       await Promise.all(pending.splice(0));
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -290,14 +269,39 @@ function createHarness({
   };
 }
 
-test("Hypertask-paid Auto always picks the cheapest Claude model for the job and never hits gateway while Anthropic credit remains", async () => {
+test("htpr-9685-anthropic-credit-first flag defaults to Everyone and off keeps legacy gateway routing", async () => {
+  const def = loadModule("src/lib/flags/definitions/htpr-9685-anthropic-credit-first.ts").default;
+  assert.equal(def.key, "htpr-9685-anthropic-credit-first");
+  assert.equal(def.kind, "improvement");
+  assert.equal(def.defaultMode, "EVERYONE");
+
+  const h = createHarness({
+    plan: "Pro",
+    creditFirstEnabled: false,
+    byokRows: { managed_gateway: MANAGED_KEY },
+    anthropicSpentUsd: 0,
+  });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+      trustedTeamId: "team-1",
+      userId: 985,
+    });
+    assert.equal(cred, MANAGED_KEY);
+    assert.equal(h.reportedErrors.length, 0);
+  } finally {
+    h.restore();
+  }
+});
+
+test("Hypertask-paid Auto picks the cheapest Claude model for the job and never hits gateway while Anthropic credit remains", async () => {
   for (const plan of ["Free", "Pro", "AI"]) {
     const taskWriterPick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan });
     assert.equal(taskWriterPick.modelKey, "claude-haiku-5-5", `${plan} taskWriter`);
     const hyperPick = auto.pickAutoModelOption({ feature: "hyperAi", settings: {}, plan });
-    assert.equal(hyperPick.modelKey, "claude-sonnet-5-5", `${plan} hyperAi`);
+    assert.equal(hyperPick.modelKey, plan === "Free" ? "claude-haiku-5-5" : "claude-sonnet-5-5", `${plan} hyperAi`);
     const boardPick = auto.pickAutoModelOption({ feature: "boardGeneration", settings: {}, plan });
-    assert.equal(boardPick.modelKey, plan === "Free" ? "claude-sonnet-5-5" : "claude-opus-5-5", `${plan} boardGeneration`);
+    assert.equal(boardPick.modelKey, plan === "Free" ? "claude-haiku-5-5" : "claude-opus-5-5", `${plan} boardGeneration`);
   }
 
   for (const [label, config] of [
@@ -308,29 +312,33 @@ test("Hypertask-paid Auto always picks the cheapest Claude model for the job and
     ["BYOK included allowance (no own key)", { plan: "BYOK", byokRows: {} }],
   ]) {
     const h = createHarness({ ...config, anthropicSpentUsd: 45, anthropicLimitUsd: 200 });
-    const autoPick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: config.plan });
-    if (config.plan !== "BYOK") assert.ok(autoPick, `${label}: Auto must pick a model`);
-    const pick = autoPick ?? catalog.getAiModelOptionById("claude-haiku-5-5", true);
-    assert.equal(pick.modelKey, "claude-haiku-5-5", label);
+    try {
+      const autoPick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: config.plan });
+      if (config.plan !== "BYOK") assert.ok(autoPick, `${label}: Auto must pick a model`);
+      const pick = autoPick ?? catalog.getAiModelOptionById("claude-haiku-5-5", true);
+      assert.equal(pick.modelKey, "claude-haiku-5-5", label);
 
-    const credential = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
-      trustedTeamId: "team-1",
-      userId: 985,
-    });
-    assert.equal(h.aiFunding.isPlatformAnthropicCredential(credential), true, `${label}: must use platform Anthropic credential`);
-    assert.equal(credential.apiKey, PLATFORM_ANTHROPIC_KEY);
+      const credential = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+        trustedTeamId: "team-1",
+        userId: 985,
+      });
+      assert.equal(h.aiFunding.isPlatformAnthropicCredential(credential), true, `${label}: must use platform Anthropic credential`);
+      assert.equal(credential.apiKey, PLATFORM_ANTHROPIC_KEY);
 
-    const model = h.modelProvider.resolveAiModel(pick.source, pick.model, credential, pick);
-    const result = await model.doGenerate({ prompt: [] });
-    await h.flush();
+      const model = h.modelProvider.resolveAiModel(pick.source, pick.model, credential, pick);
+      const result = await model.doGenerate({ prompt: [] });
+      await h.flush();
 
-    assert.equal(h.providerCalls.length, 1, label);
-    assert.equal(h.providerCalls[0].provider, "anthropic", `${label}: Hypertask-paid Auto call MUST NOT go to gateway while Anthropic credit remains`);
-    assert.equal(h.providerCalls[0].apiKey, PLATFORM_ANTHROPIC_KEY, label);
-    assert.equal(h.providerCalls[0].modelId, "claude-haiku-5-5", label);
-    assert.match(result.content[0].text, /^ok:anthropic:/);
-    assert.equal(h.usageRows[0].provider, "platform:anthropic", label);
-    assert.equal(h.reportedErrors.length, 0, `${label}: no incident when direct Anthropic succeeds`);
+      assert.equal(h.providerCalls.length, 1, label);
+      assert.equal(h.providerCalls[0].provider, "anthropic", `${label}: Hypertask-paid Auto call MUST NOT go to gateway while Anthropic credit remains`);
+      assert.equal(h.providerCalls[0].apiKey, PLATFORM_ANTHROPIC_KEY, label);
+      assert.equal(h.providerCalls[0].modelId, "claude-haiku-5-5", label);
+      assert.match(result.content[0].text, /^ok:anthropic:/);
+      assert.equal(h.usageRows[0].provider, "platform:anthropic", label);
+      assert.equal(h.reportedErrors.length, 0, `${label}: no incident when direct Anthropic succeeds`);
+    } finally {
+      h.restore();
+    }
   }
 });
 
@@ -339,73 +347,85 @@ test("BYOK teams with own Claude key, own OpenAI key, or forced key always use t
     plan: "BYOK",
     byokRows: { claude: CUSTOMER_CLAUDE_KEY },
   });
-  const claudePick = auto.pickAutoModelOption({
-    feature: "taskWriter",
-    settings: {},
-    plan: "BYOK",
-    byokProviderFlags: [{ provider: "claude", enabled: true }],
-  });
-  assert.equal(claudePick.modelKey, "claude-haiku-5-5");
-  const claudeCred = await byokClaude.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(
-    claudePick,
-    [{ provider: "claude", enabled: true }],
-    { trustedTeamId: "team-1", userId: 985 },
-  );
-  assert.equal(claudeCred, CUSTOMER_CLAUDE_KEY);
-  const claudeModel = byokClaude.modelProvider.resolveAiModel("claude", claudePick.directModel, claudeCred, claudePick);
-  await claudeModel.doGenerate({ prompt: [] });
-  await byokClaude.flush();
-  assert.equal(byokClaude.providerCalls[0].provider, "anthropic");
-  assert.equal(byokClaude.providerCalls[0].apiKey, CUSTOMER_CLAUDE_KEY);
-  assert.equal(byokClaude.usageRows[0].provider, "byok:claude");
+  try {
+    const claudePick = auto.pickAutoModelOption({
+      feature: "taskWriter",
+      settings: {},
+      plan: "BYOK",
+      byokProviderFlags: [{ provider: "claude", enabled: true }],
+    });
+    assert.equal(claudePick.modelKey, "claude-haiku-5-5");
+    const claudeCred = await byokClaude.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(
+      claudePick,
+      [{ provider: "claude", enabled: true }],
+      { trustedTeamId: "team-1", userId: 985 },
+    );
+    assert.equal(claudeCred, CUSTOMER_CLAUDE_KEY);
+    const claudeModel = byokClaude.modelProvider.resolveAiModel("claude", claudePick.directModel, claudeCred, claudePick);
+    await claudeModel.doGenerate({ prompt: [] });
+    await byokClaude.flush();
+    assert.equal(byokClaude.providerCalls[0].provider, "anthropic");
+    assert.equal(byokClaude.providerCalls[0].apiKey, CUSTOMER_CLAUDE_KEY);
+    assert.equal(byokClaude.usageRows[0].provider, "byok:claude");
+  } finally {
+    byokClaude.restore();
+  }
 
   const byokOpenAi = createHarness({
     plan: "BYOK",
     byokRows: { openai: CUSTOMER_OPENAI_KEY },
   });
-  const openaiPick = auto.pickAutoModelOption({
-    feature: "aiChat",
-    settings: {},
-    plan: "BYOK",
-    byokProviderFlags: [{ provider: "openai", enabled: true }],
-  });
-  assert.equal(openaiPick.source, "openai");
-  const openaiCred = await byokOpenAi.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(
-    openaiPick,
-    [{ provider: "openai", enabled: true }],
-    { trustedTeamId: "team-1", userId: 985 },
-  );
-  assert.equal(openaiCred, CUSTOMER_OPENAI_KEY);
-  const openaiModel = byokOpenAi.modelProvider.resolveAiModel("openai", openaiPick.model, openaiCred, openaiPick);
-  await openaiModel.doGenerate({ prompt: [] });
-  await byokOpenAi.flush();
-  assert.equal(byokOpenAi.providerCalls[0].provider, "openai");
-  assert.equal(byokOpenAi.providerCalls[0].apiKey, CUSTOMER_OPENAI_KEY);
-  assert.equal(byokOpenAi.usageRows[0].provider, "byok:openai");
+  try {
+    const openaiPick = auto.pickAutoModelOption({
+      feature: "aiChat",
+      settings: {},
+      plan: "BYOK",
+      byokProviderFlags: [{ provider: "openai", enabled: true }],
+    });
+    assert.equal(openaiPick.source, "openai");
+    const openaiCred = await byokOpenAi.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(
+      openaiPick,
+      [{ provider: "openai", enabled: true }],
+      { trustedTeamId: "team-1", userId: 985 },
+    );
+    assert.equal(openaiCred, CUSTOMER_OPENAI_KEY);
+    const openaiModel = byokOpenAi.modelProvider.resolveAiModel("openai", openaiPick.model, openaiCred, openaiPick);
+    await openaiModel.doGenerate({ prompt: [] });
+    await byokOpenAi.flush();
+    assert.equal(byokOpenAi.providerCalls[0].provider, "openai");
+    assert.equal(byokOpenAi.providerCalls[0].apiKey, CUSTOMER_OPENAI_KEY);
+    assert.equal(byokOpenAi.usageRows[0].provider, "byok:openai");
+  } finally {
+    byokOpenAi.restore();
+  }
 
   const forced = createHarness({
     plan: "Pro",
     forcedRow: { provider: "openai" },
     byokRows: { openai: FORCED_OPENAI_KEY, managed_gateway: MANAGED_KEY },
   });
-  const forcedPick = auto.pickAutoModelOption({
-    feature: "aiChat",
-    settings: {},
-    plan: "Pro",
-    forcedProvider: "openai",
-  });
-  assert.equal(forcedPick.source, "openai");
-  const forcedCred = await forced.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(
-    forcedPick,
-    [],
-    { trustedTeamId: "team-1", userId: 985 },
-  );
-  assert.equal(forcedCred, FORCED_OPENAI_KEY);
-  const forcedModel = forced.modelProvider.resolveAiModel("openai", forcedPick.model, forcedCred, forcedPick);
-  await forcedModel.doGenerate({ prompt: [] });
-  await forced.flush();
-  assert.equal(forced.providerCalls[0].provider, "openai");
-  assert.equal(forced.providerCalls[0].apiKey, FORCED_OPENAI_KEY);
+  try {
+    const forcedPick = auto.pickAutoModelOption({
+      feature: "aiChat",
+      settings: {},
+      plan: "Pro",
+      forcedProvider: "openai",
+    });
+    assert.equal(forcedPick.source, "openai");
+    const forcedCred = await forced.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(
+      forcedPick,
+      [],
+      { trustedTeamId: "team-1", userId: 985 },
+    );
+    assert.equal(forcedCred, FORCED_OPENAI_KEY);
+    const forcedModel = forced.modelProvider.resolveAiModel("openai", forcedPick.model, forcedCred, forcedPick);
+    await forcedModel.doGenerate({ prompt: [] });
+    await forced.flush();
+    assert.equal(forced.providerCalls[0].provider, "openai");
+    assert.equal(forced.providerCalls[0].apiKey, FORCED_OPENAI_KEY);
+  } finally {
+    forced.restore();
+  }
 });
 
 test("a specific model picked by the user is respected even when Auto prefers Claude", async () => {
@@ -414,89 +434,145 @@ test("a specific model picked by the user is respected even when Auto prefers Cl
     byokRows: { managed_gateway: MANAGED_KEY },
     anthropicSpentUsd: 10,
   });
-  const pickedOpenAi = catalog.getAiModelOptionById("gpt-6-luna");
-  const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pickedOpenAi, [], {
-    trustedTeamId: "team-1",
-    userId: 985,
-  });
-  assert.equal(cred, MANAGED_KEY);
-  const model = h.modelProvider.resolveAiModel(pickedOpenAi.source, pickedOpenAi.model, cred, pickedOpenAi);
-  await model.doGenerate({ prompt: [] });
-  await h.flush();
-  assert.equal(h.providerCalls[0].provider, "gateway");
-  assert.equal(h.providerCalls[0].modelId, "openai/gpt-6-luna");
-  assert.equal(h.providerCalls[0].apiKey, MANAGED_KEY);
-  assert.equal(h.reportedErrors.length, 0);
+  try {
+    const pickedOpenAi = catalog.getAiModelOptionById("gpt-6-luna");
+    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pickedOpenAi, [], {
+      trustedTeamId: "team-1",
+      userId: 985,
+    });
+    assert.equal(cred, MANAGED_KEY);
+    const model = h.modelProvider.resolveAiModel(pickedOpenAi.source, pickedOpenAi.model, cred, pickedOpenAi);
+    await model.doGenerate({ prompt: [] });
+    await h.flush();
+    assert.equal(h.providerCalls[0].provider, "gateway");
+    assert.equal(h.providerCalls[0].modelId, "openai/gpt-6-luna");
+    assert.equal(h.providerCalls[0].apiKey, MANAGED_KEY);
+    assert.equal(h.reportedErrors.length, 0);
+  } finally {
+    h.restore();
+  }
 });
 
-test("when monthly Anthropic credit is used up, Hypertask-paid calls fall back to gateway, succeed, and file exactly one urgent report per cause per day", async () => {
+test("when monthly Anthropic credit is used up, Hypertask-paid calls fall back to gateway, succeed, and file exactly one urgent report per cause per day", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-11-25T10:00:00Z") });
   const h = createHarness({
     plan: "Pro",
     byokRows: { managed_gateway: MANAGED_KEY },
     anthropicSpentUsd: 200,
     anthropicLimitUsd: 200,
   });
-  const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
 
-  for (let i = 0; i < 3; i += 1) {
-    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+    for (let i = 0; i < 3; i += 1) {
+      const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+        trustedTeamId: "team-1",
+        userId: 985,
+      });
+      assert.equal(cred, MANAGED_KEY);
+      const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+      const result = await model.doGenerate({ prompt: [] });
+      assert.match(result.content[0].text, /^ok:gateway:/);
+    }
+    await h.flush();
+
+    assert.equal(h.providerCalls.length, 3);
+    assert.ok(h.providerCalls.every((call) => call.provider === "gateway"));
+    assert.equal(h.reportedErrors.length, 1, "exactly one report per cause per day");
+    assert.equal(h.reportedErrors[0].urgent, true);
+    assert.equal(h.reportedErrors[0].dedupeSeconds, 86400);
+    assert.equal(h.reportedErrors[0].extra.cause, "anthropic_credit_exhausted");
+    assert.equal(h.reportedErrors[0].extra.anthropicSpentUsd, 200);
+    assert.match(h.reportedErrors[0].message, /\$200\.00/);
+
+    t.mock.timers.setTime(new Date("2026-11-26T01:00:00Z").getTime());
+    const nextDayCred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
       trustedTeamId: "team-1",
       userId: 985,
     });
-    assert.equal(cred, MANAGED_KEY);
-    const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
-    const result = await model.doGenerate({ prompt: [] });
-    assert.match(result.content[0].text, /^ok:gateway:/);
+    assert.equal(nextDayCred, MANAGED_KEY);
+    await h.flush();
+    assert.equal(h.reportedErrors.length, 2, "next UTC day produces one fresh report");
+  } finally {
+    h.restore();
   }
-  await h.flush();
-
-  assert.equal(h.providerCalls.length, 3);
-  assert.ok(h.providerCalls.every((call) => call.provider === "gateway"));
-  assert.equal(h.reportedErrors.length, 1, "exactly one report per cause per day");
-  assert.equal(h.reportedErrors[0].urgent, true);
-  assert.equal(h.reportedErrors[0].dedupeSeconds, 86400);
-  assert.equal(h.reportedErrors[0].extra.cause, "anthropic_credit_exhausted");
-  assert.equal(h.reportedErrors[0].extra.anthropicSpentUsd, 200);
-  assert.match(h.reportedErrors[0].message, /\$200\.00/);
-
-  h.setNow(new Date("2026-11-26T01:00:00Z"));
-  const nextDayCred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
-    trustedTeamId: "team-1",
-    userId: 985,
-  });
-  assert.equal(nextDayCred, MANAGED_KEY);
-  await h.flush();
-  assert.equal(h.reportedErrors.length, 2, "next UTC day produces one fresh report");
 });
 
-test("direct Anthropic runtime error falls back automatically to Vercel Gateway, succeeds for the user, and files one urgent report per day", async () => {
+test("direct Anthropic runtime error falls back automatically to Vercel Gateway, keeps Anthropic spend untouched, and files one urgent report per day", async () => {
   const h = createHarness({
     plan: "Pro",
     byokRows: { managed_gateway: MANAGED_KEY },
     anthropicSpentUsd: 12.5,
     anthropicError: Object.assign(new Error("Anthropic 529 overloaded"), { statusCode: 529 }),
   });
-  const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
 
-  for (let i = 0; i < 2; i += 1) {
+    for (let i = 0; i < 2; i += 1) {
+      const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+        trustedTeamId: "team-1",
+        userId: 985,
+      });
+      assert.equal(h.aiFunding.isPlatformAnthropicCredential(cred), true);
+      const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+      const result = await model.doGenerate({ prompt: [] });
+      assert.match(result.content[0].text, /^ok:gateway:anthropic\/claude-haiku-5\.5$/);
+    }
+    await h.flush();
+
+    assert.equal(h.providerCalls.filter((c) => c.provider === "anthropic").length, 2);
+    assert.equal(h.providerCalls.filter((c) => c.provider === "gateway").length, 2);
+    assert.ok(h.usageRows.every((row) => row.provider === "gateway"), "fallback usage must log as gateway, never platform:anthropic");
+    assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 12.5, "gateway fallback must not consume Anthropic monthly credit");
+    const fundingReports = h.reportedErrors.filter((r) => r.extra?.cause === "anthropic_error");
+    assert.equal(fundingReports.length, 1);
+    assert.equal(fundingReports[0].urgent, true);
+    assert.equal(fundingReports[0].extra.anthropicSpentUsd, 12.5);
+    assert.match(fundingReports[0].message, /HTTP 529 overloaded/);
+  } finally {
+    h.restore();
+  }
+});
+
+test("direct Anthropic stream error after initial metadata chunk falls back seamlessly to Vercel Gateway and reports urgently", async () => {
+  const h = createHarness({
+    plan: "Pro",
+    byokRows: { managed_gateway: MANAGED_KEY },
+    anthropicSpentUsd: 5,
+    anthropicStreamChunks: [
+      { type: "stream-start", warnings: [] },
+      { type: "response-metadata", id: "msg_1" },
+      { type: "error", error: Object.assign(new Error("overloaded_error"), { statusCode: 529 }) },
+    ],
+  });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
     const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
       trustedTeamId: "team-1",
       userId: 985,
     });
-    assert.equal(h.aiFunding.isPlatformAnthropicCredential(cred), true);
     const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
-    const result = await model.doGenerate({ prompt: [] });
-    assert.match(result.content[0].text, /^ok:gateway:anthropic\/claude-haiku-5\.5$/);
-  }
-  await h.flush();
+    const streamed = await model.doStream({ prompt: [] });
+    const reader = streamed.stream.getReader();
+    const chunks = [];
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      chunks.push(next.value);
+    }
+    await h.flush();
 
-  assert.equal(h.providerCalls.filter((c) => c.provider === "anthropic").length, 2);
-  assert.equal(h.providerCalls.filter((c) => c.provider === "gateway").length, 2);
-  const fundingReports = h.reportedErrors.filter((r) => r.extra?.cause === "anthropic_error");
-  assert.equal(fundingReports.length, 1);
-  assert.equal(fundingReports[0].urgent, true);
-  assert.equal(fundingReports[0].extra.anthropicSpentUsd, 12.5);
-  assert.match(fundingReports[0].message, /Anthropic 529 overloaded/);
+    assert.equal(h.providerCalls.filter((c) => c.provider === "anthropic").length, 1);
+    assert.equal(h.providerCalls.filter((c) => c.provider === "gateway").length, 1);
+    assert.ok(chunks.some((c) => c.type === "text-delta" && c.delta.startsWith("ok:gateway:")));
+    assert.equal(h.usageRows[0].provider, "gateway");
+    assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 5);
+    const reports = h.reportedErrors.filter((r) => r.extra?.cause === "anthropic_error");
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].urgent, true);
+  } finally {
+    h.restore();
+  }
 });
 
 test("missing ANTHROPIC_API_KEY falls back to gateway, succeeds, and reports once per day; gateway failure also reports urgently once per cause per day", async () => {
@@ -505,21 +581,25 @@ test("missing ANTHROPIC_API_KEY falls back to gateway, succeeds, and reports onc
     anthropicApiKey: "",
     byokRows: {},
   });
-  const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Free" });
-  for (let i = 0; i < 2; i += 1) {
-    const cred = await missing.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
-      trustedTeamId: "team-1",
-      userId: 985,
-    });
-    assert.equal(cred, SHARED_KEY);
-    const model = missing.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
-    const res = await model.doGenerate({ prompt: [] });
-    assert.match(res.content[0].text, /^ok:gateway:/);
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Free" });
+    for (let i = 0; i < 2; i += 1) {
+      const cred = await missing.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+        trustedTeamId: "team-1",
+        userId: 985,
+      });
+      assert.equal(cred, SHARED_KEY);
+      const model = missing.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+      const res = await model.doGenerate({ prompt: [] });
+      assert.match(res.content[0].text, /^ok:gateway:/);
+    }
+    await missing.flush();
+    const missingReports = missing.reportedErrors.filter((r) => r.extra?.cause === "anthropic_key_missing");
+    assert.equal(missingReports.length, 1);
+    assert.equal(missingReports[0].urgent, true);
+  } finally {
+    missing.restore();
   }
-  await missing.flush();
-  const missingReports = missing.reportedErrors.filter((r) => r.extra?.cause === "anthropic_key_missing");
-  assert.equal(missingReports.length, 1);
-  assert.equal(missingReports[0].urgent, true);
 
   const gatewayDown = createHarness({
     plan: "Pro",
@@ -527,94 +607,77 @@ test("missing ANTHROPIC_API_KEY falls back to gateway, succeeds, and reports onc
     byokRows: { managed_gateway: MANAGED_KEY },
     gatewayError: Object.assign(new Error("Gateway credit balance depleted"), { statusCode: 402 }),
   });
-  for (let i = 0; i < 2; i += 1) {
-    const cred = await gatewayDown.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
-      trustedTeamId: "team-1",
-      userId: 985,
-    });
-    const model = gatewayDown.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
-    await assert.rejects(model.doGenerate({ prompt: [] }), /depleted/);
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+    for (let i = 0; i < 2; i += 1) {
+      const cred = await gatewayDown.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+        trustedTeamId: "team-1",
+        userId: 985,
+      });
+      const model = gatewayDown.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+      await assert.rejects(model.doGenerate({ prompt: [] }), /depleted/);
+    }
+    await gatewayDown.flush();
+    const creditReports = gatewayDown.reportedErrors.filter((r) => r.extra?.cause === "gateway_credit_exhausted");
+    assert.equal(creditReports.length, 1);
+    assert.equal(creditReports[0].urgent, true);
+    const keyMissingReports = gatewayDown.reportedErrors.filter((r) => r.extra?.cause === "anthropic_key_missing");
+    assert.equal(keyMissingReports.length, 1, "separate cause reports independently on the same day");
+  } finally {
+    gatewayDown.restore();
   }
-  await gatewayDown.flush();
-  const creditReports = gatewayDown.reportedErrors.filter((r) => r.extra?.cause === "gateway_credit_exhausted");
-  assert.equal(creditReports.length, 1);
-  assert.equal(creditReports[0].urgent, true);
-  const keyMissingReports = gatewayDown.reportedErrors.filter((r) => r.extra?.cause === "anthropic_key_missing");
-  assert.equal(keyMissingReports.length, 1, "separate cause reports independently on the same day");
 });
 
 test("reportError marks urgent tickets with priorityIndex 1 (Urgent) and dedupes daily even when PostHog captures", async () => {
+  const restoreEnv = saveEnv();
+  process.env.NODE_ENV = "production";
+  process.env.VERCEL_ENV = "production";
+  process.env.ERROR_BOARD_PROJECT_ID = "15";
   const created = [];
   const redis = createFakeRedis();
-  const stubs = {
-    "@/lib/prisma": {
-      __esModule: true,
-      default: {
-        section: { findMany: async () => [{ id: 4389, section_title: "Bugs" }] },
-        label: { findFirst: async () => ({ id: 3 }) },
+  try {
+    const mod = loadModule("src/lib/errors/reportError.ts", {
+      "@/lib/prisma": {
+        default: {
+          section: { findMany: async () => [{ id: 4389, section_title: "Bugs" }] },
+          label: { findFirst: async () => ({ id: 3 }) },
+        },
       },
-    },
-    "@/lib/aiAllowancePolicy": policy,
-    "@/lib/flags": { isFeatureEnabled: async () => false },
-    "@/lib/redis": { getRedis: async () => redis },
-    "@/lib/mcp/tasks/services": {
-      validateProjectAccess: async () => ({ project: { uniqueIdentifier: "HTPR", teamId: 1 } }),
-      createTask: async (task) => {
-        created.push(task);
+      "@/lib/aiAllowancePolicy": policy,
+      "@/lib/flags": { isFeatureEnabled: async () => false },
+      "@/lib/redis": { getRedis: async () => redis },
+      "@/lib/mcp/tasks/services": {
+        validateProjectAccess: async () => ({ project: { uniqueIdentifier: "HTPR", teamId: 1 } }),
+        createTask: async (task) => {
+          created.push(task);
+        },
       },
-    },
-    "@/utils/helperFunctions/sanitizeRichHtml": load(path.join(root, "src/utils/helperFunctions/sanitizeRichHtml")),
-    "./errorFingerprint": load(path.join(root, "src/lib/errors/errorFingerprint")),
-    "./errorTicketThreshold": load(path.join(root, "src/lib/errors/errorTicketThreshold")),
-    "./errorBoardTarget": load(path.join(root, "src/lib/errors/errorBoardTarget")),
-    "./symbolicateStack": { symbolicateStack: async (stack) => ({ stack, resolvedFrames: 0 }) },
-    "./plainIncident.mjs": load(path.join(root, "src/lib/errors/plainIncident.mjs")),
-    "@/lib/telemetry/posthogErrorTracking": { capturePostHogException: async () => true },
-  };
-  const filename = path.join(root, "src/lib/errors/reportError.ts");
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const mod = { exports: {} };
-  vm.runInNewContext(
-    code,
-    {
-      module: mod,
-      exports: mod.exports,
-      require: (id) => stubs[id] ?? require(id),
-      process: { env: { NODE_ENV: "production", VERCEL_ENV: "production", ERROR_BOARD_PROJECT_ID: "15" } },
-      console: { log() {}, error() {} },
-      Date,
-      Math,
-      Number,
-    },
-    { filename },
-  );
+      "./symbolicateStack": { symbolicateStack: async (stack) => ({ stack, resolvedFrames: 0 }) },
+      "@/lib/telemetry/posthogErrorTracking": { capturePostHogException: async () => true },
+    });
 
-  const payload = {
-    title: "[URGENT] AI fell back to Vercel Gateway: monthly Anthropic credit used up",
-    message: "Month 2026-11 Anthropic spend: $200.00 / $200.00",
-    source: "server",
-    urgent: true,
-    dedupeSeconds: 86400,
-    fingerprintKey: "ai-funding:anthropic_credit_exhausted:2026-11-25",
-  };
-  await mod.exports.reportError(payload);
-  await mod.exports.reportError(payload);
+    const payload = {
+      title: "[URGENT] AI fell back to Vercel Gateway: monthly Anthropic credit used up",
+      message: "Month 2026-11 Anthropic spend: $200.00 / $200.00",
+      source: "server",
+      urgent: true,
+      dedupeSeconds: 86400,
+      fingerprintKey: "ai-funding:anthropic_credit_exhausted:2026-11-25",
+    };
+    await mod.reportError(payload);
+    await mod.reportError(payload);
 
-  assert.equal(created.length, 1);
-  assert.equal(created[0].priorityIndex, 1);
-  assert.equal(created[0].title, payload.title);
+    assert.equal(created.length, 1);
+    assert.equal(created[0].priorityIndex, 1);
+    assert.equal(created[0].title, payload.title);
+  } finally {
+    restoreEnv();
+  }
 });
 
 test("composeTask sends Auto instead of openai when no saved model exists on the board or writer", async () => {
-  const cached = new Map(Object.entries(require.cache));
   const dom = new JSDOM("");
   const saved = ["DOMParser", "fetch"].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
-  const source = (file, exports) => {
-    const filename = path.join(root, file);
-    require.cache[filename] = { id: filename, filename, loaded: true, exports };
-  };
   const writes = [];
   global.DOMParser = dom.window.DOMParser;
   global.fetch = async (url, options) => {
@@ -625,27 +688,23 @@ test("composeTask sends Auto instead of openai when no saved model exists on the
     };
   };
   try {
-    source("src/lib/deriveCurrentBoardBilling.ts", { deriveCurrentBoardBilling: () => ({ byokProviderFlags: [] }) });
-    source("src/lib/createTaskAttachmentUploads.ts", {
-      startCreateTaskUpload: () => ({ id: "1", promise: Promise.resolve({ url: "https://files.hypertask.app/a" }) }),
-      createTaskUploadById() {},
-      retryCreateTaskUpload() {},
-      bindCreateTaskUploads() {},
+    const { createComposedTask } = loadModule("src/lib/ai/composeTask.ts", {
+      axios: { default: { get: async () => ({ data: { sectionId: 12, section: "Todo", ranking: "a" } }) } },
+      "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({ byokProviderFlags: [] }) },
+      "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => undefined },
+      "@/utils/helperFunctions/Views/NewTaskViewDefaults": { getNewTaskViewDefaults: () => ({}) },
+      "@/lib/createTaskAttachmentUploads": {
+        startCreateTaskUpload: () => ({ id: "1", promise: Promise.resolve({ url: "https://files.hypertask.app/a" }) }),
+        createTaskUploadById() {},
+        retryCreateTaskUpload() {},
+        bindCreateTaskUploads() {},
+      },
+      "@/utils/api/global/apiHelpers/createTaskGloballycontroller": {
+        default: async (body) => ({
+          resposne: { newTask: { id: 91, uniqueIndex: 44, projectId: body.projectId, sectionId: body.sectionId, ticketNumber: "HTPR-44" } },
+        }),
+      },
     });
-    source("src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts", {
-      default: async (body) => ({
-        resposne: { newTask: { id: 91, uniqueIndex: 44, projectId: body.projectId, sectionId: body.sectionId, ticketNumber: "HTPR-44" } },
-      }),
-    });
-    const axiosPath = require.resolve("axios");
-    require.cache[axiosPath] = {
-      id: axiosPath,
-      filename: axiosPath,
-      loaded: true,
-      exports: { default: { get: async () => ({ data: { sectionId: 12, section: "Todo", ranking: "a" } }) } },
-    };
-    const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false });
-    const { createComposedTask } = jiti(path.join(root, "src/lib/ai/composeTask.ts"));
     await createComposedTask({
       text: "Write release notes",
       files: [],
@@ -657,8 +716,6 @@ test("composeTask sends Auto instead of openai when no saved model exists on the
     assert.equal(writes[0].body.sourceSelected, undefined);
     assert.equal(writes[0].body.modelSelected, undefined);
   } finally {
-    for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
-    for (const [key, value] of cached) require.cache[key] = value;
     for (const [key, descriptor] of saved) {
       if (descriptor) Object.defineProperty(global, key, descriptor);
       else delete global[key];

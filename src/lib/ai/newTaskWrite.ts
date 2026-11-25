@@ -13,7 +13,8 @@ import {
 } from "@/utils/helperFunctions/describeTaskWriterFailure";
 import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
 import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
-import { AUTO_MODEL_OPTION_ID } from "@/lib/aiModelOptions";
+
+const AUTO_MODEL_OPTION_ID = "auto";
 
 const MAX_TEMPLATE_CHIPS = 8;
 const MAX_TEMPLATE_TEXT_LENGTH = 2_000;

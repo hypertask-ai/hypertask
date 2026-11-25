@@ -65,9 +65,18 @@ function createAiFundingStub(stubs = {}, options = {}) {
     (() => Object.assign(() => ({}), { chat: () => ({}), tools: { webSearch: () => ({}) } }));
   const createOpenRouter =
     openrouterMod.createOpenRouter ?? (() => () => ({}));
-  const createGateway =
-    aiMod.createGateway ??
-    (() => Object.assign(() => ({}), { imageModel: () => ({}) }));
+  const defaultGatewayFactory = (() => {
+    try {
+      const realAi = require("ai");
+      if (typeof realAi.createGateway === "function") return realAi.createGateway;
+    } catch {}
+    return () =>
+      Object.assign(
+        (modelId) => ({ specificationVersion: "v4", provider: "gateway", modelId }),
+        { imageModel: (modelId) => ({ specificationVersion: "v4", provider: "gateway", modelId }) },
+      );
+  })();
+  const createGateway = aiMod.createGateway ?? defaultGatewayFactory;
 
   return {
     PLATFORM_ANTHROPIC_ENV_VAR: "ANTHROPIC_API_KEY",

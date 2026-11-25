@@ -145,6 +145,27 @@ export function gatewayFundingSourceForApiKey(
 }
 
 const allowanceFundedModels = new WeakMap<object, number>();
+const runtimeProviderOverrides = new WeakMap<object, { provider?: string }>();
+
+const USER_VISIBLE_STREAM_CHUNK_TYPES = new Set([
+  "text-start",
+  "text-delta",
+  "text-end",
+  "reasoning-start",
+  "reasoning-delta",
+  "reasoning-end",
+  "tool-input-start",
+  "tool-input-delta",
+  "tool-input-end",
+  "tool-call",
+  "file",
+  "source",
+  "finish",
+]);
+
+function isUserVisibleStreamChunk(chunk: { type?: string }): boolean {
+  return typeof chunk.type === "string" && USER_VISIBLE_STREAM_CHUNK_TYPES.has(chunk.type);
+}
 
 function createGatewayFailureReportingMiddleware(
   modelSlug: string,
@@ -206,81 +227,143 @@ function createGatewayFailureReportingMiddleware(
   };
 }
 
+async function wrapAnthropicStreamWithFallback<
+  TChunk extends { type: string; error?: unknown },
+  TResult extends { stream: ReadableStream<TChunk> },
+>(
+  startDirectStream: () => Promise<TResult>,
+  startFallbackStream: (error: unknown) => Promise<TResult>,
+  reportDirectError: (error: unknown) => void,
+  canFallback: () => boolean,
+  isAborted: () => boolean,
+): Promise<TResult> {
+  try {
+    const result = await startDirectStream();
+    if (!canFallback()) return result;
+    const reader = result.stream.getReader();
+    const buffered: TChunk[] = [];
+    while (true) {
+      let item: Awaited<ReturnType<typeof reader.read>>;
+      try {
+        item = await reader.read();
+      } catch (error) {
+        await reader.cancel().catch(() => undefined);
+        if (isAborted()) throw error;
+        reportDirectError(error);
+        return startFallbackStream(error);
+      }
+      if (item.done) {
+        return {
+          ...result,
+          stream: new ReadableStream<TChunk>({
+            start(controller) {
+              for (const chunk of buffered) controller.enqueue(chunk);
+              controller.close();
+            },
+          }),
+        };
+      }
+      if (item.value.type === "error") {
+        await reader.cancel().catch(() => undefined);
+        if (isAborted()) {
+          return {
+            ...result,
+            stream: new ReadableStream<TChunk>({
+              start(controller) {
+                for (const chunk of buffered) controller.enqueue(chunk);
+                controller.enqueue(item.value);
+                controller.close();
+              },
+            }),
+          };
+        }
+        reportDirectError(item.value.error);
+        return startFallbackStream(item.value.error);
+      }
+      buffered.push(item.value);
+      if (isUserVisibleStreamChunk(item.value)) {
+        break;
+      }
+    }
+    let bufferedIndex = 0;
+    return {
+      ...result,
+      stream: new ReadableStream<TChunk>({
+        async pull(controller) {
+          if (bufferedIndex < buffered.length) {
+            controller.enqueue(buffered[bufferedIndex]);
+            bufferedIndex += 1;
+            return;
+          }
+          try {
+            const item = await reader.read();
+            if (item.done) {
+              controller.close();
+              return;
+            }
+            if (item.value.type === "error" && !isAborted()) {
+              reportDirectError(item.value.error);
+            }
+            controller.enqueue(item.value);
+          } catch (error) {
+            if (!isAborted()) {
+              reportDirectError(error);
+            }
+            controller.error(error);
+          }
+        },
+        async cancel(reason) {
+          await reader.cancel(reason);
+        },
+      }),
+    };
+  } catch (error) {
+    if (isAborted() || !canFallback()) throw error;
+    reportDirectError(error);
+    return startFallbackStream(error);
+  }
+}
+
 function createDirectAnthropicWithGatewayFallbackMiddleware(
   modelId: string,
   credential: PlatformAnthropicCredential,
+  runtimeProvider: { provider?: string },
   modelOption?: TAiModelOption,
 ): LanguageModelMiddleware {
   const gatewaySlug = toGatewayAnthropicModelSlug(modelId, modelOption);
-  const runFallback = (error: unknown) => {
+  const reportDirectError = (error: unknown) => {
     void reportAiFundingIncident({
       cause: "anthropic_error",
       reason: `Direct Anthropic call failed for ${modelId}; falling back to Vercel Gateway`,
       modelId,
       error,
     });
+  };
+  const fallbackModel = () => {
+    runtimeProvider.provider = "gateway";
     return gatewayLanguageModel(gatewaySlug, credential.fallbackGatewayApiKey!, false) as ReturnType<typeof wrapLanguageModel>;
   };
   return {
     specificationVersion: "v4",
     wrapGenerate: async ({ doGenerate, params }) => {
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
       try {
         return await doGenerate();
       } catch (error) {
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
-        return runFallback(error).doGenerate(params);
+        reportDirectError(error);
+        return fallbackModel().doGenerate(params);
       }
     },
     wrapStream: async ({ doStream, params }) => {
-      try {
-        const result = await doStream();
-        if (!credential.fallbackGatewayApiKey) return result;
-        const reader = result.stream.getReader();
-        const first = await reader.read();
-        if (first.done) {
-          return {
-            ...result,
-            stream: new ReadableStream({
-              start(controller) {
-                controller.close();
-              },
-            }),
-          };
-        }
-        if (first.value.type === "error" && !params.abortSignal?.aborted) {
-          await reader.cancel().catch(() => undefined);
-          return runFallback(first.value.error).doStream(params);
-        }
-        let sentFirst = false;
-        return {
-          ...result,
-          stream: new ReadableStream({
-            async pull(controller) {
-              if (!sentFirst) {
-                sentFirst = true;
-                controller.enqueue(first.value);
-                return;
-              }
-              try {
-                const item = await reader.read();
-                if (item.done) {
-                  controller.close();
-                  return;
-                }
-                controller.enqueue(item.value);
-              } catch (error) {
-                controller.error(error);
-              }
-            },
-            async cancel(reason) {
-              await reader.cancel(reason);
-            },
-          }),
-        };
-      } catch (error) {
-        if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
-        return runFallback(error).doStream(params);
-      }
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
+      return wrapAnthropicStreamWithFallback(
+        doStream,
+        () => fallbackModel().doStream(params),
+        reportDirectError,
+        () => Boolean(credential.fallbackGatewayApiKey),
+        () => Boolean(params.abortSignal?.aborted),
+      );
     },
   };
 }
@@ -289,8 +372,17 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
   modelSlug: string,
   gatewayApiKey: string,
   fundingSource: "managed" | "shared",
+  runtimeProvider: { provider?: string },
 ): LanguageModelMiddleware {
   const directModelId = toDirectAnthropicModelId(modelSlug);
+  const reportDirectError = (error: unknown) => {
+    void reportAiFundingIncident({
+      cause: "anthropic_error",
+      reason: `Direct Anthropic call failed for ${modelSlug}; falling back to Vercel Gateway`,
+      modelId: modelSlug,
+      error,
+    });
+  };
   const tryDirect = async () => {
     const resolved = await resolveHypertaskAnthropicCredential({
       fallbackGatewayApiKey: gatewayApiKey,
@@ -310,43 +402,37 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
     specificationVersion: "v4",
     wrapGenerate: async ({ doGenerate, params }) => {
       const direct = await tryDirect();
-      if (!direct) return doGenerate();
+      if (!direct) {
+        runtimeProvider.provider = "gateway";
+        return doGenerate();
+      }
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
       try {
-        const result = await direct.doGenerate(params);
-        const input = result.usage?.inputTokens?.total ?? 0;
-        const output = result.usage?.outputTokens?.total ?? 0;
-        const cacheRead = result.usage?.inputTokens?.cacheRead ?? 0;
-        const cacheWrite = result.usage?.inputTokens?.cacheWrite ?? 0;
-        void generationCostUsd(directModelId, PLATFORM_ANTHROPIC_USAGE_PROVIDER, input, output, cacheRead, cacheWrite)
-          .then((cost) => recordAnthropicMonthlySpend(cost))
-          .catch(() => undefined);
-        return result;
+        return await direct.doGenerate(params);
       } catch (error) {
         if (params.abortSignal?.aborted) throw error;
-        void reportAiFundingIncident({
-          cause: "anthropic_error",
-          reason: `Direct Anthropic call failed for ${modelSlug}; falling back to Vercel Gateway`,
-          modelId: modelSlug,
-          error,
-        });
+        runtimeProvider.provider = "gateway";
+        reportDirectError(error);
         return doGenerate();
       }
     },
     wrapStream: async ({ doStream, params }) => {
       const direct = await tryDirect();
-      if (!direct) return doStream();
-      try {
-        return await direct.doStream(params);
-      } catch (error) {
-        if (params.abortSignal?.aborted) throw error;
-        void reportAiFundingIncident({
-          cause: "anthropic_error",
-          reason: `Direct Anthropic call failed for ${modelSlug}; falling back to Vercel Gateway`,
-          modelId: modelSlug,
-          error,
-        });
+      if (!direct) {
+        runtimeProvider.provider = "gateway";
         return doStream();
       }
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
+      return wrapAnthropicStreamWithFallback(
+        () => direct.doStream(params),
+        () => {
+          runtimeProvider.provider = "gateway";
+          return doStream();
+        },
+        reportDirectError,
+        () => true,
+        () => Boolean(params.abortSignal?.aborted),
+      );
     },
   };
 }
@@ -364,6 +450,7 @@ function gatewayLanguageModel(
     fundingSource === "shared"
       ? FREE_TEAM_AI_ALLOWANCE_USD
       : PAID_TEAM_AI_ALLOWANCE_USD;
+  const runtimeProvider: { provider?: string } = {};
   const middlewares: LanguageModelMiddleware[] = [
     createSharedAllowanceMiddleware({
       allowanceUsd,
@@ -383,6 +470,7 @@ function gatewayLanguageModel(
         catalogSlug,
         gatewayApiKey,
         fundingSource,
+        runtimeProvider,
       ),
     );
   }
@@ -392,6 +480,7 @@ function gatewayLanguageModel(
     middleware: middlewares,
   });
   allowanceFundedModels.set(funded, allowanceUsd);
+  runtimeProviderOverrides.set(funded, runtimeProvider);
   return funded;
 }
 
@@ -489,14 +578,20 @@ function resolveUntracedAiModel(
       byokCredential.apiKey,
     );
     if (!byokCredential.fallbackGatewayApiKey) return directModel;
-    return wrapLanguageModel({
+    const runtimeProvider: { provider?: string } = {
+      provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+    };
+    const wrapped = wrapLanguageModel({
       model: directModel as Parameters<typeof wrapLanguageModel>[0]["model"],
       middleware: createDirectAnthropicWithGatewayFallbackMiddleware(
         directModelId,
         byokCredential,
+        runtimeProvider,
         modelOption,
       ),
     });
+    runtimeProviderOverrides.set(wrapped, runtimeProvider);
+    return wrapped;
   }
 
   if (isBasetenCredential(byokCredential)) {
@@ -734,7 +829,12 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
   return null;
 }
 
-export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string, allowanceUsd?: number): LanguageModelMiddleware {
+export function createUsageTracingMiddleware(
+  context: ModelUsageContext,
+  modelId: string,
+  allowanceUsd?: number,
+  runtimeProvider?: { provider?: string },
+): LanguageModelMiddleware {
   const start = (prompt: unknown) => {
     const startedAt = performance.now();
     const attribution = { ...context };
@@ -748,6 +848,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
       const outputTokens = usage?.outputTokens.total ?? 0;
       const cachedInputTokens = usage?.inputTokens.cacheRead ?? null;
       const cacheWriteInputTokens = usage?.inputTokens.cacheWrite ?? null;
+      const effectiveProvider = runtimeProvider?.provider ?? attribution.provider ?? "unknown";
       const row: AiUsageRecord = {
         userId: attribution.userId ?? null,
         teamId: attribution.teamId,
@@ -755,7 +856,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         taskId: attribution.taskId,
         agentId: attribution.agentId,
         feature: attribution.feature ?? "unattributed",
-        provider: attribution.provider ?? "unknown",
+        provider: effectiveProvider,
         model: modelId,
         promptId: attribution.promptId ?? identity.promptId,
         promptVersion: attribution.promptVersion ?? identity.promptVersion,
@@ -916,7 +1017,12 @@ function traceLanguageModel(
   let traced = wrapLanguageModel({
     model,
     middleware: [
-      createUsageTracingMiddleware(context, model.modelId, allowanceFundedModels.get(model)),
+      createUsageTracingMiddleware(
+        context,
+        model.modelId,
+        allowanceFundedModels.get(model),
+        runtimeProviderOverrides.get(model),
+      ),
       createPromptCachingMiddleware(model, context, () => aiPromptCachingEnabled(traced)),
     ],
   });

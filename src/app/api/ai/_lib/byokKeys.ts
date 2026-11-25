@@ -683,14 +683,14 @@ export async function resolveAiFundingForRequest(args: {
   }
 
   const teamId = await resolveLookupTeamId(args.lookup);
-  const hypertaskSource =
-    funding && funding.source !== "customer" ? funding.source : undefined;
+  const hypertaskSource = funding?.source;
   const resolvedAnthropic = isAnthropic
     ? await resolveHypertaskAnthropicCredential({
         fallbackGatewayApiKey: funding?.apiKey,
         gatewayFundingSource: hypertaskSource,
         modelId: args.modelOption?.model,
         teamId,
+        userId: args.lookup?.userId,
         now: args.now,
       })
     : null;
@@ -777,6 +777,7 @@ export async function getByokOrTeamGatewayApiKey(
             fallbackGatewayApiKey: funding.apiKey,
             gatewayFundingSource: funding.source,
             teamId,
+            userId: lookup?.userId,
           });
           return resolved.credential;
         }
@@ -792,8 +793,9 @@ export async function getByokOrTeamGatewayApiKey(
     const teamId = await resolveLookupTeamId(lookup);
     const resolved = await resolveHypertaskAnthropicCredential({
       fallbackGatewayApiKey: funding?.apiKey,
-      gatewayFundingSource: funding && funding.source !== "customer" ? funding.source : undefined,
+      gatewayFundingSource: funding?.source,
       teamId,
+      userId: lookup?.userId,
     });
     return resolved.credential;
   }

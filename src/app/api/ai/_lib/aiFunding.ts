@@ -5,6 +5,8 @@ import { createGateway, type ImageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { reportError } from "@/lib/errors/reportError";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_9685_ANTHROPIC_CREDIT_FIRST_FLAG } from "@/lib/flags/definitions/htpr-9685-anthropic-credit-first";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import type { TAiModelOption } from "@/lib/aiModelOptions";
 import type { TAiProviderKey, TByokProviderKey } from "@/lib/aiProviders";
@@ -600,10 +602,50 @@ function incidentTitle(cause: AiFundingIncidentCause): string {
   }
 }
 
+function extractHttpStatusCode(error: unknown): number | null {
+  let current = error;
+  const seen = new Set<unknown>();
+  for (let depth = 0; depth < 5 && current && !seen.has(current); depth += 1) {
+    seen.add(current);
+    if (typeof current !== "object") break;
+    const record = current as {
+      status?: unknown;
+      statusCode?: unknown;
+      cause?: unknown;
+      lastError?: unknown;
+    };
+    const status = record.statusCode ?? record.status;
+    if (typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599) {
+      return status;
+    }
+    current = record.lastError ?? record.cause;
+  }
+  return null;
+}
+
+function errorTextForClassification(error: unknown): string {
+  let current = error;
+  const seen = new Set<unknown>();
+  const parts: string[] = [];
+  for (let depth = 0; depth < 5 && current && !seen.has(current); depth += 1) {
+    seen.add(current);
+    if (typeof current === "string") {
+      parts.push(current);
+      break;
+    }
+    if (typeof current !== "object") break;
+    const record = current as { message?: unknown; cause?: unknown; lastError?: unknown };
+    if (typeof record.message === "string" && record.message) {
+      parts.push(record.message);
+    }
+    current = record.lastError ?? record.cause;
+  }
+  return parts.join(" ").toLowerCase();
+}
+
 export function classifyGatewayFailureCause(error: unknown): GatewayFailureReason {
-  const detail = extractErrorSummary(error);
-  const status = detail.statusCode;
-  const text = detail.message.toLowerCase();
+  const status = extractHttpStatusCode(error);
+  const text = errorTextForClassification(error);
   if (
     status === 402 ||
     /insufficient|credit|balance|quota|billing|payment required|out of funds|depleted/.test(text)
@@ -616,48 +658,50 @@ export function classifyGatewayFailureCause(error: unknown): GatewayFailureReaso
   return "gateway_error";
 }
 
-export function extractErrorSummary(error: unknown): {
-  message: string;
+export function classifySafeProviderError(error: unknown): {
   statusCode: number | null;
-  errorName: string;
+  category:
+    | "overloaded"
+    | "rate_limited"
+    | "credit_exhausted"
+    | "auth_or_refusal"
+    | "upstream_server_error"
+    | "timeout_or_network"
+    | "provider_error";
+  summary: string;
 } {
-  let current = error;
-  const seen = new Set<unknown>();
-  let message = "";
-  let statusCode: number | null = null;
-  let errorName = "Error";
-  for (let depth = 0; depth < 5 && current && !seen.has(current); depth += 1) {
-    seen.add(current);
-    if (typeof current === "string") {
-      if (!message) message = current;
-      break;
-    }
-    if (typeof current !== "object") break;
-    const record = current as {
-      name?: unknown;
-      message?: unknown;
-      status?: unknown;
-      statusCode?: unknown;
-      cause?: unknown;
-      lastError?: unknown;
-    };
-    if (typeof record.name === "string" && record.name && errorName === "Error") {
-      errorName = record.name;
-    }
-    if (typeof record.message === "string" && record.message && !message) {
-      message = record.message;
-    }
-    const status = record.statusCode ?? record.status;
-    if (typeof status === "number" && Number.isInteger(status) && statusCode === null) {
-      statusCode = status;
-    }
-    current = record.lastError ?? record.cause;
+  const statusCode = extractHttpStatusCode(error);
+  const text = errorTextForClassification(error);
+  let category:
+    | "overloaded"
+    | "rate_limited"
+    | "credit_exhausted"
+    | "auth_or_refusal"
+    | "upstream_server_error"
+    | "timeout_or_network"
+    | "provider_error" = "provider_error";
+  if (statusCode === 529 || /overload/.test(text)) {
+    category = "overloaded";
+  } else if (statusCode === 429 || /rate.?limit|too many requests/.test(text)) {
+    category = "rate_limited";
+  } else if (
+    statusCode === 402 ||
+    /insufficient|credit|balance|quota|billing|payment required|out of funds|depleted/.test(text)
+  ) {
+    category = "credit_exhausted";
+  } else if (
+    statusCode === 401 ||
+    statusCode === 403 ||
+    /refus|forbidden|unauthorized|blocked|invalid.*key/.test(text)
+  ) {
+    category = "auth_or_refusal";
+  } else if (statusCode !== null && statusCode >= 500) {
+    category = "upstream_server_error";
+  } else if (/timeout|timed out|econn|enotfound|fetch failed|network/.test(text)) {
+    category = "timeout_or_network";
   }
-  return {
-    message: message || "Unknown AI provider failure",
-    statusCode,
-    errorName,
-  };
+  const summary = statusCode !== null ? `HTTP ${statusCode} ${category}` : category;
+  return { statusCode, category, summary };
 }
 
 async function claimDailyIncidentSlot(
@@ -700,9 +744,9 @@ export async function reportAiFundingIncident(args: {
   if (!claimed) return false;
 
   const credit = args.anthropicCredit ?? (await getAnthropicMonthlyCreditState(now));
-  const detail = args.error ? extractErrorSummary(args.error) : null;
+  const detail = args.error ? classifySafeProviderError(args.error) : null;
   const reasonText = detail
-    ? `${args.reason} (${detail.errorName}${detail.statusCode ? ` HTTP ${detail.statusCode}` : ""}: ${detail.message})`
+    ? `${args.reason} (${detail.summary})`
     : args.reason;
   const message =
     `${incidentTitle(args.cause)} — ${reasonText}. ` +
@@ -719,6 +763,7 @@ export async function reportAiFundingIncident(args: {
     fingerprintKey: `ai-funding:${args.cause}:${day}`,
     extra: {
       cause: args.cause,
+      errorCategory: detail?.category ?? null,
       reason: reasonText.slice(0, 300),
       month: credit.month,
       anthropicSpentUsd: Number(credit.spentUsd.toFixed(6)),
@@ -739,6 +784,7 @@ export async function resolveHypertaskAnthropicCredential(args: {
   gatewayFundingSource?: "managed" | "shared";
   modelId?: string;
   teamId?: string | null;
+  userId?: number | null;
   feature?: string | null;
   now?: Date;
 }): Promise<{
@@ -748,6 +794,22 @@ export async function resolveHypertaskAnthropicCredential(args: {
 }> {
   const now = args.now ?? new Date();
   const anthropicCredit = await getAnthropicMonthlyCreditState(now);
+  let creditFirstEnabled = true;
+  try {
+    creditFirstEnabled = await isFeatureEnabled(
+      HTPR_9685_ANTHROPIC_CREDIT_FIRST_FLAG,
+      args.userId ?? 0,
+    );
+  } catch {
+    creditFirstEnabled = true;
+  }
+  if (!creditFirstEnabled) {
+    return {
+      route: "hypertask-gateway",
+      credential: args.fallbackGatewayApiKey,
+      anthropicCredit,
+    };
+  }
   const anthropicKey = platformAnthropicApiKey();
 
   if (anthropicCredit.available && anthropicKey) {

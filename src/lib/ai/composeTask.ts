@@ -17,7 +17,8 @@ import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/Views
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
 import { isBugsColumn, readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
-import { AUTO_MODEL_OPTION_ID } from "@/lib/aiModelOptions";
+
+const AUTO_MODEL_OPTION_ID = "auto";
 
 export function composeTaskBoardId(
   url: string,
