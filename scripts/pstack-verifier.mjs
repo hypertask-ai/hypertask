@@ -1464,6 +1464,7 @@ export async function planJourneys({ request, pages, ask, key, model, models, bu
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "", unevaluated: "" };
 }
 export const driveNeeded = (plan) => !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
+export const askNeeded = (plan) => !plan.fail && (plan.journeys ?? []).some((item) => Array.isArray(item.actions) && item.actions.length > 0);
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
   const plan = await planFromRequest(request);
@@ -1596,6 +1597,10 @@ async function askJourney({ plan, item, head, viewport, index, picked, ask, work
 export async function judgeAskCommand({ work = workDir(), binding = bindingNow(), ask = askVerifier, evidence = null, picked = null } = {}) {
   const plan = readPlan(readFileSync(path.join(work, "plan", "plan.json"), "utf8"), binding);
   if (!driveNeeded(plan)) return null;
+  if (!askNeeded(plan)) {
+    console.log("judge-ask: the plan holds no journey");
+    return null;
+  }
   const head = evidence ?? readJourneyEvidence(readFileSync(path.join(work, "evidence", "evidence.json"), "utf8"), binding);
   const judge = picked ?? pickVerifier(plan.authorFamily, process.env.PSTACK_VERIFIER_ALT_MODEL);
   let asked = 0;
@@ -1706,7 +1711,11 @@ export async function postCommand(io = {}) {
   const call = io.gh ?? gh;
   let saved;
   try { saved = readVerdict(readFileSync(path.join(workDir(), "verdict", "verdict.json"), "utf8"), binding); }
-  catch { saved = { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" }; }
+  catch (error) {
+    saved = error?.code === "ENOENT"
+      ? { verdict: "UNEVALUATED", notes: "the judge lane did not produce a verdict", authorFamily: "", verifierModel: "" }
+      : { verdict: "FAIL", notes: "schema/binding mismatch", authorFamily: "", verifierModel: "" };
+  }
   const item = JSON.parse(call(["api", `repos/${repo}/pulls/${pr}`]));
   const statuses = JSON.parse(call(["api", `repos/${repo}/commits/${binding.sha}/statuses`]));
   if (!eligiblePull(item, repo, binding.sha)) return;

@@ -103,6 +103,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { repository: valentinyeo/token-ladder, ref: 33001d32edcddeb639b0c75aff234bebb57a1051, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - name: Ask the model about the head journeys
+        if: needs.plan.outputs.empty != 'true'
         env:
           GH_TOKEN: "${{ github.token }}"
           PSTACK_VERIFIER_ALT_MODEL: "${{ vars.PSTACK_VERIFIER_ALT_MODEL }}"

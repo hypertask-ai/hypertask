@@ -421,6 +421,7 @@ test("the judge asks the model first, then re-drives failed side journeys agains
   const decide = steps.findIndex((step) => String(step.run ?? "").trim().endsWith("pstack-verifier.mjs judge"));
   assert.equal(ask >= 0 && basePlan > ask && baseCheckout > basePlan && baseDrive > baseCheckout && decide > baseDrive, true);
   assert.equal(steps[ask].env.OPENROUTER_API_KEY, "${{ secrets.OPENROUTER_EVAL_KEY }}");
+  assert.equal(steps[ask].if, "needs.plan.outputs.empty != 'true'");
   assert.equal(steps[baseCheckout].if, "steps.base-plan.outputs.needed == 'true'");
   assert.equal(steps[baseCheckout].with.ref, "${{ needs.resolve.outputs.base }}");
   assert.equal(steps[baseDrive].if, "steps.base-plan.outputs.needed == 'true'");
