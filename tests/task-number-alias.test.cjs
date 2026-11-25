@@ -29,6 +29,7 @@ function load(relativePath, stubs) {
   const loaded = new Module(filename);
   loaded.filename = filename;
   loaded.require = (request) => {
+    if (request === "@/lib/api/refusal") return require("./helpers/loadModule.cjs").loadModule("src/lib/api/refusal.ts", { "@/lib/planLimits": { isPlanLimitReachedError: () => false } });
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts", {});
     if (request in stubs) return stubs[request];

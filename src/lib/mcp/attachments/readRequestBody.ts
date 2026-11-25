@@ -1,8 +1,11 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { MCP_ATTACHMENT_MAX_REQUEST_BYTES } from './constants';
 
-export class McpAttachmentRequestBodyError extends Error {
-  constructor(message: string, readonly status: number) {
-    super(message);
+export class McpAttachmentRequestBodyError extends RefusalError {
+  constructor(message: string, readonly status: 400 | 413) {
+    super(status === 413
+      ? { status, reason: 'payload_too_large', message }
+      : { status, reason: 'invalid_field', field: 'body', message });
     this.name = 'McpAttachmentRequestBodyError';
   }
 }

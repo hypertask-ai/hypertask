@@ -1,3 +1,4 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { AgentWritingError } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -35,11 +36,11 @@ const agentLabelRefs = (
 ): AgentWebhookTaskLabel[] =>
   taskLabels.map(({ label }) => ({ id: label.id, value: label.value }));
 
-export class TaskProjectScopeError extends Error {
+export class TaskProjectScopeError extends RefusalError {
     readonly statusCode = 404;
 
     constructor(taskId: number) {
-        super(`Task ${taskId} was not found in the requested project`);
+        super({ status: 404, reason: 'not_found', message: `Task ${taskId} was not found in the requested project` });
         this.name = 'TaskProjectScopeError';
     }
 }

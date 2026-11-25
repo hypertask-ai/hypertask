@@ -1,12 +1,13 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { crossTeamProjectFence } from "@/lib/agents/crossTeam";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere, savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
 
-export class IdempotencyAccessError extends Error {
+export class IdempotencyAccessError extends RefusalError {
   readonly status = 404;
   constructor() {
-    super("Resource not found or access denied");
+    super({ status: 404, reason: "not_found", message: "Resource not found or access denied" });
   }
 }
 
