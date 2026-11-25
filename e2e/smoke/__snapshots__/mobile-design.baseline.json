@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-24T02:14:17.198Z",
+  "generatedAt": "2026-11-25T03:38:16.861Z",
   "viewport": {
     "width": 390,
     "height": 844
@@ -22,41 +22,17 @@
           "div:Back",
           "div[role=button]:Later #",
           "div[role=button]:No due date #",
-          "li[row]>span:1",
-          "li[row]>span:1~2",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:2",
-          "li[row]>span:2~2",
-          "li[row]>span:2~3",
-          "li[row]>span:2~4",
-          "li[row]>span:2~5",
-          "li[row]>span:2~6",
-          "li[row]>span:2~7",
-          "li[row]>span:3",
-          "li[row]>span:3~2",
-          "li[row]>span:3~3",
-          "li[row]>span:3~4",
-          "li[row]>span:3~5",
-          "li[row]>span:3~6",
-          "li[row]>span:3~7"
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later 1 KEY-# KEY-# renamed #",
-          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "div:Later # KEY-# KEY-# renamed #",
+          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
           "li#inbox-*:*",
-          "li#inbox-*:*~2",
-          "li#inbox-*:*~3",
-          "li#inbox-*:*~4",
-          "li#inbox-*:*~5",
+          "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [
           "span:Live list updates on"
@@ -73,41 +49,17 @@
           "div:Back",
           "div[role=button]:Later #",
           "div[role=button]:No due date #",
-          "li[row]>span:1",
-          "li[row]>span:1~2",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:2",
-          "li[row]>span:2~2",
-          "li[row]>span:2~3",
-          "li[row]>span:2~4",
-          "li[row]>span:2~5",
-          "li[row]>span:2~6",
-          "li[row]>span:2~7",
-          "li[row]>span:3",
-          "li[row]>span:3~2",
-          "li[row]>span:3~3",
-          "li[row]>span:3~4",
-          "li[row]>span:3~5",
-          "li[row]>span:3~6",
-          "li[row]>span:3~7"
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later 1 KEY-# KEY-# renamed #",
-          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "div:Later # KEY-# KEY-# renamed #",
+          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
           "li#inbox-*:*",
-          "li#inbox-*:*~2",
-          "li#inbox-*:*~3",
-          "li#inbox-*:*~4",
-          "li#inbox-*:*~5",
+          "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [
           "span:Live list updates on"
@@ -124,41 +76,17 @@
           "div:Back",
           "div[role=button]:Later #",
           "div[role=button]:No due date #",
-          "li[row]>span:1",
-          "li[row]>span:1~2",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:2",
-          "li[row]>span:2~2",
-          "li[row]>span:2~3",
-          "li[row]>span:2~4",
-          "li[row]>span:2~5",
-          "li[row]>span:2~6",
-          "li[row]>span:2~7",
-          "li[row]>span:3",
-          "li[row]>span:3~2",
-          "li[row]>span:3~3",
-          "li[row]>span:3~4",
-          "li[row]>span:3~5",
-          "li[row]>span:3~6",
-          "li[row]>span:3~7"
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later 1 KEY-# KEY-# renamed #",
-          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "div:Later # KEY-# KEY-# renamed #",
+          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
           "li#inbox-*:*",
-          "li#inbox-*:*~2",
-          "li#inbox-*:*~3",
-          "li#inbox-*:*~4",
-          "li#inbox-*:*~5",
+          "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [
           "span:Live list updates on"
@@ -175,36 +103,16 @@
           "div:Back",
           "div[role=button]:Later #",
           "div[role=button]:No due date #",
-          "li[row]>span:1",
-          "li[row]>span:1~2",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:2",
-          "li[row]>span:2~2",
-          "li[row]>span:2~3",
-          "li[row]>span:2~4",
-          "li[row]>span:2~5",
-          "li[row]>span:2~6",
-          "li[row]>span:2~7",
-          "li[row]>span:3",
-          "li[row]>span:3~2",
-          "li[row]>span:3~3",
-          "li[row]>span:3~4",
-          "li[row]>span:3~5",
-          "li[row]>span:3~6",
-          "li[row]>span:3~7"
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later 1 KEY-# KEY-# renamed #",
-          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "div:Later # KEY-# KEY-# renamed #",
+          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
+          "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [
           "span:Live list updates on"
@@ -218,19 +126,15 @@
         "tap-target": [
           "button[aria=Ask AI]",
           "div#task-*",
-          "div#task-*~2",
-          "div#task-*~3",
-          "div#task-*~4",
-          "div#task-*~5",
           "div:div.group",
-          "div[role=button]:Doing #",
-          "div[role=button]:Todo #"
+          "div[role=button]:Done",
+          "div[role=button]:Ready #"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -242,24 +146,15 @@
         "tap-target": [
           "button[aria=Ask AI]",
           "div#task-*",
-          "div#task-*~2",
-          "div#task-*~3",
-          "div#task-*~4",
-          "div#task-*~5",
-          "div#task-*~6",
           "div:div.group",
-          "div[role=button]:Doing #",
-          "div[role=button]:Todo #",
-          "div[row]>div:0>a:0>div:0",
-          "div[row]>div:0>a:0>div:0~2",
-          "div[row]>div:0>a:0>div:0~3",
-          "div[row]>div:0>a:0>div:1"
+          "div[role=button]:Done",
+          "div[role=button]:Ready #"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -271,24 +166,15 @@
         "tap-target": [
           "button[aria=Ask AI]",
           "div#task-*",
-          "div#task-*~2",
-          "div#task-*~3",
-          "div#task-*~4",
-          "div#task-*~5",
-          "div#task-*~6",
           "div:div.group",
-          "div[role=button]:Doing #",
-          "div[role=button]:Todo #",
-          "div[row]>div:0>a:0>div:0",
-          "div[row]>div:0>a:0>div:0~2",
-          "div[row]>div:0>a:0>div:0~3",
-          "div[row]>div:0>a:0>div:1"
+          "div[role=button]:Done",
+          "div[role=button]:Ready #"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -300,25 +186,15 @@
         "tap-target": [
           "button[aria=Ask AI]",
           "div#task-*",
-          "div#task-*~2",
-          "div#task-*~3",
-          "div#task-*~4",
-          "div#task-*~5",
-          "div#task-*~6",
-          "div#task-*~7",
-          "div#task-*~8",
-          "div#task-*~9",
           "div:div.group",
-          "div[role=button]:Doing #",
-          "div[role=button]:Todo #",
-          "div[row]>div:0>a:0>div:0",
-          "div[row]>div:0>a:0>div:1"
+          "div[role=button]:Done",
+          "div[role=button]:Ready #"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -335,107 +211,19 @@
           "button:TITLE",
           "button[aria=Ask AI]",
           "button[aria=Create task in the selected column]",
-          "div[role=button]:Doing #",
           "div[role=button]:Done",
-          "div[role=button]:Todo #",
-          "div[role=button]:ht7381 column #",
-          "li#table-more-*",
-          "li[row]>span:0",
-          "li[row]>span:0~10",
-          "li[row]>span:0~11",
-          "li[row]>span:0~12",
-          "li[row]>span:0~13",
-          "li[row]>span:0~14",
-          "li[row]>span:0~15",
-          "li[row]>span:0~16",
-          "li[row]>span:0~17",
-          "li[row]>span:0~18",
-          "li[row]>span:0~19",
-          "li[row]>span:0~2",
-          "li[row]>span:0~20",
-          "li[row]>span:0~21",
-          "li[row]>span:0~22",
-          "li[row]>span:0~23",
-          "li[row]>span:0~24",
-          "li[row]>span:0~25",
-          "li[row]>span:0~26",
-          "li[row]>span:0~27",
-          "li[row]>span:0~28",
-          "li[row]>span:0~3",
-          "li[row]>span:0~4",
-          "li[row]>span:0~5",
-          "li[row]>span:0~6",
-          "li[row]>span:0~7",
-          "li[row]>span:0~8",
-          "li[row]>span:0~9",
-          "li[row]>span:1",
-          "li[row]>span:1~10",
-          "li[row]>span:1~11",
-          "li[row]>span:1~12",
-          "li[row]>span:1~13",
-          "li[row]>span:1~14",
-          "li[row]>span:1~15",
-          "li[row]>span:1~16",
-          "li[row]>span:1~17",
-          "li[row]>span:1~18",
-          "li[row]>span:1~19",
-          "li[row]>span:1~2",
-          "li[row]>span:1~20",
-          "li[row]>span:1~21",
-          "li[row]>span:1~22",
-          "li[row]>span:1~23",
-          "li[row]>span:1~24",
-          "li[row]>span:1~25",
-          "li[row]>span:1~26",
-          "li[row]>span:1~27",
-          "li[row]>span:1~28",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:1~8",
-          "li[row]>span:1~9",
-          "li[row]>span:2"
+          "div[role=button]:Ready #",
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Doing 8 KEY-# [qa-runner] board drive #",
           "div:Done",
-          "div:Todo 34 KEY-# [qa-runner] task drive #",
-          "div:ht7381 column #",
+          "div:Ready # KEY-# KEY-# gate sub-task #",
           "li#inbox-*:*",
-          "li#inbox-*:*~10",
-          "li#inbox-*:*~11",
-          "li#inbox-*:*~12",
-          "li#inbox-*:*~13",
-          "li#inbox-*:*~14",
-          "li#inbox-*:*~15",
-          "li#inbox-*:*~16",
-          "li#inbox-*:*~17",
-          "li#inbox-*:*~18",
-          "li#inbox-*:*~19",
-          "li#inbox-*:*~2",
-          "li#inbox-*:*~20",
-          "li#inbox-*:*~21",
-          "li#inbox-*:*~22",
-          "li#inbox-*:*~23",
-          "li#inbox-*:*~24",
-          "li#inbox-*:*~25",
-          "li#inbox-*:*~26",
-          "li#inbox-*:*~27",
-          "li#inbox-*:*~3",
-          "li#inbox-*:*~4",
-          "li#inbox-*:*~5",
-          "li#inbox-*:*~6",
-          "li#inbox-*:*~7",
-          "li#inbox-*:*~8",
-          "li#inbox-*:*~9",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
@@ -444,124 +232,23 @@
       "graphite": {
         "tap-target": [
           "button:ASSIGNEE",
-          "button:ASSIGNEE~2",
           "button:TICKET",
-          "button:TICKET~2",
           "button:TITLE",
-          "button:TITLE~2",
           "button[aria=Ask AI]",
           "button[aria=Create task in the selected column]",
-          "div[role=button]:Doing #",
           "div[role=button]:Done",
-          "div[role=button]:Todo #",
-          "div[role=button]:ht7381 column #",
-          "li#table-more-*",
-          "li[row]>span:0",
-          "li[row]>span:0~10",
-          "li[row]>span:0~11",
-          "li[row]>span:0~12",
-          "li[row]>span:0~13",
-          "li[row]>span:0~14",
-          "li[row]>span:0~15",
-          "li[row]>span:0~16",
-          "li[row]>span:0~17",
-          "li[row]>span:0~18",
-          "li[row]>span:0~19",
-          "li[row]>span:0~2",
-          "li[row]>span:0~20",
-          "li[row]>span:0~21",
-          "li[row]>span:0~22",
-          "li[row]>span:0~23",
-          "li[row]>span:0~24",
-          "li[row]>span:0~25",
-          "li[row]>span:0~26",
-          "li[row]>span:0~27",
-          "li[row]>span:0~28",
-          "li[row]>span:0~29",
-          "li[row]>span:0~3",
-          "li[row]>span:0~30",
-          "li[row]>span:0~31",
-          "li[row]>span:0~32",
-          "li[row]>span:0~33",
-          "li[row]>span:0~4",
-          "li[row]>span:0~5",
-          "li[row]>span:0~6",
-          "li[row]>span:0~7",
-          "li[row]>span:0~8",
-          "li[row]>span:0~9",
-          "li[row]>span:1",
-          "li[row]>span:1~10",
-          "li[row]>span:1~11",
-          "li[row]>span:1~12",
-          "li[row]>span:1~13",
-          "li[row]>span:1~14",
-          "li[row]>span:1~15",
-          "li[row]>span:1~16",
-          "li[row]>span:1~17",
-          "li[row]>span:1~18",
-          "li[row]>span:1~19",
-          "li[row]>span:1~2",
-          "li[row]>span:1~20",
-          "li[row]>span:1~21",
-          "li[row]>span:1~22",
-          "li[row]>span:1~23",
-          "li[row]>span:1~24",
-          "li[row]>span:1~25",
-          "li[row]>span:1~26",
-          "li[row]>span:1~27",
-          "li[row]>span:1~28",
-          "li[row]>span:1~29",
-          "li[row]>span:1~3",
-          "li[row]>span:1~30",
-          "li[row]>span:1~31",
-          "li[row]>span:1~32",
-          "li[row]>span:1~33",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:1~8",
-          "li[row]>span:1~9",
-          "li[row]>span:2"
+          "div[role=button]:Ready #",
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Doing 8 KEY-# [qa-runner] board drive #",
           "div:Done",
-          "div:Todo 34 KEY-# [qa-runner] task drive #",
-          "div:ht7381 column #",
+          "div:Ready # KEY-# KEY-# gate sub-task #",
           "li#inbox-*:*",
-          "li#inbox-*:*~10",
-          "li#inbox-*:*~11",
-          "li#inbox-*:*~12",
-          "li#inbox-*:*~13",
-          "li#inbox-*:*~14",
-          "li#inbox-*:*~15",
-          "li#inbox-*:*~16",
-          "li#inbox-*:*~17",
-          "li#inbox-*:*~18",
-          "li#inbox-*:*~19",
-          "li#inbox-*:*~2",
-          "li#inbox-*:*~20",
-          "li#inbox-*:*~21",
-          "li#inbox-*:*~22",
-          "li#inbox-*:*~23",
-          "li#inbox-*:*~24",
-          "li#inbox-*:*~25",
-          "li#inbox-*:*~26",
-          "li#inbox-*:*~27",
-          "li#inbox-*:*~3",
-          "li#inbox-*:*~4",
-          "li#inbox-*:*~5",
-          "li#inbox-*:*~6",
-          "li#inbox-*:*~7",
-          "li#inbox-*:*~8",
-          "li#inbox-*:*~9",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
@@ -574,107 +261,19 @@
           "button:TITLE",
           "button[aria=Ask AI]",
           "button[aria=Create task in the selected column]",
-          "div[role=button]:Doing #",
           "div[role=button]:Done",
-          "div[role=button]:Todo #",
-          "div[role=button]:ht7381 column #",
-          "li#table-more-*",
-          "li[row]>span:0",
-          "li[row]>span:0~10",
-          "li[row]>span:0~11",
-          "li[row]>span:0~12",
-          "li[row]>span:0~13",
-          "li[row]>span:0~14",
-          "li[row]>span:0~15",
-          "li[row]>span:0~16",
-          "li[row]>span:0~17",
-          "li[row]>span:0~18",
-          "li[row]>span:0~19",
-          "li[row]>span:0~2",
-          "li[row]>span:0~20",
-          "li[row]>span:0~21",
-          "li[row]>span:0~22",
-          "li[row]>span:0~23",
-          "li[row]>span:0~24",
-          "li[row]>span:0~25",
-          "li[row]>span:0~26",
-          "li[row]>span:0~27",
-          "li[row]>span:0~28",
-          "li[row]>span:0~3",
-          "li[row]>span:0~4",
-          "li[row]>span:0~5",
-          "li[row]>span:0~6",
-          "li[row]>span:0~7",
-          "li[row]>span:0~8",
-          "li[row]>span:0~9",
-          "li[row]>span:1",
-          "li[row]>span:1~10",
-          "li[row]>span:1~11",
-          "li[row]>span:1~12",
-          "li[row]>span:1~13",
-          "li[row]>span:1~14",
-          "li[row]>span:1~15",
-          "li[row]>span:1~16",
-          "li[row]>span:1~17",
-          "li[row]>span:1~18",
-          "li[row]>span:1~19",
-          "li[row]>span:1~2",
-          "li[row]>span:1~20",
-          "li[row]>span:1~21",
-          "li[row]>span:1~22",
-          "li[row]>span:1~23",
-          "li[row]>span:1~24",
-          "li[row]>span:1~25",
-          "li[row]>span:1~26",
-          "li[row]>span:1~27",
-          "li[row]>span:1~28",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:1~8",
-          "li[row]>span:1~9",
-          "li[row]>span:2"
+          "div[role=button]:Ready #",
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Doing 8 KEY-# [qa-runner] board drive #",
           "div:Done",
-          "div:Todo 34 KEY-# [qa-runner] task drive #",
-          "div:ht7381 column #",
+          "div:Ready # KEY-# KEY-# gate sub-task #",
           "li#inbox-*:*",
-          "li#inbox-*:*~10",
-          "li#inbox-*:*~11",
-          "li#inbox-*:*~12",
-          "li#inbox-*:*~13",
-          "li#inbox-*:*~14",
-          "li#inbox-*:*~15",
-          "li#inbox-*:*~16",
-          "li#inbox-*:*~17",
-          "li#inbox-*:*~18",
-          "li#inbox-*:*~19",
-          "li#inbox-*:*~2",
-          "li#inbox-*:*~20",
-          "li#inbox-*:*~21",
-          "li#inbox-*:*~22",
-          "li#inbox-*:*~23",
-          "li#inbox-*:*~24",
-          "li#inbox-*:*~25",
-          "li#inbox-*:*~26",
-          "li#inbox-*:*~27",
-          "li#inbox-*:*~3",
-          "li#inbox-*:*~4",
-          "li#inbox-*:*~5",
-          "li#inbox-*:*~6",
-          "li#inbox-*:*~7",
-          "li#inbox-*:*~8",
-          "li#inbox-*:*~9",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
@@ -687,80 +286,18 @@
           "button:TITLE",
           "button[aria=Ask AI]",
           "button[aria=Create task in the selected column]",
-          "div[role=button]:Doing #",
           "div[role=button]:Done",
-          "div[role=button]:Todo #",
-          "div[role=button]:ht7381 column #",
-          "li#table-more-*",
-          "li[row]>span:0",
-          "li[row]>span:0~10",
-          "li[row]>span:0~11",
-          "li[row]>span:0~12",
-          "li[row]>span:0~13",
-          "li[row]>span:0~14",
-          "li[row]>span:0~15",
-          "li[row]>span:0~16",
-          "li[row]>span:0~17",
-          "li[row]>span:0~18",
-          "li[row]>span:0~19",
-          "li[row]>span:0~2",
-          "li[row]>span:0~20",
-          "li[row]>span:0~21",
-          "li[row]>span:0~22",
-          "li[row]>span:0~23",
-          "li[row]>span:0~24",
-          "li[row]>span:0~25",
-          "li[row]>span:0~26",
-          "li[row]>span:0~27",
-          "li[row]>span:0~28",
-          "li[row]>span:0~3",
-          "li[row]>span:0~4",
-          "li[row]>span:0~5",
-          "li[row]>span:0~6",
-          "li[row]>span:0~7",
-          "li[row]>span:0~8",
-          "li[row]>span:0~9",
-          "li[row]>span:1",
-          "li[row]>span:1~10",
-          "li[row]>span:1~11",
-          "li[row]>span:1~12",
-          "li[row]>span:1~13",
-          "li[row]>span:1~14",
-          "li[row]>span:1~15",
-          "li[row]>span:1~16",
-          "li[row]>span:1~17",
-          "li[row]>span:1~18",
-          "li[row]>span:1~19",
-          "li[row]>span:1~2",
-          "li[row]>span:1~20",
-          "li[row]>span:1~21",
-          "li[row]>span:1~22",
-          "li[row]>span:1~23",
-          "li[row]>span:1~24",
-          "li[row]>span:1~25",
-          "li[row]>span:1~26",
-          "li[row]>span:1~27",
-          "li[row]>span:1~28",
-          "li[row]>span:1~3",
-          "li[row]>span:1~4",
-          "li[row]>span:1~5",
-          "li[row]>span:1~6",
-          "li[row]>span:1~7",
-          "li[row]>span:1~8",
-          "li[row]>span:1~9",
-          "li[row]>span:2"
+          "div[role=button]:Ready #",
+          "li[row]>span:#"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Doing 8 KEY-# [qa-runner] board drive #",
           "div:Done",
-          "div:Todo 34 KEY-# [qa-runner] task drive #",
-          "div:ht7381 column #",
+          "div:Ready # KEY-# KEY-# gate sub-task #",
           "span:span.absolute",
-          "span[aria=Settings]",
-          "span[aria=valentin]"
+          "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
@@ -777,7 +314,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "span:24",
+          "span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -794,7 +331,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "span:24",
+          "span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -811,7 +348,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "span:24",
+          "span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -828,7 +365,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "span:24",
+          "span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -840,31 +377,27 @@
     "task-detail": {
       "porcelain": {
         "tap-target": [
+          "a:KEY-# KEY-# QA sub-task #",
+          "a:KEY-# KEY-# gate sub-task #",
           "button#markAsDone",
-          "button:Log time",
-          "button:Not enough content for summary",
-          "button:Start",
+          "button:Establish a persistent browser target for signed",
           "button[aria=Ask AI]",
           "div#share-task-button",
-          "div:QA Sandbox",
+          "div:Midscene nightly QA fixture",
           "div:VA valentin",
-          "span#description-ai-writer-button",
+          "div:qa-fixture",
           "span:Add field",
-          "span:Doing",
-          "span:ID",
           "span:Project",
-          "span:Status",
-          "span:Time",
-          "span:span.relative"
+          "span:Tags"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#share-task-button",
-          "div:Add a comment\u2026",
-          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
-          "div:div.h-8",
+          "div:Add a comment…",
+          "div:ID KEY-# Status Ready Project Midscene nightly",
+          "div:div.h-#",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -872,37 +405,33 @@
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap",
+          "div[role=textbox]:Persistent target for signed-in Midscene flows.",
           "textarea#title-input"
         ]
       },
       "graphite": {
         "tap-target": [
+          "a:KEY-# KEY-# QA sub-task #",
+          "a:KEY-# KEY-# gate sub-task #",
           "button#markAsDone",
-          "button:Log time",
-          "button:Not enough content for summary",
-          "button:Start",
+          "button:Establish a persistent browser target for signed",
           "button[aria=Ask AI]",
           "div#share-task-button",
-          "div:QA Sandbox",
+          "div:Midscene nightly QA fixture",
           "div:VA valentin",
-          "span#description-ai-writer-button",
+          "div:qa-fixture",
           "span:Add field",
-          "span:Doing",
-          "span:ID",
           "span:Project",
-          "span:Status",
-          "span:Time",
-          "span:span.relative"
+          "span:Tags"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#share-task-button",
-          "div:Add a comment\u2026",
-          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
-          "div:div.h-8",
+          "div:Add a comment…",
+          "div:ID KEY-# Status Ready Project Midscene nightly",
+          "div:div.h-#",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -910,37 +439,33 @@
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap",
+          "div[role=textbox]:Persistent target for signed-in Midscene flows.",
           "textarea#title-input"
         ]
       },
       "amoled": {
         "tap-target": [
+          "a:KEY-# KEY-# QA sub-task #",
+          "a:KEY-# KEY-# gate sub-task #",
           "button#markAsDone",
-          "button:Log time",
-          "button:Not enough content for summary",
-          "button:Start",
+          "button:Establish a persistent browser target for signed",
           "button[aria=Ask AI]",
           "div#share-task-button",
-          "div:QA Sandbox",
+          "div:Midscene nightly QA fixture",
           "div:VA valentin",
-          "span#description-ai-writer-button",
+          "div:qa-fixture",
           "span:Add field",
-          "span:Doing",
-          "span:ID",
           "span:Project",
-          "span:Status",
-          "span:Time",
-          "span:span.relative"
+          "span:Tags"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#share-task-button",
-          "div:Add a comment\u2026",
-          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
-          "div:div.h-8",
+          "div:Add a comment…",
+          "div:ID KEY-# Status Ready Project Midscene nightly",
+          "div:div.h-#",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -948,37 +473,33 @@
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap",
+          "div[role=textbox]:Persistent target for signed-in Midscene flows.",
           "textarea#title-input"
         ]
       },
       "dia": {
         "tap-target": [
+          "a:KEY-# KEY-# QA sub-task #",
+          "a:KEY-# KEY-# gate sub-task #",
           "button#markAsDone",
-          "button:Log time",
-          "button:Not enough content for summary",
-          "button:Start",
+          "button:Establish a persistent browser target for signed",
           "button[aria=Ask AI]",
           "div#share-task-button",
-          "div:QA Sandbox",
+          "div:Midscene nightly QA fixture",
           "div:VA valentin",
-          "span#description-ai-writer-button",
+          "div:qa-fixture",
           "span:Add field",
-          "span:Doing",
-          "span:ID",
           "span:Project",
-          "span:Status",
-          "span:Time",
-          "span:span.relative"
+          "span:Tags"
         ],
         "input-font": [],
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#share-task-button",
-          "div:Add a comment\u2026",
-          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
-          "div:div.h-8",
+          "div:Add a comment…",
+          "div:ID KEY-# Status Ready Project Midscene nightly",
+          "div:div.h-#",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -986,7 +507,7 @@
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap",
+          "div[role=textbox]:Persistent target for signed-in Midscene flows.",
           "textarea#title-input"
         ]
       }
@@ -1052,252 +573,178 @@
     "ai-chat-sheet": {
       "porcelain": {
         "tap-target": [
-          "a:[qa-runner] KEY-# sidebar-attachment #",
-          "button[attr=QA Sandbox]",
-          "svg[aria=Copy message]",
-          "svg[aria=Copy response]",
-          "svg[aria=Create task from response]",
-          "svg[aria=Edit message]",
-          "svg[aria=Retry message]"
+          "button:Any duplicate tickets here?",
+          "button:What's been stuck the longest?",
+          "button:Who should take the # unassigned?",
+          "button[attr=Midscene nightly QA fixture]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
-          "div:source-sidebar-attachment.png",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       },
       "graphite": {
         "tap-target": [
-          "a:[qa-runner] KEY-# sidebar-attachment #",
-          "button[attr=QA Sandbox]",
-          "svg[aria=Copy message]",
-          "svg[aria=Copy response]",
-          "svg[aria=Create task from response]",
-          "svg[aria=Edit message]",
-          "svg[aria=Retry message]"
+          "button:Any duplicate tickets here?",
+          "button:Prioritize the # tickets in Ready",
+          "button:Top # focus this week?",
+          "button[attr=Midscene nightly QA fixture]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
-          "div:source-sidebar-attachment.png",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       },
       "amoled": {
         "tap-target": [
-          "a:[qa-runner] KEY-# sidebar-attachment #",
-          "button[attr=QA Sandbox]",
-          "svg[aria=Copy message]",
-          "svg[aria=Copy response]",
-          "svg[aria=Create task from response]",
-          "svg[aria=Edit message]",
-          "svg[aria=Retry message]"
+          "button:Prioritize the # tickets in Ready",
+          "button:What's been stuck the longest?",
+          "button:What's important in my inbox?",
+          "button:Who should take the # unassigned?",
+          "button[attr=Midscene nightly QA fixture]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
-          "div:source-sidebar-attachment.png",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       },
       "dia": {
         "tap-target": [
-          "a:[qa-runner] KEY-# sidebar-attachment #",
-          "button[attr=QA Sandbox]",
-          "svg[aria=Copy message]",
-          "svg[aria=Copy response]",
-          "svg[aria=Create task from response]",
-          "svg[aria=Edit message]",
-          "svg[aria=Retry message]"
+          "button:Any duplicate tickets here?",
+          "button:Prioritize the # tickets in Ready",
+          "button:Top # focus this week?",
+          "button[attr=Midscene nightly QA fixture]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
-          "div:source-sidebar-attachment.png",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       }
     },
     "ai-chat-full": {
       "porcelain": {
         "tap-target": [
-          "a:An agent's MCP call to hypertask_tasks failed (2",
-          "a:An agent's MCP call to hypertask_tasks failed (2~2",
           "button[aria=Exit full-screen AI chat]",
           "button[aria=Scroll to latest messages]",
-          "li[row]>a:0",
           "svg[aria=Copy message]",
-          "svg[aria=Copy message]~2",
-          "svg[aria=Copy message]~3",
-          "svg[aria=Copy message]~4",
           "svg[aria=Copy response]",
-          "svg[aria=Copy response]~2",
           "svg[aria=Create task from response]",
-          "svg[aria=Create task from response]~2",
           "svg[aria=Edit message]",
-          "svg[aria=Edit message]~2",
-          "svg[aria=Edit message]~3",
-          "svg[aria=Edit message]~4",
-          "svg[aria=Retry message]",
-          "svg[aria=Retry message]~2",
-          "svg[aria=Retry message]~3",
-          "svg[aria=Retry message]~4"
+          "svg[aria=Retry message]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
           "button[aria=Scroll to latest messages]",
-          "code:list_token",
-          "code:next_cursor",
           "div:div.w-full"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       },
       "graphite": {
         "tap-target": [
-          "a:An agent's MCP call to hypertask_tasks failed (2",
-          "a:An agent's MCP call to hypertask_tasks failed (2~2",
           "button[aria=Exit full-screen AI chat]",
           "button[aria=Scroll to latest messages]",
-          "li[row]>a:0",
           "svg[aria=Copy message]",
-          "svg[aria=Copy message]~2",
-          "svg[aria=Copy message]~3",
-          "svg[aria=Copy message]~4",
           "svg[aria=Copy response]",
-          "svg[aria=Copy response]~2",
           "svg[aria=Create task from response]",
-          "svg[aria=Create task from response]~2",
           "svg[aria=Edit message]",
-          "svg[aria=Edit message]~2",
-          "svg[aria=Edit message]~3",
-          "svg[aria=Edit message]~4",
-          "svg[aria=Retry message]",
-          "svg[aria=Retry message]~2",
-          "svg[aria=Retry message]~3",
-          "svg[aria=Retry message]~4"
+          "svg[aria=Retry message]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
           "button[aria=Scroll to latest messages]",
-          "code:list_token",
-          "code:next_cursor",
           "div:div.w-full"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       },
       "amoled": {
         "tap-target": [
-          "a:An agent's MCP call to hypertask_tasks failed (2",
-          "a:An agent's MCP call to hypertask_tasks failed (2~2",
           "button[aria=Exit full-screen AI chat]",
           "button[aria=Scroll to latest messages]",
-          "li[row]>a:0",
           "svg[aria=Copy message]",
-          "svg[aria=Copy message]~2",
-          "svg[aria=Copy message]~3",
-          "svg[aria=Copy message]~4",
           "svg[aria=Copy response]",
-          "svg[aria=Copy response]~2",
           "svg[aria=Create task from response]",
-          "svg[aria=Create task from response]~2",
           "svg[aria=Edit message]",
-          "svg[aria=Edit message]~2",
-          "svg[aria=Edit message]~3",
-          "svg[aria=Edit message]~4",
-          "svg[aria=Retry message]",
-          "svg[aria=Retry message]~2",
-          "svg[aria=Retry message]~3",
-          "svg[aria=Retry message]~4"
+          "svg[aria=Retry message]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
           "button[aria=Scroll to latest messages]",
-          "code:list_token",
-          "code:next_cursor",
           "div:div.w-full"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       },
       "dia": {
         "tap-target": [
-          "a:An agent's MCP call to hypertask_tasks failed (2",
-          "a:An agent's MCP call to hypertask_tasks failed (2~2",
           "button[aria=Exit full-screen AI chat]",
           "button[aria=Scroll to latest messages]",
+          "path:path",
           "svg[aria=Copy message]",
-          "svg[aria=Copy message]~2",
-          "svg[aria=Copy message]~3",
           "svg[aria=Copy response]",
-          "svg[aria=Copy response]~2",
           "svg[aria=Create task from response]",
-          "svg[aria=Create task from response]~2",
           "svg[aria=Edit message]",
-          "svg[aria=Edit message]~2",
-          "svg[aria=Edit message]~3",
-          "svg[aria=Retry message]",
-          "svg[aria=Retry message]~2",
-          "svg[aria=Retry message]~3"
+          "svg[aria=Retry message]"
         ],
         "input-font": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ],
         "radius": [
           "button[aria=Scroll to latest messages]",
-          "code:list_token",
-          "code:next_cursor",
           "div:div.w-full"
         ],
         "overflow-x": [],
         "purple-non-ai": [],
         "mic-action": [
-          "div[role=textbox]:div.tiptap"
+          "div[aria=Message]"
         ]
       }
     },
@@ -1313,8 +760,8 @@
           "button[aria=Create task]",
           "div:Search New Task BOARD Zoom board out Create task",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
-          "li[row]>span:0",
+          "div[row]>div:#>a:#>div:#",
+          "li[row]>span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1335,8 +782,8 @@
           "button[aria=Create task]",
           "div:Search New Task BOARD Zoom board out Create task",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
-          "li[row]>span:0",
+          "div[row]>div:#>a:#>div:#",
+          "li[row]>span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1357,8 +804,8 @@
           "button[aria=Create task]",
           "div:Search New Task BOARD Zoom board out Create task",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
-          "li[row]>span:0",
+          "div[row]>div:#>a:#>div:#",
+          "li[row]>span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1379,8 +826,8 @@
           "button[aria=Create task]",
           "div:Search New Task BOARD Zoom board out Create task",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
-          "li[row]>span:0",
+          "div[row]>div:#>a:#>div:#",
+          "li[row]>span:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1394,6 +841,7 @@
     "commands-new-task": {
       "porcelain": {
         "tap-target": [
+          "button[aria=Attach files]",
           "button[role=tab]:New Task",
           "button[role=tab]:Search",
           "div#compose-task-audio-button"
@@ -1402,10 +850,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:QA Sandbox",
-          "div:Search New Task QA Sandbox",
+          "div:Midscene nightly QA fixture",
+          "div:Search New Task Midscene nightly QA fixture",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1417,6 +865,7 @@
       },
       "graphite": {
         "tap-target": [
+          "button[aria=Attach files]",
           "button[role=tab]:New Task",
           "button[role=tab]:Search",
           "div#compose-task-audio-button"
@@ -1425,10 +874,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:QA Sandbox",
-          "div:Search New Task QA Sandbox",
+          "div:Midscene nightly QA fixture",
+          "div:Search New Task Midscene nightly QA fixture",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1440,6 +889,7 @@
       },
       "amoled": {
         "tap-target": [
+          "button[aria=Attach files]",
           "button[role=tab]:New Task",
           "button[role=tab]:Search",
           "div#compose-task-audio-button"
@@ -1448,10 +898,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:QA Sandbox",
-          "div:Search New Task QA Sandbox",
+          "div:Midscene nightly QA fixture",
+          "div:Search New Task Midscene nightly QA fixture",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1463,6 +913,7 @@
       },
       "dia": {
         "tap-target": [
+          "button[aria=Attach files]",
           "button[role=tab]:New Task",
           "button[role=tab]:Search",
           "div#compose-task-audio-button"
@@ -1471,10 +922,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:QA Sandbox",
-          "div:Search New Task QA Sandbox",
+          "div:Midscene nightly QA fixture",
+          "div:Search New Task Midscene nightly QA fixture",
           "div[aria=Commands mode]",
-          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1498,8 +949,8 @@
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#createTaskModal",
-          "div:Board: QA Sandbox Section: Doing Priority: None",
-          "div[row]>div:0>a:0>div:0",
+          "div:Board: Midscene nightly QA fixture Section: Read",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]",
           "span[aria=valentin avatar]"
@@ -1522,8 +973,8 @@
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#createTaskModal",
-          "div:Board: QA Sandbox Section: Doing Priority: None",
-          "div[row]>div:0>a:0>div:0",
+          "div:Board: Midscene nightly QA fixture Section: Read",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]",
           "span[aria=valentin avatar]"
@@ -1546,8 +997,8 @@
           "button[aria=Ask AI]",
           "button[aria=Create task]",
           "div#createTaskModal",
-          "div:Board: QA Sandbox Section: Doing Priority: None",
-          "div[row]>div:0>a:0>div:0",
+          "div:Board: Midscene nightly QA fixture Section: Read",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]",
           "span[aria=valentin avatar]"
@@ -1571,8 +1022,8 @@
           "button[aria=Create task]",
           "div#createTaskModal",
           "div#description-container-create-task-modal",
-          "div:Board: QA Sandbox Section: Doing Priority: None",
-          "div[row]>div:0>a:0>div:0",
+          "div:Board: Midscene nightly QA fixture Section: Read",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]",
           "span[aria=valentin avatar]"
@@ -1594,11 +1045,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
-          "div[row]>div:0>a:0>div:0",
+          "div:BOARDS Midscene nightly QA fixture Hypertask Pro",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span:span.flex",
-          "span:span.flex~2",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
@@ -1616,11 +1066,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
-          "div[row]>div:0>a:0>div:0",
+          "div:BOARDS Midscene nightly QA fixture Hypertask Pro",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span:span.flex",
-          "span:span.flex~2",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
@@ -1638,11 +1087,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
-          "div[row]>div:0>a:0>div:0",
+          "div:BOARDS Midscene nightly QA fixture Hypertask Pro",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span:span.flex",
-          "span:span.flex~2",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
@@ -1660,11 +1108,10 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
-          "div[row]>div:0>a:0>div:0",
+          "div:BOARDS Midscene nightly QA fixture Hypertask Pro",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span:span.flex",
-          "span:span.flex~2",
           "span[aria=Settings]"
         ],
         "overflow-x": [],
@@ -1681,8 +1128,8 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
-          "div[row]>div:0>a:0>div:0",
+          "div:VIEWS Midscene nightly QA fixture # Blocked by m",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1696,8 +1143,8 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
-          "div[row]>div:0>a:0>div:0",
+          "div:VIEWS Midscene nightly QA fixture # Blocked by m",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1711,8 +1158,8 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
-          "div[row]>div:0>a:0>div:0",
+          "div:VIEWS Midscene nightly QA fixture # Blocked by m",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -1726,8 +1173,8 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
-          "div[row]>div:0>a:0>div:0",
+          "div:VIEWS Midscene nightly QA fixture # Blocked by m",
+          "div[row]>div:#>a:#>div:#",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
