@@ -24,6 +24,7 @@ import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/
 import { HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG } from "@/lib/flags/definitions/htpr-8339-template-switch-question";
 import { YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG } from "@/lib/flags/definitions/yper4-801-manager-lease-flag-switch";
 import { isManagerClassAgentName, MANAGER_GRANT_HEADER, requireCurrentManagerGrant } from "@/lib/flags/managerLease";
+import { undoesAgentOff } from "@/lib/flags/agentOffUndo";
 import { authorize } from "@/lib/flags/agentAuthorization";
 import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
@@ -142,8 +143,17 @@ export async function PATCH(request: NextRequest) {
       }
       if (!link) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       const commentId = Number(link[3]);
+      const projectAccessWhere = projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope);
+      if (await undoesAgentOff(tx, {
+        key: body.key as string,
+        mode: body.mode as FeatureFlagMode,
+        commentId,
+        projectId: Number(link[1]),
+        uniqueIndex: Number(link[2]),
+        projectAccessWhere,
+      })) return;
       const approval = await tx.comment.findFirst({
-        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } },
+        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectAccessWhere } },
         select: { taskId: true },
       });
       if (!approval) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);

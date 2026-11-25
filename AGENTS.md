@@ -26,6 +26,7 @@ Reference command paths are repo-relative.
 - Wireframes use only live app tokens.
 - Wireframes need eight fresh theme captures.
 - Sign-off needs a `/wireframes/` link.
+- Flagged failures hold at Owner + QA. An agent's Off returns on a link to the agent's comment, never Everyone; Valentin's Off needs his yes, and Off is his safety switch.
 - Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
@@ -51,8 +52,6 @@ Read linked sections on demand.
 | Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |
 | Access or security changes | [Still-allowed tests](.claude/reference/workflow.md#repo-workflow-detail) |
 
-Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first.
-Runners never switch a flag Off; Off is Valentin's own safety switch.
 `src/` enforces comment rules through `local/no-comments`.
 
 Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.

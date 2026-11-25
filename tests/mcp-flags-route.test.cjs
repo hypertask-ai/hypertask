@@ -40,6 +40,8 @@ let editOnCandidateLock;
 let approvalLogs;
 let auditLogs;
 let latestChange;
+let offChange;
+let offUndoComment;
 let legacyFlagReads;
 let legacyFlagsFail;
 let storedRole;
@@ -121,7 +123,13 @@ function commentsMatching(query) {
 const tx = {
   $executeRaw: async () => { calls.push("advisory-lock"); },
   featureFlag: { findUnique: async () => ({ mode: previousMode }) },
-  featureFlagChange: { findFirst: async () => latestChange },
+  featureFlagChange: { findFirst: async (query) => {
+    if (query.where.newMode !== "OFF") return latestChange;
+    assert.equal(query.where.key, key);
+    assert.deepEqual(query.orderBy, [{ createdAt: "desc" }, { id: "desc" }]);
+    assert.deepEqual(query.select, { agentId: true });
+    return offChange;
+  } },
   logs: { create: async ({ data }) => { auditLogs.push(JSON.parse(data.log)); } },
   $queryRaw: async (strings, commentId, taskId, projectId) => {
     const sql = strings.join("?");
@@ -151,6 +159,14 @@ const tx = {
     findMany: async (query) => commentsMatching(query),
     findFirst: async (query) => {
       if (query.where.taskId !== undefined) return commentsMatching(query)[0] ?? null;
+      if (query.select.id === undefined && query.select.agentId === true) {
+        assert.equal(query.where.id, 123);
+        assert.equal(query.where.editedAt, null);
+        assert.equal(query.where.editedByUserId, null);
+        assert.equal(query.where.editedByAgentId, null);
+        assert.deepEqual({ ...query.where.task, project: undefined }, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" }, project: undefined });
+        return offUndoComment && offUndoComment.id === query.where.id ? offUndoComment : null;
+      }
       if (query.select.taskId && !query.select.id) return approvalComment && approvalComment.id === query.where.id && approvalComment.task.projectId === query.where.task.projectId && approvalComment.task.uniqueIndex === query.where.task.uniqueIndex && approvalComment.task.status !== "Deleted" ? { taskId: 900 } : null;
       assert.deepEqual(calls.slice(-2), ["comment-lock", "reaction-lock"]);
       assert.equal(lockQueries.length, 2 * (approvalQueries.length + 1));
@@ -227,7 +243,7 @@ async function result(response) {
   return { status: response.status, body: await response.json() };
 }
 test.beforeEach((t) => {
-  approvalLogs = []; auditLogs = []; latestChange = null; legacyFlagReads = 0; legacyFlagsFail = false; storedRole = "write";
+  approvalLogs = []; auditLogs = []; latestChange = null; offChange = null; offUndoComment = null; legacyFlagReads = 0; legacyFlagsFail = false; storedRole = "write";
   t.mock.method(console, "info", (...args) => approvalLogs.push(args));
   ticketComments = []; candidateLocks = []; editOnCandidateLock = null;
   leadAgent = { userId: 6, revokedAt: null };
@@ -355,6 +371,52 @@ for (const [mode, label] of [["OFF", "Off"], ["EVERYONE", "Everyone"], ["OWNER_A
     assert.equal(approvalQueries.length, 1);
   });
 }
+
+test("PATCH returns a flag an agent turned Off to Owner + QA on the agent's comment", async () => {
+  previousMode = "OFF";
+  offChange = { agentId: "runner-3" };
+  offUndoComment = { id: 123, agentId: "runner-3" };
+  const response = await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", reason })));
+  assert.equal(response.status, 200);
+  assert.equal(response.body.flag.mode, "OWNER_AND_QA");
+  assert.deepEqual(writes, [[key, "OWNER_AND_QA", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason, source: "api" }]]);
+  assert.equal(approvalQueries.length, 0);
+  assert.equal(broadcasts, 1);
+});
+
+test("PATCH keeps Valentin's own Off behind his yes", async () => {
+  previousMode = "OFF";
+  offChange = { agentId: null };
+  offUndoComment = { id: 123, agentId: "runner-3" };
+  assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", reason }))), { status: 403, body: { error: approvalRequired } });
+  assert.equal(writes.length, 0);
+});
+
+test("PATCH refuses an agent Off undo with a missing reason or a link that is not a ticket comment", async () => {
+  previousMode = "OFF";
+  offChange = { agentId: "runner-3" };
+  offUndoComment = { id: 123, agentId: "runner-3" };
+  for (const body of [{ key, mode: "OWNER_AND_QA" }, { key, mode: "OWNER_AND_QA", reason: "https://app.hypertask.ai/admin/flags" }]) {
+    assert.deepEqual(await result(await PATCH(request("PATCH", body))), { status: 400, body: { error: "Reason must link to the approved ticket comment (#comment-<id>)" } });
+  }
+  assert.equal(writes.length, 0);
+});
+
+test("PATCH refuses an Off undo backed by a comment no agent wrote", async () => {
+  previousMode = "OFF";
+  offChange = { agentId: "runner-3" };
+  offUndoComment = null;
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", reason })))).status, 403);
+  assert.equal(writes.length, 0);
+});
+
+test("PATCH never widens an agent's Off to Everyone without Valentin's yes", async () => {
+  previousMode = "OFF";
+  offChange = { agentId: "runner-3" };
+  offUndoComment = { id: 123, agentId: "runner-3" };
+  assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "EVERYONE", reason }))), { status: 403, body: { error: approvalRequired } });
+  assert.equal(writes.length, 0);
+});
 
 test("PATCH accepts an HTML-only comment from the API with the mention span", async () => {
   approvalComment.commentText = "";
