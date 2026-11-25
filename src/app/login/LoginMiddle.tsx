@@ -145,6 +145,10 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
     }
   }, [hasOAuthParams, searchParams]);
 
+  const returnTo = hasOAuthParams
+    ? null
+    : parseSafeReturnTo(searchParams?.get("returnTo"));
+
   useEffect(() => {
     if (!hasOAuthParams) return;
 
@@ -211,18 +215,155 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
     setShowEmailForm(true);
   };
 
+  if (boatDevModel) {
+    return (
+      <>
+        <h1 className="mb-3 text-heading font-medium text-white-black">
+          {hasOAuthParams ? "Authorize MCP Client" : "Sign in to Hypertask"}
+        </h1>
+        <p className="mb-6 text-content text-text-light-gray">
+          {hasOAuthParams
+            ? "Sign in to authorize access to your Hypertask account."
+            : "For people. Choose how you sign in."}
+        </p>
+
+        {searchParams?.get("authError") === "google_signup_disabled" && (
+          <p className="text-content text-destructive" role="alert">
+            Google sign-in didn&apos;t work. Please try again, or sign in with your email.
+          </p>
+        )}
+
+        {showEmailForm ? (
+          <div className="w-full">
+            <Suspense
+              fallback={
+                <div className="animate-pulse space-y-3">
+                  <div className="h-12 rounded-sm bg-active-list-element" />
+                  <div className="h-12 rounded-sm bg-shadcn-primary" />
+                </div>
+              }
+            >
+              <EmailAuth
+                initialEmail={email}
+                styleConfig={boatEmailAuthStyleConfig}
+              />
+            </Suspense>
+            {!isAppShell && (
+              <button
+                type="button"
+                onClick={() => setShowEmailForm(false)}
+                className="mt-4 text-content text-text-light-gray transition-colors hover:text-white-black"
+              >
+                ← Back to login options
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            {!isAppShell && (
+              <LoginButton
+                size="small"
+                label="Continue with Google"
+                callbackURL={returnTo ?? undefined}
+                className="!h-12 !w-full !gap-2.5 !rounded-sm !border !border-border-light-gray-thin !bg-cardBackground !p-0 !text-white-black transition-colors duration-150 hover:!bg-hover-active"
+                iconClassName="!h-[18px] !w-[18px]"
+                labelClassName="!text-[15px]"
+              />
+            )}
+
+            <div
+              aria-hidden="true"
+              className="my-5 flex items-center gap-3 text-meta text-text-light-gray before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border"
+            >
+              OR
+            </div>
+
+            <form onSubmit={openEmailForm}>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="Enter your personal or work email"
+                aria-label="Email address"
+                className="mb-3 h-12 w-full rounded-sm border-0 bg-active-list-element px-4 text-content text-white-black outline-none transition-colors placeholder:text-text-light-gray focus-visible:ring-1 focus-visible:ring-border"
+              />
+              <button
+                type="submit"
+                className="flex h-12 w-full items-center justify-center rounded-sm bg-shadcn-primary text-content font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border"
+              >
+                Continue with email
+              </button>
+
+              {isPasskeySupported && !isAppShell && (
+                <button
+                  type="button"
+                  onClick={() => void handlePasskeySignIn()}
+                  disabled={isPasskeyLoading}
+                  className="mt-3 flex h-12 w-full items-center justify-center rounded-sm bg-active-list-element text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isPasskeyLoading ? "Signing in…" : "Sign in with a passkey"}
+                </button>
+              )}
+
+              {passkeyError && (
+                <p className="text-content text-destructive" role="alert">
+                  {passkeyError}
+                </p>
+              )}
+            </form>
+          </>
+        )}
+
+        {agentCodeSignIn && (
+          <div className="mt-6 border-t border-border-light-gray-thin pt-6">
+            <Link
+              href="/login/agent"
+              className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border"
+            >
+              Sign in an agent
+            </Link>
+            <p className="mt-2 text-meta text-text-light-gray">
+              Connect your agent with a sign-in code.
+            </p>
+          </div>
+        )}
+
+        <p className="mt-6 text-pretty text-center text-meta leading-relaxed text-text-light-gray">
+          By continuing, you agree to Hypertask&rsquo;s{" "}
+          <a
+            href="https://hypertask.ai/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 transition-colors hover:text-white-black"
+          >
+            Terms&nbsp;of&nbsp;Service
+          </a>{" "}
+          and acknowledge our{" "}
+          <a
+            href="https://hypertask.ai/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 transition-colors hover:text-white-black"
+          >
+            Privacy&nbsp;Policy
+          </a>.
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
       <h1
         className={cn(
-          !boatDevModel && serifClassName,
-          boatDevModel ? "mb-3 text-heading font-medium text-white-black" : "mb-3.5 text-balance text-[clamp(2.5rem,3.2vw,3.25rem)] font-medium leading-[1.08] tracking-[-0.02em] text-white",
+          serifClassName,
+          "mb-3.5 text-balance text-[clamp(2.5rem,3.2vw,3.25rem)] font-medium leading-[1.08] tracking-[-0.02em] text-white",
         )}
       >
         {hasOAuthParams ? (
           "Authorize MCP Client"
-        ) : boatDevModel ? (
-          "Sign in to Hypertask"
         ) : (
           <>
             Free collaborative project boards for the{" "}
@@ -230,12 +371,10 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
           </>
         )}
       </h1>
-      <p className={boatDevModel ? "mb-6 text-content text-text-light-gray" : "mb-9 text-pretty text-[15px] leading-[1.55] text-[#8e9093]"}>
+      <p className="mb-9 text-pretty text-[15px] leading-[1.55] text-[#8e9093]">
         {hasOAuthParams
           ? "Sign in to authorize access to your Hypertask account."
-          : boatDevModel
-            ? "For people. Choose how you sign in."
-            : "AI-driven task management that keeps your team shipping. Free to join, seconds to start."}
+          : "AI-driven task management that keeps your team shipping. Free to join, seconds to start."}
       </p>
 
       {searchParams?.get("authError") === "google_signup_disabled" && (
@@ -249,21 +388,21 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
           <Suspense
             fallback={
               <div className="animate-pulse space-y-3">
-                <div className={boatDevModel ? "h-12 rounded-sm bg-active-list-element" : "h-12 rounded-full bg-[#212429]"} />
-                <div className={boatDevModel ? "h-12 rounded-sm bg-shadcn-primary" : "h-12 rounded-lg bg-[#333B47]"} />
+                <div className="h-12 rounded-full bg-[#212429]" />
+                <div className="h-12 rounded-lg bg-[#333B47]" />
               </div>
             }
           >
             <EmailAuth
               initialEmail={email}
-              styleConfig={boatDevModel ? boatEmailAuthStyleConfig : emailAuthStyleConfig}
+              styleConfig={emailAuthStyleConfig}
             />
           </Suspense>
           {!isAppShell && (
             <button
               type="button"
               onClick={() => setShowEmailForm(false)}
-              className={boatDevModel ? "mt-4 text-content text-text-light-gray transition-colors hover:text-white-black" : "mt-4 text-[14px] text-[#8e9093] transition-colors hover:text-white"}
+              className="mt-4 text-[14px] text-[#8e9093] transition-colors hover:text-white"
             >
               ← Back to login options
             </button>
@@ -275,7 +414,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
             <LoginButton
               size="small"
               label="Continue with Google"
-              className={boatDevModel ? "!h-12 !w-full !gap-2.5 !rounded-sm !border !border-border-light-gray-thin !bg-cardBackground !p-0 !text-white-black transition-colors duration-150 hover:!bg-hover-active" : "!h-12 !w-full !gap-2.5 !rounded-lg !bg-white !p-0 !text-[#0e0e0e] transition-colors duration-150 hover:!bg-[#d9d9d9]"}
+              className="!h-12 !w-full !gap-2.5 !rounded-lg !bg-white !p-0 !text-[#0e0e0e] transition-colors duration-150 hover:!bg-[#d9d9d9]"
               iconClassName="!h-[18px] !w-[18px]"
               labelClassName="!text-[15px]"
             />
@@ -283,7 +422,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
 
           <div
             aria-hidden="true"
-            className={boatDevModel ? "my-5 flex items-center gap-3 text-meta text-text-light-gray before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border" : "my-[22px] flex items-center gap-3.5 text-[11px] tracking-[0.12em] text-[#8e9093] before:h-px before:flex-1 before:bg-[rgba(76,83,98,0.55)] after:h-px after:flex-1 after:bg-[rgba(76,83,98,0.55)]"}
+            className="my-[22px] flex items-center gap-3.5 text-[11px] tracking-[0.12em] text-[#8e9093] before:h-px before:flex-1 before:bg-[rgba(76,83,98,0.55)] after:h-px after:flex-1 after:bg-[rgba(76,83,98,0.55)]"
           >
             OR
           </div>
@@ -297,11 +436,11 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Enter your personal or work email"
               aria-label="Email address"
-              className={boatDevModel ? "mb-3 h-12 w-full rounded-sm border-0 bg-active-list-element px-4 text-content text-white-black outline-none transition-colors placeholder:text-text-light-gray focus-visible:ring-1 focus-visible:ring-border" : "mb-3 h-12 w-full rounded-full border border-[#4c5362] bg-[#212429] px-[22px] text-[15px] text-white outline-none transition-colors placeholder:text-[#8e9093] focus:border-[#8e9093]"}
+              className="mb-3 h-12 w-full rounded-full border border-[#4c5362] bg-[#212429] px-[22px] text-[15px] text-white outline-none transition-colors placeholder:text-[#8e9093] focus:border-[#8e9093]"
             />
             <button
               type="submit"
-              className={boatDevModel ? "flex h-12 w-full items-center justify-center rounded-sm bg-shadcn-primary text-content font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border" : "flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093]"}
+              className="flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093]"
             >
               Continue with email
             </button>
@@ -311,7 +450,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
                 type="button"
                 onClick={() => void handlePasskeySignIn()}
                 disabled={isPasskeyLoading}
-                className={boatDevModel ? "mt-3 flex h-12 w-full items-center justify-center rounded-sm bg-active-list-element text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border disabled:cursor-not-allowed disabled:opacity-50" : "mt-3 flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093] disabled:cursor-not-allowed disabled:opacity-50"}
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isPasskeyLoading ? "Signing in…" : "Sign in with a passkey"}
               </button>
@@ -326,22 +465,13 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
         </>
       )}
 
-      {boatDevModel && agentCodeSignIn && (
-        <div className="mt-6 border-t border-border-light-gray-thin pt-6">
-          <Link href="/login/agent" className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border">
-            Sign in an agent
-          </Link>
-          <p className="mt-2 text-meta text-text-light-gray">Connect your agent with a sign-in code.</p>
-        </div>
-      )}
-
-      <p className={boatDevModel ? "mt-6 text-pretty text-center text-meta leading-relaxed text-text-light-gray" : "mt-[26px] text-pretty text-center text-[12px] leading-[1.6] text-[#8e9093]"}>
+      <p className="mt-[26px] text-pretty text-center text-[12px] leading-[1.6] text-[#8e9093]">
         By continuing, you agree to Hypertask&rsquo;s{" "}
         <a
           href="https://hypertask.ai/terms"
           target="_blank"
           rel="noopener noreferrer"
-          className={boatDevModel ? "underline underline-offset-2 transition-colors hover:text-white-black" : "underline underline-offset-2 transition-colors hover:text-white"}
+          className="underline underline-offset-2 transition-colors hover:text-white"
         >
           Terms&nbsp;of&nbsp;Service
         </a>{" "}
@@ -350,7 +480,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
           href="https://hypertask.ai/privacy"
           target="_blank"
           rel="noopener noreferrer"
-          className={boatDevModel ? "underline underline-offset-2 transition-colors hover:text-white-black" : "underline underline-offset-2 transition-colors hover:text-white"}
+          className="underline underline-offset-2 transition-colors hover:text-white"
         >
           Privacy&nbsp;Policy
         </a>.

@@ -8,7 +8,7 @@ const layoutKey = 'htpr-9277-boat-dev-model';
 const agentKey = 'htpr-7552-agent-code-signin';
 const flags = { HTPR_9277_BOAT_DEV_MODEL_FLAG: layoutKey, HTPR_7552_AGENT_CODE_SIGNIN_FLAG: agentKey };
 
-async function withLogin(props, check) {
+async function withLogin(props, check, options = {}) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'https://example.test/login' });
   dom.window.PublicKeyCredential = function PublicKeyCredential() {};
   const globals = { window: dom.window, document: dom.window.document, navigator: dom.window.navigator, sessionStorage: dom.window.sessionStorage, IS_REACT_ACT_ENVIRONMENT: true };
@@ -23,7 +23,7 @@ async function withLogin(props, check) {
     };
     const mocks = {
       'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
-      'next/navigation': { useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push() {} }) },
+      'next/navigation': { useSearchParams: () => new URLSearchParams(options.search ?? ''), useRouter: () => ({ push() {} }) },
       'next/font/google': { Newsreader: () => ({ className: 'newsreader' }) },
       'next/image': { default: ({ priority, ...rest }) => React.createElement('img', rest) },
       './Login-2-AB-test': { default: () => null },
@@ -40,6 +40,7 @@ async function withLogin(props, check) {
       '@/lib/analytics/signupIdentityClient': { getSignupContextInput: async () => ({}) },
       '@/utils/undoActions/helperFuncs': { cn: (...parts) => parts.filter(Boolean).join(' ') },
     };
+    if (options.realSafeReturnTo) delete mocks['@/lib/auth/safeReturnTo'];
     const Component = loadModule('src/app/login/LoginComponent.tsx', mocks).default;
     root = require('react-dom/client').createRoot(dom.window.document.getElementById('root'));
     await React.act(async () => root.render(React.createElement(Component, props)));
@@ -108,6 +109,26 @@ test('still allowed: flag-on Google starts sign-in and email sends the existing 
     else process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED = previous;
     if (previousEmail === undefined) delete process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL;
     else process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = previousEmail;
+  }
+});
+
+test('agent entry keeps its return path through Google, and an unsafe one is dropped', async () => {
+  const previous = process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED;
+  process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED = '1';
+  try {
+    await withLogin({ boatDevModel: true, agentCodeSignIn: true }, async ({ container, calls, dom }) => {
+      await React.act(async () => container.querySelector('#login-button').click());
+      assert.equal(calls[0].provider, 'google');
+      assert.equal(calls[0].callbackURL, '/login/agent');
+      assert.equal(dom.window.sessionStorage.getItem('postLoginRedirect'), '/login/agent');
+    }, { search: 'returnTo=%2Flogin%2Fagent', realSafeReturnTo: true });
+    await withLogin({ boatDevModel: true, agentCodeSignIn: true }, async ({ container, calls }) => {
+      await React.act(async () => container.querySelector('#login-button').click());
+      assert.equal(calls[0].callbackURL, '/my-tasks');
+    }, { search: 'returnTo=https%3A%2F%2Fevil.example%2Fsteal', realSafeReturnTo: true });
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED;
+    else process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED = previous;
   }
 });
 
