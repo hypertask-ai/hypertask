@@ -466,7 +466,6 @@ export function AI_Tiptap_Container({
                 modelBilling={modelBilling}
                 currentOptions={displayAiOptions}
                 mobileQuickPicker
-                calm={calmModelPicker ? true : undefined}
               />
             )
           }

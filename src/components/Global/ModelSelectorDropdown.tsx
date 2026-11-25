@@ -739,6 +739,13 @@ const AIModelDropDownList = ({
                     <SubmenuRow
                       key={row.key}
                       label={row.label}
+                      note={
+                        isGuestLocked
+                          ? "Sign up to unlock"
+                          : isPremiumLocked
+                            ? "Paid plan or BYOK"
+                            : undefined
+                      }
                       aside={row.providerLabel}
                       priceTier={definition?.priceTier}
                       selected={!autoSelected && definition?.key === selectedOption.modelKey}
@@ -1120,7 +1127,8 @@ function SubmenuRow({
         ) : null}
         <Check size={14}
           className={cn(
-            "text-micro text-hypertasks-purple",
+            "text-micro",
+            marker ? "text-white-black" : "text-hypertasks-purple",
             selected ? "opacity-100" : "opacity-0"
           )}
           strokeWidth={1.75}
