@@ -23,6 +23,9 @@ Reference command paths are repo-relative.
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Wireframes use only live app tokens.
+- Wireframes need eight fresh theme captures.
+- Sign-off needs a `/wireframes/` link.
 - Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
 
 Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
@@ -37,7 +40,7 @@ Read linked sections on demand.
 | Starting, claiming, delegating, shipping | [Session rules](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claim rules](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
 | Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [ticket template](docs/ticket-template.md) |
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
-| Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup), [.claude/skills/clean-up/SKILL.md](.claude/skills/clean-up/SKILL.md) |
+| Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup) |
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
 | Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
 | UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
@@ -48,7 +51,6 @@ Read linked sections on demand.
 | Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |
 | Access or security changes | [Still-allowed tests](.claude/reference/workflow.md#repo-workflow-detail) |
 
-Access and security changes need still-allowed tests.
 Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first.
 Runners never switch a flag Off; Off is Valentin's own safety switch.
 `src/` enforces comment rules through `local/no-comments`.

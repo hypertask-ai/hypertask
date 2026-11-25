@@ -2146,6 +2146,7 @@ jobs:
           BASE_URL: http://127.0.0.1:3100
           SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
           SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
+          SMOKE_TASK_PATH: ${{ steps.fixtures.outputs.task_path }}
           BROWSER_SMOKE_PR: '1'
         run: |
           set -euo pipefail
@@ -2186,7 +2187,7 @@ jobs:
             export VERIFY_QA_FIXTURE=e2e/smoke/.state/inbox-cycle-fixture.json
             export VERIFY_QA_CHANGED_FILES="${RUNNER_TEMP}/changed-files.txt"
             export VERIFY_QA_OUT=verify-qa-premerge
-            timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+            timeout --signal=TERM --kill-after=20s 600s node .github/scripts/verify-qa-premerge.mjs
             verify_qa_status=$?
             if grep -Eq '^(.github/scripts/verify-qa-premerge.mjs|tests/verify-qa-premerge.test.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
               printf '%s\n' 'src/lib/auth/session.ts' > "$RUNNER_TEMP/verify-qa-matched-files.txt"

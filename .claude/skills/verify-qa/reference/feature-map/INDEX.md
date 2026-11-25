@@ -63,7 +63,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP task moves | [mcp-task-moves.md](mcp-task-moves.md) | disposable fixture refusal, unchanged column, successful moves; delete fixture |
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; single-token mint/revoke steps in the file; never revoke-all on QA 2343 (MCP watcher) or on 985 (shared agent token) |
-| Mobile | [mobile.md](mobile.md) | any id above tagged `@mobile` (`open-board`, `open-task`, `create-task`) |
+| Mobile | [mobile.md](mobile.md) | `@mobile` journeys (`open-board`, `open-task`, `create-task`, `reply-inbox`, `ai-chat`, `switch-boards`, `switch-column`) and `e2e/smoke/mobile-design.spec.ts` |
 | AI model canary | [model-canary.md](model-canary.md) | internal cron, dedicated internal-key request identity, read-only MCP status |
 | My Tasks | [my-tasks.md](my-tasks.md) | no smoke id; drive steps in my-tasks.md (list, settings button, `/scheduled`, board-tab absence) |
 | OAuth and API clients | [oauth-and-api-clients.md](oauth-and-api-clients.md) | `feature-map-drive.mjs oauth-and-api-clients` read-only |

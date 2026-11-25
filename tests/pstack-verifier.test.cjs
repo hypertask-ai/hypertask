@@ -147,6 +147,111 @@ for (const [number, pull] of Object.entries(authorPulls)) {
   });
 }
 
+const refreshed3829 = authorPulls[3829];
+const refreshHead = "e679f41f205aefeeb0b44c2373da38069de4e9ca";
+const refreshBase = "cc3556d779545616630573e9d5b894fb990da608";
+const refreshMerge = {
+  sha: refreshHead,
+  author: { login: "hypertask-runners[bot]" },
+  committer: { login: "web-flow" },
+  parents: [{ sha: refreshed3829.commits[0].sha }, { sha: refreshBase }],
+  commit: { message: "Merge branch 'production' into dependabot/npm_and_yarn/e2e/midscene/engine.io-6.6.13", verification: { verified: true, reason: "valid" } },
+};
+
+test("a Dependabot pull request refreshed by the update-branch API resolves as dependabot[bot]", async () => {
+  const { resolveCommand } = await load();
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  assert.equal(refreshMerge.parents[0].sha, refreshed3829.commits.at(-1).sha);
+  assert.equal(refreshMerge.parents[0].sha, refreshed3829.headSha);
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pv-refresh-"));
+  const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GITHUB_REPOSITORY: "hypertask-ai/hypertask", GITHUB_RUN_ID: "10", GITHUB_RUN_ATTEMPT: "1", WORK: dir, GITHUB_OUTPUT: path.join(dir, "output") });
+  const resolve = async ({ commits = [refreshed3829.commits[0], refreshMerge], login = "dependabot[bot]", body = refreshed3829.body, files = refreshed3829.files, baseSha = refreshBase, onBase = [refreshBase], commitsUnreadable = false } = {}) => {
+    fs.rmSync(path.join(dir, "request"), { recursive: true, force: true });
+    fs.writeFileSync(process.env.GITHUB_OUTPUT, "");
+    const calls = [];
+    const pull = { number: 3829, state: "open", draft: false, user: { login }, title: "Bump engine.io from 6.6.9 to 6.6.13 in /e2e/midscene", body, base: { ref: "production", sha: baseSha }, head: { sha: refreshHead, repo: { full_name: "hypertask-ai/hypertask" } }, commits: commits.length };
+    await resolveCommand({
+      event: { workflow_run: { conclusion: "success", head_sha: refreshHead, pull_requests: [{ number: 3829 }] } },
+      gh: (args) => {
+        calls.push(args.join(" "));
+        const url = args.join(" ");
+        if (url.includes("/pulls/3829/commits")) {
+          if (commitsUnreadable) return "{}";
+          return JSON.stringify(args.includes("--slurp") ? [commits] : commits);
+        }
+        if (url.includes("/compare/")) {
+          const sha = /compare\/([0-9a-f]{40})\.\.\.([0-9a-f]{40})/.exec(url)?.[1];
+          return JSON.stringify({ status: onBase.includes(sha) ? "identical" : "diverged" });
+        }
+        if (url.includes("/pulls/3829/files")) return files.map((filename) => JSON.stringify({ filename })).join("\n");
+        if (url.includes("vnd.github.diff")) return "";
+        if (url.includes("/pulls/3829")) return JSON.stringify(pull);
+        if (url.includes(`/commits/${refreshHead}`)) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+        if (url.includes("/issues/3829/comments")) return "[]";
+        throw new Error(url);
+      },
+    });
+    const output = fs.readFileSync(process.env.GITHUB_OUTPUT, "utf8");
+    const requestPath = path.join(dir, "request/request.json");
+    return { calls, output, request: fs.existsSync(requestPath) ? JSON.parse(fs.readFileSync(requestPath, "utf8")) : null };
+  };
+  try {
+    const live = await resolve();
+    assert.match(live.output, /stop=false/);
+    assert.equal(live.request.botLogin, "dependabot[bot]");
+    assert.equal(live.request.author, "");
+    assert.equal(live.calls.filter((call) => call.includes("/compare/")).length, 1);
+    const plain = await resolve({ commits: [{ ...refreshed3829.commits[0], sha: refreshHead }] });
+    assert.match(plain.output, /stop=false/);
+    assert.equal(plain.request.botLogin, "dependabot[bot]");
+    assert.equal(plain.calls.filter((call) => call.includes("/compare/")).length, 0);
+    const advanced = await resolve({ onBase: ["a".repeat(40)] });
+    assert.match(advanced.output, /stop=true/);
+    assert.equal(advanced.request, null);
+    assert.match(advanced.output, /mark=failure/);
+    assert.match(advanced.output, /description=FAIL: author model unknown/);
+    for (const [name, patch] of [
+      ["unsigned refresh merge", { commit: { message: refreshMerge.commit.message, verification: { verified: false, reason: "unsigned" } } }],
+      ["refresh merge committed by an app instead of GitHub", { committer: { login: "hypertask-runners[bot]" } }],
+      ["refresh merge authored by a person", { author: { login: "valentinyeo" } }],
+      ["refresh merge authored by an agent account", { author: { login: "codex" } }],
+      ["refresh merge with one parent", { parents: [{ sha: refreshBase }] }],
+      ["refresh merge from a branch that is not on production", { parents: [{ sha: refreshed3829.commits[0].sha }, { sha: "b".repeat(40) }] }],
+    ]) {
+      const spoofed = await resolve({ commits: [refreshed3829.commits[0], { ...refreshMerge, ...patch }] });
+      assert.match(spoofed.output, /stop=true/, name);
+      assert.equal(spoofed.request, null, name);
+      assert.match(spoofed.output, /description=FAIL: author model unknown/, name);
+    }
+    const unsignedBump = await resolve({ commits: [{ ...refreshed3829.commits[0], commit: { ...refreshed3829.commits[0].commit, verification: { verified: false, reason: "unsigned" } } }, refreshMerge] });
+    assert.match(unsignedBump.output, /stop=true/);
+    assert.equal(unsignedBump.request, null);
+    const userPath = await resolve({ files: [...refreshed3829.files, "src/app/page.tsx"] });
+    assert.match(userPath.output, /stop=true/);
+    assert.match(userPath.output, /bot changed a user path/);
+    const unreadable = await resolve({ commitsUnreadable: true });
+    assert.match(unreadable.output, /stop=true/);
+    assert.equal(unreadable.request, null);
+    const agent = await resolve({ login: "valentinyeo", body: refreshed3829.body });
+    assert.match(agent.output, /stop=true/);
+    assert.equal(agent.request, null);
+    assert.match(agent.output, /description=FAIL: author model unknown/);
+    const signedAgent = await resolve({ login: "valentinyeo", body: "Author-Model: codex (gpt-6.1-sol)" });
+    assert.match(signedAgent.output, /stop=false/);
+    assert.equal(signedAgent.request.author, "codex");
+    assert.equal(signedAgent.request.botLogin, undefined);
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 for (const family of ["deepseek", "mystery"]) {
   test(`a PR #3806 update-branch merge cannot veto the body with ${family} trailers`, async () => {
     const { authorFamily } = await load();
@@ -1218,6 +1323,41 @@ test("an api action passes from the preview response with no page navigation", a
   }
 });
 
+test("an all-api plan matches a text expect against the response text", async () => {
+  const { runPlan } = await load();
+  const savedToken = process.env.GH_TOKEN;
+  process.env.GH_TOKEN = "actions-token";
+  try {
+  const actions = [
+    { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 403, expectText: "not a member" },
+    { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "moved" },
+  ];
+  const pageFor = (text, statuses = [200]) => {
+    let call = 0;
+    return {
+      async goto() { throw new Error("navigated"); },
+      async screenshot() { throw new Error("screenshot"); },
+      getByText() { throw new Error("page text"); },
+      request: { async fetch() { return { status: () => statuses[Math.min(call++, statuses.length - 1)], async text() { return text; } }; } },
+    };
+  };
+  const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [] };
+  const body = plan([actions[0]], { expect: [{ text: "not a member" }] });
+  const seen = await runPlan({ page: pageFor('{"message":"This agent is not a member of this board."}', [403]), plan: body, ...drive });
+  assert.equal(seen.expects[0].ok, true);
+  const missed = await runPlan({ page: pageFor('{"message":"Task moved successfully"}', [403]), plan: body, ...drive });
+  assert.equal(missed.expects[0].ok, false);
+  assert.match(missed.expects[0].error, /response text missing/);
+  const two = plan(actions, { expect: [{ text: "not a member" }, { text: "moved" }] });
+  const both = await runPlan({ page: pageFor('{"a":"not a member","b":"moved"}', [403, 200]), plan: two, ...drive });
+  assert.equal(both.steps.every((step) => step.ok), true, JSON.stringify(both.steps));
+  assert.equal(both.expects.every((item) => item.ok), true, JSON.stringify(both.expects));
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = savedToken;
+  }
+});
+
 test("the drive fills archived, board and task ids in an api body", async () => {
   const savedToken = process.env.GH_TOKEN;
   delete process.env.GH_TOKEN;
@@ -1609,6 +1749,85 @@ test("an unevaluated verifier posts an error status and no verdict comment", asy
   assert.equal(posts[0].body.description, "verifier could not evaluate: model output invalid after retry");
   assert.equal(cancelKeepsStatus({ state: "error", description: posts[0].body.description, target_url: owned.target_url }, owned.target_url), true);
   assert.equal(cancelKeepsStatus({ state: "error", description: "FAIL: something", target_url: owned.target_url }, owned.target_url), false);
+});
+
+test("run 45311010610's non-app plan drives nothing, asks nothing, and a missing verdict is the error status", async () => {
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const { planFromRequest, driveNeeded, askNeeded, judgeAskCommand, postCommand, decide, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
+  const files = [
+    ".claude/skills/verify-qa/reference/feature-map/INDEX.md",
+    ".claude/skills/verify-qa/reference/feature-map/mobile.md",
+    ".claude/skills/verify-qa/reference/feature-map/rows/mobile.md",
+    ".github/scripts/feature-map-live-daily.mjs",
+    ".github/scripts/verify-qa-premerge.mjs",
+    ".github/scripts/wait-prod-health-gate.mjs",
+    ".github/workflows/ci-tests.yml",
+    ".github/workflows/mobile-verify.yml",
+    "e2e/smoke/__snapshots__/mobile-design.baseline.json",
+    "e2e/smoke/journeys.spec.ts",
+    "e2e/smoke/lib/mobile-design.ts",
+    "e2e/smoke/mobile-design.spec.ts",
+    "e2e/smoke/playwright.config.mobile.ts",
+    "scripts/seed-browser-smoke.mjs",
+    "tests/mobile-design.test.cjs",
+    "tests/verify-qa-premerge.test.cjs",
+  ];
+  const request = { ...binding, author: "codex", title: "HTPR-9636 [INFRA] Add mobile verification map, design audit, and phone journeys", body: "", diff: "", files, filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  let asked = 0;
+  const savedToken = process.env.GH_TOKEN;
+  delete process.env.GH_TOKEN;
+  let built;
+  try {
+    built = await planFromRequest(request, { binding, pages: [], ask() { asked += 1; throw new Error("the model must not be asked"); } });
+  } finally {
+    if (savedToken !== undefined) process.env.GH_TOKEN = savedToken;
+  }
+  assert.equal(asked, 0);
+  assert.deepEqual([built.actions, built.reason], [[], "no user path: non-app files only"]);
+  assert.equal(built.journeys, undefined);
+  assert.deepEqual([driveNeeded(built), askNeeded(built)], [false, false]);
+  const green = settleWaiting({
+    runs: REQUIRED_CI_CONTEXTS.map((name) => ({ name, conclusion: "success" })),
+    statuses: REQUIRED_CI_CONTEXTS.map((context) => ({ context, state: "success" })),
+  });
+  assert.deepEqual([green.verdict, green.state, green.notes], ["PASS+NOTES", "success", "no app path: no user path"]);
+  assert.deepEqual([decide({ model: {}, plan: built, evidence: null, binding, checksPassed: false }).verdict, decide({ model: {}, plan: built, evidence: null, binding, checksPassed: true }).verdict], ["FAIL", "PASS+NOTES"]);
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "pv-no-journey-"));
+  fs.mkdirSync(path.join(work, "plan"));
+  fs.writeFileSync(path.join(work, "plan", "plan.json"), JSON.stringify(built));
+  const savedOut = process.env.GITHUB_OUTPUT;
+  process.env.GITHUB_OUTPUT = path.join(work, "output");
+  try {
+    assert.equal(await judgeAskCommand({ work, binding }), null);
+    assert.equal(fs.existsSync(path.join(work, "evidence", "evidence.json")), false);
+  } finally {
+    if (savedOut === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = savedOut;
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+  const sha = built.sha;
+  const postDir = fs.mkdtempSync(path.join(os.tmpdir(), "pv-no-verdict-"));
+  const saved = ["GH_TOKEN", "GITHUB_REPOSITORY", "HEAD_SHA", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "PR", "WORK"].map((key) => [key, process.env[key]]);
+  Object.assign(process.env, { GH_TOKEN: "t", GITHUB_REPOSITORY: "acme/app", HEAD_SHA: sha, GITHUB_RUN_ID: "45311010610", GITHUB_RUN_ATTEMPT: "1", PR: "3825", WORK: postDir });
+  const pull = { state: "open", draft: false, base: { ref: "production" }, head: { sha, repo: { full_name: "acme/app" } } };
+  const owned = { context: "pstack-verifier", creator: { login: "hypertask-runners[bot]" }, state: "pending", target_url: "https://github.com/acme/app/actions/runs/45311010610/attempts/1" };
+  const posts = [];
+  try {
+    await postCommand({
+      token: "app-token",
+      fetch: async (_url, options) => { posts.push(JSON.parse(options.body)); return { ok: true }; },
+      gh: (args) => {
+        const url = String(args[1]);
+        if (url === "repos/acme/app/pulls/3825") return JSON.stringify(pull);
+        if (url === `repos/acme/app/commits/${sha}/statuses`) return JSON.stringify([owned]);
+        throw new Error(url);
+      },
+    });
+  } finally {
+    for (const [key, value] of saved) value === undefined ? delete process.env[key] : (process.env[key] = value);
+    fs.rmSync(postDir, { recursive: true, force: true });
+  }
+  assert.deepEqual([posts.length, posts[0].state, posts[0].description], [1, "error", "verifier could not evaluate: the judge lane did not produce a verdict"]);
 });
 
 test("docs and bot shortcuts skip the model only for the sets decide accepts", async () => {

@@ -36,13 +36,17 @@ and `[data-phone-new-task-card="on"]` on `/new?id=<board>`; `#body`
 "Context:" text.
 
 `e2e/smoke/journeys.spec.ts` tests tagged `@mobile` (`open-board`,
-`open-task`, `create-task`) exercise the same shape, but only when
+`open-task`, `create-task`, `reply-inbox`, `ai-chat`, `switch-boards`,
+`switch-column`) exercise the same shape, but only when
 `HT_QA_JOURNEYS=1`. `prod-health.yml` runs `--project Desktop --project Mobile`, whose
 test match covers `prod`, `layout-lock`, `agent-sidebar-chats` and
 `github-connect` specs, so those are not the `@mobile` journeys. Reading the
 `@mobile` test bodies is still the fastest way to see what "normal" looks
 like, just don't assume they ran automatically. For the session's own proof,
 shoot production with `phone-shot.sh` and `--state`.
+`e2e/smoke/mobile-design.spec.ts` audits all 16 screens across Porcelain, Graphite, AMOLED and Dia against `e2e/smoke/__snapshots__/mobile-design.baseline.json` (`MOBILE_DESIGN_STRICT=1` for zero debt). Board, table and task-detail screens walk the read-only "Midscene nightly QA fixture" board and "Midscene persistent browser target" ticket (`SMOKE_BOARD_PATH`, `SMOKE_TASK_PATH`), never the live QA sandbox. A violation identity is one structural element, so neither a row repeated by data nor a group of identical controls that rotate their text is a new defect. `.github/workflows/mobile-verify.yml` runs both projects after each production push, and its manual `mode: refresh` dispatch regenerates the committed baseline from that fixture board, and `mode: dry-run` runs the suites without a release verdict; `.github/scripts/feature-map-live-daily.mjs` runs `mobile-journeys` daily.
+Every phone screen must hold six rules at 390x844 touch: tap targets >= 44x44 (avatars and status dots exempt), inputs >= 16px, corners 0/2/4px, no horizontal overflow or unellipsized clipping, no purple outside AI, and a standard right-bound mic on every text field.
+Readiness landmarks: `board-kanban` `.kanban-column-title`, `board-table` `.table-view-header`, `calendar` `.mobile-calendar`, `my-tasks` `[data-testid="my-tasks-list"]`, `search` `#search-input`, `inbox` `[data-testid="inbox-panel"]`, `task-detail` `#title-input`, `ai-chat-sheet`/`ai-chat-full` `#ai-chat-tiptap-editor`, `commands-search` `#htc-mobile-search`, `commands-new-task` `[aria-label="Describe the task"]`, `new-task-modal` `#createTaskModal`, `board-switcher`/`view-switcher` `#mobile-board-option-<id>`/`#mobile-board-view-picker`, `settings-menu`/`settings-general` `#settings-display-name`.
 
 For the New Task title, open a sandbox board at 390x844, press `C`, expand
 `Title: Add`, then tap the title field, type and save. Check the textarea itself

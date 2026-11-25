@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live screen fixture</title>
+<style>
+html,body{margin:0;background-color:#1a1d21;color:#ececec;font-family:"IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;font-size:14px}
+header{padding:8px;border-bottom:1px solid #262a30}
+.card{background-color:#262a30;border-radius:4px;padding:8px}
+</style>
+</head>
+<body>
+<header><span>HTPR-9628</span></header>
+<main class="card">Live task entry</main>
+<script>document.body.dataset.ready = "1"; document.querySelector("main").textContent += innerWidth < 768 ? " Phone layout" : " Desktop layout"; history.replaceState(null, "", location.pathname + "?view=default");</script>
+</body>
+</html>
