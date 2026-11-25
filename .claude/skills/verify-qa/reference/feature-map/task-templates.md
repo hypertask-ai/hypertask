@@ -56,6 +56,16 @@ stale-save 409) is `verified-unreachable: htpr-7472-task-templates is OFF and
 runners do not switch flags; tried /settings/board-task-templates (fell back to
 Custom instructions) and the API above`.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 Cross-board edits must return 404. Anonymous edits return 401. Flag-off

@@ -1,1 +1,1 @@
-| Figma connect | [figma-connect.md](figma-connect.md) | no smoke id; drive steps in figma-connect.md (Settings > Accounts, `/api/figma/connection`, OAuth leave) |
+| Figma connect | [figma-connect.md](figma-connect.md) | `feature-map-drive.mjs figma-connect`; connection read and the Accounts row |

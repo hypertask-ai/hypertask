@@ -48,6 +48,16 @@ Signed out, `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://ap
 gives `307 https://app.hypertask.ai/login`. The board segment is the project slug: `/report/15/status-update`
 lands on `/unauthorized`, because `parseProjectSlug` reads the id after `project-`.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - The agent door drifting from the web screen: both must call `loadVelocityReport` in `src/utils/controllers/reports/velocityReport.ts` and `generateStatusUpdateReport` in `src/utils/controllers/reports/statusUpdate.ts`. A second copy of the maths is the bug.

@@ -91,6 +91,16 @@ Agent routes (`/api/mcp/tasks/archive`, `/api/mcp/tasks/delete`) are
 401`. `htpr-8231-agent-archive-done` reads OWNER_AND_QA and the delete of a
 Done-column ticket stays 403.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - Permanent delete on the trash page stays a human write. `htpr-8215-agent-archive-delete` lets an agent archive or move a ticket to Trash. It does not call `DELETE /api/tasks/deleteTask`. `htpr-8231-agent-archive-done` allows Archive out of a Done column and still refuses Deleted. Drive permanent delete as the QA human account.

@@ -58,6 +58,16 @@ are never written back to the state file, so there is nothing to restore there.
 Palette focus matters: press Escape and click a neutral label before Ctrl+K,
 or the settings page's own Search settings input keeps focus.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - Client hydration replaces the server-selected theme before flags load.

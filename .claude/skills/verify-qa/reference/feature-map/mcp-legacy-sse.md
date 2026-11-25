@@ -18,6 +18,16 @@
 4. Probe `POST /message?sessionId=test` with no token: 401 JSON-RPC `-32001`. Probe `POST /mcp` with no token: 401 JSON-RPC `-32001`.
 5. Probe `POST /sse` with a valid token: 405 Method Not Allowed.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - Long-lived streams can lose buffered events when a serverless invocation ends. Capture immediately and keep the promise alive with `waitUntil`.

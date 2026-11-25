@@ -1,1 +1,1 @@
-| Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
+| Public sites | [public-sites.md](public-sites.md) | `feature-map-drive.mjs public-sites`; three public hosts and the `/developers` redirect |

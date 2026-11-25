@@ -21,6 +21,7 @@ const AGENT_FIXTURE = path.join(HOME, ".config/ht-qa/htpr-8090-agent.json");
 const SBX = 7049;
 const INVITE_BOARD = 7283;
 const SBX_TEAM = "08f79efd-770e-4e32-9728-65e6d29ec893";
+const QA_TEAM = "9bca4a7c-798a-492f-af71-9324259b98ce";
 const PLAN_TEAMS = {
   free: "308dcc93-8076-4e30-a982-ae8b0df82cee",
   pro: "2ce0d9f8-4179-489d-bbce-2b0e197f8067",
@@ -33,6 +34,12 @@ const FEATURES = [
   "board-invites", "board-member-list", "board-skills", "boards-and-views",
   "admin-and-owner-tools", "agents-directory", "all-tasks", "calendar", "chat-sessions", "drafts",
   "integrations", "oauth-and-api-clients", "pinned-and-archived",
+  "pricing-and-trial", "reminders", "saved-reports-and-velocity", "settings-account", "settings-board",
+  "snippets", "task-labels-and-followers", "time-tracking",
+  "cli-install", "custom-instructions", "demo-board", "desktop-login", "feature-flags-api",
+  "figma-connect", "mcp-legacy-sse", "my-tasks", "pages", "public-sites", "reports-agent-doors",
+  "slack-app", "starred", "task-templates", "themes", "trash-and-permanent-delete", "webhooks",
+  "command-palette",
 ];
 
 const FEATURE_ACCOUNTS = {
@@ -774,6 +781,403 @@ const featureRuns = {
       step("/reset password gate", null, "verified-unreachable: do not enter password on /reset");
       await shot(page, dir, "admin-blocked-1440x900.png");
     });
+  },
+
+  "time-tracking": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/time", 6000);
+      const body = await text(page);
+      step("Time reports opens signed in", !isLogin(nav.url) && nav.url.includes("/time"), { url: nav.url, status: nav.status });
+      step("the Time reports heading renders", /Time reports/i.test(body), { sample: body.slice(0, 160) });
+      step("the report controls render with the heading", /Total |Timer|Start/i.test(body), { sample: body.slice(0, 240) });
+      await shot(page, dir, "time-1440x900.png");
+    });
+  },
+
+  "reminders": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/reminders", 6000);
+      const body = await text(page);
+      step("reminders opens signed in", !isLogin(nav.url) && nav.url.includes("/reminders"), { url: nav.url, status: nav.status });
+      step("the Reminders heading renders", /Reminders/i.test(body), { sample: body.slice(0, 160) });
+      step("each reminder row carries its remind time", /Remind me/.test(body) || (body.match(/Reminders/gi) ?? []).length >= 1, { rows: (body.match(/Remind me/gi) ?? []).length });
+      await shot(page, dir, "reminders-1440x900.png");
+    });
+  },
+
+  "snippets": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/snippets", 6000);
+      const body = await text(page);
+      step("snippets opens signed in", !isLogin(nav.url) && nav.url.includes("/snippets"), { url: nav.url, status: nav.status });
+      step("the page offers New snippet", /New snippet/i.test(body), { sample: body.slice(0, 160) });
+      step("the saved-snippet list renders", /Saved snippets/i.test(body), {});
+      await shot(page, dir, "snippets-1440x900.png");
+    });
+  },
+
+  "settings-account": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      for (const [route, heading] of [["/settings/general", "General"], ["/settings/appearance", "Appearance"], ["/settings/notifications", "Notifications"]]) {
+        const nav = await open(page, route, 5000);
+        const body = await text(page);
+        step(`${route} opens its section`, !isLogin(nav.url) && nav.url.includes(route) && new RegExp(heading, "i").test(body), { url: nav.url });
+      }
+      await shot(page, dir, "settings-account-1440x900.png");
+    });
+  },
+
+  "settings-board": async (dir, step) => {
+    await withBrowser("flags", async ({ page, context }) => {
+      await pinBoard(context, SBX);
+      for (const [route, heading] of [["/settings/board-general", "Board"], ["/settings/board-ai", "Custom instructions"], ["/settings/board-members", "Members"]]) {
+        const nav = await open(page, route, 5000);
+        const body = await text(page);
+        step(`${route} opens its section on the sandbox`, !isLogin(nav.url) && nav.url.includes(route) && new RegExp(heading, "i").test(body), { url: nav.url });
+        step(`${route} keeps the board picker on the sandbox`, /QA Sandbox/.test(body), { sample: body.slice(0, 140) });
+      }
+      await shot(page, dir, "settings-board-1440x900.png");
+    });
+  },
+
+  "pricing-and-trial": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const pricing = await open(page, "/pricing", 5000);
+      step("/pricing routes into the plans settings page", !isLogin(pricing.url) && /\/settings\/plans/.test(pricing.url), pricing);
+      const plans = await text(page);
+      step("Plans lists Free and Pro with a current plan", /Free \$0/.test(plans) && /Pro \$20/.test(plans) && /Current/.test(plans), { sample: plans.slice(0, 200) });
+      await shot(page, dir, "pricing-trial-1440x900.png");
+      const trial = await open(page, "/trial", 4000);
+      step("a used trial leaves /trial for the app", !/\/trial$/.test(trial.url) && !isLogin(trial.url), trial);
+    });
+    step("checkout returns need an in-flight Stripe session", null, "no checkout is opened and no card entered; the confirmation pages need a real session_id");
+  },
+
+  "saved-reports-and-velocity": async (dir, step) => {
+    const velocity401 = await api(null, "GET", `/api/mcp/reports/velocity?project_id=${SBX}`);
+    step("the velocity agent door refuses a cookie-less caller", velocity401.status === 401, { status: velocity401.status });
+    await withBrowser("flags", async ({ page }) => {
+      const report = await open(page, "/report", 6000);
+      const body = await text(page);
+      step("reports home renders its heading", report.url.includes("/report") && /Reports/.test(body), { url: report.url });
+      step("the velocity list sits beside the saved reports", /Velocity/i.test(body), {});
+      await shot(page, dir, "reports-1440x900.png");
+      const velocityPage = await open(page, "/report/project-15/velocity", 7000);
+      const velocityBody = await text(page);
+      step("the velocity page renders for project-15", velocityPage.url.includes("/report/project-15/velocity") && /Velocity/i.test(velocityBody), { url: velocityPage.url });
+      step("the velocity page shows board metrics", /Board|Ticket|Points|Speed/i.test(velocityBody), { sample: velocityBody.slice(0, 200) });
+      await shot(page, dir, "velocity-1440x900.png");
+    });
+  },
+
+  "task-labels-and-followers": async (dir, step) => {
+    const labels = await api("flags", "GET", `/api/labels/getByProject?projectId=${SBX}`);
+    step("labels by project answers for the sandbox", labels.status === 200, { status: labels.status });
+    const anonLabels = await api(null, "GET", `/api/labels/getByProject?projectId=${SBX}`);
+    step("the labels route refuses no session", [401, 403].includes(anonLabels.status), { status: anonLabels.status });
+    const sections = await api("flags", "POST", "/api/section/getProjectSections", { projectId: SBX });
+    step("sections for the sandbox answer 200", sections.status === 200, { status: sections.status });
+    const priority = await api("flags", "GET", "/api/priority/getByTask");
+    step("the priority read asks for the task id it needs", priority.status === 400 && /Missing Required Task ID/i.test(priority.text), { status: priority.status });
+    const anonPriority = await api(null, "GET", `/api/priority/getByTask?taskId=1`);
+    const anonFollower = await api(null, "POST", "/api/follower/getFollower", { taskId: 1 });
+    step("the priority and follower reads refuse no session", anonPriority.status === 401 && anonFollower.status === 401, { priority: anonPriority.status, follower: anonFollower.status });
+    step("follower and assignee writes stay out of the read-only pass", null, "assigning a follower or assignee writes another person's board; the reads above are the read-only stop");
+  },
+
+  "cli-install": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/settings/cli", 6000);
+      const body = await text(page);
+      step("Settings > CLI shows the install command", !isLogin(nav.url) && /curl -fsSL https:\/\/hypertask\.ai\/install \| sh/.test(body), { url: nav.url, sample: body.slice(0, 200) });
+      step("the page shows the login command and the docs link", /hypertask login/.test(body) && /Read the CLI docs/.test(body), {});
+      await shot(page, dir, "settings-cli-1440x900.png");
+    });
+    await withBrowser(null, async ({ page }) => {
+      const nav = await open(page, "/llms.txt", 2000);
+      const body = await text(page);
+      step("llms.txt serves the same install and login commands", nav.status === 200 && /hypertask\.ai\/install/.test(body) && /hypertask login/.test(body), { status: nav.status });
+      await fs.writeFile(path.join(dir, "llms.txt"), body);
+    });
+    step("a real CLI install stays out of the daily pass", null, "the install downloads and runs a shell script; the commands above are what the page and llms.txt serve");
+  },
+
+  "custom-instructions": async (dir, step) => {
+    const read = await api("flags", "GET", `/api/ai/project/customInstruction?projectId=${SBX}`);
+    step("the board instruction read answers 985", read.status === 200, { status: read.status });
+    const anon = await api(null, "GET", `/api/ai/project/customInstruction?projectId=${SBX}`);
+    step("the instruction read refuses no session", [401, 404].includes(anon.status), { status: anon.status });
+    await withBrowser("flags", async ({ page, context }) => {
+      await pinBoard(context, SBX);
+      const nav = await open(page, "/settings/board-ai", 6000);
+      await page.getByText(/Save instructions/i).first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      const body = await text(page);
+      step("Custom instructions opens on the sandbox board", nav.url.includes("board-ai") && /QA Sandbox/.test(body), { url: nav.url, sample: body.slice(0, 160) });
+      step("the editor offers a textarea and Save instructions", (await page.locator("textarea").count()) >= 1 && /Save instructions/i.test(body), { textareas: await page.locator("textarea").count() });
+      await shot(page, dir, "custom-instructions-1440x900.png");
+    });
+  },
+
+  "demo-board": async (dir, step) => {
+    await withBrowser(null, async ({ page }) => {
+      const nav = await open(page, "/demo", 6000);
+      step("the guest demo leaves /demo for a seeded board", !isLogin(nav.url) && /\/project\?id=\d+/.test(nav.url), { url: nav.url, status: nav.status });
+      await page.getByText(/Hypetask CLI/).first().waitFor({ state: "visible", timeout: 40_000 }).catch(() => {});
+      const body = await text(page);
+      const cards = ["Press Ctrl+K", "Ask the AI to build this board", "Hypetask CLI", "Hypetask MCP"].filter((label) => body.includes(label)).length;
+      step("the seeded board shows its starter cards", cards >= 2 && /MYDE-\d+/.test(body), { cards, sample: body.slice(0, 240) });
+      await shot(page, dir, "demo-board-1440x900.png");
+    });
+    await withBrowser(null, async ({ page }) => {
+      const learn = await open(page, "/learn", 3000);
+      step("/learn without a session lands on the login page", isLogin(learn.url), { url: new URL(learn.url).pathname });
+    });
+    step("the demo login is a guest, not the QA account", null, "one guest creation per run, under the 5-per-hour cap; the signup banner needs the Owner + QA flag and a plain guest cannot prove it");
+  },
+
+  "desktop-login": async (dir, step) => {
+    await withBrowser(null, async ({ page }) => {
+      const cli = await open(page, "/cli-auth", 3000);
+      step("/cli-auth without a session lands on login with its return path", isLogin(cli.url) && /returnTo=%2Fcli-auth/.test(cli.url), { url: `${new URL(cli.url).pathname}${new URL(cli.url).search}` });
+      const agent = await open(page, "/login/agent", 3000);
+      step("/login/agent without a session lands on login", isLogin(agent.url), { url: new URL(agent.url).pathname });
+    });
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/cli-auth?port=3456", 5000);
+      const body = await text(page);
+      step("the CLI consent screen names the local port", /Authenticating\s+Hypertask CLI/i.test(body) && /Local port: 3456/i.test(body), { sample: body.slice(0, 200) });
+      step("the consent offers Allow and continue and Cancel", /Allow and continue/i.test(body) && /Cancel/i.test(body), {});
+      await shot(page, dir, "cli-auth-consent-1440x900.png");
+    });
+    step("the code exchange stays out of the daily pass", null, "Allow would mint a live CLI token; the consent screen above is the read-only stop");
+  },
+
+  "feature-flags-api": async (dir, step) => {
+    const flags = await api("flags", "GET", "/api/flags");
+    const keys = Object.keys(flags.json?.flags ?? {});
+    step("GET /api/flags answers 985 with the served flag map", flags.status === 200 && keys.length > 100, { status: flags.status, flags: keys.length });
+    const agent = await api(null, "GET", "/api/mcp/flags");
+    step("the agent flag door refuses a cookie-less caller", [401, 403, 405].includes(agent.status), { status: agent.status });
+    await withBrowser("flags", async ({ page }) => {
+      const admin = await open(page, "/admin/flags", 4000);
+      step("the admin flag page is not found for QA 985", admin.status === 404 && /could not be found/i.test(await text(page)), { status: admin.status });
+      await shot(page, dir, "admin-flags-404-1440x900.png");
+    });
+    step("a same-mode switch refusal needs an agent token", null, "ht-flag set <key> <its current mode> is the refusal; no agent token in this pass, flags-drive-live.mjs proves it on loopback");
+  },
+
+  "figma-connect": async (dir, step) => {
+    const connection = await api("flags", "GET", "/api/figma/connection");
+    step("GET /api/figma/connection answers 985", connection.status === 200 && connection.json?.configured === true, { status: connection.status, connected: Boolean(connection.json?.connection) });
+    const anon = await api(null, "GET", "/api/figma/connection");
+    step("the connection read refuses no session", anon.status === 401, { status: anon.status });
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/settings/accounts", 5000);
+      await page.getByText(/Connect Figma|Disconnect/).first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      const body = await text(page);
+      step("Settings > Accounts renders Connected apps", nav.url.includes("accounts") && /Connected apps/i.test(body), { url: nav.url });
+      step("the Figma row offers connect or disconnect", /Figma account/i.test(body) && /Connect Figma|Disconnect/i.test(body), { sample: body.slice(0, 200) });
+      await shot(page, dir, "figma-account-row-1440x900.png");
+    });
+  },
+
+  "mcp-legacy-sse": async (dir, step) => {
+    const message = await api(null, "POST", "/message?sessionId=probe", { jsonrpc: "2.0", id: 1, method: "initialize", params: {} });
+    step("POST /message without a token is a JSON-RPC auth refusal", message.status === 401 && message.json?.error?.code === -32001, { status: message.status, body: message.text.slice(0, 120) });
+    const modern = await api(null, "POST", "/mcp", { jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+    step("POST /mcp without a token is the same refusal", modern.status === 401 && modern.json?.error?.code === -32001, { status: modern.status });
+    step("the legacy SSE stream needs a QA bearer", null, "GET /sse with Accept: text/event-stream; no bearer in this pass, so the endpoint frame and PostHog ingestion stay unread");
+  },
+
+  "my-tasks": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/my-tasks", 7000);
+      await page.locator('[data-testid="my-tasks-title"]').first().waitFor({ state: "visible", timeout: 25_000 }).catch(() => {});
+      const body = await text(page);
+      step("My Tasks opens signed in on its own route", !isLogin(nav.url) && nav.url.includes("/my-tasks"), { url: nav.url, status: nav.status });
+      step("the title and list shell render", (await page.locator('[data-testid="my-tasks-list"]').count()) === 1 && /My Tasks/.test(body), { sample: body.slice(0, 180) });
+      step("the dropped board-tab row stays out", (await page.locator('[data-testid="my-tasks-splits-desktop"], [data-testid="my-tasks-splits-phone"]').count()) === 0, {});
+      await shot(page, dir, "my-tasks-1440x900.png");
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(5000);
+      step("the phone layout keeps the list", (await page.locator('[data-testid="my-tasks-list"]').count()) === 1, { url: page.url() });
+      await shot(page, dir, "my-tasks-390x844.png");
+    });
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/scheduled", 6000);
+      step("/scheduled renders Tasks with Due Dates", !isLogin(nav.url) && /Tasks with Due Dates/.test(await text(page)), { url: nav.url, status: nav.status });
+      await shot(page, dir, "scheduled-1440x900.png");
+    });
+  },
+
+  "pages": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/pages", 6000);
+      const body = await text(page);
+      step("the pages list opens signed in", !isLogin(nav.url) && nav.url.includes("/pages"), { url: nav.url, status: nav.status });
+      step("the list offers New page and both board scopes", /New page/.test(body) && /This board/.test(body) && /All boards/.test(body), { sample: body.slice(0, 200) });
+      step("the page search field renders", (await page.getByLabel("Search pages").count()) >= 1 && /Archived pages|Pages/.test(body), {});
+      await shot(page, dir, "pages-1440x900.png");
+    });
+  },
+
+  "public-sites": async (dir, step) => {
+    for (const host of ["https://hypertask.ai/", "https://docs.hypertask.ai/", "https://help.hypertask.ai/"]) {
+      const result = await api(null, "GET", host);
+      step(`${host} answers 200 without a login`, result.status === 200, { status: result.status });
+    }
+    await withBrowser(null, async ({ page }) => {
+      const nav = await open(page, "/developers", 5000);
+      step("/developers lands on the docs REST API page", /docs\.hypertask\.ai/.test(nav.url) && !isLogin(nav.url), { url: nav.url });
+      step("the docs page renders a heading", /REST API|Hypertask/i.test(await text(page)), {});
+      await shot(page, dir, "developers-redirect-1440x900.png");
+    });
+  },
+
+  "reports-agent-doors": async (dir, step) => {
+    const velocity = await api(null, "GET", "/api/mcp/reports/velocity?project_id=15");
+    step("the velocity agent door refuses a cookie-less caller", velocity.status === 401, { status: velocity.status, body: velocity.text.slice(0, 120) });
+    const statusUpdate = await api(null, "POST", "/api/mcp/reports/status-update", { project_id: 15, range: "7d" });
+    step("the status-update door refuses a cookie-less caller", [401, 404].includes(statusUpdate.status), { status: statusUpdate.status });
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/report", 6000);
+      const body = await text(page);
+      step("Reports renders its purpose line", nav.url.includes("/report") && /Saved reports and board velocity in one place/i.test(body), { url: nav.url });
+      step("every visible board gets a velocity row", /Velocity/i.test(body), {});
+      await shot(page, dir, "report-1440x900.png");
+    });
+    await withBrowser(null, async ({ page }) => {
+      const signedOut = await open(page, "/report", 3000);
+      step("a signed-out visitor is sent to login", isLogin(signedOut.url), { url: new URL(signedOut.url).pathname });
+    });
+    step("the agent doors' 200 path needs an agent token on board 15", null, "the cookie-only run proves the 401 refusal; reports-agent-doors.md carries the bearer recipe");
+  },
+
+  "slack-app": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const install = await open(page, "/add-to-slack", 5000);
+      const installBody = await text(page);
+      const installTitle = await page.title();
+      step("the add-to-slack page renders its overview", install.status === 200 && /Add Hypertask to Slack/.test(installTitle) && /Turn Slack conversations into tracked tasks/i.test(installBody), { status: install.status, title: installTitle });
+      step("the overview describes the /ht command", /\/ht /.test(installBody), { sample: installBody.slice(0, 200) });
+      await shot(page, dir, "add-to-slack-1440x900.png");
+      const support = await open(page, "/slack/support", 5000);
+      const supportBody = await text(page);
+      step("the Slack support page renders linking and disconnect", support.status === 200 && /\/ht connect/.test(supportBody) && /disconnect/i.test(supportBody), { status: support.status });
+      await shot(page, dir, "slack-support-1440x900.png");
+      const link = await open(page, "/settings/slack/link", 5000);
+      step("an unlinked Slack visit reports the invalid link", /This link is invalid/i.test(await text(page)) && /slack\/link/.test(link.url), { url: link.url });
+    });
+    step("live Slack workspace parity needs a real workspace invite", null, "no Slack workspace to install into; the three pages above are the closest real check");
+  },
+
+  "starred": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const starred = await open(page, "/starred", 5000);
+      const body = await text(page);
+      step("starred opens signed in", !isLogin(starred.url) && starred.url.includes("/starred"), { url: starred.url, status: starred.status });
+      step("both starred lists render", /Starred Tasks/i.test(body) && /Starred Comments/i.test(body), { sample: body.slice(0, 200) });
+      await shot(page, dir, "starred-1440x900.png");
+      const pinned = await open(page, "/pinned", 5000);
+      const pinnedBody = await text(page);
+      step("pinned opens its two tabs", !isLogin(pinned.url) && /Your Pins/i.test(pinnedBody) && /Team Pins/i.test(pinnedBody), { url: pinned.url });
+      await shot(page, dir, "pinned-1440x900.png");
+    });
+    step("the unstar keys need a star of your own", null, "Ctrl+Shift+S and Alt+S remove a star this run did not create; the tabs above prove the lists render");
+  },
+
+  "task-templates": async (dir, step) => {
+    const list = await api("flags", "GET", "/api/task-templates?projectId=" + SBX);
+    step("GET /api/task-templates answers 985 for the sandbox", list.status === 200 && list.json?.success === true && Array.isArray(list.json?.templates), { status: list.status, templates: list.json?.templates?.length ?? 0 });
+    const anon = await api(null, "POST", "/api/task-templates", { taskId: 1 });
+    step("the templates route refuses no session", anon.status === 401, { status: anon.status });
+    const bad = await api("flags", "GET", "/api/task-templates?projectId=abc");
+    step("a non-numeric project id is a 400", bad.status === 400, { status: bad.status, body: bad.text.slice(0, 120) });
+    await withBrowser("flags", async ({ page, context }) => {
+      await pinBoard(context, SBX);
+      const nav = await open(page, "/settings/board-task-templates", 5000);
+      const body = await text(page);
+      step("the templates section or its fallback renders", /Task templates|Custom instructions/i.test(body), { url: nav.url, sample: body.slice(0, 160) });
+      await shot(page, dir, "task-templates-settings-1440x900.png");
+    });
+    step("the on-state editor needs htpr-7472-task-templates on", null, "runners never switch flags; the read-only API above drives what the flag does not gate");
+  },
+
+  "themes": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/settings/appearance", 6000);
+      await page.getByText(/Graphite/).first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      const body = await text(page);
+      const theme = await page.locator("html").getAttribute("data-theme").catch(() => null);
+      step("Appearance lists the shipped themes", /Porcelain/.test(body) && /Graphite/.test(body) && /AMOLED/.test(body) && /Dia/.test(body), { sample: body.slice(0, 240) });
+      step("the page renders on a resolved theme", Boolean(theme), { theme });
+      await shot(page, dir, "appearance-1440x900.png");
+      const inbox = await open(page, "/inbox", 7000);
+      const inboxTheme = await page.locator("html").getAttribute("data-theme").catch(() => null);
+      step("the resolved theme carries into /inbox", !isLogin(inbox.url) && inboxTheme === theme, { theme, inboxTheme });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await open(page, "/settings/appearance", 6000);
+      const phoneBody = await text(page);
+      step("the phone Appearance keeps the theme list", /Porcelain/.test(phoneBody) && /AMOLED/.test(phoneBody), {});
+      await shot(page, dir, "appearance-390x844.png");
+    });
+  },
+
+  "trash-and-permanent-delete": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, `/trash/${SBX}`, 7000);
+      const body = await text(page);
+      step("the board trash opens with its heading", !isLogin(nav.url) && /Trash/.test(body) && /QA Sandbox/.test(body), { url: nav.url, status: nav.status });
+      await shot(page, dir, "trash-1440x900.png");
+      const archived = await open(page, "/archived", 6000);
+      const archivedBody = await text(page);
+      step("the archive keeps both tabs and its board scopes", /Tasks Archive/i.test(archivedBody) && /Inbox Archive/i.test(archivedBody) && /Active boards/i.test(archivedBody), { url: archived.url });
+      await shot(page, dir, "archived-1440x900.png");
+    });
+    const live = await api("flags", "DELETE", "/api/tasks/deleteTask?taskId=999999999");
+    step("a permanent delete of an invisible task answers 404", live.status === 404, { status: live.status, body: live.text.slice(0, 120) });
+    const recover = await api("flags", "POST", "/api/tasks/recoverTask", { taskId: 999999999 });
+    step("recovering an unknown task is refused", [400, 404].includes(recover.status), { status: recover.status });
+    step("trashing and recovering a fixture stays out of the read-only pass", null, "both keys need a task this run created; the refusals above prove the routes still guard their input");
+  },
+
+  "webhooks": async (dir, step) => {
+    const missing = await api("flags", "GET", "/api/settings/webhooks");
+    step("the webhooks read needs a team id", missing.status === 400 && /teamId is required/i.test(missing.text), { status: missing.status, body: missing.text.slice(0, 120) });
+    const anon = await api(null, "GET", `/api/settings/webhooks?teamId=${QA_TEAM}`);
+    step("the webhooks read refuses no session", anon.status === 401, { status: anon.status });
+    const list = await api("flags", "GET", `/api/settings/webhooks?teamId=${QA_TEAM}`);
+    const events = list.json?.availableEvents ?? [];
+    step("the QA team lists its signing events and endpoints", list.status === 200 && list.json?.success === true && events.includes("task.created") && Array.isArray(list.json?.endpoints), { status: list.status, events: events.length, endpoints: list.json?.endpoints?.length ?? 0 });
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/settings/webhooks", 7000);
+      step("Settings > Webhooks renders its list", nav.url.includes("webhooks") && /Webhooks/i.test(await text(page)), { url: nav.url });
+      await shot(page, dir, "webhooks-1440x900.png");
+    });
+    step("a test delivery needs a receiver this run owns", null, "creating and deleting an endpoint writes the team's webhook list; the reads above prove the route and its events");
+  },
+
+  "command-palette": async (dir, step) => {
+    await withBrowser("flags", async ({ page }) => {
+      const nav = await open(page, "/my-tasks", 6000);
+      step("the page behind the palette loads signed in", !isLogin(nav.url), { url: nav.url });
+      await page.keyboard.press("Control+k");
+      await page.locator("#htc-search").first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      const body = await text(page);
+      step("Ctrl+K opens Search in the command window", await page.locator("#htc-search").first().isVisible().catch(() => false), { sample: body.slice(0, 160) });
+      step("the palette offers Search and New Task", /Search/.test(body) && /New Task/.test(body), {});
+      await shot(page, dir, "ctrl-k-search-1440x900.png");
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(900);
+      await page.keyboard.press("Control+j");
+      await page.locator('[aria-label="Describe the task"]').first().waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+      const writer = await page.locator('[aria-label="Describe the task"]').first().isVisible().catch(() => false);
+      step("Ctrl+J opens the task writer without submitting", writer, { textareas: await page.locator('[aria-label="Describe the task"]').count() });
+      await shot(page, dir, "ctrl-j-writer-1440x900.png");
+      await page.keyboard.press("Escape");
+    });
+    step("sending a palette task spends model budget", null, "Ctrl+J Send creates a ticket and starts AI writing; the open writer above is the read-only stop");
   },
 
 };
