@@ -174,6 +174,8 @@ if (dirty.length) {
 const typeDirectory = join(root, ".cache", "tsc");
 const typeConfig = join(typeDirectory, "quick-check.json");
 const typeCache = join(typeDirectory, "quick-check.tsbuildinfo");
+const confirmConfig = join(typeDirectory, "confirm.json");
+const confirmTypeCache = join(typeDirectory, "confirm.tsbuildinfo");
 const fullTypeCache = join(typeDirectory, "full.tsbuildinfo");
 
 function lintLabel() {
@@ -231,6 +233,9 @@ const lintArgs = fullLint || lintTargets.length
   : null;
 
 let typeArgs = null;
+let declarations = [];
+let projectFiles = [];
+let augmentations = [];
 if (!typeTargets.length && !fullTypecheck) {
   console.log("quick check: no changed TypeScript files, skipping the type check");
   skipped.push("types");
@@ -243,17 +248,25 @@ if (!typeTargets.length && !fullTypecheck) {
     configPath = join(typeDirectory, "full.json");
     cachePath = fullTypeCache;
   }
-  const declarations = split(git(root, ["ls-files", "-z", "--", "*.d.ts"]));
-  const augmentations = split(git(root, [
-    "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
-    "--", ":(glob)src/**/*.ts", ":(glob)src/**/*.tsx",
-  ]));
-  const include = [...new Set([
-    ...(existsSync(join(root, "next-env.d.ts")) ? ["next-env.d.ts"] : []),
-    ...declarations,
-    ...augmentations,
-    ...typeTargets,
-  ])].map((file) => relative(typeDirectory, join(root, file)));
+  if (!fullTypecheck) {
+    const ts = require("typescript");
+    const project = ts.getParsedCommandLineOfConfigFile(join(root, "tsconfig.json"), {}, {
+      ...ts.sys,
+      onUnRecoverableConfigFileDiagnostic: (diagnostic) => blocked(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")),
+    });
+    if (project.errors.length) {
+      blocked(project.errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")).join("\n"));
+    }
+    projectFiles = project.fileNames;
+    const projectFileSet = new Set(projectFiles);
+    declarations = projectFiles.filter((file) => /\.d\.(?:ts|mts|cts)$/.test(file));
+    augmentations = split(git(root, [
+      "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
+      "--", ":(glob)src/**/*.ts", ":(glob)src/**/*.tsx",
+    ])).filter((file) => projectFileSet.has(join(root, file))).map((file) => join(root, file));
+  }
+  const include = [...new Set([...declarations, ...augmentations, ...typeTargets.map((file) => join(root, file))])]
+    .map((file) => relative(typeDirectory, file));
   writeFileSync(
     configPath,
     `${JSON.stringify(
@@ -279,6 +292,11 @@ const lintPromise = lintArgs
 const typePromise = typeArgs
   ? runTool("tsc", binary(root, "tsc"), typeArgs, fullTypecheck ? fullTypeBudgetMs : typeBudgetMs, fullTypeBudgetMs)
   : null;
+
+function confirmationPassed(run) {
+  if (run.result.error || run.result.timedOut) outcome(run.result, "tsc");
+  return !run.result.signal && run.result.status === 0 && !/\berror TS\d+/.test(run.output);
+}
 
 function outcome(result, name) {
   if (result.error) {
@@ -315,9 +333,34 @@ if (rewritten.length) {
   blocked(`formatting fixes applied to ${rewritten.join(", ")}; commit them and push again (${elapsed(started)}s)`);
 }
 
-const typeRun = typePromise ? await typePromise : null;
+let typeRun = typePromise ? await typePromise : null;
+let typeOutcome = typeRun ? outcome(typeRun.result, "tsc") : "skipped";
+if (typeOutcome === "failed" && !fullTypecheck) {
+  console.log("quick check: confirming partial type errors with the full project");
+  const confirmFiles = [...new Set([...projectFiles, ...typeTargets.map((file) => join(root, file))])]
+    .filter((file) => existsSync(file))
+    .map((file) => relative(typeDirectory, file));
+  writeFileSync(
+    confirmConfig,
+    `${JSON.stringify(
+      {
+        extends: relative(typeDirectory, join(root, "tsconfig.json")),
+        files: confirmFiles,
+        include: [],
+        compilerOptions: { noEmit: true, incremental: true, tsBuildInfoFile: confirmTypeCache },
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  typeRun = await runTool("tsc", binary(root, "tsc"), ["-p", confirmConfig], fullTypeBudgetMs, fullTypeBudgetMs);
+  if (confirmationPassed(typeRun)) typeOutcome = "passed";
+  else {
+    console.log("quick check: the full project did not clear the partial errors, so the push stays blocked");
+    typeOutcome = "failed";
+  }
+}
 if (typeRun) process.stdout.write(typeRun.output);
-const typeOutcome = typeRun ? outcome(typeRun.result, "tsc") : "skipped";
 if (typeOutcome === "failed") {
   blocked(`the type check failed; the push was stopped after ${elapsed(started)}s`);
 }
