@@ -75,6 +75,7 @@ export const AI_Chat_Sidebar = ({
   const generalChatPending = enabled && !!projectId && target.kind === "ai" && !!chat.currentSession?.agentId;
   const drafts = useRef(new Map<string, { html: string; files: typeof chat.fileItems }>());
   const sidebarEnabled = enabled && !!projectId && !!currentUser;
+  const deepLink = searchParams?.get("sidebarAgent");
 
   const loadRoster = useCallback(async () => {
     if (!enabled || !projectId) return;
@@ -291,13 +292,17 @@ export const AI_Chat_Sidebar = ({
   useEffect(() => {
     ++intentRef.current;
     setNativeSidebarChat(null);
-    setTarget({ kind: "ai" });
-    setVisited([]);
     setRoutedDraft(null);
     lastAgentSessions.current.clear();
-    setAgents([]);
     aiSessionRef.current = null;
     drafts.current.clear();
+    const linked = targetRef.current;
+    const deepLinkHoldsSelection = !!deepLink && linked.kind !== "ai" && linked.agent.id === deepLink;
+    if (!deepLinkHoldsSelection) {
+      setTarget({ kind: "ai" });
+      setVisited([]);
+      setAgents([]);
+    }
     return () => {
       ++intentRef.current;
       if (getNativeSidebarChat()) {
@@ -317,7 +322,6 @@ export const AI_Chat_Sidebar = ({
     if (target.kind !== "ai" && !agents.some((agent) => agent.id === target.agent.id)) void selectTargetRef.current({ kind: "ai" });
   }, [agents]);
 
-  const deepLink = searchParams?.get("sidebarAgent");
   const handledDeepLink = useRef<string | null>(null);
   useEffect(() => { handledDeepLink.current = null; }, [projectId, currentUser?.id, sidebarEnabled]);
   useEffect(() => {
