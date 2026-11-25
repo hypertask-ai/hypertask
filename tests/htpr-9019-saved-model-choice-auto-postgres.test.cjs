@@ -25,7 +25,7 @@ test("real Prisma reset backs up exact JSON, retries failures, sweeps dormant ac
     const preferences = (id = 1) => scalar('SELECT "aiModelPreferences" FROM "UserSetting" WHERE "userId"=$1', [id]);
     const backup = (id = 1) => scalar('SELECT previous_preferences FROM htpr_9019_model_choice_auto_done WHERE user_id=$1', [id]);
     await db.query('CREATE TABLE "UserSetting" ("userId" int PRIMARY KEY, "aiModelPreferences" jsonb); CREATE TABLE htpr_7038_model_choice_reset_done(user_id int PRIMARY KEY)');
-    await db.query(fs.readFileSync("src/prisma/migrations/20261110140000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));
+    await db.query(fs.readFileSync("src/prisma/migrations/20261125130000_htpr_9019_saved_model_choice_auto/migration.sql", "utf8"));
     const original = { aiChat: "old-chat", taskWriter: "old-writer", writeWithAi: "old-write", improveWriting: "old-improve", askAi: "old-ask", imageGeneration: "keep-image", thinking: { mode: "high" }, teams: { 'odd.team,{"': { aiChat: "team-pick", imageGeneration: "team-image" }, broken: null } };
     await db.query('INSERT INTO "UserSetting" VALUES (1, $1), (2, $1), (3, \'{}\')', [original]);
     let enabled = false, baseEnabled = true, failCache = false, everyone = false;
