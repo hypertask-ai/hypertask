@@ -218,4 +218,8 @@ try {
   );
 } finally {
   await prisma.$disconnect();
+  if (process.env.REDIS_URL) {
+    const { getRedis } = jiti(path.join(appRoot, "src/lib/redis.ts"));
+    (await getRedis()).disconnect();
+  }
 }
