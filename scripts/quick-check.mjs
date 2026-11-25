@@ -263,7 +263,7 @@ if (!typeTargets.length && !fullTypecheck) {
     augmentations = split(git(root, [
       "grep", "-lz", "-E", "^[[:space:]]*declare[[:space:]]+(module|global)([[:space:]]|$)",
       "--", ":(glob)src/**/*.ts", ":(glob)src/**/*.tsx",
-    ])).filter((file) => projectFileSet.has(join(root, file)));
+    ])).filter((file) => projectFileSet.has(join(root, file))).map((file) => join(root, file));
   }
   const include = [...new Set([...declarations, ...augmentations, ...typeTargets.map((file) => join(root, file))])]
     .map((file) => relative(typeDirectory, file));
