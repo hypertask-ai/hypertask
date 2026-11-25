@@ -6,6 +6,7 @@ const { tmpdir } = require("node:os");
 const path = require("node:path");
 
 const script = path.resolve(__dirname, "..", "scripts", "quick-check.mjs");
+const OLD_SCRIPT = path.resolve(__dirname, "fixtures", "quick-check-full-lint.mjs");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -35,6 +36,8 @@ function commit(directory, name, body) {
 
 function makeStubs({
   eslintExit = 0,
+  eslintHang = null,
+  eslintOutput = "",
   tscExit = 0,
   tscExits = null,
   tscKilled = false,
@@ -48,9 +51,15 @@ function makeStubs({
   const log = path.join(directory, "calls.log");
   const counter = path.join(directory, "tsc-runs");
   const rewriteLine = rewrite ? `printf 'written by eslint\\n' >> "${path.join(rewrite.repository, rewrite.file)}"\n` : "";
+  const hangLine = eslintHang
+    ? eslintHang.when === "full"
+      ? `case "$*" in *"-- ."*) sleep ${eslintHang.seconds};; esac\n`
+      : `sleep ${eslintHang.seconds}\n`
+    : "";
+  const printLine = eslintOutput ? `printf '%b\\n' "${eslintOutput}"\n` : "";
   writeFileSync(
     path.join(directory, "eslint"),
-    `#!/bin/sh\nprintf 'eslint %s\\n' "$*" >> "${log}"\n${rewriteLine}exit ${eslintExit}\n`,
+    `#!/bin/sh\nprintf 'eslint %s\\n' "$*" >> "${log}"\n${rewriteLine}${printLine}${hangLine}exit ${eslintExit}\n`,
   );
   const runs = `runs=$(cat "${counter}" 2>/dev/null || echo 0)\nruns=$((runs + 1))\necho "$runs" > "${counter}"\n`;
   const exits = tscExits ?? [tscExit];
@@ -73,8 +82,15 @@ function makeStubs({
   };
 }
 
-function run(directory, stubs, { cwd = directory, args = [], env = {} } = {}) {
-  return spawnSync(process.execPath, [script, ...args], {
+function cpuLimit() {
+  const probe = spawnSync("taskset", ["-c", "0", process.execPath, "-e", "0"], { encoding: "utf8" });
+  return probe.status === 0 ? ["taskset", "-c", "0"] : [];
+}
+
+function runFile(file, directory, stubs, { cwd = directory, args = [], env = {}, limit = [] } = {}) {
+  const command = limit.length ? limit[0] : process.execPath;
+  const commandArgs = limit.length ? [...limit.slice(1), process.execPath, file, ...args] : [file, ...args];
+  return spawnSync(command, commandArgs, {
     cwd,
     encoding: "utf8",
     timeout: 600_000,
@@ -85,6 +101,10 @@ function run(directory, stubs, { cwd = directory, args = [], env = {} } = {}) {
       ...env,
     },
   });
+}
+
+function run(directory, stubs, options = {}) {
+  return runFile(script, directory, stubs, options);
 }
 
 const TWO_FILES = { "src/one.ts": "export const one = 1;\n", "src/two.ts": "export const two = 2;\n" };
@@ -310,7 +330,7 @@ test("a type check over its budget reruns once with the longer budget and passes
   assert.equal(stubs.calls().filter((call) => call.startsWith("tsc")).length, 2);
 });
 
-test("a type check that stays over budget stops the push with the rerun command", () => {
+test("a type check that stays over budget says why and lets the push through on what it finished", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one = 11;\n");
   const stubs = makeStubs({ tscSleeps: 30 });
@@ -318,12 +338,14 @@ test("a type check that stays over budget stops the push with the rerun command"
     env: { QUICK_CHECK_TYPE_BUDGET_MS: "300", QUICK_CHECK_FULL_TYPE_BUDGET_MS: "500" },
   });
 
-  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /quick check: NOT FULLY TYPE CHECKED: src\/one\.ts \(tsc was still running when its \d+s budget ran out and had reported no errors/);
   assert.match(
-    result.stderr,
-    /quick check: tsc did not finish for src\/one\.ts; push blocked\. Run: node scripts\/quick-check\.mjs --files src\/one\.ts/,
+    result.stdout,
+    /Rerun when the machine is quieter: node scripts\/quick-check\.mjs --files src\/one\.ts/,
   );
-  assert.doesNotMatch(result.stdout, /NOT TYPE CHECKED/);
+  assert.match(result.stdout, /format, lint and types passed/);
+  assert.match(result.stdout, /skipped types/);
   assert.equal(stubs.calls().filter((call) => call.startsWith("tsc")).length, 2);
 });
 
@@ -336,11 +358,61 @@ test("the rerun command quotes a path with a space", () => {
     env: { QUICK_CHECK_TYPE_BUDGET_MS: "300", QUICK_CHECK_FULL_TYPE_BUDGET_MS: "500" },
   });
 
-  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(
-    result.stderr,
-    /Run: node scripts\/quick-check\.mjs --files 'src\/tutorial space\/one\.ts'/,
+    result.stdout,
+    /Rerun when the machine is quieter: node scripts\/quick-check\.mjs --files 'src\/tutorial space\/one\.ts'/,
   );
+});
+
+test("a lint pass over its budget says why and lets the push through on what it finished", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  const stubs = makeStubs({ eslintHang: { seconds: 30, when: "always" } });
+  const result = run(repository, stubs, {
+    env: { QUICK_CHECK_LINT_BUDGET_MS: "400", QUICK_CHECK_DEADLINE_MS: "3000" },
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /quick check: NOT FULLY LINTED: src\/one\.ts \(eslint was still running when its \d+s budget ran out and had reported no errors/);
+  assert.match(result.stdout, /Rerun when the machine is quieter: node scripts\/quick-check\.mjs --files src\/one\.ts/);
+  assert.match(result.stdout, /skipped lint/);
+});
+
+test("a lint pass that reported errors before its budget ran out still stops the push", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  const stubs = makeStubs({
+    eslintHang: { seconds: 30, when: "always" },
+    eslintOutput: "src/one.ts\\n  1:1  error  Boom  some-rule",
+  });
+  const result = run(repository, stubs, {
+    env: { QUICK_CHECK_LINT_BUDGET_MS: "400", QUICK_CHECK_DEADLINE_MS: "3000" },
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /lint reported errors before its \d+s budget ran out; the push was stopped/);
+});
+
+test("the check ends at its deadline even when every tool is too slow", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  const stubs = makeStubs({ eslintHang: { seconds: 60, when: "always" }, tscSleeps: 60 });
+  const beganAt = Date.now();
+  const result = run(repository, stubs, {
+    env: {
+      QUICK_CHECK_LINT_BUDGET_MS: "60000",
+      QUICK_CHECK_TYPE_BUDGET_MS: "60000",
+      QUICK_CHECK_FULL_TYPE_BUDGET_MS: "60000",
+      QUICK_CHECK_DEADLINE_MS: "2500",
+    },
+  });
+  const seconds = (Date.now() - beganAt) / 1000;
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.ok(seconds < 20, `the check took ${seconds}s`);
+  assert.match(result.stdout, /NOT FULLY LINTED/);
+  assert.match(result.stdout, /NOT FULLY TYPE CHECKED/);
 });
 
 test("a missing type checker stops the push instead of skipping it", () => {
@@ -365,27 +437,61 @@ test("the old skip variable no longer bypasses the check", () => {
   assert.ok(stubs.calls().length > 0);
 });
 
-test("a lint configuration change runs the full lint without rewriting files", () => {
+test("a lint configuration change lints the changed files and a sample, never the whole repository", () => {
   const repository = makeRepository({ ...TWO_FILES, "eslint.config.mjs": "export default [];\n" });
   commit(repository, "eslint.config.mjs", "export default [{ rules: {} }];\n");
   const stubs = makeStubs();
   const result = run(repository, stubs);
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /lint configuration changed, running the full lint/);
-  const lint = stubs.calls().find((call) => call.startsWith("eslint"));
-  assert.match(lint, /^eslint --cache .* \.$/);
-  assert.doesNotMatch(lint, /--fix/);
+  assert.match(
+    result.stdout,
+    /lint configuration changed, so linting the changed files and 2 untouched sample files; the full lint runs in CI/,
+  );
+  const calls = stubs.calls().filter((call) => call.startsWith("eslint"));
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /^eslint --fix .* eslint\.config\.mjs$/);
+  assert.match(calls[1], /^eslint --cache .* src\/one\.ts src\/two\.ts$/);
+  assert.doesNotMatch(calls.join("\n"), /-- \.$/);
 });
 
-test("a changed file inside eslint-local-rules runs the full lint", () => {
+test("a changed file inside eslint-local-rules is linted along with a sample", () => {
   const repository = makeRepository({ ...TWO_FILES, "eslint-local-rules/style.mjs": "export default [];\n" });
   commit(repository, "eslint-local-rules/style.mjs", "export default [{ rules: {} }];\n");
   const stubs = makeStubs();
   const result = run(repository, stubs);
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /lint configuration changed, running the full lint/);
+  assert.match(result.stdout, /lint configuration changed/);
+  const calls = stubs.calls().filter((call) => call.startsWith("eslint"));
+  assert.match(calls[0], /^eslint --fix .* eslint-local-rules\/style\.mjs$/);
+  assert.equal(calls.length, 2);
+  assert.doesNotMatch(calls.join("\n"), /-- \.$/);
+});
+
+test("the #3811 lint config change times out on the whole-repository lint and finishes on the changed-file plan", () => {
+  const repository = makeRepository({ ...TWO_FILES, "eslint.config.mjs": "export default [];\n" });
+  commit(repository, "eslint.config.mjs", "export default [{ rules: {} }];\n");
+  const stubs = makeStubs({ eslintHang: { seconds: 30, when: "full" } });
+  const limit = cpuLimit();
+
+  const before = runFile(OLD_SCRIPT, repository, stubs, {
+    limit,
+    env: { QUICK_CHECK_FULL_LINT_BUDGET_MS: "800" },
+  });
+  assert.equal(before.status, 1, before.stdout + before.stderr);
+  assert.match(before.stderr, /eslint did not finish for the whole repository; push blocked/);
+
+  const oldCalls = stubs.calls().join("\n");
+  assert.match(oldCalls, /-- \.$/);
+
+  const beforeCount = stubs.calls().length;
+  const after = run(repository, stubs, { limit });
+  assert.equal(after.status, 0, after.stdout + after.stderr);
+  assert.match(after.stdout, /format, lint and types passed/);
+  const afterCalls = stubs.calls().slice(beforeCount).join("\n");
+  assert.match(afterCalls, /eslint\.config\.mjs/);
+  assert.doesNotMatch(afterCalls, /-- \.$/);
 });
 
 test("a dirty configuration file blocks the push", () => {
