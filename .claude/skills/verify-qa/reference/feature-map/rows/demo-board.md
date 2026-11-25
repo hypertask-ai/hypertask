@@ -1,1 +1,1 @@
-| Demo board | [demo-board.md](demo-board.md) | one guest `/demo`, `/onboarding?resumeKey=…`, tutorial URLs recorded unreachable (tutorial disabled) |
+| Demo board | [demo-board.md](demo-board.md) | `feature-map-drive.mjs demo-board`; one guest `/demo` board per run, `/learn` signed out |

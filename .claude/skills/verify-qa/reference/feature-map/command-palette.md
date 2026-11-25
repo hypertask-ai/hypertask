@@ -182,6 +182,16 @@ Turn `htpr-8947-ctrlk-no-footer` on. Open Ctrl+K on Search. The shortcut hint ro
 
 Turn `htpr-8954-ctrlk-filled-search`, `htpr-8931-ctrlk-integrated-tabs`, and `htpr-8943-ctrlk-tabs-on-top` on. Open Ctrl+K. The search box must use the New Task fill and must not show a line above or below it. Type a command. Results must still filter. Turn only the filled-search flag off. The lines around the search box must return. Turn filled search on without the two tab flags. The search box must keep the old lines.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs command-palette --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`command-palette ok`. It opens Search with Ctrl+K and the writer with Ctrl+J, never submits, and
+never prints a cookie, token or email address.
+
 ## Gotchas
 
 - A palette label drifting from the key that actually works: the palette

@@ -29,6 +29,16 @@ Open `/admin/flags/<key>` for a key that exists, with the flag owner's login. Th
 
 With `htpr-7560-flag-reader-subscribe` on, flag answers on a signed-in page match flag off. An identical flag refresh redraws no reader. A changed key redraws only the readers of that key. Account switches must not keep the previous account's flag values. Prove the redraw counts with `node --test tests/htpr-7560-flag-reader-subscribe.test.cjs`. Do not switch this flag on production.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - An approval that survives an edit to the comment, so one thumbs up switches a different key or mode (HTPR-7181).

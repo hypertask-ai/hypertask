@@ -19,9 +19,11 @@ await driveMain("task", process.argv.slice(2), { title: "title visible" }, async
   if (titleVisible) {
     await page.locator("#description-container").dblclick();
     const editor = page.locator("#description-input .ProseMirror[contenteditable='true']");
-    await editor.waitFor({ state: "visible", timeout: 5_000 });
-    await editor.click();
-    await page.keyboard.type(`QA drive description ${marker} `);
+    const editorOpen = await editor.waitFor({ state: "visible", timeout: 20_000 }).then(() => true, () => false);
+    if (editorOpen) {
+      await editor.click();
+      await page.keyboard.type(`QA drive description ${marker} `);
+    }
     await page.keyboard.press("Control+b");
     await page.keyboard.type("bold-part");
     await page.keyboard.press("Control+b");

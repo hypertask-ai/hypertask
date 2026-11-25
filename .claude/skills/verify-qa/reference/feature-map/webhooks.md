@@ -40,6 +40,16 @@ GET  (no teamId)     400 teamId is required
 Use a fresh endpoint per run and delete it; a 5-second poll is enough against
 httpbin. `ht-verify api GET "/api/settings/webhooks"` prints the 400 body.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - Signing keys stored encrypted (`enc:v1:`, HTPR-7624, flag `htpr-7624-sealed-webhook-keys`): a key that cannot be opened (wrong or replaced `BYOK_CIPHER_SECRET`, damaged value) makes the delivery fail with "Webhook signing key is unavailable" and no request is sent. The hint then shows `unavailable`.

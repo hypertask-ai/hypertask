@@ -29,6 +29,16 @@ Open `/cli-auth` from the terminal sign-in link. Open `/login/agent` to start an
 11. Human bearer, in memory only: mint with the QA cookie (`POST /api/cli/generate-code`), exchange without cookies (`POST /api/cli/token-exchange`), then `GET /api/ai-chat/all-sessions` with the bearer. Verified 2026-11-20: 200, every session `userId` 985, then `DELETE /api/mcp/token` with the same bearer 200. Never print the code or token. With no token and with a bogus bearer the route answers 401.
 12. Repeat the call with an agent bearer and confirm the refusal. `htpr-7684` is EVERYONE, so the flag-off call is UNREACHABLE. Cite `tests/htpr-7684-desktop-ai-chat-bearer.test.cjs`, the test `flag off refuses the desktop token; flag on still allows it`. Do not start a paid chat generation.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - GET defaults accepts desktop sign-in while POST save still returns 401.

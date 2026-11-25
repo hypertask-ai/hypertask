@@ -1,1 +1,1 @@
-| My Tasks | [my-tasks.md](my-tasks.md) | no smoke id; drive steps in my-tasks.md (list, settings button, `/scheduled`, board-tab absence) |
+| My Tasks | [my-tasks.md](my-tasks.md) | `feature-map-drive.mjs my-tasks`; list shell at desktop and phone, plus `/scheduled` |

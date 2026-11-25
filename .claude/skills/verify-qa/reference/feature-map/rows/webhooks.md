@@ -1,1 +1,1 @@
-| Webhooks | [webhooks.md](webhooks.md) | Playwright request with `Origin` to `/api/settings/webhooks` create/test/delete; `lastDeliveryOk` true |
+| Webhooks | [webhooks.md](webhooks.md) | `feature-map-drive.mjs webhooks`; team endpoint and event list |

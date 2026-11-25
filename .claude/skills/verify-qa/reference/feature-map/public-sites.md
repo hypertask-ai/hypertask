@@ -34,6 +34,16 @@ On 2026-11-20 all three hosts answered 200 and `/developers` answered 307 to
 `https://docs.hypertask.ai/api/rest-api/`, which answered 200 with title
 `REST API | Hypertask Docs`.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - The marketing, docs and help sites deploy separately from the app. Verify the affected site's deployment, not the app deployment. None of the three has source in this repo, so only the `/developers` redirect and the help-search code are checkable here.

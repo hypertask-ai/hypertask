@@ -1,1 +1,1 @@
-| Starred tasks and comments | [starred.md](starred.md) | `ht-verify` /starred and /pinned with `toggleSaved` fixtures; Ctrl+Shift+S and Ctrl+Shift+P removal, reload |
+| Starred tasks and comments | [starred.md](starred.md) | `feature-map-drive.mjs starred`; `/starred` and `/pinned` tabs |
