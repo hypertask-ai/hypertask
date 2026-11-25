@@ -105,7 +105,8 @@ function rowValue(label) {
 }
 
 function actionRowValue(label) {
-  return labelSpan(label).parentElement.querySelector("div span")?.textContent;
+  const spans = labelSpan(label).parentElement.querySelectorAll("span");
+  return spans[spans.length - 1]?.textContent;
 }
 
 test("a comped Pro team never reads Free Plan on any billing row", async () => {
