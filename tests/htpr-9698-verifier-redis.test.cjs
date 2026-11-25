@@ -47,6 +47,8 @@ test("the isolated stack starts a Redis container and hands its URL to the seed"
   const redisRun = calls.find((line) => line.startsWith("run -d --name ht-smoke-redis-"));
   assert.ok(redisRun, calls.join("\n"));
   assert.match(redisRun, /--network ht-smoke-net-/);
+  assert.match(redisRun, /--user 999:1000/);
+  assert.match(redisRun, /--cap-drop ALL/);
   assert.match(redisRun, /ghcr\.io\/hypertask-ai\/ci-redis:7-alpine@sha256:[0-9a-f]{64}/);
   const redisName = redisRun.match(/--name (ht-smoke-redis-\S+)/)[1];
   const seedRun = calls.find((line) => line.includes("--name ht-smoke-seed-"));
