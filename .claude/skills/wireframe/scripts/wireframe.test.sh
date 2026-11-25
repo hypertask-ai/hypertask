@@ -322,6 +322,22 @@ p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.strip() == TODAY and not events(log, "http")
 add_today(page.parent)
 ok("theme entries cannot share just one image per viewport even with a matching Today section")
+add_today(page.parent)
+body = page.read_text()
+payloads = re.findall(r'src="data:image/png;base64,([A-Za-z0-9+/=]+)"', body)
+assert len(payloads) == 8 and payloads[0] != payloads[1]
+page.write_text(body.replace(payloads[0], "\x00").replace(payloads[1], payloads[0]).replace("\x00", payloads[1]))
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+body = page.read_text()
+for payload in payloads[1:]:
+    body = body.replace(payload, payloads[0])
+page.write_text(body)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+add_today(page.parent)
+ok("embedded Today images must be the declared capture files, not swapped or duplicated ones")
 
 for fixture in ("rejected-ai-chat.html", "rejected-task-entry.html"):
     rejected = (fixtures / fixture).read_text()
@@ -343,6 +359,16 @@ add_today(page.parent)
 p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and "border" in p.stderr.lower() and not events(log, "http")
 ok("a wireframe that adds an off-token border colour is refused")
+
+for family, fail in (("'__IBM_Plex_Sans_1a2b3c'", False), ("'__IBM_Plex_Sans_Fallback_1a2b3c'", False), ("'__Karla_1a2b3c'", True)):
+    page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;font-family:{family}">Changed card</div>'))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
+    if fail:
+        assert p.stderr.startswith(TOKENS) and "font" in p.stderr and not events(log, "http")
+    else:
+        assert len(uploaded(log, "waiting")) == 1
+ok("next/font generated families on a cloned live screen count as the live font")
 
 page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;color:#4455bb">Changed card</div>'))
 add_today(page.parent)

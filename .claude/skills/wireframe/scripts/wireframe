@@ -222,6 +222,11 @@ const tokens = JSON.parse(fs.readFileSync(process.argv[4], 'utf8'));
 const colors = new Set(tokens.colors.map((rgba) => rgba.join(' ')));
 const sizes = tokens.sizes;
 const fonts = new Set(tokens.fonts);
+const fontFamily = (value) => {
+    const raw = value.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
+    if (!raw.startsWith('__')) return raw;
+    return raw.replace(/^__/, '').replace(/_fallback(?=_|$)/, '').replace(/_[0-9a-z]{5,}$/, '').replace(/_/g, ' ').trim();
+};
 const radii = new Set(tokens.radii);
 const rgba = (value) => {
     const match = /^rgba?\(([^)]*)\)$/.exec(value);
@@ -234,7 +239,7 @@ const rgba = (value) => {
 };
 const px = (value) => value.endsWith('px') ? parseFloat(value) : NaN;
 const check = (row) => {
-    const family = row.font.split(',')[0].trim().replace(/^["']|["']$/g, '').toLowerCase();
+    const family = fontFamily(row.font);
     const problems = [];
     if (row.externalFrame) problems.push('external iframe; use the base kit inline srcdoc');
     if (!fonts.has(family)) problems.push('font ' + family);
@@ -349,6 +354,25 @@ def read_manifest(file):
     shown = set(re.findall(r'data-capture="([^"]+)"', section.group(1)))
     if shown != {entry["file"] for entry in data} or len(re.findall(r'src="data:image/png;base64,', section.group(1))) != len(data):
         raise SystemExit(TODAY_MESSAGE)
+    embedded = {}
+    for tag in re.findall(r"<img\b[^>]*>", section.group(1)):
+        name = re.search(r'data-capture="([^"]+)"', tag)
+        payload = re.search(r'src="data:(image/png);base64,([A-Za-z0-9+/=]+)"', tag)
+        if not name or not payload:
+            raise SystemExit(TODAY_MESSAGE)
+        try:
+            embedded[name.group(1)] = base64.b64decode(payload.group(2), validate=True)
+        except ValueError:
+            raise SystemExit(TODAY_MESSAGE)
+    if set(embedded) != shown:
+        raise SystemExit(TODAY_MESSAGE)
+    for entry in data:
+        try:
+            raw = (file.parent / entry["file"]).read_bytes()
+        except OSError:
+            raise SystemExit(TODAY_MESSAGE)
+        if embedded[entry["file"]] != raw:
+            raise SystemExit(TODAY_MESSAGE)
 
 
 def ticket_info(ticket):
