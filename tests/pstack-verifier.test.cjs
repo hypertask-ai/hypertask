@@ -1218,6 +1218,41 @@ test("an api action passes from the preview response with no page navigation", a
   }
 });
 
+test("an all-api plan matches a text expect against the response text", async () => {
+  const { runPlan } = await load();
+  const savedToken = process.env.GH_TOKEN;
+  process.env.GH_TOKEN = "actions-token";
+  try {
+  const actions = [
+    { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 403, expectText: "not a member" },
+    { op: "api", method: "POST", path: "/api/mcp/tasks/{task}", body: {}, expectStatus: 200, expectText: "moved" },
+  ];
+  const pageFor = (text, statuses = [200]) => {
+    let call = 0;
+    return {
+      async goto() { throw new Error("navigated"); },
+      async screenshot() { throw new Error("screenshot"); },
+      getByText() { throw new Error("page text"); },
+      request: { async fetch() { return { status: () => statuses[Math.min(call++, statuses.length - 1)], async text() { return text; } }; } },
+    };
+  };
+  const drive = { base: "http://127.0.0.1:3100", projectId: "4", taskId: "7", bearer: "smoke-token", shotsDir: "/tmp", navigations: [] };
+  const body = plan([actions[0]], { expect: [{ text: "not a member" }] });
+  const seen = await runPlan({ page: pageFor('{"message":"This agent is not a member of this board."}', [403]), plan: body, ...drive });
+  assert.equal(seen.expects[0].ok, true);
+  const missed = await runPlan({ page: pageFor('{"message":"Task moved successfully"}', [403]), plan: body, ...drive });
+  assert.equal(missed.expects[0].ok, false);
+  assert.match(missed.expects[0].error, /response text missing/);
+  const two = plan(actions, { expect: [{ text: "not a member" }, { text: "moved" }] });
+  const both = await runPlan({ page: pageFor('{"a":"not a member","b":"moved"}', [403, 200]), plan: two, ...drive });
+  assert.equal(both.steps.every((step) => step.ok), true, JSON.stringify(both.steps));
+  assert.equal(both.expects.every((item) => item.ok), true, JSON.stringify(both.expects));
+  } finally {
+    if (savedToken === undefined) delete process.env.GH_TOKEN;
+    else process.env.GH_TOKEN = savedToken;
+  }
+});
+
 test("the drive fills archived, board and task ids in an api body", async () => {
   const savedToken = process.env.GH_TOKEN;
   delete process.env.GH_TOKEN;
