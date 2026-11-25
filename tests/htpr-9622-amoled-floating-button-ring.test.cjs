@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { loadModule } = require("../helpers/loadModule.cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const COMPONENT = "src/components/Global/MobileFloatingActionButton.tsx";
 const FLAG = "htpr-9622-amoled-floating-button-ring";
