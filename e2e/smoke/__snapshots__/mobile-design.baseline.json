@@ -568,9 +568,7 @@
           "button[attr=Midscene nightly QA fixture]",
           "div>button:group"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
@@ -586,9 +584,7 @@
           "button[attr=Midscene nightly QA fixture]",
           "div>button:group"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
@@ -604,9 +600,7 @@
           "button[attr=Midscene nightly QA fixture]",
           "div>button:group"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
@@ -622,9 +616,7 @@
           "button[attr=Midscene nightly QA fixture]",
           "div>button:group"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "div[row]>div:#>a:#>div:#",
           "span[aria=Settings]"
@@ -647,9 +639,7 @@
           "svg[aria=Edit message]",
           "svg[aria=Retry message]"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "button[aria=Scroll to latest messages]",
           "div:div.w-full"
@@ -670,9 +660,7 @@
           "svg[aria=Edit message]",
           "svg[aria=Retry message]"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "button[aria=Scroll to latest messages]",
           "div:div.w-full"
@@ -693,9 +681,7 @@
           "svg[aria=Edit message]",
           "svg[aria=Retry message]"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "button[aria=Scroll to latest messages]",
           "div:div.w-full"
@@ -717,9 +703,7 @@
           "svg[aria=Edit message]",
           "svg[aria=Retry message]"
         ],
-        "input-font": [
-          "div[aria=Message]"
-        ],
+        "input-font": [],
         "radius": [
           "button[aria=Scroll to latest messages]",
           "div:div.w-full"
