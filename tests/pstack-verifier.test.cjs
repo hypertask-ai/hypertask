@@ -884,6 +884,31 @@ test("a deepseek author never gets a deepseek verifier on any lane", async () =>
   });
 });
 
+test("run 45516805008 keeps the GLM judge on its configured model with and without screenshots", async () => {
+  const { callLadder, modelRequest, pickVerifier, modelAcceptsImages } = await load();
+  const replay = require("./fixtures/pstack-verifier/45516805008-ladder.json");
+  const picked = pickVerifier(replay.authorFamily, replay.verifierModel);
+  assert.equal(picked.model, replay.verifierModel);
+  assert.equal(modelAcceptsImages(picked.model), true);
+  assert.equal(modelAcceptsImages("zai/glm-5"), false);
+  for (const images of [[], ["abc"]]) {
+    await withLadderLanes(replay.lanes, async ({ fs, spawn }) => {
+      let routed;
+      const answer = callLadder(modelRequest("judge the captured head journey", { model: picked.model, images }), (_bin, _args, options) => {
+        routed = JSON.parse(fs.readFileSync(options.env.LADDER_CALL_LANES, "utf8"));
+        return spawn();
+      });
+      assert.equal(answer, "{}");
+      assert.deepEqual(routed.map((lane) => [lane.name, lane.model]), [
+        ["vercel-ai-gateway", replay.verifierModel],
+        ["vercel-ai-gateway-zai", replay.verifierModel],
+        ["openrouter", replay.verifierModel],
+      ]);
+      assert.deepEqual(routed[1].gateway, { only: ["token-pass"] });
+    });
+  }
+});
+
 test("judge screenshots skip lanes that cannot take images", async () => {
   const { callLadder, modelAcceptsImages, modelRequest, FLASH } = await load();
   const lanes = [

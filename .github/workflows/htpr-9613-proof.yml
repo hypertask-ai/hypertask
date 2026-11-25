@@ -1,0 +1,39 @@
+name: HTPR-9613 focused replay proof
+on:
+  pull_request:
+    branches: [production]
+    paths: ['.github/workflows/htpr-9613-proof.yml']
+permissions:
+  contents: read
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: {node-version: '^24.22.1', check-latest: true}
+      - name: Replay fails without the fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp scripts/pstack-verifier.mjs "$RUNNER_TEMP/pstack-verifier-fixed.mjs"
+          git show HEAD^:scripts/pstack-verifier.mjs > scripts/pstack-verifier.mjs
+          set +e
+          timeout 90 node --test --test-name-pattern='run 45516805008' tests/pstack-verifier.test.cjs > "$RUNNER_TEMP/replay-red.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/replay-red.log"
+          cp "$RUNNER_TEMP/pstack-verifier-fixed.mjs" scripts/pstack-verifier.mjs
+          test "$status" -eq 1
+          grep -q 'not ok.*run 45516805008' "$RUNNER_TEMP/replay-red.log"
+      - name: Replay and related files pass with the fix
+        run: |
+          timeout 90 node --test tests/pstack-verifier.test.cjs
+          timeout 90 node --test tests/pstack-verifier-workflow.test.cjs
+          timeout 90 node --test tests/pstack-verifier-eval.test.cjs
+          timeout 90 node --test tests/pstack-verifier-reuse.test.cjs
