@@ -259,7 +259,7 @@ test('Pages comment adapter refuses a board the body agent was not given and sti
   const res = response();
   await handler({ url: '/api/comments/create', method: 'POST', headers: {}, body: { text: 'Test', creatorId: 6, taskId: 150, ownerId: 6, agentId: f.agent.id, kind: 'qa' } }, res);
   assert.equal(res.body.id, 40600);
-  assert.equal(f.state.flagReads, 0);
+  assert.equal(f.state.flagReads, 1);
 });
 
 test('Pages delete-reminder refuses a board the signed agent was not given and still updates a granted task', async () => {

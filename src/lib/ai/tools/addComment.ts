@@ -10,7 +10,7 @@ import { convertPlainTextMentionsToHtml, resolveTextMentions } from "@/utils/con
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
-import { AGENT_LOG_NOTE, AGENT_LOG_UNAVAILABLE, agentLogText, writeAgentLogEntry } from "@/lib/mcp/operations/comments/agentLog";
+import { AGENT_LOG_NOTE, AGENT_LOG_NO_TEXT, AGENT_LOG_UNAVAILABLE, agentLogText, writeAgentLogEntry } from "@/lib/mcp/operations/comments/agentLog";
 import { buildMcpImageUrls, persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { COMMENT_TASK_LINK_RULE } from "@/lib/ai/chatStream/prompt";
@@ -47,7 +47,7 @@ export function createAddCommentTool(context: ToolContext) {
           unique_index: z.coerce.number().int().positive().optional(),
           project_id: z.coerce.number().int().positive().optional(),
           text: z.string().min(1).max(5000),
-          kind: z.enum(['question', 'qa', 'done']).optional().describe('Optional. An agent comment with no kind is saved to the agent log, not the ticket thread. Pass question for a decision by a person, qa for a QA verdict, or done for the closing summary to post for people.'),
+          kind: z.enum(['question', 'qa', 'done']).optional().describe('Optional. An agent comment with no kind goes to the agent log, not the thread. Pass question to ask a person, qa for a QA verdict, or done for the closing summary.'),
           ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
           images: z.array(z.string()).optional(),
           mentions: z
@@ -190,21 +190,21 @@ export function createAddCommentTool(context: ToolContext) {
 
           if (actingAgentId && input.kind === undefined) {
             const note = await agentLogText(sanitizedText);
-            const activity = note
-              ? await writeAgentLogEntry({
-                principal: {
-                  userId: user.id,
-                  agentId: actingAgentId,
-                  teamScope: context.teamScope ?? null,
-                  displayName: userObj.displayName?.trim() || 'Hypertask agent',
-                  source: 'agent',
-                },
-                taskId: task.id,
-                text: note,
-                idempotencyKey: null,
-              })
-              : null;
-            if (!activity) return { success: false, error: AGENT_LOG_UNAVAILABLE };
+            if (!note) return { success: false, error: AGENT_LOG_NO_TEXT };
+            const write = await writeAgentLogEntry({
+              principal: {
+                userId: user.id,
+                agentId: actingAgentId,
+                teamScope: context.teamScope ?? null,
+                displayName: userObj.displayName?.trim() || 'Hypertask agent',
+                source: 'agent',
+              },
+              taskId: task.id,
+              text: note,
+              idempotencyKey: null,
+            });
+            if (write.status === 'unreachable') return { success: false, error: "Task not found or access denied" };
+            if (write.status === 'failed') return { success: false, error: AGENT_LOG_UNAVAILABLE };
             return sanitizeForJson({
               success: true,
               routedTo: 'log',
@@ -216,7 +216,7 @@ export function createAddCommentTool(context: ToolContext) {
                 url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
               },
               url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-              activity,
+              activity: write.activity,
             });
           }
 
@@ -280,11 +280,17 @@ export function createAddCommentTool(context: ToolContext) {
         );
         if (results.length === 1) return results[0];
 
-        const tasks = results.flatMap((result) =>
+        const loggedTasks = results.flatMap((result) =>
+          result.success && "task" in result && "activity" in result
+            ? [{ ...result.task, routedTo: 'log' as const, visibleToPeople: false, activity: result.activity }]
+            : []
+        );
+        const commentedTasks = results.flatMap((result) =>
           result.success && "task" in result && "comment" in result
             ? [{ ...result.task, comment: result.comment }]
             : []
         );
+        const tasks = [...loggedTasks, ...commentedTasks];
         const failures = results.flatMap((result, index) =>
           result.success
             ? []

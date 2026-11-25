@@ -1,5 +1,5 @@
 import { parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
-import { AGENT_LOG_NOTE, AGENT_LOG_UNAVAILABLE, agentLogText, writeAgentLogEntry } from '@/lib/mcp/operations/comments/agentLog'
+import { AGENT_LOG_NOTE, AGENT_LOG_NO_TEXT, AGENT_LOG_UNAVAILABLE, agentLogText, writeAgentLogEntry } from '@/lib/mcp/operations/comments/agentLog'
 import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
@@ -53,22 +53,22 @@ const handler: NextApiHandler = async (
 
       if (agentId && kind === undefined) {
         const note = await agentLogText(storedText);
-        const activity = note
-          ? await writeAgentLogEntry({
-              principal: {
-                userId: currentUser.id,
-                agentId,
-                teamScope: null,
-                displayName: currentUser.displayName?.trim() || 'Hypertask agent',
-                source: 'agent',
-              },
-              taskId,
-              text: note,
-              idempotencyKey: null,
-            })
-          : null;
-        if (!activity) return res.status(503).json({ success: false, message: AGENT_LOG_UNAVAILABLE });
-        return res.json({ success: true, routedTo: 'log', visibleToPeople: false, notice: AGENT_LOG_NOTE, activity });
+        if (!note) return res.status(400).json({ message: AGENT_LOG_NO_TEXT, code: "missing_field", field: "text" });
+        const write = await writeAgentLogEntry({
+          principal: {
+            userId: currentUser.id,
+            agentId,
+            teamScope: null,
+            displayName: currentUser.displayName?.trim() || 'Hypertask agent',
+            source: 'agent',
+          },
+          taskId,
+          text: note,
+          idempotencyKey: null,
+        });
+        if (write.status === 'unreachable') return res.status(404).json({ message: "Task not found or access denied" });
+        if (write.status === 'failed') return res.status(503).json({ success: false, message: AGENT_LOG_UNAVAILABLE });
+        return res.json({ success: true, routedTo: 'log', visibleToPeople: false, notice: AGENT_LOG_NOTE, activity: write.activity });
       }
 
       const comment = await createCommentService({

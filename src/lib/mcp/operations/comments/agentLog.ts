@@ -6,6 +6,9 @@ export const AGENT_LOG_NOTE =
 export const AGENT_LOG_UNAVAILABLE =
   'Agent log unavailable, so nothing was saved. Retry later, or add kind question, qa or done to post for people.'
 
+export const AGENT_LOG_NO_TEXT =
+  'Nothing was saved: this post has no text the agent log can hold. Add text, or choose kind question, qa or done to post for people.'
+
 export type AgentLogPrincipal = {
   userId: number
   agentId: string
@@ -33,21 +36,25 @@ export async function agentLogText(html: string) {
   return text ? text : null
 }
 
+export type AgentLogWrite =
+  | { status: 'written'; activity: AgentLogReceipt }
+  | { status: 'unreachable' }
+  | { status: 'failed' }
+
 export async function writeAgentLogEntry({ principal, taskId, text, idempotencyKey }: {
   principal: AgentLogPrincipal
   taskId: number
   text: string
   idempotencyKey: string | null
-}): Promise<AgentLogReceipt | null> {
+}): Promise<AgentLogWrite> {
   const { createRuntimeAgentRun, createAgentRunActivity } = await import('@/lib/agentRuns/service')
   const { parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
   const run = await createRuntimeAgentRun(principal, { taskId, title: null, source: 'runtime' })
-  const result = run
-    ? await createAgentRunActivity(principal, run.id, parseAgentRunActivityInput({ type: 'thought', text }), idempotencyKey)
-    : null
-  if (!result) return null
+  if (!run) return { status: 'unreachable' }
+  const result = await createAgentRunActivity(principal, run.id, parseAgentRunActivityInput({ type: 'thought', text }), idempotencyKey)
+  if (!result) return { status: 'failed' }
   const { id, runId, type, text: storedText, createdAt } = result.activity
-  return { id, runId, type, text: storedText, createdAt }
+  return { status: 'written', activity: { id, runId, type, text: storedText, createdAt } }
 }
 
 async function htmlToLogText(html: string) {

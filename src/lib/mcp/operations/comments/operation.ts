@@ -1069,20 +1069,20 @@ export async function POST(request: NextRequest) {
       idempotencyBody,
       async (): Promise<AddCommentResponse> => {
         if (agentLogEntry) {
-          const activity = await writeAgentLogEntry({
+          const write = await writeAgentLogEntry({
             principal: agentLogEntry.principal,
             taskId: task.id,
             text: agentLogEntry.text,
             idempotencyKey: clientIdempotencyKey,
           })
-          if (activity) {
+          if (write.status === 'written') {
             return {
               success: true,
               routedTo: 'log' as const,
               visibleToPeople: false,
               notice: AGENT_LOG_NOTE,
               url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-              activity,
+              activity: write.activity,
             }
           }
           if (writingPolicy) {
