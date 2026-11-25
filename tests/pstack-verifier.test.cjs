@@ -221,7 +221,7 @@ test("a Dependabot pull request refreshed by the update-branch API resolves as d
       ["refresh merge with one parent", { parents: [{ sha: refreshBase }] }],
       ["refresh merge from a branch that is not on production", { parents: [{ sha: refreshed3829.commits[0].sha }, { sha: "b".repeat(40) }] }],
     ]) {
-      const spoofed = await resolve({ commits: [refreshed3829.commits[0], { ...refreshMerge, ...patch }], onBase: patch.parents ? ["b".repeat(40)] : [refreshBase] });
+      const spoofed = await resolve({ commits: [refreshed3829.commits[0], { ...refreshMerge, ...patch }] });
       assert.match(spoofed.output, /stop=true/, name);
       assert.equal(spoofed.request, null, name);
       assert.match(spoofed.output, /description=FAIL: author model unknown/, name);
