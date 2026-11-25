@@ -163,20 +163,20 @@ export async function POST(request: NextRequest) {
           })
         : messageData.content;
 
-    const createdAt = await resolveQueuedMessageCreatedAt(
-      messageData.role,
-      messageData.precedesMessageId,
-      (id) => prisma.chatMessage.findFirst({ where: { id, sessionId, role: "assistant" }, select: { createdAt: true } })
-    );
-
-    const [_, message] = await prisma.$transaction([
-      prisma.chatSession.update({
+    const message = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "ChatSession" WHERE id = ${sessionId} FOR UPDATE`;
+      await tx.chatSession.update({
         where: { id: sessionId },
         data: {
           updatedAt: new Date(),
         },
-      }),
-      prisma.chatMessage.create({
+      });
+      const createdAt = await resolveQueuedMessageCreatedAt(
+        messageData.role,
+        messageData.precedesMessageId,
+        (id) => tx.chatMessage.findFirst({ where: { id, sessionId, role: "assistant" }, select: { createdAt: true } })
+      );
+      return tx.chatMessage.create({
         data: {
           sessionId,
           content,
@@ -200,8 +200,8 @@ export async function POST(request: NextRequest) {
         include: {
           attachments: true,
         },
-      }),
-    ]);
+      });
+    }, { isolationLevel: "ReadCommitted" });
 
     return NextResponse.json({ message }, { status: 200 });
   } catch (error: any) {

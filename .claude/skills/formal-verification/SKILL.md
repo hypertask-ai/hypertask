@@ -30,7 +30,7 @@ Read every result, pass or fail, with the pstack `/statechart` skill. It turns e
 |---|---|---|---|
 | seat-billing | `verification/formal/seat-billing/SeatBilling.tla` | `src/lib/syncSeatBilling.ts`, `src/lib/seatBillingLock.ts` | `616b6c73f8` |
 | webhook-retry | `verification/formal/webhook-retry/BoardWebhook.tla` | `src/lib/mcp/webhooks/outboxDelivery.ts`, `src/lib/mcp/webhooks/queue.ts`, `src/lib/mcp/webhooks/events.ts` | `616b6c73f8` |
-| chat-send-queue | `verification/formal/chat-send-queue/ChatSendQueue.tla` | `src/lib/aiChat/sessionMessageQueue.ts`, `src/lib/aiChat/queuedMessageOrder.ts`, `src/hooks/MultiPages/AIChat/aiChatSend.ts`, `src/hooks/MultiPages/AIChat/useAiChatSessions.ts`, `src/app/api/ai-chat/add-message/route.ts`, `src/app/api/mcp/chat/pending/route.ts` | `c52aa580be` |
+| chat-send-queue | `verification/formal/chat-send-queue/ChatSendQueue.tla` | `src/lib/aiChat/sessionMessageQueue.ts`, `src/lib/aiChat/queuedMessageOrder.ts`, `src/hooks/MultiPages/AIChat/aiChatSend.ts`, `src/hooks/MultiPages/AIChat/useAiChatSessions.ts`, `src/app/api/ai-chat/add-message/route.ts`, `src/app/api/mcp/chat/pending/route.ts` | HTPR-9617 |
 
 ### seat-billing
 
@@ -90,7 +90,7 @@ Bounds: one delivery row, two workers, two attempts, three posts, no retry delay
 | `FailedSendKeepsQueued` | holds | After a send fails, that message is still in the queue. |
 | `ChatSwitchKeepsQueue` | holds | While another chat is open, no unfinished message leaves its queue. |
 | `QueueOrderKept` | holds | A message is delivered only after every message queued before it. |
-| `QueuedStoredBeforeReply` | violated, recorded open finding | A queued human message is stored with a `createdAt` that sorts before the reply row it names. |
+| `QueuedStoredBeforeReply` | holds | A queued human message is stored with a `createdAt` that sorts before the reply row it names. |
 | `StoppedReleasesSend` | holds | After Stop, Send is not held any more. |
 | `StoppedStreamCloses` | holds | Stop closes the stream. |
 | `ReplyEndReleasesSend` | holds | A finished reply never keeps the Send slot. |
@@ -99,10 +99,11 @@ Bounds: one delivery row, two workers, two attempts, three posts, no retry delay
 | `AcquisitionAttemptsBounded` | holds | A poll opens at most two transactions. |
 | `AcquisitionNotReplayed` | holds | A transaction that already ran its callback is never retried. |
 
-Four checks replay the four times this class of bug reached production, and a fifth guards the acquisition retry. Each sets constants in its own config; the current model sets the pre-fix behaviour off.
+Six checks replay the lookup race, four production regressions, and the acquisition retry guard. Each sets constants in its own config; the current model sets the pre-fix behaviour off.
 
 | Check | Pre-fix behaviour it encodes | Property it breaks |
 |---|---|---|
+| `chat-send-queue-lookup-race` (HTPR-9617) | the reply lookup ran outside the insert transaction, allowing a reply to commit after a null lookup but before the human insert | `QueuedStoredBeforeReply` |
 | `chat-send-queue-7785` (HTPR-7785, `db3ed0bc5f`) | the queued human row kept its insert time instead of the reply row's `createdAt - 1`, so history sorted it after the reply it waited for | `QueuedStoredBeforeReply` |
 | `chat-send-queue-7767` (HTPR-7767, `f7844f1b5e`) | one in-memory queue per mounted chat, emptied when the chat changed | `MessageConserved`, `ChatSwitchKeepsQueue`, `FailedSendKeepsQueued`, `QueueOrderKept` |
 | `chat-send-queue-7794` (HTPR-7794, `6b644aa7cd`) | Stop left the stream open and the send slot held | `StoppedReleasesSend`, `StoppedStreamCloses` |
@@ -117,16 +118,16 @@ Each model action stands for one step in the code:
 | `SendQueued` | `drainQueuedMessage`: the head of `persistentQueue.get(sessionId)` goes to `handleSendMessage(next.content, { queuedMessage: next, sessionId })`, which captures the originating session |
 | `Accept`, `Refuse` | the `fetch(chatRoute)` response, so `queueAccepted` or a refusal; the queue keeps the message until the send returns `true` |
 | `ReplyStored` | the reply row `precedesMessageId` names exists with its own persisted `createdAt` |
-| `LookupReply` | `POST /api/ai-chat/add-message` awaits `resolveQueuedMessageCreatedAt` at lines 166-170; `lookupStamp` retains the reply's persisted timestamp, or 0 for a null lookup |
-| `Accept` (insert) | the separate `prisma.$transaction` at lines 172-183 inserts the human row using the retained lookup result: `reply.createdAt - 1` if found, otherwise the insert time; it does not read the reply again |
+| `LookupReply` (bug replay only) | the pre-fix route awaited `resolveQueuedMessageCreatedAt` outside the insert transaction; `lookupStamp` retains its result |
+| `Accept` (lookup and insert) | `POST /api/ai-chat/add-message` locks the `ChatSession` row `FOR UPDATE`, then resolves the reply and inserts the human within one Read Committed transaction; reply inserts must acquire a conflicting foreign-key lock on that session |
 | `ReplyEnd` | `consumeAiChatStream` reaching its `done` event, then `settleSend` and `drainQueuedMessage(completedSessionId)`, which removes the message from its originating session's queue |
 | `Stop` | `handleCancelStream`, then `clearStreamingState` and `settleSendRef.current()` |
 | `Switch` | `sessionQueue.sessionId = currentSession?.id`, and the queue the hooks read for the displayed chat |
 | `PollStart` to `AcquisitionFail` | `GET /api/mcp/chat/pending`: `prisma.$transaction(callback, { maxWait: 5000 })`, the `transactionStarted` guard, one retry on a `P2028` before the callback, and no retry after it |
 
-**Open product race:** `QueuedStoredBeforeReply` also fails on today's code. The shortest path is `Compose, Enqueue, SendQueued, LookupReply(null), ReplyStored, Accept`. The lookup finds no reply and retains no timestamp. The assistant row commits before the separate human-row insert, which uses its later insert time. The final reply stamp is 1 and human stamp is 2, so history shows the answer above the question. This is registered as an expected violation with a witness in `checks.json`, just like the seat-billing and webhook findings. This PR does not fix product code.
+**Fixed lookup race (HTPR-9617):** the current model combines lookup and insert in `Accept`. `BugLookupRace.cfg` retains the split actions and the shortest violating path `Compose, Enqueue, SendQueued, LookupReply(null), ReplyStored, Accept`. `tests/htpr-9617-chat-order-postgres.test.cjs` drives the real route against disposable Postgres, attempts a reply write after the null lookup, and proves the session lock blocks that write until the human insert commits. It also checks that an existing reply is backdated and a foreign-session or non-assistant row is ignored.
 
-`QueuedStoredBeforeReply` fails on `chat-send-queue-7785` like this: a message is queued and sent, its reply row is written first, and the accept writes the human row with the insert time, which is later than the reply's `createdAt`. Today's backdating handles a reply committed before `LookupReply`, but not one committed between `LookupReply` and `Accept`.
+`QueuedStoredBeforeReply` fails on `chat-send-queue-7785` like this: a message is queued and sent, its reply row is written first, and the accept writes the human row with the insert time, which is later than the reply's `createdAt`. The fixed transaction also prevents a reply from committing between the lookup and the insert.
 
 `MessageConserved` fails on `chat-send-queue-7767` like this: a message is queued in the open chat, the person switches to another chat, and the old queue is emptied, so the message is in no queue, not in flight, and not delivered. `ChatSwitchKeepsQueue`, `FailedSendKeepsQueued` and `QueueOrderKept` fail on the same clear.
 
@@ -144,9 +145,9 @@ Three mutations were run against this model to prove the properties can fail. Ea
 | `ReplyEnd` clears `queue[active]` to `<<>>`, rerun with one session so only the queued tail can disappear | `MessageConserved` | `Compose`, `Enqueue`, `Compose`, `Enqueue`, `SendQueued`, `LookupReply`, `Accept`, `ReplyEnd` |
 | `SendQueued` pops the head before the send is acknowledged | `MessageConserved`, `FailedSendKeepsQueued` | `Compose`, `Enqueue`, `SendQueued`, `Refuse` |
 
-`node verification/formal/chat-send-queue/repro.cjs` drives the real `createSessionMessageQueue`, `createAiChatSend` and `drainQueuedMessage` with a stubbed transport through the failed-send and chat-switch traces, and the real `resolveQueuedMessageCreatedAt` through the 7785 trace with the reply row written first. It prints the queue after the failed send, the order, the switch result, the current back-dated `createdAt`, and the `createdAt` the pre-fix code would have written, and exits 0 only while today's code keeps every message and sorts the queued one before its already-stored reply. It also replays the open lookup/insert race against the real ordering helper, with storage and its default insert timestamp simulated: the lookup returns `undefined`, the reply commits, and the human row sorts after it. Exit 0 requires that recorded finding too; this is not an end-to-end route test.
+`timeout 900 node verification/formal/chat-send-queue/repro.cjs` drives the real queue and send hooks through the failed-send and chat-switch traces, and the timestamp helper through the 7785 trace. Its `lookupInsertBugReplay` deliberately replays the old split lookup and insert. The real-route Postgres test is the before/after proof of the fixed race.
 
-Bounds: two messages in one chat, a second chat that holds none, one send at a time, one in-flight message with its originating session captured separately from the displayed chat, one poll with the single transaction slot held and at most two transaction attempts. Time is modelled in 1000 ms ticks: the current model passes 5 ticks of `maxWait`, the pre-fix variant 2. The model assumes the poll's `P2028` either arrives before the callback or while it runs, and separates the awaited reply lookup from the human-row insert. The reply may commit before the lookup, between lookup and insert, or after the insert. `lookedUp` and `lookupStamp` reset on each send attempt, so a retry reads again. Not covered: attachment preparation failing between the composer and the queue, Stop before the server accepts the send, parallel streams, the 2 second drain interval and its retry delays, a reload that rehydrates the queue from sessionStorage, the `FOR UPDATE` wait inside the transaction, the agent heartbeat refresh, and the delivery write itself.
+Bounds: two messages in one chat, a second chat that holds none, one send at a time, one in-flight message with its originating session captured separately from the displayed chat, one poll with the single transaction slot held and at most two transaction attempts. Time is modelled in 1000 ms ticks: the current model passes 5 ticks of `maxWait`, the pre-fix variant 2. The model assumes the poll's `P2028` either arrives before the callback or while it runs, and combines the reply lookup and human-row insert in `Accept`. Only `BugLookupRace.cfg` separates them, allowing a reply to commit in between. Its `lookedUp` and `lookupStamp` reset on each send attempt, so a retry reads again. Not covered: attachment preparation failing between the composer and the queue, Stop before the server accepts the send, parallel streams, the 2 second drain interval and its retry delays, a reload that rehydrates the queue from sessionStorage, the `FOR UPDATE` wait inside the transaction, the agent heartbeat refresh, and the delivery write itself.
 
 ## When a covered file changes
 

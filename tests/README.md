@@ -25,8 +25,10 @@ If GHCR login is unavailable locally, a previously cached pinned image still
 works. The transport test prefers an installed `redis-server`, so installing
 that binary avoids Docker entirely. PostgreSQL suites and the backfill
 verifiers honor `HTPR_PG_IMAGE` for an explicit locally available PostgreSQL 16
-image (use the matching Alpine or Bookworm variant). No automatic upstream
-registry fallback is enabled in CI.
+image (use the matching Alpine or Bookworm variant). A job with no registry
+login, such as `repro-first`, leaves `HTPR_PG_IMAGE` unset and pulls the pinned
+upstream `source` recorded in `.github/ci-images.json`, which is the image the
+GHCR copy mirrors.
 
 See [local premerge smoke](../e2e/smoke/README.md#local-docker-fixtures) for the
 three-image setup used by `scripts/premerge-local.sh`.
@@ -37,6 +39,26 @@ The dependency-free `ci-image-sources.test.cjs` guard scans every file under
 must copy those sources; its consumers are not exempt. The existing root
 `docker-compose.yml` is local-only PostgreSQL 14 and is not used by CI, so it
 is left unchanged rather than silently upgrading a developer's data directory.
+
+## HTPR-9617 chat verification
+
+In the isolated preview, open `/chat` on desktop and phone. Fill the `Message`
+textbox with `HTPR-9617 persisted question` and press Enter. On a fresh account,
+this prepares the first native session but can leave the draft with
+`AI chat is still loading. Please try again.` Capture the prepared session,
+fill `Message` with the same text, and press Enter again. Check that the question
+appears in the conversation, not just in the composer. With the signed-in browser cookies, GET
+`/api/ai-chat/all-sessions` and expect HTTP 200 with that text in the response.
+This checks saved history, not only the optimistic message display. The UI
+supplies the chat-session ID and the required nested `message` request body;
+a board ID cannot substitute for a session ID.
+
+This browser check covers persistence through the changed transaction. The
+lookup/insert race is deterministic in
+`tests/htpr-9617-chat-order-postgres.test.cjs`: the real route runs against
+Postgres while a reply insert is attempted between lookup and human insert.
+CI must also keep the expected `QueuedStoredBeforeReply` violation in
+`verification/formal/chat-send-queue/BugLookupRace.cfg` and pass the fixed model.
 
 ## Feature flag stubs
 

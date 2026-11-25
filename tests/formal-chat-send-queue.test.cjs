@@ -16,7 +16,9 @@ const covered = [
   "verification/formal/checks.json",
   "verification/formal/chat-send-queue/ChatSendQueue.tla",
   "verification/formal/chat-send-queue/ChatSendQueue.cfg",
+  "verification/formal/chat-send-queue/BugLookupRace.cfg",
   "verification/formal/chat-send-queue/Bug7785.cfg",
+  "tests/htpr-9617-chat-order-postgres.test.cjs",
   "verification/formal/chat-send-queue/Bug7767.cfg",
   "verification/formal/chat-send-queue/Bug7794.cfg",
   "verification/formal/chat-send-queue/Bug9111.cfg",
@@ -25,7 +27,7 @@ const covered = [
   ".claude/skills/formal-verification/SKILL.md",
 ];
 
-const variants = ["7785", "7767", "7794", "9111", "9111-replay"];
+const variants = ["lookup-race", "7785", "7767", "7794", "9111", "9111-replay"];
 
 test("the chat send queue model covers the files its record names", () => {
   for (const file of covered) {
@@ -36,19 +38,14 @@ test("the chat send queue model covers the files its record names", () => {
 test("every recorded bug variant still expects the property it broke to fail", () => {
   const manifest = require(path.join(root, "verification/formal/checks.json"));
   const properties = manifest.checks["chat-send-queue"].properties;
-  assert.deepEqual(properties.filter((property) => property.expect === "violated"), [{
-    name: "QueuedStoredBeforeReply",
-    expect: "violated",
-    witness: ["Compose", "Enqueue", "SendQueued", "LookupReply", "ReplyStored", "Accept"],
-  }]);
-  assert.ok(properties.filter((property) => property.name !== "QueuedStoredBeforeReply").every((property) => property.expect === "holds"));
+  assert.ok(properties.every((property) => property.expect === "holds"));
   for (const variant of variants) {
     const properties = manifest.checks[`chat-send-queue-${variant}`].properties;
     assert.ok(properties.some((property) => property.expect === "violated"), `chat-send-queue-${variant} lost its violation`);
   }
 });
 
-test("the current queue model raises only its recorded finding and every past bug variant breaks it", () => {
+test("the fixed queue model passes and every bug replay still breaks its recorded property", () => {
   const checked = spawnSync(
     process.execPath,
     ["scripts/formal-verification/run.mjs", "chat-send-queue", ...variants.map((variant) => `chat-send-queue-${variant}`)],
@@ -57,7 +54,11 @@ test("the current queue model raises only its recorded finding and every past bu
   assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
   assert.match(
     checked.stdout,
-    /formal-verification: ok chat-send-queue matches its record .*MessageConserved holds, DoneNotQueued holds, FailedSendKeepsQueued holds, ChatSwitchKeepsQueue holds, QueueOrderKept holds, QueuedStoredBeforeReply violated \(recorded finding\), StoppedReleasesSend holds, StoppedStreamCloses holds, ReplyEndReleasesSend holds, AcquisitionWindowKept holds, AcquisitionRetried holds, AcquisitionAttemptsBounded holds, AcquisitionNotReplayed holds/,
+    /formal-verification: ok chat-send-queue matches its record .*MessageConserved holds, DoneNotQueued holds, FailedSendKeepsQueued holds, ChatSwitchKeepsQueue holds, QueueOrderKept holds, QueuedStoredBeforeReply holds, StoppedReleasesSend holds, StoppedStreamCloses holds, ReplyEndReleasesSend holds, AcquisitionWindowKept holds, AcquisitionRetried holds, AcquisitionAttemptsBounded holds, AcquisitionNotReplayed holds/,
+  );
+  assert.match(
+    checked.stdout,
+    /formal-verification: ok chat-send-queue-lookup-race matches its record .*QueuedStoredBeforeReply violated \(recorded finding\)/,
   );
   assert.match(
     checked.stdout,
@@ -86,7 +87,7 @@ test("the repro drives the real queue through the recorded traces", () => {
   assert.equal(repro.status, 0, `${repro.stdout}\n${repro.stderr}`);
   assert.match(repro.stdout, /"afterFailure": \[\s*"one",\s*"two"\s*\]/);
   assert.match(repro.stdout, /"preFixBefore": false/);
-  const race = JSON.parse(repro.stdout).lookupInsertRace;
+  const race = JSON.parse(repro.stdout).lookupInsertBugReplay;
   assert.equal(race.lookupMissed, true);
   assert.equal(race.before, false);
   assert.ok(new Date(race.queuedCreatedAt) > new Date(race.replyCreatedAt));

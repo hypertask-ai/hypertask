@@ -67,6 +67,7 @@ async function run(operation, requestedMode = 'OFF', options = {}) {
     user: { update: fn('userUpdate', actor), findUnique: fn('userFind', ({ where }) => options.noUserRow ? null : { id: where.id, displayName: 'Actor', email: 'actor@fixture.invalid', UserSetting: null, userPicture: null }) }, revokedToken: { upsert: fn('tokenRevoke', {}) },
     userSetting: { update: fn('preferencesUpdate', { playGifs: false }), findUnique: fn('preferencesFind', null) },
     agent: { findFirst: fn('agent', { id: agentId, userId, displayName: 'Agent' }) },
+    $queryRaw: async () => [],
     $transaction: async (work) => typeof work === 'function'
       ? record('transaction', ['callback'], await work(prisma))
       : arrayTransaction(work),
@@ -390,10 +391,7 @@ const baseline = {
       [
         "transaction",
         [
-          [
-            {},
-            {}
-          ]
+          "callback"
         ]
       ]
     ]
