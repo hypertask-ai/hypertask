@@ -22,7 +22,7 @@ Home: $WIREFRAME_HOME or ~/.local/share/hypertask-wireframes.
 Screenshots: ~/.local/state/vcc-evidence/<TICKET>/wireframe/ at 1440x900.
 """
 import argparse, base64, html, importlib.machinery, importlib.util, json, os, re, shutil, struct, subprocess, sys, tempfile
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -31,6 +31,7 @@ BASE = HOME / "base"
 THEMES = ("porcelain", "graphite", "amoled", "dia")
 VIEWPORTS = {"mobile": (390, 844), "desktop": (1440, 900)}
 RADII = (0.0, 2.0, 4.0)
+CAPTURE_MAX_AGE = timedelta(days=14)
 QA_STATE = Path("~/.config/hypertask-videos/storageState-qa.json").expanduser()
 APP = os.environ.get("WIREFRAME_APP_BASE") or "https://app.hypertask.ai"
 TOKEN_MESSAGE = ("publish refused: this page uses fonts, colours, sizes or radii outside the app's design system; "
@@ -118,6 +119,16 @@ def design_tokens():
                 colors.add(rgba)
         for raw in re.findall(r"(?<![\w.%-])(-?\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%", text):
             colors.add(_hsl(*raw))
+        for raw in re.findall(r"hsla?\(([^)]*)\)", text):
+            parts = [p for p in re.split(r"[\s,/]+", raw.strip()) if p]
+            if len(parts) not in (3, 4):
+                continue
+            try:
+                alpha = parts[3] if len(parts) == 4 else "1"
+                alpha = round(float(alpha[:-1]) * 255 / 100) if alpha.endswith("%") else round(float(alpha) * 255)
+                colors.add((*_hsl(*(p[:-1] if p.endswith("%") else p for p in parts[:3]))[:3], alpha))
+            except ValueError:
+                continue
         for raw in re.findall(r"font-size:\s*([\d.]+)(px|rem)", text):
             sizes.add(round(float(raw[0]) * (16 if raw[1] == "rem" else 1), 2))
         for stack in re.findall(r"font-family:\s*([^;}]+)", text):
@@ -332,8 +343,10 @@ def read_manifest(file):
         if source_url.scheme != app_url.scheme or source_url.netloc != app_url.netloc or len(source_url.path) < 2:
             raise SystemExit(TODAY_MESSAGE)
         try:
-            datetime.fromisoformat(str(entry.get("capturedAt")).replace("Z", "+00:00"))
+            captured = datetime.fromisoformat(str(entry.get("capturedAt")).replace("Z", "+00:00"))
         except ValueError:
+            raise SystemExit(TODAY_MESSAGE)
+        if captured.tzinfo is None or not -timedelta(minutes=5) <= datetime.now(timezone.utc) - captured <= CAPTURE_MAX_AGE:
             raise SystemExit(TODAY_MESSAGE)
         image = file.parent / shot
         try:

@@ -148,6 +148,10 @@ jobs:
         shell: bash
         run: timeout 900 bash .claude/skills/wireframe/scripts/wireframe.test.sh
 
+      - name: Run the UX sign-off gate tests
+        shell: bash
+        run: timeout 300 node --test tests/ux-signoff-gate.test.cjs
+
   ship-scripts-tests-siblings:
     name: ship-scripts-tests-siblings
     runs-on: ubuntu-latest

@@ -97,7 +97,7 @@ for cmd in hypertask vcc npx; do ln -s stub "$D/bin/$cmd"; done
 export PATH="$D/bin:$PATH"
 python3 - <<'PY'
 import atexit, base64, html, json, os, re, struct, subprocess, zlib
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 D, home, script = Path(os.environ["TEST_DIR"]), Path(os.environ["WIREFRAME_HOME"]), os.environ["WIREFRAME_SCRIPT"]
@@ -153,7 +153,7 @@ def add_today(folder):
         for name, viewport in (("mobile", "390x844"), ("desktop", "1440x900")):
             shot = f"today/{name}-{theme}.png"
             (folder / shot).write_bytes(png_for(*map(int, viewport.split("x"))))
-            manifest.append({"file": shot, "viewport": viewport, "theme": theme, "sourceUrl": source, "capturedAt": "2026-11-23T10:00:00Z"})
+            manifest.append({"file": shot, "viewport": viewport, "theme": theme, "sourceUrl": source, "capturedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")})
     (folder / "today.json").write_text(json.dumps(manifest))
     figures = "".join(f'<figure><img alt="{e["theme"]} {e["viewport"]}" src="data:image/png;base64,{base64.b64encode((folder / e["file"]).read_bytes()).decode()}" data-capture="{e["file"]}"><figcaption>{e["theme"]} {e["viewport"]}</figcaption></figure>' for e in manifest)
     section = f'<section data-wireframe-today id="today"><h2>Today</h2>{figures}</section>'
@@ -287,6 +287,9 @@ today_variants = [None, '', '{}', '[]', json.dumps(manifest[:-1]),
                   json.dumps([{**manifest[0], "sourceUrl": "https://app.hypertask.ai/project?id=7049"}] + manifest[1:]),
                   json.dumps([{**entry, "sourceUrl": "https://app.hypertask.ai/project?id=7049"} for entry in manifest]),
                   json.dumps([{**manifest[0], "capturedAt": "yesterday"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "capturedAt": "2026-01-02T03:04:05Z"}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "capturedAt": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()}] + manifest[1:]),
+                  json.dumps([{**manifest[0], "capturedAt": datetime.now(timezone.utc).replace(tzinfo=None).isoformat()}] + manifest[1:]),
                   json.dumps([{**manifest[0], "file": "today/missing.png"}] + manifest[1:])]
 for content in today_variants:
     manifest_path.unlink(missing_ok=True)
@@ -386,8 +389,8 @@ for color, fail in (("rgba(68,85,187,0.01)", True), ("#4455bb03", True), ("rgba(
         assert len(uploaded(log, "waiting")) == 1
 ok("alpha variants stay distinct and literal translucent app tokens pass in rgba and hex forms")
 
-for accent in ("text-decoration:underline;text-decoration-color:#ff0000", "text-emphasis:filled dot #ff0000", "-webkit-text-stroke:1px #ff0000", "-webkit-text-fill-color:#ff0000"):
-    for css, fail in ((accent, True), (accent.replace("#ff0000", "#ececec"), False)):
+for accent in ("text-decoration:underline;text-decoration-color:#ff0000", "text-emphasis:filled dot #ff0000", "-webkit-text-stroke:1px #ff0000", "-webkit-text-fill-color:#ff0000", "border:1px solid hsl(0, 100%, 50%)"):
+    for css, fail in ((accent, True), (accent.replace("#ff0000", "#ececec").replace("hsl(0, 100%, 50%)", "hsl(216, 8%, 23%, 0.2)"), False)):
         page.write_text(valid_page.replace('padding:8px">Changed card</div>', f'padding:8px;{css}">Changed card</div>'))
         add_today(page.parent)
         p, log = invoke("publish", "HTPR-255", "--no-comment", fail=fail)
@@ -395,7 +398,7 @@ for accent in ("text-decoration:underline;text-decoration-color:#ff0000", "text-
             assert p.stderr.startswith(TOKENS) and not events(log, "http")
         else:
             assert len(uploaded(log, "waiting")) == 1
-ok("painted text decorations, emphasis, strokes and fills use app token colours")
+ok("painted text decorations, emphasis, strokes, fills and literal hsl tokens use app token colours")
 
 page.write_text(valid_page.replace("<body>", '<body style="background-color:#ff0000">'))
 add_today(page.parent)
