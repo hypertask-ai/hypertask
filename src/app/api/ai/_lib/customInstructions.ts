@@ -105,7 +105,7 @@ export async function uploadCustomInstructionFiles(args: {
   };
   const uniqueUrls = Array.from(new Set(args.urls.filter(Boolean)));
   const processed: ProcessUrlResult[] = [];
-  const gatewayApiKey = await getByokOrTeamGatewayApiKeyForProvider(
+  const resolvedGatewayKey = await getByokOrTeamGatewayApiKeyForProvider(
     "openai",
     undefined,
     {
@@ -113,6 +113,7 @@ export async function uploadCustomInstructionFiles(args: {
       userId: args.userId,
     }
   );
+  const gatewayApiKey = typeof resolvedGatewayKey === "string" ? resolvedGatewayKey : undefined;
 
   for (const url of uniqueUrls) {
     try {

@@ -48,6 +48,14 @@ import {
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
 import { autoModelEnabled } from "@/app/api/ai/_lib/autoModel";
+import {
+  getAnthropicMonthlyCreditState,
+  isPlatformAnthropicCredential,
+  platformAnthropicApiKey,
+  resolveAiFundingTableDecision,
+  resolveHypertaskAnthropicCredential,
+  type AiFundingDecision,
+} from "@/app/api/ai/_lib/aiFunding";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
@@ -604,12 +612,117 @@ export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
   return (await getTeamGatewayFunding(lookup))?.apiKey;
 }
 
+export async function resolveAiFundingForRequest(args: {
+  provider: TByokProviderKey;
+  modelOption?: TAiModelOption;
+  flags?: ByokProviderFlag[] | null;
+  lookup?: ByokLookupContext;
+  options?: { resolveOpenRouterWithoutFlag?: boolean };
+  now?: Date;
+}): Promise<AiFundingDecision | undefined> {
+  const forced = await resolveForcedTeamKey(args.lookup);
+  const isAnthropic =
+    args.provider === "claude" ||
+    (args.modelOption
+      ? getAiModelDefinition(args.modelOption.modelKey)?.provider === "anthropic"
+      : false);
+  const anthropicCredit = await getAnthropicMonthlyCreditState(args.now);
+
+  if (forced) {
+    const plan = (await resolveLookupPlan(args.lookup)) ?? "Free";
+    const servedProvider = args.modelOption ? modelByokProvider(args.modelOption) : args.provider;
+    const matches = args.modelOption
+      ? modelOptionMatchesForcedKey(args.modelOption, forced.provider)
+      : forcedServesProvider(forced, args.provider);
+    if (
+      !(await forcedKeyEligible(forced, args.lookup)) ||
+      !forced.apiKey ||
+      !matches ||
+      (servedProvider && !(await isByokProviderAllowedForLookup(servedProvider, args.lookup)))
+    ) {
+      throw new ForcedTeamKeyError(forced.provider);
+    }
+    return resolveAiFundingTableDecision({
+      plan,
+      forcedKey: forced,
+      isAnthropicModel: isAnthropic,
+      anthropicCredit,
+    });
+  }
+
+  const plan = await resolveLookupPlan(args.lookup);
+  if (!plan) return undefined;
+
+  const byokApiKey =
+    plan === "Free"
+      ? undefined
+      : await getByokApiKeyForProvider(args.provider, args.flags, args.lookup, {
+          ...args.options,
+          resolveWithoutFlag: true,
+        });
+
+  if (byokApiKey && !isVercelAiGatewayKey(byokApiKey)) {
+    return resolveAiFundingTableDecision({
+      plan,
+      customerKey: byokApiKey,
+      isCustomerGateway: false,
+      isAnthropicModel: isAnthropic,
+      anthropicCredit,
+    });
+  }
+
+  const funding = await getTeamGatewayFunding(args.lookup);
+  if (funding?.source === "customer") {
+    return resolveAiFundingTableDecision({
+      plan,
+      customerKey: funding.apiKey,
+      isCustomerGateway: true,
+      isAnthropicModel: isAnthropic,
+      anthropicCredit,
+    });
+  }
+
+  const teamId = await resolveLookupTeamId(args.lookup);
+  const hypertaskSource =
+    funding && funding.source !== "customer" ? funding.source : undefined;
+  const resolvedAnthropic = isAnthropic
+    ? await resolveHypertaskAnthropicCredential({
+        fallbackGatewayApiKey: funding?.apiKey,
+        gatewayFundingSource: hypertaskSource,
+        modelId: args.modelOption?.model,
+        teamId,
+        now: args.now,
+      })
+    : null;
+
+  if (resolvedAnthropic?.route === "hypertask-anthropic" && isPlatformAnthropicCredential(resolvedAnthropic.credential)) {
+    return {
+      plan,
+      payer: "hypertask",
+      route: "hypertask-anthropic",
+      credential: resolvedAnthropic.credential,
+      fallbackGatewayCredential: funding?.apiKey,
+      gatewayFundingSource: hypertaskSource,
+      anthropicCredit: resolvedAnthropic.anthropicCredit,
+    };
+  }
+
+  return resolveAiFundingTableDecision({
+    plan,
+    hypertaskGatewayKey: funding?.apiKey,
+    hypertaskGatewaySource: hypertaskSource,
+    isAnthropicModel: isAnthropic,
+    anthropicCredit: resolvedAnthropic?.anthropicCredit ?? anthropicCredit,
+    anthropicApiKey: platformAnthropicApiKey(),
+  });
+}
+
 export async function getByokOrTeamGatewayApiKeyForProvider(
   provider: ModelProviderId,
   flags?: ByokProviderFlag[] | null,
   lookup?: ByokLookupContext,
   options?: { resolveOpenRouterWithoutFlag?: boolean }
-) {
+): Promise<AiModelCredential | undefined> {
   return getByokOrTeamGatewayApiKey(
     provider,
     flags,
@@ -623,7 +736,7 @@ export async function getByokOrTeamGatewayApiKey(
   flags?: ByokProviderFlag[] | null,
   lookup?: ByokLookupContext,
   options?: { resolveOpenRouterWithoutFlag?: boolean }
-) {
+): Promise<AiModelCredential | undefined> {
   const forced = await resolveForcedTeamKey(lookup);
   if (forced) {
     if (!(await forcedKeyEligible(forced, lookup)) || !forcedServesProvider(forced, provider) ||
@@ -657,9 +770,32 @@ export async function getByokOrTeamGatewayApiKey(
     if (isPlatformManagedGatewayKey(byokApiKey)) registerManagedGatewayKey(byokApiKey);
     if (!fromFlag) {
       const funding = await getTeamGatewayFunding(lookup);
-      if (funding?.apiKey === byokApiKey) return funding.apiKey;
+      if (funding?.apiKey === byokApiKey) {
+        if (provider === "claude" && funding.source !== "customer") {
+          const teamId = await resolveLookupTeamId(lookup);
+          const resolved = await resolveHypertaskAnthropicCredential({
+            fallbackGatewayApiKey: funding.apiKey,
+            gatewayFundingSource: funding.source,
+            teamId,
+          });
+          return resolved.credential;
+        }
+        return funding.apiKey;
+      }
     }
     return byokApiKey;
+  }
+
+  if (provider === "claude") {
+    const funding = await getTeamGatewayFunding(lookup);
+    if (funding?.source === "customer") return funding.apiKey;
+    const teamId = await resolveLookupTeamId(lookup);
+    const resolved = await resolveHypertaskAnthropicCredential({
+      fallbackGatewayApiKey: funding?.apiKey,
+      gatewayFundingSource: funding && funding.source !== "customer" ? funding.source : undefined,
+      teamId,
+    });
+    return resolved.credential;
   }
 
   return getTeamGatewayApiKey(lookup);

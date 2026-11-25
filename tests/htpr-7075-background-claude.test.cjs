@@ -5,6 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const ts = require("typescript");
 
+const { createAiFundingStub } = require("./helpers/ai-funding-stub.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
@@ -29,6 +30,7 @@ function read(file) {
 
 function moduleWithStubs(file, stubs) {
   stubs = { "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7915-auto-model": { HTPR_7915_AUTO_MODEL_FLAG: "htpr-7915-auto-model" }, "@/app/api/ai/_lib/autoModel": { autoModelEnabled: async () => false, isAutoRequest: () => false, chatStepUp: () => 0, pickAutoModelOption: () => null }, "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" }, "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false }, ...stubs };
+  if (!stubs["@/app/api/ai/_lib/aiFunding"]) stubs["@/app/api/ai/_lib/aiFunding"] = createAiFundingStub(stubs);
   const code = ts.transpileModule(read(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;

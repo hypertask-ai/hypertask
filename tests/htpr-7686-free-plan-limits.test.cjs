@@ -57,6 +57,7 @@ function loader(stubs, logger) {
       require(id) {
         if (id === "@/lib/agents/writing") return require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {});
         if (id === "@/lib/agents/writingEnforcement") return require("./helpers/stub-map.cjs").enforcementFor(require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}));
+        if (id === "@/app/api/ai/_lib/aiFunding" && !Object.hasOwn(stubs, id)) return require("./helpers/ai-funding-stub.cjs").createAiFundingStub(stubs);
         if (Object.hasOwn(stubs, id)) return { __esModule: true, ...stubs[id] };
         if (id === "crypto" || id.startsWith("node:")) return require(id);
         const base = id.startsWith("@/")

@@ -23,6 +23,7 @@ Reference command paths are repo-relative.
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Create AI provider clients only in `src/app/api/ai/_lib/aiFunding.ts`.
 - Wireframes use only live app tokens.
 - Wireframes need eight fresh theme captures.
 - Sign-off needs a `/wireframes/` link.
@@ -48,7 +49,7 @@ Read linked sections on demand.
 | New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
 | App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
 | pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
-| Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |
+| AI models, keys, plans, Auto routing or AI outages | [Model rules](.claude/reference/architecture.md#ai-models), [AI funding](.claude/reference/architecture.md#ai-funding) |
 | Access or security changes | [Still-allowed tests](.claude/reference/workflow.md#repo-workflow-detail) |
 
 Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first.

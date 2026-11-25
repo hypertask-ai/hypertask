@@ -5,10 +5,14 @@ export { escapeHtml } from "./editorAiPrompts";
 export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, TASK_AUTHORING_WEB_STYLE, createTaskAuthoringStyle, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
 import { cookies, headers } from "next/headers";
 
-import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV4 } from "@ai-sdk/provider";
-import { createOpenAI } from "@ai-sdk/openai";
 import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, type UserContent } from "ai";
+import {
+  createAnthropicWebSearchTool,
+  createOpenAiWebSearchTool,
+  isCustomerPaidCredential,
+  isPlatformAnthropicCredential,
+} from "@/app/api/ai/_lib/aiFunding";
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -23,7 +27,7 @@ import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
-import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
+import { autoForcedProvider, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
 import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
@@ -34,6 +38,12 @@ import prisma from "@/lib/prisma";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: unknown) {
+  if (isPlatformAnthropicCredential(apiKey)) {
+    const team = typeof teamId === "string" ? teamId : "";
+    let on = false;
+    try { if (team) { const { remainingSpendPathEnabled } = await import("@/app/api/ai/_lib/planAllowancePolicy"); on = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(team); } } catch { on = false; }
+    return (provider === "claude" || provider === "openai") && !on;
+  }
   const key = typeof apiKey === "string" ? apiKey.trim() : "";
   const team = typeof teamId === "string" ? teamId : "";
   let on = false;
@@ -472,19 +482,18 @@ export function selectEditorModel(
         requestedModel && CLAUDE_MODELS.has(requestedModel)
           ? requestedModel
           : DEFAULT_CLAUDE_MODEL;
-      const directModel = typeof byokCredential === "string" &&
-        !isVercelAiGatewayKey(byokCredential)
+      const directModel = isPlatformAnthropicCredential(byokCredential) ||
+        (typeof byokCredential === "string" && !isVercelAiGatewayKey(byokCredential))
         ? options?.modelOption?.directModel ?? model
         : model;
-      const aiModel = resolveAiModel(provider, directModel, byokCredential);
-      const directApiKey = isVercelAiGatewayKey(byokCredential)
-        ? undefined
-        : typeof byokCredential === "string"
-          ? byokCredential
-          : undefined;
-      const anthropic = createAnthropic({
-        apiKey: directApiKey ?? "",
-      });
+      const aiModel = resolveAiModel(provider, directModel, byokCredential, options?.modelOption);
+      const directApiKey = isPlatformAnthropicCredential(byokCredential)
+        ? byokCredential.apiKey
+        : isVercelAiGatewayKey(byokCredential)
+          ? undefined
+          : typeof byokCredential === "string"
+            ? byokCredential
+            : undefined;
       return {
         provider,
         usageProvider,
@@ -502,7 +511,7 @@ export function selectEditorModel(
         },
         tools: options?.includeNativeWebSearch
           ? ({
-              web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
+              web_search: createAnthropicWebSearchTool(directApiKey),
             } as ToolSet)
           : undefined,
       };
@@ -578,9 +587,6 @@ export function selectEditorModel(
         : typeof byokCredential === "string"
           ? byokCredential
           : undefined;
-      const openai = createOpenAI({
-        apiKey: directApiKey ?? "",
-      });
       return {
         provider: "openai",
         usageProvider,
@@ -597,7 +603,7 @@ export function selectEditorModel(
           maxOutputTokens: 16000,
         },
         tools: options?.includeNativeWebSearch
-          ? ({ web_search: openai.tools.webSearch() } as ToolSet)
+          ? ({ web_search: createOpenAiWebSearchTool(directApiKey) } as ToolSet)
           : undefined,
       };
     }
@@ -680,11 +686,7 @@ export async function selectTaskWriterModel(args: {
       keyLookup,
     );
     const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
-    hasEligibleByokCredential =
-      (typeof credential === "string" &&
-        credential.trim().length > 0 &&
-        credential.trim() !== sharedKey) ||
-      (credential !== null && typeof credential === "object");
+    hasEligibleByokCredential = isCustomerPaidCredential(credential, sharedKey);
   }
   const deepseekFlashFastEnabled = await import("@/lib/flags")
     .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, args.userId ?? 0))
@@ -703,13 +705,18 @@ export async function selectTaskWriterModel(args: {
     defaultContext.haikuDefaultEnabled,
     defaultContext,
   );
-  const personalModelOptionId = args.aiFeature && !taskWriterSonnet
+  const rawPersonalModelOptionId = args.aiFeature && !taskWriterSonnet
     ? await getPersonalModelOptionId(
         args.userId,
         teamContext.teamId,
         args.aiFeature
       )
     : null;
+  const personalAuto = typeof isAutoRequest === "function" && isAutoRequest(rawPersonalModelOptionId);
+  const personalModelOptionId = personalAuto ? null : rawPersonalModelOptionId;
+  const explicitAutoRequest =
+    typeof isAutoRequest === "function" &&
+    (isAutoRequest(args.modelOptionId) || isAutoRequest(args.modelSelected));
   let pickerSelection = null;
   if (args.aiFeature === "taskWriter" && typeof args.userId === "number") {
     if (await isFeatureEnabled(HTPR_8995_PICKER_AUTO_FLAG, args.userId)) {
@@ -717,7 +724,7 @@ export async function selectTaskWriterModel(args: {
     }
   }
   const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
-  const requestAuto = pickerSelection === "auto";
+  const requestAuto = pickerSelection === "auto" || explicitAutoRequest || personalAuto;
   const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
     ? pickAutoModelOption({
         feature: args.aiFeature,

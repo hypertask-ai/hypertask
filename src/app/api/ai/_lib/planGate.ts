@@ -14,6 +14,7 @@ import {
   type TAiImageModelDefinition,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
+import { isCustomerPaidCredential } from "@/app/api/ai/_lib/aiFunding";
 
 export class AiPlanAccessError extends Error {
   constructor(message: string) {
@@ -139,12 +140,7 @@ export async function assertModelAllowedForPlan(
   const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
-  if (
-    (typeof resolvedCredential === "string" &&
-      resolvedCredential.length > 0 &&
-      resolvedCredential !== sharedKey) ||
-    (resolvedCredential !== null && typeof resolvedCredential === "object")
-  ) {
+  if (isCustomerPaidCredential(resolvedCredential, sharedKey)) {
     return;
   }
   if (!resolvedCredential) {

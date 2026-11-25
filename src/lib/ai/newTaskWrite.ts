@@ -13,6 +13,7 @@ import {
 } from "@/utils/helperFunctions/describeTaskWriterFailure";
 import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
 import { creationScreenshotCandidates, guaranteeCreationScreenshots } from "@/lib/media/inlineAgentImages";
+import { AUTO_MODEL_OPTION_ID } from "@/lib/aiModelOptions";
 
 const MAX_TEMPLATE_CHIPS = 8;
 const MAX_TEMPLATE_TEXT_LENGTH = 2_000;
@@ -181,6 +182,8 @@ export async function requestNewTaskWrite({
   guaranteeScreenshots: boolean;
 }): Promise<string> {
   const boardAi = project.ai_custom_instructions?.[0];
+  const savedModelId = boardAi?.model_selected ?? undefined;
+  const savedSource = boardAi?.source_selected ?? undefined;
   const response = await fetch(taskWriterRoute, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -189,8 +192,8 @@ export async function requestNewTaskWrite({
       PROMPT: buildNewTaskWritePrompt(instruction, chip, currentTitle),
       userRetrievalTexts: [instruction],
       customInstructions: boardAi?.customInstruction ?? "",
-      sourceSelected: boardAi?.source_selected ?? "openai",
-      modelSelected: boardAi?.model_selected ?? undefined,
+      ...(savedSource ? { sourceSelected: savedSource } : {}),
+      ...(savedModelId ? { modelSelected: savedModelId } : { modelOptionId: AUTO_MODEL_OPTION_ID }),
       aiMode: "AiTaskWriter",
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       images64: [],

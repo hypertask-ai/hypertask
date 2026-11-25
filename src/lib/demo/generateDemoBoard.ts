@@ -1,5 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
-import { createGateway, generateText, Output, type LanguageModelUsage } from "ai";
+import { generateText, Output, type LanguageModelUsage } from "ai";
+import { createFundingGatewayLanguageModel } from "@/app/api/ai/_lib/aiFunding";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { z } from "zod";
 
@@ -100,8 +101,8 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
     throw new DemoBoardGenerationUnavailableError();
   }
   const modelSlug = claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL;
-  const rawModel = createGateway({ apiKey })(modelSlug);
-  const model = capsEnabled ? cappedDemoModel(rawModel, modelSlug, apiKey, teamId) : rawModel;
+  const rawModel = createFundingGatewayLanguageModel(modelSlug, apiKey);
+  const model = capsEnabled ? cappedDemoModel(rawModel as Parameters<typeof cappedDemoModel>[0], modelSlug, apiKey, teamId) : rawModel;
   const startedAt = Date.now();
   let usage: LanguageModelUsage | undefined;
   let succeeded = false;

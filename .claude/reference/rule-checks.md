@@ -20,6 +20,7 @@ or when a row names a check file that is not in the repository.
 | Verify the successful production deployment and live behavior before Done. | `.github/workflows/prod-health.yml` |
 | Clean only your own finished worktree and branch. | nothing yet |
 | No explanatory code comments. Express intent in code. | `eslint-local-rules/no-comments.mjs` |
+| Create AI provider clients only in `src/app/api/ai/_lib/aiFunding.ts`. | `eslint-local-rules/ai-funding-provider-clients.mjs`, `tests/ai-funding-provider-clients-rule.test.cjs` |
 | Wireframes use only live app tokens. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Wireframes need eight fresh theme captures. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Sign-off needs a `/wireframes/` link. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `tests/ux-signoff-gate.test.cjs` |

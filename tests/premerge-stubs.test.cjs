@@ -47,6 +47,7 @@ function harness(env = local) {
     "@upstash/qstash": { Client: neverProvider },
     "@upstash/qstash/nextjs": { verifySignature: neverProvider },
   };
+  mocks["@/app/api/ai/_lib/aiFunding"] = require("./helpers/ai-funding-stub.cjs").createAiFundingStub(mocks);
   function module(file) {
     const filename = path.join(root, file);
     const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {

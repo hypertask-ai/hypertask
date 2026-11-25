@@ -80,7 +80,7 @@ export const taskWriterRequestSchema = z.object({
   teamId: z.unknown().optional(),
   PROMPT: z.string().optional().default(""),
   customInstructions: z.string().optional().default(""),
-  sourceSelected: z.string().optional().default("openai"),
+  sourceSelected: z.string().optional(),
   modelSelected: z.string().nullable().optional(),
   modelOptionId: z.string().nullable().optional(),
   timeZone: z.string().max(64).optional(),

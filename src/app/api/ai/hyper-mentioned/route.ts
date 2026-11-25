@@ -83,7 +83,7 @@ const hyperMentionRequestSchema = z.object({
     .nullable()
     .optional(),
   ownerId: z.coerce.number().int().positive().optional(),
-  sourceSelected: z.string().optional().default("openai"),
+  sourceSelected: z.string().optional(),
   modelSelected: z.string().optional().nullable(),
   modelOptionId: z.string().optional().nullable(),
   modelMentionLabel: z.string().optional().nullable(),

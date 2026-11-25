@@ -199,6 +199,7 @@ function tracingHarness(options = {}) {
     "@/lib/aiModelOptions": {}, "@/lib/aiProviders": {},
     "@/lib/aiAllowancePolicy": {}, "@/lib/aiUsageClassification": {}, "@/lib/ai/customEndpoint": {},
   };
+  stubs["@/app/api/ai/_lib/aiFunding"] = require("./helpers/ai-funding-stub.cjs").createAiFundingStub(stubs);
   const api = load("src/app/api/ai/_lib/modelProvider.ts", stubs, {
     performance, setTimeout, clearTimeout, ReadableStream, process,
   });
