@@ -33,7 +33,7 @@
         {"name": "FailedSendKeepsQueued", "expect": "holds"},
         {"name": "ChatSwitchKeepsQueue", "expect": "holds"},
         {"name": "QueueOrderKept", "expect": "holds"},
-        {"name": "QueuedStoredBeforeReply", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "LookupReply", "ReplyStored", "Accept"]},
+        {"name": "QueuedStoredBeforeReply", "expect": "holds"},
         {"name": "StoppedReleasesSend", "expect": "holds"},
         {"name": "StoppedStreamCloses", "expect": "holds"},
         {"name": "ReplyEndReleasesSend", "expect": "holds"},
@@ -41,6 +41,13 @@
         {"name": "AcquisitionRetried", "expect": "holds"},
         {"name": "AcquisitionAttemptsBounded", "expect": "holds"},
         {"name": "AcquisitionNotReplayed", "expect": "holds"}
+      ]
+    },
+    "chat-send-queue-lookup-race": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/BugLookupRace.cfg",
+      "properties": [
+        {"name": "QueuedStoredBeforeReply", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "LookupReply", "ReplyStored", "Accept"]}
       ]
     },
     "chat-send-queue-7785": {
