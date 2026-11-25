@@ -71,15 +71,35 @@ try {
   await page.screenshot({ path: path.join(dir, '01-full-page.png') });
   step('the full-page chat shows its composer and named buttons', (await visible(composer)) && names.length >= 2, { names });
 
-  const prompt = `AI chat drive ${Date.now()}`;
+  const newChat = async () => {
+    for (const button of await page.getByRole('button', { name: 'New chat', exact: true }).all()) {
+      if (await visible(button)) return button;
+    }
+    return null;
+  };
+  const newChatButton = await newChat();
+  const fresh = newChatButton ? (await newChatButton.click().then(() => true, () => false)) : false;
+  const emptied = await page.waitForFunction(
+    () => {
+      const section = [...document.querySelectorAll('main section')].filter((entry) => entry.querySelector('#ai-chat-tiptap-editor')).at(-1);
+      return Boolean(section) && section.querySelectorAll('.submessage-container').length === 0;
+    },
+    null, { timeout: 30_000 },
+  ).then(() => true, () => false);
+  step('New chat opens an empty conversation with its composer', fresh && emptied && (await visible(composer)), { fresh, emptied });
+
+  const prompt = `In one short sentence, what is Hypertask? (drive ${Date.now()})`;
   await composer.click();
   await page.keyboard.insertText(prompt);
   await page.keyboard.press('Enter');
   const answered = await page.waitForFunction(
-    () => document.querySelectorAll('.submessage-container.delivered [data-chat-content-html]').length >= 2,
+    () => {
+      const section = [...document.querySelectorAll('main section')].filter((entry) => entry.querySelector('#ai-chat-tiptap-editor')).at(-1);
+      return Boolean(section) && section.querySelectorAll('.submessage-container.delivered [data-chat-content-html]').length >= 2;
+    },
     null, { timeout: 90_000 },
   ).then(() => true, () => false);
-  const reply = answered ? (await page.locator('.submessage-container.delivered [data-chat-content-html]').last().innerText()).trim() : '';
+  const reply = answered ? (await page.locator('main section').filter({ has: page.locator('#ai-chat-tiptap-editor') }).last().locator('.submessage-container.delivered [data-chat-content-html]').last().innerText()).trim() : '';
   await page.screenshot({ path: path.join(dir, '02-chat-sent.png') });
   step('Enter sends the message and an assistant answer arrives', answered && reply.length > 0 && reply !== prompt && !/Premerge stubs require/.test(reply), { reply: reply.slice(0, 120) });
 

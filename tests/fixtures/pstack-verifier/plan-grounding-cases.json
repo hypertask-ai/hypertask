@@ -1,0 +1,185 @@
+{
+  "htpr-9691-literal-placeholder": {
+    "why": "HTPR-9691: the plan sent an api body holding a placeholder the drive never fills, and the run failed on it.",
+    "corpus": "<div className=\"flex\"><Tiptap ariaLabel=\"Start dictation\" placeholder=\"Message\" /></div>",
+    "routes": [
+      "src/pages/api/mcp/tasks/[id].ts",
+      "src/pages/api/agent-rooms/index.ts"
+    ],
+    "journeys": [
+      {
+        "journey": "change:repro",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/chat"
+          },
+          {
+            "op": "api",
+            "method": "GET",
+            "path": "/api/mcp/tasks/{task}",
+            "body": {
+              "taskId": "{taskId}"
+            },
+            "expectStatus": 200,
+            "expectText": ""
+          }
+        ],
+        "expect": [
+          {
+            "path": "/chat"
+          }
+        ]
+      }
+    ],
+    "problems": [
+      "change:repro step 2 api: {taskId} is not a seeded value"
+    ],
+    "dropped": []
+  },
+  "htpr-9691-invented-api-route": {
+    "why": "HTPR-9691: the plan called an api route the head source does not serve, and got a 404.",
+    "corpus": "<div className=\"flex\"><Tiptap ariaLabel=\"Start dictation\" placeholder=\"Message\" /></div>",
+    "routes": [
+      "src/pages/api/agent-rooms/index.ts",
+      "src/pages/api/chat/index.ts"
+    ],
+    "journeys": [
+      {
+        "journey": "change:repro",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/chat"
+          },
+          {
+            "op": "api",
+            "method": "GET",
+            "path": "/api/mcp/tasks/{task}",
+            "body": {},
+            "expectStatus": 200,
+            "expectText": ""
+          }
+        ],
+        "expect": [
+          {
+            "path": "/chat"
+          }
+        ]
+      }
+    ],
+    "problems": [
+      "change:repro step 2 api: /api/mcp/tasks/{task} is not a route in the head source"
+    ],
+    "dropped": []
+  },
+  "pr-3349-error-wording": {
+    "why": "PR 3349: the plan expected wording the code does not use, so a good change failed.",
+    "corpus": "return NextResponse.json({ success: false, error: \"Invalid AI model preference\" }, { status: 400 });",
+    "routes": [
+      "src/app/api/users/preferences/route.ts"
+    ],
+    "journeys": [
+      {
+        "journey": "change:primary",
+        "actions": [
+          {
+            "op": "api",
+            "method": "PUT",
+            "path": "/api/users/preferences",
+            "body": {
+              "model": "nope"
+            },
+            "expectStatus": 400,
+            "expectText": "Invalid model preference",
+            "force": "a model id the preference route rejects"
+          }
+        ],
+        "expect": [
+          {
+            "text": "Invalid model preference",
+            "force": "a model id the preference route rejects"
+          }
+        ]
+      }
+    ],
+    "problems": [
+      "change:primary step 1 api: \"Invalid model preference\" is not in the head source",
+      "change:primary expect 1: \"Invalid model preference\" is not in the head source"
+    ],
+    "dropped": []
+  },
+  "pr-3846-made-up-selectors": {
+    "why": "PR 3846: the plan used a palette and a field label the writer does not render, and expected a failure that cannot be forced live.",
+    "corpus": "<textarea placeholder=\"Describe the task\" aria-label=\"Describe the task\" /><button aria-label=\"Send\" onClick={send}>Send</button>",
+    "routes": [
+      "src/pages/api/mcp/tasks/index.ts"
+    ],
+    "journeys": [
+      {
+        "journey": "change:repro",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/project?id={id}"
+          },
+          {
+            "op": "click",
+            "text": "New Task"
+          },
+          {
+            "op": "fill",
+            "label": "Describe the task",
+            "value": "fix login bug"
+          },
+          {
+            "op": "press",
+            "key": "Enter"
+          }
+        ],
+        "expect": [
+          {
+            "text": "Could not write your ticket"
+          }
+        ]
+      }
+    ],
+    "problems": [
+      "change:repro step 2 click: \"New Task\" is not in the head source"
+    ],
+    "dropped": [
+      "change:repro expect 1: expects an error and names no way to force it (dropped)"
+    ]
+  },
+  "pr-3846-forceable-error": {
+    "why": "A failure the plan names how to force is kept, so a real error path still gets judged.",
+    "corpus": "return NextResponse.json({ success: false, error: \"Could not write your ticket\" }, { status: 422 });",
+    "routes": [
+      "src/pages/api/mcp/tasks/index.ts"
+    ],
+    "journeys": [
+      {
+        "journey": "change:repro",
+        "actions": [
+          {
+            "op": "api",
+            "method": "POST",
+            "path": "/api/mcp/tasks",
+            "body": {},
+            "expectStatus": 422,
+            "expectText": "Could not write your ticket",
+            "force": "an empty title the writer rejects"
+          }
+        ],
+        "expect": [
+          {
+            "text": "Could not write your ticket",
+            "force": "an empty title the writer rejects"
+          }
+        ]
+      }
+    ],
+    "problems": [],
+    "dropped": []
+  }
+}

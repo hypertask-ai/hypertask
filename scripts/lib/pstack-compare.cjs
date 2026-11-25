@@ -1,4 +1,5 @@
 const { createHash } = require("node:crypto");
+const { LOADING_NOTE } = require("./pstack-loading.cjs");
 
 const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
@@ -34,6 +35,12 @@ function judgedVerdict(run) {
   return String(field ?? "").trim().toUpperCase();
 }
 
+function loadingOnly(run) {
+  const entries = [...(Array.isArray(run?.steps) ? run.steps : []), ...(Array.isArray(run?.expects) ? run.expects : [])];
+  const failed = entries.filter((entry) => entry?.ok !== true);
+  return failed.length > 0 && failed.every((entry) => String(entry?.note ?? "").includes(LOADING_NOTE));
+}
+
 function classifyRun(run, plan) {
   if (!run || run.preview === "down") return { state: "unavailable", failIndex: -1 };
   const steps = Array.isArray(run.steps) ? run.steps : null;
@@ -41,7 +48,7 @@ function classifyRun(run, plan) {
   if (!steps || !expects) return { state: "unavailable", failIndex: -1 };
   const index = firstFailure(steps, expects);
   const tail = steps.length + expects.length;
-  if (index >= 0) return { state: "failed", failIndex: index };
+  if (index >= 0) return loadingOnly(run) ? { state: "unjudged", failIndex: -1, loading: true } : { state: "failed", failIndex: index };
   const navigations = Array.isArray(run.navigations) ? run.navigations : [];
   const badNav = navigations.some((item) => !(Number(item?.status) >= 200 && Number(item?.status) < 400));
   if (badNav || (Array.isArray(run.offOrigin) && run.offOrigin.length)) return { state: "failed", failIndex: tail };
@@ -92,12 +99,13 @@ function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnev
   const notes = [];
   const unjudged = [];
   const unrun = [];
+  const loading = [];
   const label = (item) => (item.viewport ? `${item.journey} [${item.viewport}]` : item.journey);
   for (const item of list) {
     const where = label(item);
     const area = areaOf(item.journey);
     if (item.head.state === "unavailable") unrun.push(`${where}: the run did not finish`);
-    else if (item.head.state === "unjudged") unjudged.push(where);
+    else if (item.head.state === "unjudged") (item.head.loading ? loading : unjudged).push(where);
     else if (item.head.state === "ok") continue;
     else if (red.has(area)) notes.push(`${where} is already red on production, so the nightly live pass owns it`);
     else if (area && item.hasBase && (baseChecked.has(item.journey) || baseChecked.size < limit)) {
@@ -111,7 +119,7 @@ function decideHeadOnly({ journeys, redFeatures = [], bugfix = false, bugfixUnev
     else if (bugfixUnevaluated) unrun.push(`the bug fix has no repro journey: ${bugfixUnevaluated}`.slice(0, 240));
     else problems.push("the bug fix has no repro journey");
   }
-  const notesOut = [...new Set([...unrun, ...unjudged.map((journey) => `${journey}: the judge model did not answer`)])];
+  const notesOut = [...new Set([...unrun, ...unjudged.map((journey) => `${journey}: the judge model did not answer`), ...loading.map((journey) => `${journey}: ${LOADING_NOTE} ran past the wait, so the run could not be judged`)])];
   const verdict = problems.length ? "FAIL" : notesOut.length ? "UNEVALUATED" : notes.length ? "PASS+NOTES" : "PASS";
   return { verdict, notes: [...problems, ...notesOut, ...notes].join(" ").replace(/\s+/g, " ").trim().slice(0, 480) };
 }
@@ -177,6 +185,7 @@ module.exports = {
   classifyRun,
   decideHeadOnly,
   isPass,
+  loadingOnly,
   parseMarker,
   reusableVerdict,
   sha256,
