@@ -1,9 +1,4 @@
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
-import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
-import {
-  pickEntitlingSubscriptionRow,
-  subscriptionStatusGrantsAccess,
-} from "@/lib/subscriptionAccess";
 import { teamCompPlan } from "@/lib/teamComp";
 import type { ITeam } from "@/models/model";
 
@@ -16,28 +11,30 @@ export type SettingsBillingDisplay = {
   plan: string;
 };
 
+export function legacyBillingDisplay(
+  billing: TeamBillingSnapshot | null | undefined
+): SettingsBillingDisplay {
+  return {
+    billingCycle: billing?.billingInterval ?? "Free Plan",
+    comped: false,
+    compedUntil: null,
+    plan: billing?.storePlanId ?? "Free",
+  };
+}
+
 export function settingsBillingDisplay(
   team: ITeam | null | undefined,
   billing: TeamBillingSnapshot | null | undefined
 ): SettingsBillingDisplay {
   const comp = teamCompPlan(team);
-  const paid = pickEntitlingSubscriptionRow(
-    team?.subscriptionPlan,
-    team?.activeSubscriptionPlanId
-  );
-  const paidRow = subscriptionStatusGrantsAccess(paid?.subscriptionStatus)
-    ? paid
-    : null;
-  const comped = comp !== null && paidRow === null;
+  const comped = comp !== null && billing?.storePlanId === comp;
   return {
     billingCycle: comped
       ? COMPED_BILLING_CYCLE
-      : billing?.billingInterval ??
-        planKindFromStripePriceId(paidRow?.priceId).billingInterval ??
-        "Free Plan",
+      : billing?.billingInterval ?? "Free Plan",
     comped,
     compedUntil:
       comped && team?.compedUntil ? new Date(team.compedUntil) : null,
-    plan: comped ? comp : billing?.storePlanId ?? "Free",
+    plan: comped && comp ? comp : billing?.storePlanId ?? "Free",
   };
 }

@@ -8,6 +8,9 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 
 const slots = ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"];
 for (const [i, slot] of slots.entries()) process.env[`NEXT_PUBLIC_STRIPE_${slot}`] = `price_choice_${i}`;
+const PAID_BYOK_PRICE = "price_choice_0";
+const PAID_PRO_PRICE = "price_choice_2";
+const COMPED_ROWS_FLAG = "htpr-9529-comped-billing-rows";
 
 const compedUntil = new Date("2099-01-01T12:00:00.000Z");
 const expiredComp = new Date("2020-01-01T12:00:00.000Z");
@@ -15,11 +18,11 @@ const upcomingPeriodEnd = 1793000000;
 const expectedDate = (seconds) =>
   new Date(seconds * 1000).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
 
-let team, dom, mounted, billingData;
+let team, dom, mounted, billingData, compedRows;
 const { deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 const { default: BillingSection } = loadModule("src/components/Modals/Settings/BillingSection.tsx", {
   "@/components/Modals/OptionPicker": { default: () => null },
-  "@/hooks/useFlag": { useFlag: () => false },
+  "@/hooks/useFlag": { useFlag: (key) => (key === COMPED_ROWS_FLAG ? compedRows : false) },
   "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
   "@/store": { currentUserAtom: {} },
   "./SettingsSectionShell": { default: ({ children }) => React.createElement("main", null, children) },
@@ -34,22 +37,23 @@ const { default: BillingSection } = loadModule("src/components/Modals/Settings/B
   }) },
 });
 
-function subscribed(status = "active") {
+function subscribed(priceId = PAID_PRO_PRICE, status = "active") {
   return {
     ...team,
     activeSubscriptionPlanId: "sub_current",
     subscriptionPlan: [{
       subscriptionId: "sub_current",
       subscriptionStatus: status,
-      priceId: "price_choice_2",
+      priceId,
       subscriptionObject: { cancel_at_period_end: false, items: { data: [{ price: {
-        id: "price_choice_2", currency: "usd", unit_amount: 2000, recurring: { interval: "month", interval_count: 1 },
+        id: priceId, currency: "usd", unit_amount: 2000, recurring: { interval: "month", interval_count: 1 },
       } }] } },
     }],
   };
 }
 
 beforeEach(() => {
+  compedRows = true;
   team = {
     id: "team_selected",
     title: "Selected",
@@ -124,6 +128,18 @@ test("a comped Pro team never reads Free Plan on any billing row", async () => {
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
 });
 
+test("with the switch off a comped Pro team reads the old rows", async () => {
+  compedRows = false;
+  team.compedUntil = compedUntil;
+  team.compedPlan = "Pro";
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(rowValue("Billing cycle"), "Free Plan");
+  assert.equal(rowValue("Next invoice"), "Free Plan");
+});
+
 test("a normal Free team still reads Free Plan", async () => {
   await render();
 
@@ -151,8 +167,8 @@ test("a paid Pro team outranks a BYOK comp and keeps every subscription row", as
   assert.doesNotMatch(document.body.textContent, /Not billed/);
 });
 
-test("a comped Pro team that also pays keeps its paid cycle on screen", async () => {
-  team = subscribed();
+test("a Pro comp outranks a paid BYOK team and owns the rows", async () => {
+  team = subscribed(PAID_BYOK_PRICE);
   team.stripe_customer_id = "cus_selected";
   team.compedPlan = "Pro";
   team.compedUntil = compedUntil;
@@ -160,8 +176,8 @@ test("a comped Pro team that also pays keeps its paid cycle on screen", async ()
   await render();
 
   assert.equal(rowValue("Plan"), "Pro");
-  assert.equal(rowValue("Billing cycle"), "month");
-  assert.equal(actionRowValue("Invoice total"), "$20.00");
+  assert.equal(rowValue("Billing cycle"), "Comped");
+  assert.equal(rowValue("Renewal"), expectedDate(compedUntil.getTime() / 1000));
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
 });
 

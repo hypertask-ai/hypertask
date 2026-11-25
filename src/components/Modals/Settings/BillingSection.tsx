@@ -16,7 +16,11 @@ import { getSettingsPath } from "./settingsNavigation";
 import { useSettingsTeam } from "./useSettingsTeam";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7980_STRIPE_PORTAL_BILLING_FLAG } from "@/lib/flags/definitions/htpr-7980-stripe-portal-billing";
-import { settingsBillingDisplay } from "@/lib/settingsBillingDisplay";
+import { HTPR_9529_COMPED_BILLING_ROWS_FLAG } from "@/lib/flags/definitions/htpr-9529-comped-billing-rows";
+import {
+  legacyBillingDisplay,
+  settingsBillingDisplay,
+} from "@/lib/settingsBillingDisplay";
 import { settingsBillingSummary } from "@/lib/settingsBillingSummary";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
@@ -52,6 +56,7 @@ type SettingsBillingData = {
 const BillingSection = () => {
   const router = useRouter();
   const portalBillingEnabled = useFlag(HTPR_7980_STRIPE_PORTAL_BILLING_FLAG);
+  const compedBillingRows = useFlag(HTPR_9529_COMPED_BILLING_ROWS_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
   const [choosingPlan, setChoosingPlan] = useState(false);
   const [openingCheckout, setOpeningCheckout] = useState(false);
@@ -82,7 +87,9 @@ const BillingSection = () => {
       id: type.stripePriceId ?? "",
       label: `${plan.name} · ${type.title} · ${type.price} ${type.description}`,
     }))).filter((option) => option.id.startsWith("price_"));
-  const display = settingsBillingDisplay(team, billing);
+  const display = compedBillingRows
+    ? settingsBillingDisplay(team, billing)
+    : legacyBillingDisplay(billing);
   const planLabel = display.plan;
   const billingCycle = display.billingCycle;
   const usedSeats =
