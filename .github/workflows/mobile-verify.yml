@@ -2,6 +2,8 @@ name: Mobile Verification
 on:
   push: { branches: [production] }
   workflow_dispatch:
+    inputs:
+      mode: { description: 'release waits for the release verdict; dry-run and refresh are manual runs', type: choice, options: [release, dry-run, refresh], default: release }
 permissions: { contents: read, actions: read, statuses: read }
 concurrency: { group: mobile-verify, cancel-in-progress: false }
 jobs:
@@ -15,10 +17,13 @@ jobs:
         with: { node-version: ^24.22.1, check-latest: true, cache: npm }
       - run: npm ci --no-audit --no-fund && npx prisma generate && bash .github/scripts/install-chromium.sh
         timeout-minutes: 15
-      - { id: gate, timeout-minutes: 34, env: { GITHUB_TOKEN: '${{ github.token }}', GITHUB_REPOSITORY: '${{ github.repository }}', SHA: '${{ github.sha }}', EVENT_NAME: '${{ github.event_name }}' }, run: node .github/scripts/wait-prod-health-gate.mjs }
-      - if: steps.gate.outputs.ok == 'true'
-        env: { SMOKE_BASE_URL: 'https://app.hypertask.ai', SMOKE_POSTDEPLOY: '1', HT_QA_JOURNEYS: '1', QA_LOGIN_EMAIL: '${{ secrets.QA_LOGIN_EMAIL }}', QA_LOGIN_PASSWORD: '${{ secrets.QA_LOGIN_PASSWORD }}', SMOKE_BOARD_PATH: '/project?id=7049&surface=board', SMOKE_TASK_PATH: '/detail/project-7049/6283' }
+      - { id: gate, if: inputs.mode != 'refresh' && inputs.mode != 'dry-run', timeout-minutes: 34, env: { GITHUB_TOKEN: '${{ github.token }}', GITHUB_REPOSITORY: '${{ github.repository }}', SHA: '${{ github.sha }}', EVENT_NAME: '${{ github.event_name }}' }, run: node .github/scripts/wait-prod-health-gate.mjs }
+      - if: steps.gate.outcome == 'success' || steps.gate.outcome == 'skipped'
+        env: { SMOKE_BASE_URL: 'https://app.hypertask.ai', SMOKE_POSTDEPLOY: '1', HT_QA_JOURNEYS: '1', MOBILE_DESIGN_UPDATE: '${{ inputs.mode == ''refresh'' && ''1'' || ''0'' }}', SMOKE_BOARD_PATH: '/project?id=6121&surface=board', SMOKE_TASK_PATH: '/detail/project-6121/1', QA_LOGIN_EMAIL: '${{ secrets.QA_LOGIN_EMAIL }}', QA_LOGIN_PASSWORD: '${{ secrets.QA_LOGIN_PASSWORD }}' }
         run: timeout 900 npx playwright test -c e2e/smoke/playwright.config.mobile.ts --project=mobile-design --project=mobile-journeys
+      - if: inputs.mode == 'refresh'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: mobile-design-baseline, path: e2e/smoke/__snapshots__/mobile-design.baseline.json, retention-days: 7 }
       - if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: mobile-verify-failures, path: test-results/**/*.png, if-no-files-found: ignore, retention-days: 7 }
