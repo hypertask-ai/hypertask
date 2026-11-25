@@ -1,16 +1,26 @@
 ---
 name: verify-hypertask
-description: Prove real Hypertask behavior by driving the app: local before the PR, Visual Regression before a UI merge, design QA against the ticket frame, and production after every deploy. Use for app QA verdicts, mobile checks and post-deploy proof.
+description: The one verification skill for Hypertask. Prove real app behavior by driving it: local before the PR, Visual Regression before a UI merge, design QA against the ticket frame, and production after every deploy. Use for any app QA verdict, mobile check and post-deploy proof.
 ---
 
 pstack: 0.15.43
 
 # Verify Hypertask
 
-One verification skill for `https://app.hypertask.ai`. `verify-qa`, `verify-visual`,
-`verify-design` and `verify-on-phone` are pointers here. Built on Lauren Tan's verification
-pattern: drive the app the way a user does, then leave evidence a second person can read
-without you.
+One verification skill for `https://app.hypertask.ai`, with its feature map inside it. Built
+on Lauren Tan's verification pattern (pstack `create-verification-skill`): drive the app the
+way a user does, then leave evidence a second person can read without you.
+
+Read the map for the change before testing:
+
+| Map | What it holds |
+|---|---|
+| [features/README.md](features/README.md) | One page per customer area: Sub-features, How to get to it (user POV), Driving it with agent-browser, Gotchas |
+| [ops-map/README.md](ops-map/README.md) | Build, release, runner, CI and monitoring recipes for infra tickets |
+| [design/README.md](design/README.md) | Design-pass screens, one recipe per screen |
+
+Every helper the maps name lives in `scripts/`. Reference detail (logins, evidence storage,
+fixture cleanup, local launch) lives in `reference/`.
 
 Never use Valentin's login or his browser. Never print a credential, a cookie or a storage
 state file. Use headless Playwright with a QA identity from the helper list. A test, a
@@ -18,33 +28,14 @@ preview, an open PR or a local build is not live proof. Never build or run tests
 because CI does that; a local run killed with exit 137 is not a blocker. Admin pages are not
 agent-testable.
 
-## ht-verify
+## Launch
 
-One command wraps the helpers below. It prints one JSON object on stdout,
-`{ command, ok, target, run, data, evidence, error }`, where `error` holds
+`ht-verify` wraps every helper (the full command list is in Helpers, below) and prints one JSON
+object on stdout, `{ command, ok, target, run, data, evidence, error }`, where `error` holds
 `{ code, message, next }` and `next` is what to run instead. Exit codes: 0 ok,
 1 the check failed, 2 usage or unreadable environment, 3 identity expired.
 State lives in `~/.local/state/ht-verify/default` (`HT_VERIFY_RUN` overrides), so
 `up`, `seed` and `login` compose without repeating flags. `--help` is canonical.
-
-| Command | What it proves |
-|---|---|
-| `.claude/skills/verify-hypertask/bin/ht-verify up [--port] [--db-port] [--dry-run]` | the disposable Postgres, migrations and Next dev start and `/login` answers 200 |
-| `.claude/skills/verify-hypertask/bin/ht-verify down [--keep-db] [--dry-run]` | only this run's dev process group, container and volume stop |
-| `.claude/skills/verify-hypertask/bin/ht-verify doctor [--target local\|production] [--ticket HTPR-N]` | local: page, database, dev pid and seeded identity; production: the merge deployment and the QA identity |
-| `.claude/skills/verify-hypertask/bin/ht-verify seed [--visual] [--all-flags-on] [--dry-run]` | the disposable database seeds and the local state loads as a real user |
-| `.claude/skills/verify-hypertask/bin/ht-verify login [account] [--state] [--expect] [--base-url]` | the chosen QA account's state loads as the expected user |
-| `.claude/skills/verify-hypertask/bin/ht-verify shot <url> --out <png> [--account] [--viewport] [--theme]` | the page renders signed in and lands where asked, never on a login page |
-| `.claude/skills/verify-hypertask/bin/ht-verify session start\|status\|stop [--state] [--base] [--viewport]` | one persistent headless browser for the commands below |
-| `.claude/skills/verify-hypertask/bin/ht-verify open <path> [--wait <selector>]` | the page loads in the session and reports URL, status and title |
-| `.claude/skills/verify-hypertask/bin/ht-verify click <selector> [--double]` | a real click lands and the page reacts |
-| `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text> [--submit]` | a field accepts typed input on the real page |
-| `.claude/skills/verify-hypertask/bin/ht-verify press <keys> [--selector] [--count]` | a real key or chord lands, e.g. `Control+Shift+S`, `Shift+3`, `j` |
-| `.claude/skills/verify-hypertask/bin/ht-verify probe <selector> [--text\|--count\|--attr\|--style\|--html]` | what the page shows, read-only: text, count, attribute, computed style, or `--cookie theme` |
-| `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path> [--data] [--confirm] [--dry-run]` | an authenticated call through the run's cookies; a write needs `--confirm`; 401 means the state expired, a 403 is a route's flag/role/origin refusal |
-| `.claude/skills/verify-hypertask/bin/ht-verify logs [--dev\|--browser] [--lines] [--grep]` | the dev or browser log shows what happened |
-| `.claude/skills/verify-hypertask/bin/ht-verify flags list\|show <key>\|set ...` | flag state, and a switch only through ht-flag's approval path, never Off |
-| `.claude/skills/verify-hypertask/bin/ht-verify drive <area> [--base] [--state] [--board]` | one hands-free area (board, task, comments, flags, ctrl-j, ai-chat, inbox) step by step |
 
 ```bash
 .claude/skills/verify-hypertask/bin/ht-verify up && .claude/skills/verify-hypertask/bin/ht-verify seed
@@ -61,41 +52,22 @@ refuses a `node_modules` symlink that resolves outside this checkout and stops i
 on a fatal line in `dev.log`, so a stack that cannot serve never waits out the 240s timeout
 or leaves `env.json` behind for the next command.
 
-## Launch
-
 Pick one target per run: local before the PR, a PR's Visual Regression comparison, or
 production after the deploy, which design QA also uses.
 
-**Local, before the PR.** Unmerged code, disposable database, no production data:
-
-```bash
-docker volume create hypertask-verify-db
-docker run -d --name hypertask-verify-db \
-  -e POSTGRES_USER=verify -e POSTGRES_PASSWORD=verify -e POSTGRES_DB=hypertask \
-  -p 5678:5432 postgres:14.0-alpine
-export DATABASE_URL=postgresql://verify:verify@127.0.0.1:5678/hypertask
-export SESSION_SECRET=local-verification-session-placeholder-32
-export BETTER_AUTH_SECRET=local-verification-auth-placeholder-32
-export NEXT_PUBLIC_SITE_URL=http://127.0.0.1:3000
-export NEXT_PUBLIC_BASEURL=http://127.0.0.1:3000
-npx prisma generate
-npx prisma migrate deploy
-npx next build
-setsid nohup env CI=1 __NEXT_AGENT_UPGRADE=security npx next start -H 127.0.0.1 -p 3000 \
-  > <run-folder>/dev.log 2>&1 &
-echo $! > <run-folder>/dev.pid
-```
-
-Build and serve, never `next dev`: in dev the inline Flight payload never resolves, no page
-hydrates, and the board sits on "Loading board..." forever. Real live board updates also need
-`REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up` starts. Write
-only `dev.log`. `Ready` in it is not ready: the first `/login` still compiles. Ready means
-`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`.
-`CI=1` and `__NEXT_AGENT_UPGRADE=security` stop Next's agent upgrade nudge from exiting
-before it serves. `npm run dev` also starts `stripe:listen`, which local proof does not need.
-A worktree whose `node_modules` is a symlink elsewhere cannot run Next: it fails on module
-resolution. Run `npm ci` there first, then `npx prisma generate`. More detail:
-[local launch](../verify-qa/reference/local-launch.md).
+**Local, before the PR.** Unmerged code, disposable database, no production data. Build with
+`npx prisma generate && npx prisma migrate deploy && npx next build`, then serve with
+`setsid nohup env CI=1 __NEXT_AGENT_UPGRADE=security npx next start -H 127.0.0.1 -p 3000`, and
+write only `dev.log`. Build and serve, never `next dev`: in dev the inline Flight payload never
+resolves, no page hydrates, and the board sits on "Loading board..." forever. Real live board
+updates also need `REDIS_URL` and the `PUSHER_*`/`NEXT_PUBLIC_PUSHER_*` pair that `ht-verify up`
+starts. `Ready` in the log is not ready: the first `/login` still compiles, so ready means
+`curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/login` answers `200`. `CI=1` and
+`__NEXT_AGENT_UPGRADE=security` stop Next's agent upgrade nudge from exiting before it serves,
+and `npm run dev` also starts `stripe:listen`, which local proof does not need. A worktree whose
+`node_modules` is a symlink elsewhere cannot run Next: it fails on module resolution, so run
+`npm ci` there first. The exact database container, exports and teardown are in
+[local launch](reference/local-launch.md).
 
 A local run that needs a session seeds its own account: a fresh database has no user 985 and
 its own secrets, so a production storage state cannot sign in there. With the launch exports
@@ -104,7 +76,7 @@ in scope:
 ```bash
 BROWSER_SMOKE_STATE_FILE=<run-folder>/state.json GITHUB_OUTPUT=<run-folder>/seed.out \
   node scripts/seed-browser-smoke.mjs
-.claude/skills/verify-qa/scripts/qa-identity <run-folder>/state.json --base-url http://127.0.0.1:3000
+.claude/skills/verify-hypertask/scripts/qa-identity <run-folder>/state.json --base-url http://127.0.0.1:3000
 ```
 
 `identity ok: user <id>` is the local identity pass; add `--all-flags-on` only when the
@@ -156,16 +128,17 @@ then capture signed-in `/my-tasks` and check the identity:
 
 ```bash
 .claude/skills/ship/scripts/ship-check deployed <TICKET>
-.claude/skills/verify-qa/scripts/qa-login flags --state
-.claude/skills/verify-qa/scripts/qa-identity <state> --expect 985
+.claude/skills/verify-hypertask/scripts/qa-login flags --state
+.claude/skills/verify-hypertask/scripts/qa-identity <state> --expect 985
 ```
 
 `identity ok` means fix state loading; only `identity expired` means refresh.
 
 **Design.** A design run ends with `doctor ok` from
-`.claude/skills/verify-design/scripts/design-check doctor`, which checks the QA state, the QA
-identity, QA board `https://app.hypertask.ai/project?id=7049&surface=board` opening without a
-redirect, and the theme cookie switching the page theme. Do not judge a design before it does.
+`.claude/skills/verify-hypertask/scripts/design-check doctor`, which checks the QA state, the
+QA identity, QA board `https://app.hypertask.ai/project?id=7049&surface=board` opening without
+a redirect, and the theme cookie switching the page theme. Do not judge a design before it
+does.
 
 **Visual.** Require the current PR head, the PR's base, and a capture summary in the job log
 or step summary. `gh pr checks` carries neither the head nor the base, so read them from the
@@ -190,22 +163,21 @@ dispatch or retry a workflow to get green.
 ## Drive
 
 Start from the map for the change: the customer map
-`.claude/skills/verify-qa/reference/feature-map/INDEX.md`, one file per customer area with
-Sub-features, How to get to it (user POV), Driving it with agent-browser and Gotchas, or the
-ops map `.claude/skills/verify-qa/reference/ops-map/INDEX.md` for build, release, runner, CI
-and monitoring recipes. Build and release tickets read the ops map, not the customer map. A
-`[FEATURE]` or `[IMPROVE]` PR adds or edits the area page it touches; coverage growth of old
-pages is not a gate. Design screens use the recipe in
-`.claude/skills/verify-design/features/README.md`, one `design-check run` per screen. Write
-the checklist from the ticket's acceptance criteria before testing, and correct a wrong or
-missing recipe in the same PR.
+[features/README.md](features/README.md), one file per customer area with Sub-features, How to
+get to it (user POV), Driving it with agent-browser and Gotchas, or the ops map
+[ops-map/README.md](ops-map/README.md) for build, release, runner, CI and monitoring recipes.
+Build and release tickets read the ops map, not the customer map. A `[FEATURE]` or `[IMPROVE]`
+PR adds or edits the area page it touches; coverage growth of old pages is not a gate. Design
+screens use the recipe in [design/README.md](design/README.md), one `design-check run` per
+screen. Write the checklist from the ticket's acceptance criteria before testing, and correct
+a wrong or missing recipe in the same PR.
 
 **Pre-PR local shot, 390x844.** Shoot the page your branch changes, then assert what the user
 must see in the served HTML. The screenshot proves the look, the assertion proves the state;
 neither alone is a pass.
 
 ```bash
-.claude/skills/verify-on-phone/scripts/phone-shot.sh http://127.0.0.1:3000/verify-email \
+.claude/skills/verify-hypertask/scripts/phone-shot.sh http://127.0.0.1:3000/verify-email \
   <run-folder>/verify-email-390x844.png
 curl -s http://127.0.0.1:3000/verify-email | grep -cF 'Verifying your email'
 ```
@@ -231,16 +203,15 @@ requested path, labels the shot `UNVERIFIED`, and never permits a login landing.
 refuse an address whose path says sign-in, even when that page is the one you asked for
 (https://app.hypertask.ai/detail/project-15/9462). For those pages prove the state with the
 served HTML and name the missing screenshot in the ticket. A missing or stale state file makes
-the script fail loud; repair it through
-[logins](../verify-qa/reference/logins.md) and never invent a login flow. Attach
-the shot with `vcc comment add <TICKET> --kind qa --attach <out.png>`, never as a markdown
-image, which crashes the ticket UI. With no local dev server for the change, shoot production
-as it is today as the "before" and say so on the ticket.
+the script fail loud; repair it through [logins](reference/logins.md) and never invent a login
+flow. Attach the shot with `vcc comment add <TICKET> --kind qa --attach <out.png>`, never as a
+markdown image, which crashes the ticket UI. With no local dev server for the change, shoot
+production as it is today as the "before" and say so on the ticket.
 
 **Production journey.** Every app deployment runs the core inbox cycle:
 
 ```bash
-node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <run-folder>/inbox-cycle
+node .claude/skills/verify-hypertask/scripts/inbox-cycle-live.mjs <run-folder>/inbox-cycle
 ```
 
 Require `inbox-cycle ok`, add `--phone` for the mobile layout, and include it in the cases.
@@ -257,7 +228,7 @@ stack and refuse anything else. Pass `--base`, `--state` and `--board`; each pri
 `<area> ok` or the failing step:
 
 ```bash
-node .claude/skills/verify-qa/scripts/board-drive-live.mjs <run-folder>/board --base http://127.0.0.1:3100 --state <state> --board <board-id>
+node .claude/skills/verify-hypertask/scripts/board-drive-live.mjs <run-folder>/board --base http://127.0.0.1:3100 --state <state> --board <board-id>
 ```
 
 `task-drive-live.mjs`, `comments-drive-live.mjs`, `flags-drive-live.mjs`, `ctrl-j-drive.mjs`
@@ -267,7 +238,7 @@ and `ai-chat-drive.mjs` take the same arguments.
 `--viewport`, so each changed theme is compared against its own frame:
 
 ```bash
-.claude/skills/verify-design/scripts/design-check run <TICKET> '<live url>' \
+.claude/skills/verify-hypertask/scripts/design-check run <TICKET> '<live url>' \
   --frame <frame-porcelain.png> --themes porcelain --viewport 1920x1032
 ```
 
@@ -319,20 +290,19 @@ live QA. Never upload auth state, tokens, traces or raw app logs.
 
 For a mobile or responsive ticket, reading code or a desktop-width window is never
 verification. Anything short of a real 390x844 screenshot on production with the flag on is not
-a pass (Valentin, 2026-09-11, after a mobile ticket passed on desktop and was broken on his
-phone).
+a pass (Valentin, after a mobile ticket passed on desktop and was broken on his phone).
 
 ## Evidence
 
 Everything lands under `~/.local/state/vcc-evidence/<TICKET>/<YYYY-MM-DD>-qa-run-<n>/`.
 Evidence is proof, not a checkout: never build, install or keep a browser cache there. Rules
 and the offline build lifecycle are in
-`.claude/skills/verify-qa/reference/evidence-storage.md`.
+`.claude/skills/verify-hypertask/reference/evidence-storage.md`.
 
 Write `<TICKET>/proof.md`:
 
 ```text
-Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md
+Feature map: .claude/skills/verify-hypertask/features/<page>.md
 Doctor: sha <latest-merge-sha> deployment success; /my-tasks signed in as user <id>
 Run: <YYYY-MM-DD>-qa-run-<n>
 Leftovers: none
@@ -343,12 +313,14 @@ Leftovers: none
 - UNREACHABLE: <case> -> <reason; closest real check>
 ```
 
-`Leftovers` is `none`, or a list of what the run left on production: a test login, a label, a switched setting, a reminder. `ship-check proof <TICKET>` must print `proof ok`, and it belongs to the production target
-only: it reads the merge sha and requires the `Doctor:` line to name that sha and its
-`success`, so it cannot pass before a merge exists. A proof with no `Leftovers` line fails that check. A local or PR-visual run proves itself
-with its own run folder: the cases, the served HTML, the 390x844 shot, that folder named in
-the ticket comment, and, for a visual run, the current-head run URL. A FAIL case cannot pass.
-Publish the self-contained HTML report as a ticket page with `vcc pages create`, then post one
+`Leftovers` is `none`, or a list of what the run left on production: a test login, a label, a
+switched setting, a reminder. `ship-check proof <TICKET>` must print `proof ok`, and it belongs
+to the production target only: it reads the merge sha and requires the `Doctor:` line to name
+that sha and its `success`, so it cannot pass before a merge exists. A proof with no
+`Leftovers` line fails that check. A local or PR-visual run proves itself with its own run
+folder: the cases, the served HTML, the 390x844 shot, that folder named in the ticket comment,
+and, for a visual run, the current-head run URL. A FAIL case cannot pass. Publish the
+self-contained HTML report as a ticket page with `vcc pages create`, then post one
 `vcc comment add <TICKET> --kind qa` verdict with the report link, the proof and the
 attachments, and read it back. PASS explains what changed and the ticket moves to Done. FAIL
 keeps it In Progress and names the exact case. After two failed repairs use the
@@ -371,17 +343,16 @@ docker volume rm hypertask-verify-db
 ```
 
 Remove your own fixtures through product surfaces only, never SQL:
-`node .claude/skills/verify-qa/scripts/fixture-cleanup <state-file> <taskId...>`.
-Ticket deletion does not undo a test login, a label, or a switched setting.
-Put those back as `.claude/skills/verify-qa/reference/fixture-cleanup.md` describes
-before writing `Leftovers: none`. It targets
-production by default; `--base-url` accepts only an `http://127.0.0.1` origin, so pass it for a
-local run and omit it for production. Design and phone runs start and close their own headless
-browsers and create no
-rows. Actions owns its disposable services. The daily pruner removes old allowlisted build
-debris and Done-ticket videos under its age rules (`evidence-prune` dry-runs by default, the
-timer applies it); it never removes a run folder you just wrote. Run cleanup after every failed
-iteration too, and confirm the evidence survives it: a cleanup that eats the proof fails.
+`node .claude/skills/verify-hypertask/scripts/fixture-cleanup <state-file> <taskId...>`.
+Ticket deletion does not undo a test login, a label, or a switched setting. Put those back as
+`.claude/skills/verify-hypertask/reference/fixture-cleanup.md` describes before writing
+`Leftovers: none`. It targets production by default; `--base-url` accepts only an
+`http://127.0.0.1` origin, so pass it for a local run and omit it for production. Design and
+phone runs start and close their own headless browsers and create no rows. Actions owns its
+disposable services. The daily pruner removes old allowlisted build debris and Done-ticket
+videos under its age rules (`evidence-prune` dry-runs by default, the timer applies it); it
+never removes a run folder you just wrote. Run cleanup after every failed iteration too, and
+confirm the evidence survives it: a cleanup that eats the proof fails.
 
 ## Helpers
 
@@ -395,26 +366,29 @@ Every script below is executable and is invoked exactly as shown.
 | `.claude/skills/verify-hypertask/bin/ht-verify login [account]` | the chosen QA account's state loads as the expected user |
 | `.claude/skills/verify-hypertask/bin/ht-verify seed` | the disposable database seeds and the local state loads as a real user |
 | `.claude/skills/verify-hypertask/bin/ht-verify shot <url> --out <png>` | the page renders signed in, never a login landing |
-| `.claude/skills/verify-hypertask/bin/ht-verify session start` | one persistent browser the later `open`, `click`, `fill` and `shot --session` share |
+| `.claude/skills/verify-hypertask/bin/ht-verify session start\|status\|stop` | one persistent browser the later `open`, `click`, `fill` and `shot --session` share |
+| `.claude/skills/verify-hypertask/bin/ht-verify open <path> [--wait <selector>]` | the page loads in the session and reports URL, status and title |
 | `.claude/skills/verify-hypertask/bin/ht-verify click <selector>` | a real click lands and the page reacts |
 | `.claude/skills/verify-hypertask/bin/ht-verify fill <selector> <text>` | a field accepts typed input on the real page |
 | `.claude/skills/verify-hypertask/bin/ht-verify press <keys>` | a key or chord lands, with `--selector` to focus first and `--count` to repeat |
 | `.claude/skills/verify-hypertask/bin/ht-verify probe <selector>` | read-only text, count, attribute, computed style or safe cookie from the page |
 | `.claude/skills/verify-hypertask/bin/ht-verify api <method> <path>` | an authenticated API call answers through the run's own cookies, writes behind `--confirm`, a 403 is a refusal not an expired identity |
-| `.claude/skills/verify-hypertask/bin/ht-verify logs` | the dev or browser log shows what happened |
-| `.claude/skills/verify-qa/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
-| `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |
-| `.claude/skills/verify-qa/scripts/qa-teams` | the free, pro and byok team accounts load on their own plan and AI usage answers |
-| `.claude/skills/verify-qa/scripts/feature-map-drive.mjs <feature>` | one feature-map area driven read-only on production, `PASS`/`FAIL` per step plus screenshots |
-| `.claude/skills/verify-on-phone/scripts/phone-shot.sh <url> <out.png>` | one headless shot at 390x844, refusing a login landing |
-| `.claude/skills/verify-design/scripts/design-check doctor` | QA state, QA identity, board 7049 and the theme cookie |
-| `.claude/skills/verify-design/scripts/design-check run <TICKET> <url> --frame <png>` | per-theme live shot, score, purple, sparkle and corner audit |
-| `.claude/skills/verify-design/scripts/design-check fail-column <section...>` | the intake column a design FAIL belongs in |
-| `.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <dir> [--phone]` | the core inbox cycle on production |
-| `.claude/skills/verify-qa/scripts/fixture-cleanup <state> <taskId...>` | deletes only fixtures the run created, through product surfaces |
-| `.claude/skills/verify-qa/scripts/evidence-prune` | ages out old build debris; dry-run unless `--apply` |
+| `.claude/skills/verify-hypertask/bin/ht-verify logs [--dev\|--browser]` | the dev or browser log shows what happened |
+| `.claude/skills/verify-hypertask/bin/ht-verify flags list\|show <key>\|set ...` | flag state, and a switch only through ht-flag's approval path, never Off |
+| `.claude/skills/verify-hypertask/bin/ht-verify drive <area> [--base] [--state] [--board]` | one hands-free area (board, task, comments, flags, ctrl-j, ai-chat, inbox) step by step |
+| `.claude/skills/verify-hypertask/scripts/qa-login [account] [--state]` | QA identity and state path for an account |
+| `.claude/skills/verify-hypertask/scripts/qa-identity <state> --expect <id>` | the state loads as the expected user (`identity ok` or `identity expired`) |
+| `.claude/skills/verify-hypertask/scripts/qa-teams` | the free, pro and byok team accounts load on their own plan and AI usage answers |
+| `.claude/skills/verify-hypertask/scripts/feature-map-drive.mjs <feature>` | one feature-map area driven read-only on production, `PASS`/`FAIL` per step plus screenshots |
+| `.claude/skills/verify-hypertask/scripts/phone-shot.sh <url> <out.png>` | one headless shot at 390x844, refusing a login landing |
+| `.claude/skills/verify-hypertask/scripts/design-check doctor` | QA state, QA identity, board 7049 and the theme cookie |
+| `.claude/skills/verify-hypertask/scripts/design-check run <TICKET> <url> --frame <png>` | per-theme live shot, score, purple, sparkle and corner audit |
+| `.claude/skills/verify-hypertask/scripts/design-check fail-column <section...>` | the intake column a design FAIL belongs in |
+| `.claude/skills/verify-hypertask/scripts/inbox-cycle-live.mjs <dir> [--phone]` | the core inbox cycle on production |
+| `.claude/skills/verify-hypertask/scripts/fixture-cleanup <state> <taskId...>` | deletes only fixtures the run created, through product surfaces |
+| `.claude/skills/verify-hypertask/scripts/evidence-prune` | ages out old build debris; dry-run unless `--apply` |
 
-`verify-qa` and `verify-design` scripts are owned by
+The scripts under `.claude/skills/verify-hypertask/scripts/` are owned by
 `.github/workflows/ship-scripts-tests.yml`, which runs their tests on these paths; keep the
 paths and the tests together if they move. The skill pack eval
 `.claude/skills/evals/run-evals.sh` checks that every `SKILL.md` is indexed, that each INDEX

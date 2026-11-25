@@ -579,9 +579,9 @@ upstream/pricing proof.
 
 ## Ship script regressions
 
-The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing the script/unit paths in `docs/ci-policy.yml`, including `.claude/skills/ship/scripts/**`, `.claude/skills/verify-qa/scripts/**`, `scripts/premerge-local.sh` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
+The non-required `ship-scripts-tests` check in [`.github/workflows/ship-scripts-tests.yml`](../.github/workflows/ship-scripts-tests.yml) runs on GitHub-hosted `ubuntu-latest` for pull requests to `production` changing the script/unit paths in `docs/ci-policy.yml`, including `.claude/skills/ship/scripts/**`, `.claude/skills/verify-hypertask/scripts/**`, `scripts/premerge-local.sh` or the workflow itself. It does not change the ruleset or auto-merge requirements. No tests run on the VPS.
 
-- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `bash .claude/skills/setup-runner/scripts/setup-runner.test.sh`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/board-check.test.sh`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
+- Runs `bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only`, `bash .claude/skills/setup-runner/scripts/setup-runner.test.sh`, `python3 .claude/skills/ship/scripts/premerge-evidence.test.py`, `python3 .claude/skills/ship/scripts/ci-why.test.py`, `bash .claude/skills/ship/scripts/board-check.test.sh`, `bash .claude/skills/ship/scripts/user-unit-check.test.sh`, `python3 .claude/skills/verify-hypertask/scripts/evidence-prune.test.py` and `node --test .claude/skills/verify-hypertask/scripts/qa-identity.test.mjs`. The full shell suite also contains live authenticated checks and is deliberately excluded.
 - Runs `python3 .claude/skills/ship/scripts/ht-hax-runner.test.py` against isolated home folders and fake process/load tools. It checks load-only launches, pauses, active sessions, target bounds, setup failure and validation before enabling the keeper timer. Interactive lifecycle fixtures check brief delivery, final-line detection, saved output, idle cooldown, failed-start watcher cleanup and bounded timeout recovery; they start no real runners.
 - Installs Python 3 for the standard-library test harnesses and fixtures, `jq` for JSON handling in `ship-check`, and Git for repository-scope detection. Sets up Node 24 for the dependency-free QA identity tests, which use only temporary storage-state fixtures and a loopback HTTP server (YPER4-607). No npm or pip packages are needed; Bash and standard Unix utilities come with the hosted runner.
 - Uses a temporary HOME and the harnesses' temporary state and local Git/GitHub/Hypertask fixtures. A fallback `gh` stub fails unexpected calls outside the fixtures. Tests need no network, real tokens, existing VPS state or systemd service; checkout and dependency installation still use network. Checkout does not persist credentials, and the job requests only `contents: read`, so fork PRs need no secrets.
@@ -593,7 +593,7 @@ boundaries, permission errors, daily installer ordering, logging, and premerge
 scratch-copy/EXIT cleanup without installing dependencies or building the app.
 It runs directly with Python's standard library, not the repository suite.
 Daily live cleanup is separately installed by the runner; see
-[QA evidence storage](../.claude/skills/verify-qa/reference/evidence-storage.md).
+[QA evidence storage](../.claude/skills/verify-hypertask/reference/evidence-storage.md).
 
 The `ship-scripts-tests-siblings` job runs the sibling suites no check ran
 before HYCI-21: `disk-guard.test.py`,
@@ -661,7 +661,7 @@ or `src/components/`; a changed page covers an area when it cites the area path
 or a changed file in it in backticks. `[BUGFIX]`, `[INFRA]`, `[REFACTOR]` and
 every other tag are exempt. A pull request that breaks the rule fails with a
 message naming
-`.claude/skills/verify-qa/reference/feature-map/` and the uncovered areas.
+`.claude/skills/verify-hypertask/features/` and the uncovered areas.
 
 The tag can be changed after the pull request is opened, and `ci-tests` does not
 rerun on a title edit, so the same check runs again in the title-sensitive
@@ -955,7 +955,7 @@ Relevant PRs also replay the recorded incident without publishing. Manual dispat
 
 Jobs: `resolve`, `plan`, `drive`, `judge`, `mark`, `post`, `cancel`. The head drive belongs to `drive`; the base re-drive and its `base-evidence.json` belong to `judge`. There is no separate base job and no base cache. A plan that holds no journey skips `drive` and the judge's `judge-ask` step, so the judge decides on the required checks alone. A run that leaves no verdict artifact posts the error status `verifier could not evaluate: the judge lane did not produce a verdict`, never a failure that names nobody.
 
-Journeys come from the feature map. The plan lane reads `.claude/skills/verify-qa/reference/feature-map` from the production checkout, never from the candidate, and picks the pages whose code the pull request touches: a changed flag definition, a flag key in a changed line, a named source or API path, a named component directory, or a distinctive file name. A test file never selects a page, and a flag-looking file name is not a flag key, because nearly every page names its own tests. At most six pages are planned, highest score first, so one plan stays inside the lane timeouts. A page whose plan cannot be read is logged and skipped; it does not throw away the pages that were read. Each matched page gives one `area:<page>` journey planned from that page's own text, so the same page always gives the same script. One `change:primary` journey is planned from the pull request, and a `[BUGFIX]` title plans `change:repro` instead: the repro must pass on head. A change that matches no page keeps the change journey alone.
+Journeys come from the feature map. The plan lane reads `.claude/skills/verify-hypertask/features` from the production checkout, never from the candidate, and picks the pages whose code the pull request touches: a changed flag definition, a flag key in a changed line, a named source or API path, a named component directory, or a distinctive file name. A test file never selects a page, and a flag-looking file name is not a flag key, because nearly every page names its own tests. At most six pages are planned, highest score first, so one plan stays inside the lane timeouts. A page whose plan cannot be read is logged and skipped; it does not throw away the pages that were read. Each matched page gives one `area:<page>` journey planned from that page's own text, so the same page always gives the same script. One `change:primary` journey is planned from the pull request, and a `[BUGFIX]` title plans `change:repro` instead: the repro must pass on head. A change that matches no page keeps the change journey alone.
 
 Before the change journey is planned, the plan lane traces each changed library file through its importers, two hops at most, to the `src/pages` or `src/app` file that uses it, and names the feature page that mentions that file. The planner reads that trace, so a library change is never called a non-app change while an importer reaches a screen or an API route. The planner also reads the seeded fixtures: `{id}` is the active board, `{task}` is a task on it and `{archived}` is the archived board. It may plan setup actions as `api` calls, and a body value that is exactly one of those placeholders becomes a number, while the same placeholder inside a longer string stays text.
 
@@ -1129,7 +1129,7 @@ permits normal ticket selection. GitHub or claim read failures never mean an
 empty queue. The launcher installer ships both the picker and queue-first
 instruction. This changes no required checks or release permissions.
 
-See [the live verification recipe](../.claude/skills/verify-qa/reference/ops-map/pr-drain-picker.md).
+See [the live verification recipe](../.claude/skills/verify-hypertask/ops-map/pr-drain-picker.md).
 
 ## Board registration boundary (HTPR-8190)
 

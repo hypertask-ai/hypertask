@@ -31,8 +31,8 @@ export const LISTS = [
   {
     id: "feature-map-index",
     kind: "region",
-    directory: ".claude/skills/verify-qa/reference/feature-map/rows",
-    target: ".claude/skills/verify-qa/reference/feature-map/INDEX.md",
+    directory: ".claude/skills/verify-hypertask/features/rows",
+    target: ".claude/skills/verify-hypertask/features/README.md",
     entryPattern: ROW_FILE,
     header: ["| Area | File | e2e/smoke id |", "|---|---|---|"],
     start: ROW_START,

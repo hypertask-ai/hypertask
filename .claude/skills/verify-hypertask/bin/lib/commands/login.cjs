@@ -18,7 +18,7 @@ Usage:
 
 Wraps qa-login and qa-identity. It prints no credential and no cookie, only the
 account, the user id and the state path. Exit 3 means the state expired and needs
-the login refresh in verify-qa reference/logins.md; exit 1 means mismatch.
+the login refresh in verify-hypertask reference/logins.md; exit 1 means mismatch.
 
 Examples:
   ht-verify login
@@ -32,7 +32,7 @@ module.exports = {
   async run(argv) {
     const { values, positionals } = parseArgs(argv, { state: "value", expect: "value", "base-url": "value", "no-verify": "bool" });
     const account = positionals[0] || "flags";
-    const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [account], { timeout: 15_000 });
+    const selected = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-login"), [account], { timeout: 15_000 });
     if (selected.status !== 0) {
       fail(`unknown account ${account}`, "Run ht-verify login --help for the eight accounts qa-login accepts.", "usage", 2);
     }
@@ -65,7 +65,7 @@ module.exports = {
       fail(`identity can only be verified at https://app.hypertask.ai or a loopback origin, not ${origin}`, "Pass --base-url http://127.0.0.1:<port> for a local run, or leave it out for production.", "usage", 2);
     }
     const identity = run(
-      path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"),
+      path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-identity"),
       [state, ...(expect ? ["--expect", expect] : []), ...(loopback ? ["--base-url", origin] : [])],
       { timeout: 30_000 },
     );
@@ -74,7 +74,7 @@ module.exports = {
     const match = /^identity ok: user (\d+)$/.exec(line);
     if (identity.status !== 0) {
       const expired = identity.status === 3;
-      fail(line || "identity check failed", expired ? `Refresh this one state through the recipe in .claude/skills/verify-qa/reference/logins.md, then re-run.` : "Check the state path and the base URL, then re-run ht-verify login.", expired ? "identity-expired" : "failed", expired ? 3 : 1);
+      fail(line || "identity check failed", expired ? `Refresh this one state through the recipe in .claude/skills/verify-hypertask/reference/logins.md, then re-run.` : "Check the state path and the base URL, then re-run ht-verify login.", expired ? "identity-expired" : "failed", expired ? 3 : 1);
     }
     data.verified = true;
     data.userId = match ? Number(match[1]) : null;

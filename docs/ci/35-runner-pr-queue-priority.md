@@ -7,4 +7,4 @@ permits normal ticket selection. GitHub or claim read failures never mean an
 empty queue. The launcher installer ships both the picker and queue-first
 instruction. This changes no required checks or release permissions.
 
-See [the live verification recipe](../.claude/skills/verify-qa/reference/ops-map/pr-drain-picker.md).
+See [the live verification recipe](../.claude/skills/verify-hypertask/ops-map/pr-drain-picker.md).

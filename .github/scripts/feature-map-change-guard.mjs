@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-export const mapFolder = ".claude/skills/verify-qa/reference/feature-map";
+export const mapFolder = ".claude/skills/verify-hypertask/features";
 export const enforcedTags = ["FEATURE", "IMPROVE"];
 
 const USER_FACING = /^src\/(?:app|components)\//;
@@ -45,7 +45,7 @@ export function evaluate({ title, changedFiles, mapPages }) {
   const files = [...new Set(changedFiles)].filter(isUserFacing);
   if (!files.length) return { tag, enforced: true, ok: true, reasons: [], areas: [] };
   const areas = [...new Set(files.map(areaOf))].sort();
-  const pages = (mapPages ?? []).filter((page) => page.status !== "D" && page.path.endsWith(".md") && page.path !== `${mapFolder}/INDEX.md` && !page.path.startsWith(`${mapFolder}/rows/`));
+  const pages = (mapPages ?? []).filter((page) => page.status !== "D" && page.path.endsWith(".md") && page.path !== `${mapFolder}/README.md` && !page.path.startsWith(`${mapFolder}/rows/`));
   const cited = pages.flatMap((page) => [...citedPaths(page.text)]);
   const uncovered = areas.filter((area) => !citesArea(new Set(cited), area, files));
   const reasons = [];
@@ -59,7 +59,7 @@ export function formatFailure(result) {
     `[${result.tag}] pull requests that change user-facing files must add or edit a feature-map page for each area they touch.`,
     `Map folder: ${mapFolder}/`,
     ...result.reasons.map((reason) => `Problem: ${reason}.`),
-    "Fix: edit the existing page for that area, or add a page and cite the changed path in backticks, then list the page in INDEX.md.",
+    "Fix: edit the existing page for that area, or add a page and cite the changed path in backticks, then list the page in README.md.",
   ];
   return lines.join("\n");
 }

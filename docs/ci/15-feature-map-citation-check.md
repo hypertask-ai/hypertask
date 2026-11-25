@@ -36,7 +36,7 @@ or `src/components/`; a changed page covers an area when it cites the area path
 or a changed file in it in backticks. `[BUGFIX]`, `[INFRA]`, `[REFACTOR]` and
 every other tag are exempt. A pull request that breaks the rule fails with a
 message naming
-`.claude/skills/verify-qa/reference/feature-map/` and the uncovered areas.
+`.claude/skills/verify-hypertask/features/` and the uncovered areas.
 
 The tag can be changed after the pull request is opened, and `ci-tests` does not
 rerun on a title edit, so the same check runs again in the title-sensitive

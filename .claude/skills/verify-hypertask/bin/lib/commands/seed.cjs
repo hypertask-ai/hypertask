@@ -57,7 +57,7 @@ module.exports = {
     const boardId = /^\/detail\/project-(\d+)\//.exec(fixture.detailPath || "")?.[1];
     const boardPath = fixture.boardPath || (boardId ? `/project?id=${boardId}&surface=board` : null);
     const base = env.baseUrl || `http://127.0.0.1:${env.port || 3000}`;
-    const identity = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"), [state, "--base-url", new URL(base).origin], { timeout: 30_000 });
+    const identity = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-identity"), [state, "--base-url", new URL(base).origin], { timeout: 30_000 });
     const identityLine = (identity.stdout || identity.stderr).trim().split("\n").pop();
     if (identity.status !== 0) {
       fail(`seeded state does not load: ${identityLine}`, "Run ht-verify up, then ht-verify seed again; do not reuse a production state here.", "not-ready");

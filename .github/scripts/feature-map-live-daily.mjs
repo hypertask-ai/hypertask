@@ -5,13 +5,13 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { api, findOpenWeeklyTicket } from './feature-map-live-weekly-file.mjs'
-import { LIVE_OPT_IN } from '../../.claude/skills/verify-qa/scripts/drive-grade.mjs'
+import { LIVE_OPT_IN } from '../../.claude/skills/verify-hypertask/scripts/drive-grade.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 export const APP = 'https://app.hypertask.ai'
-export const MAP_INDEX = '.claude/skills/verify-qa/reference/feature-map/INDEX.md'
-export const DRIVE_DIR = '.claude/skills/verify-qa/scripts'
+export const MAP_INDEX = '.claude/skills/verify-hypertask/features/README.md'
+export const DRIVE_DIR = '.claude/skills/verify-hypertask/scripts'
 export const BOARD = { projectId: 15, sectionId: 38903 }
 export const TICKET_TITLE = 'Feature map live: mapped features failing'
 export const QA_BOARD_PATH = '/project?id=7049&surface=board'

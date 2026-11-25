@@ -47,7 +47,7 @@
       "title": "HTPR-7311 [FEATURE] Opening a ticket from Decisions jumps to the question",
       "url": "https://github.com/hypertask-ai/hypertask/pull/1789",
       "files": [
-        ".claude/skills/verify-qa/reference/feature-map/inbox.md",
+        ".claude/skills/verify-hypertask/features/inbox.md",
         "src/components/notifications/inboxSplit/index.tsx",
         "src/hooks/Task Detail/useArchiveAndNavigate.ts",
         "src/lib/flags/definitions/htpr-7311-decision-comment-link.ts",

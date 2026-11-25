@@ -72,7 +72,7 @@ async function localChecks(values) {
     origin = null;
   }
   if (state && existsSync(state) && origin) {
-    const identity = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"), [state, "--base-url", origin], { timeout: 30_000 });
+    const identity = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-identity"), [state, "--base-url", origin], { timeout: 30_000 });
     checks.push(recorded({ name: "identity", ok: identity.status === 0, detail: (identity.stdout || identity.stderr).trim().split("\n").pop() }));
   } else {
     checks.push(recorded({ name: "identity", ok: false, detail: origin ? `no auth state at ${state}; run ht-verify seed` : `base URL is not a URL: ${base}` }));
@@ -93,7 +93,7 @@ function productionChecks(values) {
   let expect = values.expect;
   if (!state) {
     const account = values.account || "flags";
-    const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [account], { timeout: 15_000 });
+    const selected = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-login"), [account], { timeout: 15_000 });
     if (selected.status !== 0) fail(`qa-login refused ${account}`, "Run ht-verify login <account> to list the accounts it accepts.", "usage", 2);
     let parsed;
     try {
@@ -105,7 +105,7 @@ function productionChecks(values) {
     expect = expect ?? String(parsed.userId);
   }
   if (!state) fail("guest has no auth state", "Pick a signed-in account with --account, for example flags.", "usage", 2);
-  const identity = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-identity"), [state, ...(expect ? ["--expect", String(expect)] : [])], { timeout: 30_000 });
+  const identity = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-identity"), [state, ...(expect ? ["--expect", String(expect)] : [])], { timeout: 30_000 });
   checks.push(recorded({ name: "identity", ok: identity.status === 0, detail: (identity.stdout || identity.stderr).trim().split("\n").pop() }));
   return { target: "production", data: { ticket: values.ticket, state, checks, ok: checks.every((check) => check.ok) }, all: checks.every((check) => check.ok) };
 }

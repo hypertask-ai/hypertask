@@ -22,9 +22,9 @@ function answer(file) {
 }
 
 if (action === 'plan') {
-  const pages = [mapPath, '.claude/skills/verify-qa/reference/ops-map'].flatMap(directory =>
+  const pages = [mapPath, '.claude/skills/verify-hypertask/ops-map'].flatMap(directory =>
     existsSync(path.join(repo, directory)) ? readdirSync(path.join(repo, directory))
-      .filter(name => name.endsWith('.md') && name !== 'INDEX.md').sort()
+      .filter(name => name.endsWith('.md') && name !== 'README.md').sort()
       .map(name => path.relative(mapPath, path.join(directory, name)).split(path.sep).join('/')) : []);
   const sha = git(['rev-parse', 'HEAD']);
   const previous = existsSync(path.join(state, 'last-run-sha')) ? read(path.join(state, 'last-run-sha')).trim() : '';
@@ -72,11 +72,11 @@ if (action === 'plan') {
       drift.get(problem.page).citations.push(citation);
       continue;
     }
-    let recipe = 'Doctor first with verify-qa; check index links against sibling pages. No app clicks for index-only drift.';
-    if (path.basename(problem.page) !== 'INDEX.md') {
+    let recipe = 'Doctor first with verify-hypertask; check index links against sibling pages. No app clicks for index-only drift.';
+    if (path.basename(problem.page) !== 'README.md') {
       const markdown = read(path.join(repo, mapPath, problem.page));
       const drive = markdown.match(/## How to drive it\s+([\s\S]*?)(?=\n## |$)/)?.[1]?.trim();
-      recipe = `Doctor first with verify-qa, then follow ${mapPath}/${problem.page}: ${drive || 'open the area using its documented customer entry point; verify the cited surface, reload and collect proof; clean up only your fixtures.'}`;
+      recipe = `Doctor first with verify-hypertask, then follow ${mapPath}/${problem.page}: ${drive || 'open the area using its documented customer entry point; verify the cited surface, reload and collect proof; clean up only your fixtures.'}`;
     }
     drift.set(problem.page, { citations: [citation], recipe });
   }
@@ -90,9 +90,9 @@ if (action === 'plan') {
   description += '<h2>Checker problems</h2>' + list(plan.problems.map(({ page, kind, value }) => `${page}: ${kind}: ${value}`));
   description += '<h2>Skipped to next run</h2>' + list([...new Set([...plan.skipped, ...failures])]);
   if (failures.length) description += '<p>Blocked source helpers (after one retry):</p>' + list(failures);
-  description += '<p>A runner picks this ticket with /ship, fixes only the verify-qa skill directory and its feature map, and does each listed live recipe with verify-qa. Report product regressions separately; never paper them over in the map. Reconcile citations and overlapping recipes before editing.</p>\n';
+  description += '<p>A runner picks this ticket with /ship, fixes only the verify-hypertask skill directory and its feature map, and does each listed live recipe with verify-hypertask. Report product regressions separately; never paper them over in the map. Reconcile citations and overlapping recipes before editing.</p>\n';
   writeFileSync(path.join(run, 'description.html'), description);
-  writeFileSync(path.join(run, 'result.json'), JSON.stringify({ count: drift.size, driftPages: [...drift.keys()].filter(page => page !== 'INDEX.md'), failures }, null, 2) + '\n');
+  writeFileSync(path.join(run, 'result.json'), JSON.stringify({ count: drift.size, driftPages: [...drift.keys()].filter(page => page !== 'README.md'), failures }, null, 2) + '\n');
 } else if (action === 'finish') {
   const plan = json(path.join(run, 'plan.json'));
   const result = json(path.join(run, 'result.json'));

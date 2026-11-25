@@ -8,7 +8,7 @@ For https://app.hypertask.ai/detail/project-4060/232. Deterministic measuring, n
 
 Requirements: the app's Node 24 major, the company skill pack at `$COMPANY_SKILLS_DIR` or `~/projects/company-skills`, Playwright and installed Chromium. Use the app's existing `@playwright/test` dependency, not another harness. Set `PLAYWRIGHT_NODE_MODULES` to the app's `node_modules` if the shared resolver cannot find it. For a fresh development installation: `npm ci`, then `npx playwright install chromium`. Do not install in a production checkout.
 
-QA-normal state: `~/.config/hypertask-videos/storageState-qa-normal.json`, user 2343. The shared harness validates it privately and drops origins and unrelated cookies. A server-side `POST /api/app-shell/bootstrap` doctor must agree with that identity. If expired, follow `.claude/skills/verify-qa/SKILL.md` Logins, using the existing QA runner login/email-code flow. Never use Valentin's account or print the state. Authentication is outside the timed samples.
+QA-normal state: `~/.config/hypertask-videos/storageState-qa-normal.json`, user 2343. The shared harness validates it privately and drops origins and unrelated cookies. A server-side `POST /api/app-shell/bootstrap` doctor must agree with that identity. If expired, follow `.claude/skills/verify-hypertask/SKILL.md` Logins, using the existing QA runner login/email-code flow. Never use Valentin's account or print the state. Authentication is outside the timed samples.
 
 ```sh
 PLAYWRIGHT_NODE_MODULES="$PWD/node_modules" node scripts/speed/measure.mjs

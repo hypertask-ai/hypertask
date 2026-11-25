@@ -44,7 +44,7 @@ async function runHandsFreeDrives(base, out) {
   for (const drive of HANDS_FREE_DRIVES) {
     const folder = path.join(out, `${drive.script.replace(/\.mjs$/, '')}${drive.args.length ? '-broken-shortcut' : ''}`)
     await mkdir(folder, { recursive: true })
-    const args = [path.join('.claude/skills/verify-qa/scripts', drive.script), folder, '--base', base, '--state', process.env.VERIFY_QA_STATE_FILE, ...drive.args]
+    const args = [path.join('.claude/skills/verify-hypertask/scripts', drive.script), folder, '--base', base, '--state', process.env.VERIFY_QA_STATE_FILE, ...drive.args]
     const child = spawnSync(process.execPath, args, { cwd: path.dirname(path.dirname(fileURLToPath(import.meta.url))), encoding: 'utf8', timeout: 150_000 })
     const output = `${child.stdout ?? ''}${child.stderr ?? ''}`.trim()
     await writeFile(path.join(folder, 'drive.log'), output)

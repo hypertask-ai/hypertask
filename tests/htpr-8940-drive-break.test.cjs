@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 test("a detected break is the negative control and a missed break is not", async () => {
-  const { finish, themeLanded } = await import("../.claude/skills/verify-qa/scripts/drive-grade.mjs");
+  const { finish, themeLanded } = await import("../.claude/skills/verify-hypertask/scripts/drive-grade.mjs");
   const logs = [];
   const original = console.log;
   console.log = (line) => logs.push(String(line));

@@ -54,7 +54,7 @@ function stateArgument(values) {
   if (values.state) return path.resolve(values.state);
   const seeded = sessionState();
   if (seeded) return seeded;
-  const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [values.account || "flags", "--state"], { timeout: 15_000 });
+  const selected = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-login"), [values.account || "flags", "--state"], { timeout: 15_000 });
   if (selected.status !== 0) fail("no auth state and qa-login refused the account", "Pass --state with a Playwright storage state file, or --account with a qa-login name.", "usage", 2);
   return selected.stdout.trim();
 }

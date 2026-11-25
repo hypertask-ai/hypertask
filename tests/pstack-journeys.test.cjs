@@ -105,9 +105,9 @@ test("a change to script paths matches no area", () => {
 });
 
 test("a mixed app and scripts/verify-qa change matches no feature-map area", () => {
-  const dir = path.join(__dirname, "../.claude/skills/verify-qa/reference/feature-map");
+  const dir = path.join(__dirname, "../.claude/skills/verify-hypertask/features");
   const mapped = readdirSync(dir)
-    .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
+    .filter((name) => name.endsWith(".md") && name !== "README.md")
     .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
   assert.ok(mapped.length > 0);
   assert.deepEqual(pagesForFiles({ files: ["scripts/verify-qa", "src/lib/unrelated.ts"], pages: mapped }), []);

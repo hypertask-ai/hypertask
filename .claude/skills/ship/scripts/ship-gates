@@ -41,7 +41,7 @@ const gates = {
   pr: ['The PR is named HTPR-NNNN [TYPE] description', 'title ok'],
   merged: ['The PR is merged into production', 'merged ok'],
   deployed: ['The Production deployment for the merge is success', 'deployed ok'],
-  proof: ['Live QA proof.md follows the verify-qa contract for the latest merge, with screenshots', 'proof ok'],
+  proof: ['Live QA proof.md follows the verification evidence contract for the latest merge, with screenshots', 'proof ok'],
   docs: ['Docs page change is merged and live on docs.hypertask.ai, or a No user-visible change reason is recorded', 'docs ok'],
   done: ["The ticket is in the done column its board names", 'done ok'],
   cleaned: ['This session removed its worktree and branch for the ticket (/clean-up)', 'cleaned ok'],

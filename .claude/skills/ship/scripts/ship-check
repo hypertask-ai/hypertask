@@ -25,7 +25,7 @@
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
-#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge, including a Leftovers line
+#   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verification evidence contract for that merge, including a Leftovers line
 #   ship-check done <T>          ticket is in the done column its own board names
 #   ship-check cleaned <T>       only this session's recorded branches and worktrees are gone
 #   ship-check move <T> <section> [project] [destination]  enforce completion before a board section write
@@ -801,10 +801,10 @@ check_proof() {
   dropped_ok proof "$1" && return 0
   elsewhere_ok proof "$1" && return 0
   nochange_ok proof "$1" && return 0
-  [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
+  [ -s "$p" ] || fail "missing $p (verification evidence contract)"
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
-  grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" \
-    || fail "proof.md has no 'Feature map: .claude/skills/verify-qa/reference/feature-map/<page>.md' line"
+  grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-hypertask/features/[a-z0-9-]+\.md' "$p" \
+    || fail "proof.md has no 'Feature map: .claude/skills/verify-hypertask/features/<page>.md' line"
   grep -qE "^[[:space:]]*Doctor:.*${sha:0:9}.*success" "$p" \
     || fail "proof.md 'Doctor:' line must name the latest merge sha ${sha:0:9} and 'success' (stale proof?)"
   run=$(sed -nE 's/^[[:space:]]*Run:[[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2}-qa-run-[0-9]+)[[:space:]]*$/\1/p' "$p" | head -1)
@@ -844,7 +844,7 @@ check_completion() {
       out=$(check_docs "$t") || { echo "ship-check blocked moving $t to \"$section_title\": ${out#FAIL: }. Merge a docs PR titled with $t or post a No user-visible change: <reason> ticket comment." >&2; exit 2; }
       continue
     fi
-    out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to \"$section_title\": ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
+    out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to \"$section_title\": ${out#FAIL: }. Follow .claude/skills/verify-hypertask/SKILL.md first." >&2; exit 2; }
   done
 }
 

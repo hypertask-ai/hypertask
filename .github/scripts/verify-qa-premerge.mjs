@@ -5,7 +5,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const FEATURE_MAP_DIR = '.claude/skills/verify-qa/reference/feature-map'
+const FEATURE_MAP_DIR = '.claude/skills/verify-hypertask/features'
 
 export const FEATURE_MAP_CATALOG = [
   { page: 'inbox.md', journey: ['inbox-cycle'], prefixes: [
@@ -14,7 +14,7 @@ export const FEATURE_MAP_CATALOG = [
     'src/pages/api/queues/inboxQueue.ts',
     'src/pages/api/queues/inboxReminder.ts',
     'e2e/smoke/inbox-cycle.spec.ts',
-    '.claude/skills/verify-qa/scripts/inbox-cycle-live.mjs',
+    '.claude/skills/verify-hypertask/scripts/inbox-cycle-live.mjs',
   ]},
   { page: 'login.md', journey: ['login'], prefixes: ['src/proxy.ts', 'src/lib/auth/'] },
   { page: 'boards-and-views.md', journey: ['open-board', 'switch-boards', 'drag-card'], prefixes: ['src/components/PageComponents/Kanban/'] },

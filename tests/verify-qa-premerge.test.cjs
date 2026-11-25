@@ -33,7 +33,7 @@ test('changed pages select their own drivers, never an inbox fallback', async ()
     const choice = selectJourney([file, 'docs/ci.md'])
     assert.equal(choice.matchedPage, page)
     assert.deepEqual(choice.journey, journey)
-    assert.equal(choice.featureMap, `.claude/skills/verify-qa/reference/feature-map/${page}`)
+    assert.equal(choice.featureMap, `.claude/skills/verify-hypertask/features/${page}`)
     assert.equal(choice.reason, 'matched')
   }
   for (const files of [[], ['docs/ci.md'], ['.github/scripts/verify-qa-premerge.mjs']]) {
@@ -58,7 +58,7 @@ test('catalog drivers cover the journey tags and refer to real feature-map pages
   const mapped = [...new Set(FEATURE_MAP_CATALOG.flatMap((entry) => entry.journey || []))].filter((id) => id !== 'inbox-cycle').sort()
   assert.deepEqual(mapped, ids)
   for (const entry of FEATURE_MAP_CATALOG) {
-    assert.equal(fs.existsSync(`.claude/skills/verify-qa/reference/feature-map/${entry.page}`), true, entry.page)
+    assert.equal(fs.existsSync(`.claude/skills/verify-hypertask/features/${entry.page}`), true, entry.page)
   }
 })
 

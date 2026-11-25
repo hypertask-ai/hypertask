@@ -10,7 +10,7 @@ const libRequire = createRequire(import.meta.url);
 const journeyLib = libRequire("./lib/pstack-journeys.cjs");
 const compareLib = libRequire("./lib/pstack-compare.cjs");
 
-export const FEATURE_MAP_DIR = ".claude/skills/verify-qa/reference/feature-map";
+export const FEATURE_MAP_DIR = ".claude/skills/verify-hypertask/features";
 export const AREA_JOURNEY_LIMIT = 6;
 export const BASE_REDRIVE_LIMIT = compareLib.BASE_REDRIVE_LIMIT;
 export const JOURNEY_RUN_LIMIT = (AREA_JOURNEY_LIMIT + 2) * 2;
@@ -636,7 +636,7 @@ const readDir = (dir) => {
 };
 export function readFeaturePages(dir = FEATURE_MAP_DIR) {
   return readDir(dir)
-    .filter((name) => name.endsWith(".md") && name !== "INDEX.md")
+    .filter((name) => name.endsWith(".md") && name !== "README.md")
     .map((name) => ({ name: name.slice(0, -3), text: readFileSync(path.join(dir, name), "utf8") }));
 }
 export function bugfixTitle(title) {

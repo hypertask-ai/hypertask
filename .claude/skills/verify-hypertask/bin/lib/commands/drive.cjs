@@ -15,7 +15,7 @@ Usage:
   ai-chat   the AI chat panel opens and answers from the stub
   inbox     the production inbox cycle (inbox-cycle-live.mjs)
 
-Wraps the hands-free drives in .claude/skills/verify-qa/scripts, which only run
+Wraps the hands-free drives in .claude/skills/verify-hypertask/scripts, which only run
 against a disposable loopback stack. The inbox drive is the production cycle.
 Reports each step as PASS or FAIL with the run folder that holds its screenshots.
 
@@ -52,7 +52,7 @@ module.exports = {
     const script = AREAS[area];
     if (!script) fail(`unknown drive area ${area}`, `Pass one of ${Object.keys(AREAS).join(", ")}.`, "usage", 2);
     const dir = values.dir || path.join(runDir(), "drive", area);
-    const args = [path.join(repoRoot, ".claude/skills/verify-qa/scripts", script), dir];
+    const args = [path.join(repoRoot, ".claude/skills/verify-hypertask/scripts", script), dir];
     if (area === "inbox") {
       if (values.phone) args.push("--phone");
     } else {
