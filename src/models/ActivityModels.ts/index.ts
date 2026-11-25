@@ -46,7 +46,7 @@ export interface ITaskPullRequestActivity {
     fromUserId?: number;
     fromUser?: IUser;
     fromAgent?: IAgent | null;
-    action: "linked" | "state_changed" | "closed";
+    action: "linked" | "unlinked" | "state_changed" | "closed";
     pullRequest: {
       url: string;
       title: string;

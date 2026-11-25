@@ -4,7 +4,6 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { isPaidTeam } from "@/lib/freeTier";
 import { HTPR_7686_FREE_PLAN_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-limits";
 import { HTPR_7924_FREE_FILE_25MB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-file-25mb";
-import { HTPR_7924_FREE_STORAGE_2GB_FLAG } from "@/lib/flags/definitions/htpr-7924-free-storage-2gb";
 import { HTPR_7922_UNLIMITED_FREE_BOARDS_FLAG } from "@/lib/flags/definitions/htpr-7922-unlimited-free-boards";
 import { HTPR_7923_UNLIMITED_FREE_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7923-unlimited-free-tickets";
 import {
@@ -264,7 +263,6 @@ export async function assertStorageRoomForProject(
   options: Pick<StorageAdmissionOptions, "pendingBytes" | "tx"> = {},
 ): Promise<void> {
   if (bytes <= 0 || !await isPlanLimitsEnabled(ctx.actorUserId)) return;
-  if (!await isFeatureEnabled(HTPR_7924_FREE_STORAGE_2GB_FLAG, ctx.actorUserId!)) return;
   const scope = await limitScopeForProject(projectId);
   if (!await isFreeScope(scope)) return;
   if (options.tx) await lockStorageScope(options.tx, scope);

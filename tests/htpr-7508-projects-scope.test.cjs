@@ -71,8 +71,17 @@ for (const area of ["planning", "labels"]) {
     assert.equal(h.labelQueries.length, 0);
   });
 
-  test(`${area}: same ungranted agent still allowed with flag Off (WATCH)`, async () => {
+  test(`${area}: same ungranted agent with boards is refused with flag Off (WATCH)`, async () => {
     const h = harness({ enforce: false });
+    assert.equal(await request(h), 404);
+    assert.equal(h.state.flagReads, 1);
+    assert.deepEqual(h.state.writes, []);
+    assert.equal(h.labelQueries.length, 0);
+  });
+
+  test(`${area}: zero-board agent keeps its owner access with flag Off (WATCH)`, async () => {
+    const h = harness({ enforce: false });
+    h.projects.forEach(project => { project.members = []; });
     assert.equal(await request(h), 200);
     assert.equal(h.state.flagReads, 1);
   });
@@ -160,12 +169,16 @@ test("planning: recorded update itself retains project id and authenticated scop
   assert.equal(matches(h.projects[0], query.where), false);
 });
 
-test("planning: GET also refuses ungranted ENFORCE agents and keeps WATCH", async () => {
+test("planning: GET refuses ungranted agents in both modes and keeps zero-board WATCH access", async () => {
   for (const enforce of [true, false]) {
     const h = harness({ enforce });
-    assert.equal((await h.planning("GET")).status, enforce ? 404 : 200);
+    assert.equal((await h.planning("GET")).status, 404);
     assert.equal(h.state.flagReads, 1);
   }
+  const open = harness({ enforce: false });
+  open.projects.forEach(project => { project.members = []; });
+  assert.equal((await open.planning("GET")).status, 200);
+  assert.equal(open.state.flagReads, 1);
 });
 
 for (const enforce of [true, false]) {

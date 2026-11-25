@@ -13,7 +13,9 @@ import {
   type UpdateTaskBody,
 } from '@/lib/mcp/tasks/updateTask'
 import type { TaskDetail } from '@/lib/mcp/tasks/types'
+import { findReusedKeyCollisions, findTaskByIdentifier, type ReusedTicketKeyCollision } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
+import { nameMovedTicketKeys } from '@/lib/mcp/tasks/previousTicketNumbers'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { IUser } from '@/models/model'
 import getMemberAndOwner from '@/utils/controllers/getMemberAndOwnerForBoard'
@@ -21,10 +23,8 @@ import { requireRole } from '@/lib/mcp/agents/scopes'
 
 const MAX_BATCH_ITEMS = 100
 
-type BatchGetBody = {
-  op: 'get'
-  task_ids: number[]
-}
+type BatchGetIdentifier = { task_id?: number; ticket_number?: string; unique_index?: number; project_id?: number }
+type BatchGetBody = { op: 'get'; task_ids?: number[]; ticket_numbers?: string[]; project_id?: number; identifiers?: BatchGetIdentifier[] }
 
 type BatchUpdateBody = {
   op: 'update'
@@ -163,12 +163,11 @@ async function handleBatchGet(
     include: taskMcpGetInclude(ctx.user.id, ctx.agentId, ctx.teamScope),
   })
 
-  const tasksById = new Map(
-    tasks.map((task) => [
-      task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope),
-    ])
+  const named = await nameMovedTicketKeys(
+    ctx.user.id,
+    tasks.map((task) => mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId, ctx.teamScope)),
   )
+  const tasksById = new Map(named.map((task) => [task.id, task]))
 
   return NextResponse.json({
     success: true,
@@ -354,6 +353,21 @@ async function handleBatchUpdate(
   return NextResponse.json({ success: true, results })
 }
 
+async function handleBatchGetByIdentifiers(ctx: McpAuthContext, items: BatchGetIdentifier[], field: 'ticket_numbers' | 'identifiers'): Promise<NextResponse> {
+  if (items.length > MAX_BATCH_ITEMS) return fieldErrorResponse(field, `${field} cannot contain more than ${MAX_BATCH_ITEMS} items`)
+  const resolved = await Promise.all(items.map(async (item) => ({ item, id: (await findTaskByIdentifier(ctx.user, item, ctx.agentId, undefined, ctx.teamScope).catch(() => null))?.id ?? null })))
+  const ids = [...new Set(resolved.flatMap((e) => (e.id ? [e.id] : [])))]
+  const rows = ids.length ? await prisma.task.findMany({ where: { id: { in: ids }, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) }, include: taskMcpGetInclude(ctx.user.id, ctx.agentId, ctx.teamScope) }) : []
+  const byId = new Map(rows.map((t) => [t.id, mapTaskToMcpGetResponse(t, ctx.user.id, ctx.agentId, ctx.teamScope)]))
+  const collisions: ReusedTicketKeyCollision[] = typeof findReusedKeyCollisions === 'function' && rows.length
+    ? (await Promise.all(resolved.map((e) => { const row = e.id ? rows.find((t) => t.id === e.id) : undefined; return row && (e.item.ticket_number || e.item.unique_index != null) ? findReusedKeyCollisions(ctx.user, [row], { ticketNumbers: e.item.ticket_number ? [e.item.ticket_number] : undefined, uniqueIndex: e.item.unique_index ?? null, projectId: e.item.project_id ?? null }, ctx.agentId, undefined, ctx.teamScope) : [] }))).flat()
+    : []
+  const seen = new Set<number>()
+  const tasks = resolved.flatMap((e) => { const m = e.id ? byId.get(e.id) : undefined; if (!m || seen.has(m.id)) return []; seen.add(m.id); return [m] })
+  const notFound = resolved.flatMap((e) => (e.id && byId.has(e.id) ? [] : [field === 'ticket_numbers' && e.item.ticket_number ? e.item.ticket_number : e.item]))
+  return NextResponse.json({ success: true, tasks, notFound, ...(collisions.length ? { reusedKeyCollisions: collisions } : {}) })
+}
+
 export async function handleBatchBody(
   request: NextRequest,
   ctx: McpAuthContext,
@@ -367,6 +381,15 @@ export async function handleBatchBody(
   }
 
   if (body.op === 'get') {
+    if (Array.isArray(body.ticket_numbers)) {
+      const projectId = isPositiveInteger(body.project_id) ? body.project_id : undefined
+      if (!body.ticket_numbers.every((v): v is string => typeof v === 'string' && v.trim().length > 0)) return fieldErrorResponse('ticket_numbers', 'ticket_numbers must be an array of non-empty strings')
+      return handleBatchGetByIdentifiers(ctx, body.ticket_numbers.map((ticket_number) => ({ ticket_number: ticket_number.trim(), ...(projectId ? { project_id: projectId } : {}) })), 'ticket_numbers')
+    }
+    if (Array.isArray(body.identifiers)) {
+      if (!body.identifiers.every(isRecord)) return fieldErrorResponse('identifiers', 'identifiers must be an array of identifier objects')
+      return handleBatchGetByIdentifiers(ctx, body.identifiers as BatchGetIdentifier[], 'identifiers')
+    }
     if (!Array.isArray(body.task_ids)) {
       return fieldErrorResponse(
         'task_ids',

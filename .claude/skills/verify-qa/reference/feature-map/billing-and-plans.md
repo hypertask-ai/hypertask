@@ -5,6 +5,7 @@
 - `test-teams-for-every-plan` Test teams for every plan.
 - `start-plan-trial-duration` Start plan trial duration.
 - `free-ticket-admission` Free ticket admission.
+- `free-plan-limits-copy` Production has `htpr-7686-free-plan-limits` and `htpr-7686-free-plan-copy` on for Everyone. The Plans Free card and the trial comparison list `Up to 2 GB attachment storage per team`. The retired `htpr-7924-free-storage-2gb` key reads true for every account, so the 2 GB cap applies whenever plan limits are on.
 - `cancellation-and-failed-payment-admission` Cancellation and failed-payment admission.
 - `free-board-admission` Free board admission.
 - `dedicated-billing-portal` Dedicated billing portal.
@@ -15,14 +16,15 @@
 - `trial-checkout-return` `/trial-plan-confirmation` shows Choose Trial Plan, or "Your Pro Plan trial is now active!" after a matching checkout. Anything else shows "Something Went Wrong".
 - `plan-ai-caps` With `htpr-7324-plan-ai-caps` on for the team owner, included AI is $5 per paid seat each month, $2.50 per member on BYOK, and $1 a month plus $0.25 a day on Free. Off keeps the older $40 paid and $1 free monthly caps.
 - `remaining-ai-spend` With `htpr-7394-remaining-ai-spend` on for the team owner, Slack and label batches and embeddings reserve spend against that cap, and native web search stays off on Hypertask keys.
-- `internal-team-saved-plan` With `htpr-7852-internal-team-saved-plan` on, the internal team uses its saved subscription or comp for AI access and board admission. Off still treats that team as Pro.
+- `internal-team-saved-plan` The internal team uses its saved subscription or comp for AI access, board admission, and the open board billing chip.
 - `vercel-budget-alerts` With `htpr-8101-vercel-budget-alerts` on, a signed Vercel budget alert files one Urgent ticket and later alerts update that same ticket. At 100% the owner is emailed once.
 
 ## How to get to it (user POV)
 
-- Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`).
-- Click Manage subscription to reach Plans (`/settings/plans`); `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
-- Billing > Payment > Update opens the Stripe customer portal. The card is titled **Payment**
+- Sign in, open an owned board, then Settings > Team > Billing (`/settings/billing`). A read-only check of this page is: open it, read the `Billing` heading and the `Plan` row, and take a shot. The heading and the `Plan` row show at 1440x900 and at 390x844 alike.
+- Production has `htpr-7686-free-plan-limits` and `htpr-7686-free-plan-copy` on for Everyone, so the Plans Free card there lists `Up to 2 GB attachment storage per team`. Both flags default to Owner + QA in code. This preview loads no saved flag rows, so the smoke account keeps that default and `/settings/plans` does not show the storage sentence. The preview proof is `GET /api/flags` answering 200 with `"htpr-7924-free-storage-2gb":true`. That call does not change the page URL, so the expect list stays empty.
+- Plans is its own sidebar entry at `/settings/plans`, not the Manage subscription row. On phone the settings sidebar is hidden, so open `/settings/plans` by URL. `/pricing` is a legacy entry that defaults to Plans. Its `preSelect` query also routes `API Keys` to Bring your own key, `Billing` to Billing, `Members` to Team > Members, and `Settings` to Profile > General.
+- `Manage` on the Manage subscription row and Update under Billing > Payment both open the Stripe customer portal and leave the app, so a read-only check presses neither. The portal card is titled **Payment**
   and its row shows the saved card (`src/components/Modals/Settings/BillingSection.tsx:401-413`).
 
 ### Test teams for every plan
@@ -63,7 +65,7 @@ Open `/trial` while signed in and onboarded. The app allows it only when the tri
 
 ### Trial checkout return
 
-Open `/trial-plan-confirmation` while signed in. The page tries to create a Stripe customer when the team has none, then looks up the team from the query or from the signed-in user's own team. With a portal link, a Stripe customer on the user, and no checkout `session_id` or `success` flag, the heading is "Choose Trial Plan". The card stays empty until `htpr-7551-start-plan-checkout` is known. It then shows that flag's start-plan control, or the bring-your-own-key plan when the flag is off. After checkout, a session whose Stripe customer matches the signed-in user shows "Your Pro Plan trial is now active!" The line under it is "Checking plan access…" until the start-plan flag is known, then "Check your board for your current plan details" when that flag is on, otherwise "You have 14 days to test all Hypertask Pro Features". Let's Go opens the board already open in the app, the previous board, or the onboarding screen. Any other result shows "Something Went Wrong".
+Open `/trial-plan-confirmation` while signed in. The page tries to create a Stripe customer when the team has none, then looks up the team from the query or from the signed-in user's own team. With a portal link, a Stripe customer on the user, and no checkout `session_id` or `success` flag, the heading is "Choose Trial Plan". The card shows the start-plan control for that team. After checkout, a session whose Stripe customer matches the signed-in user shows "Your Pro Plan trial is now active!" The line under it is "Check your board for your current plan details". Let's Go opens the board already open in the app, the previous board, or the onboarding screen. Any other result shows "Something Went Wrong".
 
 ### Plan AI caps
 
@@ -75,7 +77,7 @@ Open `/trial-plan-confirmation` while signed in. The page tries to create a Stri
 
 ### Internal team saved plan
 
-`htpr-7852-internal-team-saved-plan` has no page of its own. It defaults to Owner + QA. The internal team is the one named in `src/lib/internalCompTeams.ts`. On for the feature-flag owner, that team's AI access and free-board check use its saved subscription or comp. The open board's billing chip does the same when the flag is on for the person using the app. Off, those checks treat the team as Pro even when the saved plan is not Pro.
+The internal team named in `src/lib/internalCompTeams.ts` uses its saved subscription or comp for AI access and free-board admission. The open board billing chip does the same. A team id by itself does not grant Pro.
 
 ### Vercel budget alerts
 
@@ -123,7 +125,7 @@ Do not run a Slack summary, a smart label, or an embedding to prove `htpr-7394-r
 
 ### Internal team saved plan
 
-Do not switch `htpr-7852-internal-team-saved-plan`. Leave the internal team's plan untouched. The saved-plan and forced-Pro branches are `node --test tests/htpr-7852-internal-team-saved-plan.test.cjs`.
+Leave the internal team's plan untouched. Saved subscription, comp, and an empty saved plan are `node --test tests/htpr-7852-internal-team-saved-plan.test.cjs`.
 
 ### Vercel budget alerts
 
@@ -161,9 +163,7 @@ Never enter card details, submit a payment, cancel a subscription, change a plan
 
 ### Start plan trial duration
 
-The existing `htpr-7551-start-plan-checkout` eligibility flag must permit the QA identity before testing Start plan. Its default is Owner only; do not widen it or borrow owner credentials. Record an unavailable preview as UNREACHABLE with the actual refusal.
-
-When eligible, open a Free owned board and check Start a Hypertask plan. The preview response's positive `trialDays` must match both the displayed “after N days” offer and Stripe's trial period. `htpr-7938-fourteen-day-trial` selects fourteen days for new offers, default Owner + QA; prior saved offers keep their original duration. A used trial must show no free-trial promise. Compare desktop and phone in all themes without submitting payment.
+Open a Free owned board and check Start a Hypertask plan. The preview response's positive `trialDays` must match both the displayed “after N days” offer and Stripe's trial period. `htpr-7938-fourteen-day-trial` selects fourteen days for new offers, default Owner + QA; prior saved offers keep their original duration. A used trial must show no free-trial promise. Compare desktop and phone in all themes without submitting payment.
 
 Switching the duration flag off must keep historical checkout reconciliation intact. Never fully revert the historical `start-plan` marker readers: completed checkouts still awaiting subscription visibility must block another checkout, including when their Redis reservation is gone. Use a duration-only rollback.
 
@@ -211,7 +211,7 @@ If the flag check throws and the owner can still be read, `htpr-7324-plan-ai-cap
 
 ### Internal team saved plan
 
-`htpr-7852-internal-team-saved-plan` changes access for one internal team. Off restores forced Pro. Do not flip it to prove either side. A Billing page on any other team does not show this flag.
+The internal team uses its saved plan for AI access, board admission, and the open board billing chip. Checkout and other plan reads that never used this switch still treat that team as Pro. A Billing page on any other team does not show this. Do not change the internal team's saved plan to prove it.
 
 ### Vercel budget alerts
 

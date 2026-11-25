@@ -82,7 +82,6 @@ for (const corrected of [false, true]) {
       "@/lib/flags/definitions/htpr-7919-allowance-percent": flagModule,
       "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": {},
       "@/hooks/useFlag": { useFlag: name => name === flag || (name === "copy" && corrected), useFlagReady: () => true },
-      "@/lib/flags/keys": { HTPR_7551_START_PLAN_CHECKOUT_FLAG: "checkout" },
       "next/navigation": {},
     }).PlansTable;
     const html = renderToStaticMarkup(React.createElement(Screen));

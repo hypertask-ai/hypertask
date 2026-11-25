@@ -36,7 +36,7 @@ function freeAmounts(flags) {
   return plans.subscriptionPlansFor(flags)
     .find((plan) => plan.id === "Free")
     .perks
-    .filter((perk) => ["Boards", "Open tickets", "Files", "Teams already over a limit"].includes(perk.title))
+    .filter((perk) => ["Boards", "Open tickets", "Files", "Teams already over a limit", "Storage"].includes(perk.title))
     .map((perk) => perk.amount);
 }
 
@@ -74,6 +74,8 @@ test("free plan copy with the limits flag on uses the enforced board, ticket and
   assert.equal(lines[1], "Up to 250 open tickets");
   assert.equal(lines[2], "Up to 10 MB each on tickets and comments");
   assert.equal(lines.includes("Unlimited tickets"), false);
+  assert.equal(lines.includes("Up to 2 GB attachment storage per team"), true);
+  assert.equal(limits.freePlanLimitCopy(legacy).some((line) => line.includes("2 GB")), false);
   const shown = text(capped);
   assert.equal(shown.includes("Up to 2 boards (archived don't count)"), true);
   assert.equal(shown.includes("Up to 250 open tickets"), true);
@@ -166,7 +168,6 @@ test("the trial table renders each plan's own features only when the copy flag i
     "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton": { StartPlanButton: () => null, requestCheckout: async () => "" },
     "@/lib/flags/definitions/htpr-7919-allowance-percent": { HTPR_7919_ALLOWANCE_PERCENT_FLAG: "htpr-7919-allowance-percent" },
     "@/hooks/useFlag": { useFlag: (name) => name === "htpr-7686-free-plan-copy" && shown.corrected, useFlagReady: () => true },
-    "@/lib/flags/keys": { HTPR_7551_START_PLAN_CHECKOUT_FLAG: "htpr-7551-start-plan-checkout" },
     "next/navigation": { useRouter: () => ({ push() {} }) },
   }).PlansTable;
   const markup = (corrected) => {

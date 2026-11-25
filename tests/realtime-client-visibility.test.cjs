@@ -118,6 +118,83 @@ test("localhost browser smoke can opt an automated browser into realtime", () =>
   assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
 });
 
+test("a local verify build takes realtime in an automated browser with no query flag", () => {
+  const previous = process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = "1";
+  const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
+    "src/lib/realtime/client.ts",
+  );
+  try {
+    const local = fakeBrowser("", true, "127.0.0.1");
+    local.values.set(REALTIME_DISABLED_STORAGE_KEY, "1");
+    assert.equal(realtimeDisabledForBrowser(local.browser), false);
+    assert.equal(local.values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+
+    const headless = fakeHeadlessBrowser();
+    headless.browser.location.hostname = "127.0.0.1";
+    assert.equal(realtimeDisabledForBrowser(headless.browser), false);
+
+    const managed = fakeBrowser("", true, "127.0.0.1");
+    managed.browser.__multipromptNotificationClickBridgeInstalled = true;
+    assert.equal(realtimeDisabledForBrowser(managed.browser), true);
+
+    const localhost = fakeBrowser("", true, "localhost");
+    assert.equal(realtimeDisabledForBrowser(localhost.browser), false);
+
+    const off = fakeBrowser("?realtime=off", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(off.browser), true);
+
+    const production = fakeBrowser("", true, "app.hypertask.ai");
+    assert.equal(realtimeDisabledForBrowser(production.browser), true);
+    assert.equal(production.values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+    else process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME = previous;
+  }
+});
+
+test("a build whose public base URL is loopback takes realtime without the opt-in flag", () => {
+  const previous = process.env.NEXT_PUBLIC_BASEURL;
+  process.env.NEXT_PUBLIC_BASEURL = "http://127.0.0.1:3100";
+  const {
+    REALTIME_DISABLED_STORAGE_KEY,
+    localRealtimeOptedIn,
+    realtimeDisabledForBrowser,
+  } = loadTs("src/lib/realtime/client.ts");
+  try {
+    assert.equal(localRealtimeOptedIn("127.0.0.1"), true);
+    assert.equal(localRealtimeOptedIn("app.hypertask.ai"), false);
+
+    const headless = fakeHeadlessBrowser();
+    headless.browser.location.hostname = "127.0.0.1";
+    assert.equal(realtimeDisabledForBrowser(headless.browser), false);
+
+    const production = fakeBrowser("", true, "app.hypertask.ai");
+    assert.equal(realtimeDisabledForBrowser(production.browser), true);
+    assert.equal(production.values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_BASEURL;
+    else process.env.NEXT_PUBLIC_BASEURL = previous;
+  }
+});
+
+test("a non-loopback public base URL is not a local copy", () => {
+  const previous = process.env.NEXT_PUBLIC_BASEURL;
+  process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
+  const { localRealtimeOptedIn, realtimeDisabledForBrowser } = loadTs(
+    "src/lib/realtime/client.ts",
+  );
+  try {
+    assert.equal(localRealtimeOptedIn("127.0.0.1"), false);
+    const { browser } = fakeHeadlessBrowser();
+    browser.location.hostname = "127.0.0.1";
+    assert.equal(realtimeDisabledForBrowser(browser), true);
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_BASEURL;
+    else process.env.NEXT_PUBLIC_BASEURL = previous;
+  }
+});
+
 test("headless agent-browser contexts disable realtime without webdriver", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
@@ -126,6 +203,12 @@ test("headless agent-browser contexts disable realtime without webdriver", () =>
 
   assert.equal(realtimeDisabledForBrowser(browser), true);
   assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+});
+
+test("a production build keeps realtime off for automated browsers on loopback", () => {
+  const { realtimeDisabledForBrowser } = loadTs("src/lib/realtime/client.ts");
+  const { browser } = fakeBrowser("", true, "127.0.0.1");
+  assert.equal(realtimeDisabledForBrowser(browser), true);
 });
 
 test("managed Multiprompt agent panes always disable realtime", () => {

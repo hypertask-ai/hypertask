@@ -23,11 +23,12 @@ import {
 } from '@/lib/mcp/tasks/mappers'
 import { userCommentCountsByTaskId } from '@/utils/controllers/tasks/userCommentCounts'
 import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
-import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
+import { findReusedKeyCollisions, findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/keys'
+import { previousTicketNumbersFor, withPreviousTicketNumbers } from '@/lib/mcp/tasks/previousTicketNumbers'
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG, HTPR_9393_ARCHIVED_BOARD_TASK_LIST_FLAG } from '@/lib/flags/keys'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -83,6 +84,7 @@ export interface TaskListItem {
   blockerCommentId?: number | null
   waitingOnUserId?: number | null
   ticketNumber?: string
+  previousTicketNumbers?: string[]
   title: string
   description: string
   section: string
@@ -382,6 +384,7 @@ export async function GET(request: NextRequest) {
         }
 
         const attachmentDownloadHints = await isFeatureEnabled(HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG, user.id).catch(() => false)
+        const previousTicketNumbers = await previousTicketNumbersFor(user.id, tasks)
         const commentCounts = await userCommentCountsByTaskId(tasks.map(task => task.id))
         const mapTask = async (task: (typeof tasks)[number]) => {
           const pullRequests = task.pullRequests?.length
@@ -394,7 +397,7 @@ export async function GET(request: NextRequest) {
             ctx.teamScope,
           ), attachmentDownloadHints)
           const mapped = {
-            ...detail,
+            ...withPreviousTicketNumbers(detail, previousTicketNumbers),
             skill_context: await getMcpSkillContext(ctx, task.projectId, [
               detail.title, detail.description, ...(task.comments ?? []).map(comment => comment.text),
             ]),
@@ -414,16 +417,24 @@ export async function GET(request: NextRequest) {
         const projectSingleTask = (task: Record<string, unknown>) =>
           singleTaskFields.length ? projectRows([task], parseFields(singleTaskFields))[0] : task
 
+        const reusedKeyCollisions =
+          typeof findReusedKeyCollisions === 'function' && (requestedTickets.length > 0 || (uniqueIndex !== null && projectIdForLookup !== null))
+            ? await findReusedKeyCollisions(user, tasks, { ticketNumbers: requestedTickets, uniqueIndex, projectId: projectIdForLookup }, ctx.agentId, undefined, ctx.teamScope)
+            : []
+        const collisionField = reusedKeyCollisions.length ? { reusedKeyCollisions } : {}
+
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: projectSingleTask(await mapTask(tasks[0]))
+            task: projectSingleTask(await mapTask(tasks[0])),
+            ...collisionField,
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: (await Promise.all(tasks.map(mapTask))).map(projectSingleTask)
+          tasks: (await Promise.all(tasks.map(mapTask))).map(projectSingleTask),
+          ...collisionField,
         })
       }
     }
@@ -534,9 +545,12 @@ export async function GET(request: NextRequest) {
       return validationError(`sort must be one of ${TASK_SORT_FIELDS.join(', ')}`)
     }
 
+    const namedBoardId = projectId || boardId
+    const includeArchivedBoard = Boolean(namedBoardId) &&
+      await isFeatureEnabled(HTPR_9393_ARCHIVED_BOARD_TASK_LIST_FLAG, user.id)
     const accessibleProjects = await prisma.project.findMany({
       where: {
-        status: 'Normal',
+        status: includeArchivedBoard ? { in: ['Normal', 'Archive'] } : 'Normal',
         ...getProjectWhere(user.id, ctx.agentId, ctx.teamScope),
       },
       select: { id: true }
@@ -673,7 +687,8 @@ export async function GET(request: NextRequest) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { description_: { content: { contains: search, mode: 'insensitive' } } },
-        { ticketNumber: { contains: search, mode: 'insensitive' } }
+        { ticketNumber: { contains: search, mode: 'insensitive' } },
+        { numberAliases: { some: { ticketNumber: { equals: search.trim(), mode: 'insensitive' } } } },
       ]
     }
 
@@ -828,6 +843,7 @@ export async function GET(request: NextRequest) {
     const tasksWithBlockers = await attachOpenBlockingTasks(
       tasks as Array<(typeof tasks)[number] & TaskWithBlockingRelations>,
     )
+    const previousTicketNumbers = await previousTicketNumbersFor(user.id, tasks)
 
     const taskList: TaskListItem[] = tasksWithBlockers.map(task => {
       recordAgentBoardScopeMiss(task.projectId, "read");
@@ -880,7 +896,7 @@ export async function GET(request: NextRequest) {
         permanentlyDeleteAt: task.permanentlyDeleteAt?.toISOString() || null,
         ...(agent ? { agent } : {}),
       }
-    })
+    }).map((task) => withPreviousTicketNumbers(task, previousTicketNumbers))
 
     const presentedTasks = taskList.map((task) => withTaskPresentation(task))
     const projectedTasks = listQuery?.fields.length

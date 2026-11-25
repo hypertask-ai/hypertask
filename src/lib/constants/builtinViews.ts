@@ -24,6 +24,7 @@ export interface BuiltinViewContext {
   nextCycleId?: number | null;
   cyclesEnabled?: boolean;
   currentUserNames?: string[];
+  leaveFinishedOut?: boolean;
 }
 
 export interface BuiltinView {
@@ -58,11 +59,38 @@ export const overduePredicate: BuiltinView["predicate"] = (task, context) =>
   isPastDate(task.dueDate, context.now) &&
   !isDoneColumn(task.section, context.doneSectionTitles);
 
-export const blockedPredicate: BuiltinView["predicate"] = (task) =>
-  task.waitingOnUserId != null || (task.blockingTasks?.length ?? 0) > 0;
+const inFinishedColumn = (task: ITask, context: BuiltinViewContext) =>
+  context.leaveFinishedOut === true &&
+  isDoneColumn(task.section, context.doneSectionTitles);
+
+export const taskInColumn = <T extends { sectionId?: number | null; section?: string | null }>(
+  task: T,
+  column: { sectionId?: number | null; section_title?: string | null },
+): T => ({
+  ...task,
+  sectionId: column.sectionId ?? task.sectionId,
+  section: column.section_title ?? task.section,
+});
+
+export const BLOCKED_VIEW_RULE =
+  "Waiting on a person, or blocked by another ticket. Done columns stay out.";
+
+export const BLOCKED_BY_ME_VIEW_RULE = "Waiting on you. Done columns stay out.";
+
+export const blockedViewRule = (viewId: string | undefined) => {
+  if (viewId === BUILTIN_VIEW_IDS.blocked) return BLOCKED_VIEW_RULE;
+  if (viewId === BUILTIN_VIEW_IDS.blockedByMe) return BLOCKED_BY_ME_VIEW_RULE;
+  return null;
+};
+
+export const blockedPredicate: BuiltinView["predicate"] = (task, context) =>
+  (task.waitingOnUserId != null || (task.blockingTasks?.length ?? 0) > 0) &&
+  !inFinishedColumn(task, context);
 
 export const blockedByMePredicate: BuiltinView["predicate"] = (task, context) =>
-  context.currentUserId != null && task.waitingOnUserId === context.currentUserId;
+  context.currentUserId != null &&
+  task.waitingOnUserId === context.currentUserId &&
+  !inFinishedColumn(task, context);
 
 export const getBlockedByMeSections = (
   project: IProject,
@@ -177,6 +205,14 @@ const builtinViewsById = new Map(
 export const isBuiltinViewId = (id: string | undefined): id is BuiltinViewId =>
   id != null && builtinViewsById.has(id as BuiltinViewId);
 
+export const builtinViewIdFromViewParam = (
+  value: string | null | undefined,
+): BuiltinViewId | undefined => {
+  const candidate = String(value ?? "").trim().toLowerCase();
+  if (!candidate.startsWith("builtin:")) return undefined;
+  return isBuiltinViewId(candidate) ? candidate : undefined;
+};
+
 export const isBuiltinView = (view: BoardView): view is BuiltinView =>
   isBuiltinViewId(view.id);
 
@@ -184,6 +220,22 @@ export const viewTabPreferenceKey = (
   projectId: number | undefined,
   viewId: string,
 ) => (isBuiltinViewId(viewId) ? `${projectId ?? 0}:${viewId}` : viewId);
+
+export const viewTabIsShown = (
+  viewId: string,
+  options: {
+    projectId: number | undefined;
+    defaultViewId: string | undefined;
+    activeViewId: string | undefined;
+    hiddenViewTabIds: Record<string, boolean | undefined>;
+    keepOpenViewVisible: boolean;
+  },
+) => {
+  if (viewId === options.defaultViewId) return true;
+  const hidden = options.hiddenViewTabIds[viewTabPreferenceKey(options.projectId, viewId)] === true;
+  if (!hidden) return true;
+  return options.keepOpenViewVisible && viewId === options.activeViewId;
+};
 
 export const getBuiltinView = (id: string | undefined) =>
   isBuiltinViewId(id) ? builtinViewsById.get(id) : undefined;
@@ -193,6 +245,7 @@ export const buildBuiltinViewContext = (
   currentUserId?: number | null,
   now?: Date | number,
   currentUserDisplayName?: string | null,
+  leaveFinishedOut = false,
 ): BuiltinViewContext => {
   const cycleWindow = resolveCycleWindow(project?.cycles ?? [], now);
   const displayName = currentUserDisplayName?.trim() || (currentUserId == null
@@ -207,6 +260,7 @@ export const buildBuiltinViewContext = (
       : [],
     now,
     doneSectionTitles: doneColumnTitles(project?.section ?? []),
+    leaveFinishedOut,
     cyclesEnabled: project?.cyclesEnabled,
     currentCycleId: cycleWindow.current?.id ?? null,
     nextCycleId: cycleWindow.next?.id ?? null,
@@ -227,4 +281,36 @@ export const getActiveBoardViewId = (
     project.project_view?.user_project_views[0]?.appliedView?.id ??
     project.project_view?.default_view_id
   );
+};
+
+export const getViewToActivateWhenHidden = (
+  project: IProject | null | undefined,
+  activeBuiltinViews: Record<number, string>,
+  views: readonly BoardView[],
+  hiddenViewId: string,
+): BoardView | undefined => {
+  if (!project) return undefined;
+  if (getActiveBoardViewId(project, activeBuiltinViews) !== hiddenViewId) return undefined;
+  const defaultViewId = project.project_view?.default_view_id;
+  if (!defaultViewId || defaultViewId === hiddenViewId) return undefined;
+  return views.find((view) => view.id === defaultViewId);
+};
+
+export const getHiddenOpenViewToLeave = (
+  project: IProject | null | undefined,
+  activeBuiltinViews: Record<number, string>,
+  views: readonly BoardView[],
+  hiddenViewTabIds: Record<string, boolean | undefined>,
+): BoardView | undefined => {
+  const activeViewId = getActiveBoardViewId(project, activeBuiltinViews);
+  if (!project || !activeViewId) return undefined;
+  const shown = viewTabIsShown(activeViewId, {
+    projectId: project.id,
+    defaultViewId: project.project_view?.default_view_id,
+    activeViewId,
+    hiddenViewTabIds,
+    keepOpenViewVisible: false,
+  });
+  if (shown) return undefined;
+  return getViewToActivateWhenHidden(project, activeBuiltinViews, views, activeViewId);
 };
