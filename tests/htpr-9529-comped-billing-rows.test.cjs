@@ -10,6 +10,7 @@ const slots = ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_I
 for (const [i, slot] of slots.entries()) process.env[`NEXT_PUBLIC_STRIPE_${slot}`] = `price_choice_${i}`;
 
 const compedUntil = new Date("2099-01-01T12:00:00.000Z");
+const expiredComp = new Date("2020-01-01T12:00:00.000Z");
 const upcomingPeriodEnd = 1793000000;
 const expectedDate = (seconds) =>
   new Date(seconds * 1000).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
@@ -17,6 +18,7 @@ const expectedDate = (seconds) =>
 let team, dom, mounted, billingData;
 const { deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 const { default: BillingSection } = loadModule("src/components/Modals/Settings/BillingSection.tsx", {
+  "@/components/Modals/OptionPicker": { default: () => null },
   "@/hooks/useFlag": { useFlag: () => false },
   "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
   "@/store": { currentUserAtom: {} },
@@ -121,6 +123,58 @@ test("a normal Free team still reads Free Plan", async () => {
   assert.equal(rowValue("Renewal"), "Free Plan");
   assert.equal(rowValue("Next invoice"), "Free Plan");
   assert.match(document.body.textContent, /No invoices found/);
+});
+
+test("a paid Pro team outranks a BYOK comp and keeps every subscription row", async () => {
+  team = subscribed();
+  team.stripe_customer_id = "cus_selected";
+  team.compedPlan = "BYOK";
+  team.compedUntil = compedUntil;
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(rowValue("Billing cycle"), "month");
+  assert.equal(rowValue("Renewal"), expectedDate(upcomingPeriodEnd));
+  assert.equal(rowValue("Next invoice"), expectedDate(upcomingPeriodEnd));
+  assert.equal(rowValue("Invoice total"), "$20.00");
+  assert.doesNotMatch(document.body.textContent, /Comped/);
+  assert.doesNotMatch(document.body.textContent, /Not billed/);
+});
+
+test("a comped Pro team that also pays keeps its paid cycle on screen", async () => {
+  team = subscribed();
+  team.stripe_customer_id = "cus_selected";
+  team.compedPlan = "Pro";
+  team.compedUntil = compedUntil;
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(rowValue("Billing cycle"), "month");
+  assert.equal(rowValue("Invoice total"), "$20.00");
+  assert.doesNotMatch(document.body.textContent, /Free Plan/);
+});
+
+test("an expired comp falls back to the plan the team really has", async () => {
+  team.compedPlan = "Pro";
+  team.compedUntil = expiredComp;
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Free");
+  assert.equal(rowValue("Billing cycle"), "Free Plan");
+  assert.doesNotMatch(document.body.textContent, /Comped/);
+});
+
+test("a comped plan name without a comped-until date is not a comp", async () => {
+  team.compedPlan = "Pro";
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Free");
+  assert.equal(rowValue("Billing cycle"), "Free Plan");
+  assert.doesNotMatch(document.body.textContent, /Comped/);
 });
 
 test("a paid Pro team keeps its subscription rows", async () => {
