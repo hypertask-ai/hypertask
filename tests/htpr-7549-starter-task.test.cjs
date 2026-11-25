@@ -7,9 +7,10 @@ const { loadModule: load } = require("./helpers/loadModule.cjs");
 const legacy = require("./fixtures/cli-install/legacy.json");
 const key = "htpr-7549-first-task-pointer";
 const cliKey = "htpr-7033-cli-install-command";
+const browserKey = "htpr-9530-onboarding-cli-browser-login";
 const commands = load("src/lib/onboarding/installCommands.ts");
 
-async function seed(enabled, cliEnabled) {
+async function seed(enabled, cliEnabled, browserLoginEnabled = true) {
   const tasks = [];
   const markers = [];
   const assignments = [];
@@ -38,10 +39,12 @@ async function seed(enabled, cliEnabled) {
     "@/lib/flags": {
       HTPR_7549_FIRST_TASK_POINTER_FLAG: key,
       HTPR_7033_CLI_INSTALL_COMMAND_FLAG: cliKey,
+      HTPR_9530_ONBOARDING_CLI_BROWSER_LOGIN_FLAG: browserKey,
       isFeatureEnabled: async (flag, userId) => {
         assert.equal(userId, 2343);
         reads.push(flag);
-        assert.ok([key, cliKey].includes(flag));
+        assert.ok([key, cliKey, browserKey].includes(flag));
+        if (flag === browserKey) return browserLoginEnabled;
         return flag === key ? enabled : cliEnabled;
       },
     },
@@ -74,7 +77,7 @@ for (const cliEnabled of [false, true]) {
     assert.doesNotMatch(text, /does not sign in today/);
     assert.doesNotMatch(text, /login --token/);
     assert.doesNotMatch(task.description, /npm|login --code/);
-    assert.deepEqual(reads, [key]);
+    assert.deepEqual(reads, [key, browserKey]);
     assert.deepEqual(markers, [{ firstTaskPointerTaskId: 71, firstTaskPointerSectionId: 10 }]);
     dom.window.close();
   });
@@ -91,13 +94,53 @@ for (const cliEnabled of [false, true]) {
 }
 
 test("HTPR-9530 onboarding CLI step uses browser sign-in", async () => {
-  const { task } = await seed(true, true);
+  const { task, reads } = await seed(true, true);
   const dom = new JSDOM(task.description);
   const text = dom.window.document.body.textContent;
   assert.match(text, /hypertask login: it opens your browser to authorize/);
   assert.doesNotMatch(text, /does not sign in today/);
   assert.doesNotMatch(text, /login --token/);
+  assert.doesNotMatch(text, /--token/);
+  assert.doesNotMatch(text, /app\.hypertask\.ai\/agents/);
+  assert.deepEqual(reads, [key, browserKey]);
   dom.window.close();
+});
+
+test("HTPR-9530 off keeps the previous token sentence, agents page included", async () => {
+  const { task } = await seed(true, true, false);
+  const dom = new JSDOM(task.description);
+  const text = dom.window.document.body.textContent;
+  assert.match(text, /https:\/\/app\.hypertask\.ai\/agents/);
+  assert.match(text, /hypertask login --token <your-agent-token>/);
+  assert.match(text, /Bare hypertask login does not sign in today/);
+  assert.doesNotMatch(text, /hypertask login: it opens your browser/);
+  dom.window.close();
+});
+
+test("HTPR-9530 browser sign-in copy does not depend on the CLI install flag", async () => {
+  const { task, reads } = await seed(true, false, true);
+  const dom = new JSDOM(task.description);
+  const text = dom.window.document.body.textContent;
+  assert.match(text, /hypertask login: it opens your browser to authorize/);
+  assert.doesNotMatch(text, /--token/);
+  assert.deepEqual(reads, [key, browserKey]);
+  dom.window.close();
+});
+
+test("HTPR-9530 no onboarding sign-in step prescribes a token", async () => {
+  const { task } = await seed(true, true);
+  const dom = new JSDOM(task.description);
+  assert.doesNotMatch(dom.window.document.body.textContent, /login --token/);
+  dom.window.close();
+  const surfaces = [
+    "src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx",
+    "public/llms.txt",
+  ];
+  for (const file of surfaces) {
+    const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    assert.ok(source.includes("hypertask login"), file);
+    assert.doesNotMatch(source, /login --token/, file);
+  }
 });
 
 test("legacy factory remains byte-identical to the production baseline", () => {
