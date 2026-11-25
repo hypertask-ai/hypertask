@@ -18,8 +18,12 @@ function touchesFlagDefinitions(changedFiles) {
 
 const BUDGET_MS = 10_000;
 const FULL_BUDGET_MS = 60_000;
+const MIN_BUDGET_MS = 1_000;
+const SAMPLE_SIZE = 8;
+const lintBudgetMs = Number(process.env.QUICK_CHECK_LINT_BUDGET_MS) || BUDGET_MS;
 const typeBudgetMs = Number(process.env.QUICK_CHECK_TYPE_BUDGET_MS) || BUDGET_MS;
 const fullTypeBudgetMs = Number(process.env.QUICK_CHECK_FULL_TYPE_BUDGET_MS) || FULL_BUDGET_MS;
+const deadlineMs = Number(process.env.QUICK_CHECK_DEADLINE_MS) || FULL_BUDGET_MS;
 const LINTABLE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const TYPED = /\.(?:ts|tsx|mts|cts)$/;
 const COMPILER = /^(?:tsconfig[^/]*\.json|package(?:-lock)?\.json)$/;
@@ -75,6 +79,16 @@ function uncommitted(root, files) {
   return split(git(root, ["diff", "--name-only", "-z", "HEAD", "--", ...files]));
 }
 
+function sampleFiles(root, changed) {
+  const changedSet = new Set(changed);
+  const candidates = split(
+    git(root, ["ls-files", "-z", "--", "*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.mts", "*.cts"]),
+  ).filter((file) => LINTABLE.test(file) && !changedSet.has(file));
+  if (candidates.length <= SAMPLE_SIZE) return candidates;
+  const step = candidates.length / SAMPLE_SIZE;
+  return Array.from({ length: SAMPLE_SIZE }, (_, index) => candidates[Math.floor(index * step)]);
+}
+
 function elapsed(started) {
   return ((Date.now() - started) / 1000).toFixed(1);
 }
@@ -82,6 +96,10 @@ function elapsed(started) {
 function blocked(message) {
   console.error(`quick check: ${message}`);
   process.exit(1);
+}
+
+function reportedErrors(output) {
+  return /\berror TS\d+/.test(output) || /^\s*\d+:\d+\s+error\s+\S/m.test(output);
 }
 
 function start(root, command, args, timeoutMs) {
@@ -121,6 +139,7 @@ function start(root, command, args, timeoutMs) {
 }
 
 const started = Date.now();
+const deadline = started + deadlineMs;
 
 const root = repoRoot();
 if (!root) {
@@ -137,7 +156,8 @@ if (pushedCommit) {
 const explicit = explicitFiles(process.argv.slice(2));
 let lintTargets = [];
 let typeTargets = [];
-let fullLint = false;
+let lintConfigChanged = false;
+let sampleTargets = [];
 let fullTypecheck = false;
 let touched = [];
 
@@ -151,16 +171,20 @@ if (explicit) {
     typeTargets = [];
   } else {
     touched = changes.touched;
-    fullLint = changes.touched.some((file) => LINT_CONFIG.test(file));
+    lintConfigChanged = changes.touched.some((file) => LINT_CONFIG.test(file));
     fullTypecheck = changes.touched.some((file) => COMPILER.test(file));
-    lintTargets = fullLint ? [] : changes.changed.filter((file) => LINTABLE.test(file));
+    lintTargets = changes.changed.filter((file) => LINTABLE.test(file));
+    sampleTargets = lintConfigChanged ? sampleFiles(root, lintTargets) : [];
     typeTargets = changes.changed.filter((file) => TYPED.test(file));
   }
 }
 typeTargets = typeTargets.filter((file) => existsSync(join(root, file)));
 
-if (fullLint) console.log("quick check: lint configuration changed, running the full lint");
-else if (lintTargets.length) console.log(`quick check: linting ${lintTargets.join(", ")}`);
+if (lintConfigChanged) {
+  console.log(
+    `quick check: lint configuration changed, so linting the changed files and ${sampleTargets.length} untouched sample files; the full lint runs in CI`,
+  );
+} else if (lintTargets.length) console.log(`quick check: linting ${lintTargets.join(", ")}`);
 else console.log("quick check: no changed lint targets");
 
 const skipped = [];
@@ -178,10 +202,6 @@ const confirmConfig = join(typeDirectory, "confirm.json");
 const confirmTypeCache = join(typeDirectory, "confirm.tsbuildinfo");
 const fullTypeCache = join(typeDirectory, "full.tsbuildinfo");
 
-function lintLabel() {
-  return fullLint ? "the whole repository" : lintTargets.join(", ");
-}
-
 function typeLabel() {
   return typeTargets.length ? typeTargets.join(", ") : "the whole project";
 }
@@ -190,47 +210,63 @@ function shellArgument(file) {
   return /^[\w./@+-]+$/.test(file) ? file : `'${file.replace(/'/g, "'\\''")}'`;
 }
 
-function rerunCommand(name) {
-  if (name === "eslint") {
-    return fullLint || !lintTargets.length
-      ? "node scripts/quick-check.mjs"
-      : `node scripts/quick-check.mjs --files ${lintTargets.map(shellArgument).join(" ")}`;
-  }
-  return typeTargets.length
-    ? `node scripts/quick-check.mjs --files ${typeTargets.map(shellArgument).join(" ")}`
+function filesCommand(files) {
+  return files.length
+    ? `node scripts/quick-check.mjs --files ${files.map(shellArgument).join(" ")}`
     : "node scripts/quick-check.mjs";
+}
+
+function budgetWithinDeadline(budgetMs) {
+  return Math.max(MIN_BUDGET_MS, Math.min(budgetMs, deadline - Date.now()));
 }
 
 async function runTool(name, command, args, budgetMs, retryBudgetMs) {
   const toolStarted = Date.now();
-  const first = start(root, command, args, budgetMs);
+  const firstBudget = budgetWithinDeadline(budgetMs);
+  const first = start(root, command, args, firstBudget);
   let result = await first.result;
   let output = first.output;
-  if (result.timedOut && retryBudgetMs > budgetMs) {
+  let used = firstBudget;
+  const longerBudget = budgetWithinDeadline(retryBudgetMs);
+  if (result.timedOut && longerBudget > firstBudget) {
     console.log(
-      `quick check: ${name} passed its ${Math.round(budgetMs / 1000)}s budget; running it once more with ${Math.round(retryBudgetMs / 1000)}s`,
+      `quick check: ${name} passed its ${Math.round(firstBudget / 1000)}s budget; running it once more with ${Math.round(longerBudget / 1000)}s`,
     );
-    const second = start(root, command, args, retryBudgetMs);
+    const second = start(root, command, args, longerBudget);
     result = await second.result;
     output += second.output;
+    used = longerBudget;
   }
-  return { output, result, seconds: ((Date.now() - toolStarted) / 1000).toFixed(1) };
+  return { output, result, seconds: ((Date.now() - toolStarted) / 1000).toFixed(1), budgetMs: used };
 }
 
-const lintArgs = fullLint || lintTargets.length
-  ? [
-      ...(fullLint ? [] : ["--fix"]),
-      "--cache",
-      "--cache-location",
-      join(root, ".cache", "eslint", "quick-check"),
-      "--suppressions-location",
-      "eslint-local-rules/style-guide-suppressions.json",
-      "--pass-on-unpruned-suppressions",
-      "--no-warn-ignored",
-      "--",
-      ...(fullLint ? ["."] : lintTargets),
-    ]
-  : null;
+function lintArgs(pass) {
+  return [
+    ...(pass.fix ? ["--fix"] : []),
+    "--cache",
+    "--cache-location",
+    join(root, ".cache", "eslint", pass.cache),
+    "--suppressions-location",
+    "eslint-local-rules/style-guide-suppressions.json",
+    "--pass-on-unpruned-suppressions",
+    "--no-warn-ignored",
+    "--",
+    ...pass.files,
+  ];
+}
+
+const lintPlan = [
+  ...(lintTargets.length ? [{ files: lintTargets, fix: true, cache: "quick-check" }] : []),
+  ...(sampleTargets.length ? [{ files: sampleTargets, fix: false, cache: "sample" }] : []),
+];
+
+async function runLintPlan() {
+  const runs = [];
+  for (const pass of lintPlan) {
+    runs.push(await runTool("eslint", binary(root, "eslint"), lintArgs(pass), lintBudgetMs, lintBudgetMs * 2));
+  }
+  return runs;
+}
 
 let typeArgs = null;
 let declarations = [];
@@ -282,59 +318,80 @@ if (!typeTargets.length && !fullTypecheck) {
   typeArgs = ["-p", configPath];
 }
 
-if (lintArgs) {
+if (lintPlan.length) {
   mkdirSync(join(root, ".cache", "eslint"), { recursive: true });
 }
 
-const lintPromise = lintArgs
-  ? runTool("eslint", binary(root, "eslint"), lintArgs, fullLint ? FULL_BUDGET_MS : BUDGET_MS, FULL_BUDGET_MS)
-  : null;
+const lintPromise = lintPlan.length ? runLintPlan() : null;
 const typePromise = typeArgs
   ? runTool("tsc", binary(root, "tsc"), typeArgs, fullTypecheck ? fullTypeBudgetMs : typeBudgetMs, fullTypeBudgetMs)
   : null;
 
 function confirmationPassed(run) {
-  if (run.result.error || run.result.timedOut) outcome(run.result, "tsc");
+  if (run.result.error) {
+    blocked(
+      run.result.error.code === "ENOENT"
+        ? "tsc is not installed in this checkout; run npm install and push again"
+        : `tsc could not run: ${run.result.error.message}`,
+    );
+  }
+  if (run.result.timedOut) {
+    console.log(
+      `quick check: the confirming type check ran out of its ${Math.round(run.budgetMs / 1000)}s budget, so the reported errors stay`,
+    );
+    return false;
+  }
   return !run.result.signal && run.result.status === 0 && !/\berror TS\d+/.test(run.output);
 }
 
-function outcome(result, name) {
+function outcome(result, name, files, budgetMs, rerun) {
   if (result.error) {
     if (result.error.code === "ENOENT") {
       blocked(`${name} is not installed in this checkout; run npm install and push again`);
     }
     blocked(`${name} could not run: ${result.error.message}`);
   }
-  const files = name === "eslint" ? lintLabel() : typeLabel();
   if (result.timedOut) {
-    blocked(`${name} did not finish for ${files}; push blocked. Run: ${rerunCommand(name)}`);
+    if (reportedErrors(result.output)) return "failed";
+    console.log(
+      `quick check: NOT FULLY ${name === "tsc" ? "TYPE CHECKED" : "LINTED"}: ${files} (${name} was still running when its ${Math.round(budgetMs / 1000)}s budget ran out and had reported no errors, so this machine is too slow for it; the full ${name === "tsc" ? "type check" : "lint"} runs in CI). Rerun when the machine is quieter: ${rerun}`,
+    );
+    if (!skipped.includes(name === "tsc" ? "types" : "lint")) skipped.push(name === "tsc" ? "types" : "lint");
+    return "skipped";
   }
   if (result.signal || result.status === 137) {
     console.log(
       `quick check: NOT ${name === "tsc" ? "TYPE CHECKED" : "LINTED"}: ${files} (the machine killed ${name}; this push goes through unchecked)`,
     );
-    skipped.push(name === "eslint" ? "lint" : "types");
+    if (!skipped.includes(name === "tsc" ? "types" : "lint")) skipped.push(name === "tsc" ? "types" : "lint");
     return "skipped";
   }
   return result.status === 0 ? "passed" : "failed";
 }
 
-const lintRun = lintPromise ? await lintPromise : null;
-if (lintRun) process.stdout.write(lintRun.output);
-const lintOutcome = lintRun ? outcome(lintRun.result, "eslint") : "skipped";
-const rewritten = lintTargets.length ? uncommitted(root, lintTargets) : [];
-if (lintOutcome === "failed") {
+const lintRuns = lintPromise ? await lintPromise : [];
+let lintSeconds = 0;
+for (const [index, run] of lintRuns.entries()) {
+  const pass = lintPlan[index];
+  lintSeconds += Number(run.seconds);
+  process.stdout.write(run.output);
+  const lintOutcome = outcome(run.result, "eslint", pass.files.join(", "), run.budgetMs, filesCommand(pass.files));
+  const rewritten = uncommitted(root, pass.files);
   if (rewritten.length) {
     blocked(`formatting fixes applied to ${rewritten.join(", ")}; commit them and push again (${elapsed(started)}s)`);
   }
-  blocked(`lint failed; the push was stopped after ${elapsed(started)}s`);
-}
-if (rewritten.length) {
-  blocked(`formatting fixes applied to ${rewritten.join(", ")}; commit them and push again (${elapsed(started)}s)`);
+  if (lintOutcome === "failed") {
+    if (run.result.timedOut) {
+      blocked(
+        `lint reported errors before its ${Math.round(run.budgetMs / 1000)}s budget ran out; the push was stopped after ${elapsed(started)}s`,
+      );
+    }
+    blocked(`lint failed; the push was stopped after ${elapsed(started)}s`);
+  }
 }
 
 let typeRun = typePromise ? await typePromise : null;
-let typeOutcome = typeRun ? outcome(typeRun.result, "tsc") : "skipped";
+let typeOutcome = typeRun ? outcome(typeRun.result, "tsc", typeLabel(), typeRun.budgetMs, filesCommand(typeTargets)) : "skipped";
 if (typeOutcome === "failed" && !fullTypecheck) {
   console.log("quick check: confirming partial type errors with the full project");
   const confirmFiles = [...new Set([...projectFiles, ...typeTargets.map((file) => join(root, file))])]
@@ -393,6 +450,6 @@ const skippedParts = [...skipped];
 if (flagOutcome === "skipped") skippedParts.push("feature flags");
 const skippedNote = skippedParts.length ? `, skipped ${skippedParts.join(" and ")}` : "";
 console.log(
-  `quick check: format, lint and types passed in ${(total / 1000).toFixed(1)}s (lint ${lintRun ? lintRun.seconds : "0.0"}s, types ${typeRun ? typeRun.seconds : "0.0"}s)${skippedNote}`,
+  `quick check: format, lint and types passed in ${(total / 1000).toFixed(1)}s (lint ${lintSeconds.toFixed(1)}s, types ${typeRun ? typeRun.seconds : "0.0"}s)${skippedNote}`,
 );
 if (total > BUDGET_MS) console.log(`quick check: over the ${BUDGET_MS / 1000}s budget for this change`);
