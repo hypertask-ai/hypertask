@@ -243,17 +243,10 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
                 </div>
               }
             >
-              <EmailAuth
-                initialEmail={email}
-                styleConfig={boatEmailAuthStyleConfig}
-              />
+              <EmailAuth initialEmail={email} styleConfig={boatEmailAuthStyleConfig} />
             </Suspense>
             {!isAppShell && (
-              <button
-                type="button"
-                onClick={() => setShowEmailForm(false)}
-                className="mt-4 text-content text-text-light-gray transition-colors hover:text-white-black"
-              >
+              <button type="button" onClick={() => setShowEmailForm(false)} className="mt-4 text-content text-text-light-gray transition-colors hover:text-white-black">
                 ← Back to login options
               </button>
             )}
@@ -271,10 +264,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
               />
             )}
 
-            <div
-              aria-hidden="true"
-              className="my-5 flex items-center gap-3 text-meta text-text-light-gray before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border"
-            >
+            <div aria-hidden="true" className="my-5 flex items-center gap-3 text-meta text-text-light-gray before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">
               OR
             </div>
 
@@ -289,10 +279,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
                 aria-label="Email address"
                 className="mb-3 h-12 w-full rounded-sm border-0 bg-active-list-element px-4 text-content text-white-black outline-none transition-colors placeholder:text-text-light-gray focus-visible:ring-1 focus-visible:ring-border"
               />
-              <button
-                type="submit"
-                className="flex h-12 w-full items-center justify-center rounded-sm bg-shadcn-primary text-content font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border"
-              >
+              <button type="submit" className="flex h-12 w-full items-center justify-center rounded-sm bg-shadcn-primary text-content font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border">
                 Continue with email
               </button>
 
@@ -318,37 +305,18 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
 
         {agentCodeSignIn && (
           <div className="mt-6 border-t border-border-light-gray-thin pt-6">
-            <Link
-              href="/login/agent"
-              className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border"
-            >
+            <Link href="/login/agent" className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border">
               Sign in an agent
             </Link>
-            <p className="mt-2 text-meta text-text-light-gray">
-              Connect your agent with a sign-in code.
-            </p>
+            <p className="mt-2 text-meta text-text-light-gray">Connect your agent with a sign-in code.</p>
           </div>
         )}
 
         <p className="mt-6 text-pretty text-center text-meta leading-relaxed text-text-light-gray">
           By continuing, you agree to Hypertask&rsquo;s{" "}
-          <a
-            href="https://hypertask.ai/terms"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 transition-colors hover:text-white-black"
-          >
-            Terms&nbsp;of&nbsp;Service
-          </a>{" "}
+          <a href="https://hypertask.ai/terms" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 transition-colors hover:text-white-black">Terms&nbsp;of&nbsp;Service</a>{" "}
           and acknowledge our{" "}
-          <a
-            href="https://hypertask.ai/privacy"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline underline-offset-2 transition-colors hover:text-white-black"
-          >
-            Privacy&nbsp;Policy
-          </a>.
+          <a href="https://hypertask.ai/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 transition-colors hover:text-white-black">Privacy&nbsp;Policy</a>.
         </p>
       </>
     );
