@@ -281,7 +281,7 @@ async function withPalette(t, config, check) {
   const useValue = (atom) => React.useSyncExternalStore(subscribe, () => values.get(atom));
   const setters = new Map(atomNames.map((name) => [name, (next) => set(name, next)]));
   const state = { useRecoilValue: useValue, useRecoilState: (atom) => [useValue(atom), setters.get(atom)], useSetRecoilState: (atom) => setters.get(atom) };
-  const requests = [], navigations = [], cacheAdds = [], cacheUpdates = [], viewedTasks = [], loadedBoards = [];
+  const requests = [], navigations = [], cacheAdds = [], cacheUpdates = [], viewedTasks = [], loadedBoards = [], taskSaves = [];
   const queryClient = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 1_000 } } });
   if (config.boards) queryClient.setQueryData(['projectsAllMinimal', 985], config.boards);
   let legacyJ = 0, reactRoot;
@@ -302,10 +302,11 @@ async function withPalette(t, config, check) {
     source('src/lib/contexts/TourContext.tsx', { useTourContext: () => ({ endTour() {} }) });
     source('src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx', { default: () => null });
     source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.boards ?? [] }) });
-    source('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts', { getActiveEmptySectionSettingFromProject: () => '', getActiveStalenessFromProject: () => false });
+    source('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts', { getActiveEmptySectionSettingFromProject: () => '', getActiveStalenessFromProject: () => false, getActiveFiltersFromProject: () => ({ addedFilters: [] }) });
     source('src/styles/linksModal.module.scss', { default: { links_modal: 'links_modal' } });
     if (!config.realTooltip) source('src/components/Common/Tooltip.tsx', { default: ({ text, keyCombination }) => React.createElement('span', { 'data-tooltip': text }, keyCombination.join('+')) });
-    const axios = { get: async () => ({ data: config.targetTask }) };
+    const axios = { get: async (url) => ({ data: config.taskWriterFetch && url === '/api/tasks/createGlobally'
+      ? { sectionId: 12, section: 'Todo', ranking: 'a' } : config.targetTask }) };
     stub(require.resolve('axios'), { default: axios });
     source('src/components/RTE/Components/AudioButton.tsx', { default: config.AudioButton ?? ((props) => React.createElement('button', { 'aria-label': props.ariaLabel, onClick: () => props.callbackHandler(' spoken note') }, 'Mic')) });
     source('src/hooks/MultiPages/useClickOutside.ts', { default: () => {} });
@@ -321,10 +322,15 @@ async function withPalette(t, config, check) {
       cacheUpdates.push(args);
     } }) });
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
-    source('src/lib/createTaskAttachmentUploads.ts', { discardUnboundCreateTaskUploads() {} });
-    source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', {});
+    source('src/lib/createTaskAttachmentUploads.ts', { discardUnboundCreateTaskUploads() {}, bindCreateTaskUploads() {} });
+    source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', { default: async (body) => {
+      taskSaves.push(body);
+      return { resposne: { newTask: { id: 91, projectId: body.projectId, sectionId: 12, uniqueIndex: 44, ticketNumber: 'QASA-44' } } };
+    } });
     const compose = realExports(path.join(root, 'src/lib/ai/composeTask.ts'));
-    source('src/lib/ai/composeTask.ts', { ...compose, createComposedTask: (body) => new Promise((resolve, reject) => requests.push({ body, resolve, reject })) });
+    if (config.taskWriterFetch) global.fetch = config.taskWriterFetch;
+    source('src/lib/ai/composeTask.ts', { ...compose, createComposedTask: config.taskWriterFetch ? compose.createComposedTask
+      : (body) => new Promise((resolve, reject) => requests.push({ body, resolve, reject })) });
     const Thumbnails = ({ files, handleRemove }) => React.createElement('div', { 'data-thumbnails': true }, files.map(({ file }) => React.createElement('button', { key: file.name, onClick: () => handleRemove(file.name), 'aria-label': `Remove ${file.name}` }, React.createElement('img', { alt: file.name }), file.name)));
     const gallery = config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails;
     source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: (props) => React.createElement(gallery, props) });
@@ -411,7 +417,7 @@ async function withPalette(t, config, check) {
     });
     replacingStubs = true;
     const boardsArrive = () => { if (!releaseBoards) return Promise.resolve(); return React.act(async () => { releaseBoards(config.coldBoards); }); };
-    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, boardsArrive, headerState: () => headerState, legacyJ: () => legacyJ });
+    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, taskSaves, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, boardsArrive, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {
