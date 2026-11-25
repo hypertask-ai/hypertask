@@ -208,3 +208,55 @@ test("flag off: a click on empty board space keeps the selection", () => {
     assert.deepEqual(b.ids, [1]);
   } finally { b.close(); }
 });
+
+function barHarness({ enabled = true, mobile = false } = {}) {
+  const ui = mount();
+  let count = 0;
+  const load = loader({
+    "@/hooks/useFlag": { useFlag: key => key === flagKey && enabled },
+    "@/lib/contexts/Kanban/BulkSelectionContext": { useKanbanBulkSelection: () => ({
+      selectedCount: count, failedIds: new Set(), isProcessing: false,
+      archiveSelected: async () => {}, openBulkCommand: () => {}, clearSelection: () => {},
+    }) },
+    "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
+  });
+  const Bar = load("src/components/PageComponents/Kanban/KanbanHomepageComponents/KanbanBulkActionBar.tsx").default;
+  const select = (next) => {
+    count = next;
+    ui.render(React.createElement(Bar));
+  };
+  return {
+    select,
+    text: () => ui.container.textContent,
+    close: () => ui.close(),
+  };
+}
+
+const hintPattern = /Ctrl\+click or Shift\+click for more/;
+
+test("flag on: the selection bar shows the mouse hint once", () => {
+  const b = barHarness();
+  try {
+    b.select(1);
+    assert.match(b.text(), hintPattern);
+    b.select(0);
+    b.select(1);
+    assert.doesNotMatch(b.text(), hintPattern);
+  } finally { b.close(); }
+});
+
+test("flag off: the selection bar shows no mouse hint", () => {
+  const b = barHarness({ enabled: false });
+  try {
+    b.select(1);
+    assert.doesNotMatch(b.text(), hintPattern);
+  } finally { b.close(); }
+});
+
+test("flag on and phone layout: the selection bar shows no mouse hint", () => {
+  const b = barHarness({ mobile: true });
+  try {
+    b.select(1);
+    assert.doesNotMatch(b.text(), hintPattern);
+  } finally { b.close(); }
+});
