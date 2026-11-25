@@ -1,37 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const ts = require('typescript');
+const { loadModule } = require('./helpers/loadModule.cjs');
 const React = require('react');
 const { JSDOM } = require('jsdom');
 
 const layoutKey = 'htpr-9277-boat-dev-model';
 const agentKey = 'htpr-7552-agent-code-signin';
 const flags = { HTPR_9277_BOAT_DEV_MODEL_FLAG: layoutKey, HTPR_7552_AGENT_CODE_SIGNIN_FLAG: agentKey };
-
-function loader(mocks) {
-  const cache = new Map();
-  return function load(file) {
-    const absolute = path.resolve(file);
-    if (cache.has(absolute)) return cache.get(absolute).exports;
-    const compiled = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), {
-      fileName: absolute,
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-    }).outputText;
-    const mod = { exports: {} };
-    cache.set(absolute, mod);
-    new Function('require', 'module', 'exports', compiled)((name) => {
-      if (name in mocks) return { __esModule: true, ...mocks[name] };
-      if (!name.startsWith('.')) return require(name);
-      const base = path.resolve(path.dirname(absolute), name);
-      const next = [base + '.tsx', base + '.ts', base + '/index.tsx'].find(fs.existsSync);
-      assert.ok(next, `Missing import ${name}`);
-      return load(next);
-    }, mod, mod.exports);
-    return mod.exports;
-  };
-}
 
 async function withLogin(props, check) {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'https://example.test/login' });
@@ -46,7 +21,8 @@ async function withLogin(props, check) {
       calls.push({ url, ...options });
       return { ok: true, json: async () => ({ success: true }) };
     };
-    const load = loader({
+    const mocks = {
+      'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
       'next/navigation': { useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push() {} }) },
       'next/font/google': { Newsreader: () => ({ className: 'newsreader' }) },
       'next/image': { default: ({ priority, ...rest }) => React.createElement('img', rest) },
@@ -63,8 +39,8 @@ async function withLogin(props, check) {
       '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null, POST_LOGIN_REDIRECT_STORAGE_KEY: 'returnTo' },
       '@/lib/analytics/signupIdentityClient': { getSignupContextInput: async () => ({}) },
       '@/utils/undoActions/helperFuncs': { cn: (...parts) => parts.filter(Boolean).join(' ') },
-    });
-    const Component = load('src/app/login/LoginComponent.tsx').default;
+    };
+    const Component = loadModule('src/app/login/LoginComponent.tsx', mocks).default;
     root = require('react-dom/client').createRoot(dom.window.document.getElementById('root'));
     await React.act(async () => root.render(React.createElement(Component, props)));
     await check({ container: dom.window.document.getElementById('root'), calls, dom });
@@ -136,7 +112,7 @@ test('still allowed: flag-on Google starts sign-in and email sends the existing 
 });
 
 test('flag definition stays an improvement released to Owner + QA for design review', () => {
-  const definition = loader({})('src/lib/flags/definitions/htpr-9277-boat-dev-model.ts').default;
+  const definition = loadModule('src/lib/flags/definitions/htpr-9277-boat-dev-model.ts').default;
   assert.equal(definition.key, layoutKey);
   assert.equal(definition.kind, 'improvement');
   assert.equal(definition.defaultMode, 'OWNER_AND_QA');
@@ -147,7 +123,7 @@ for (const user of [null, { userId: 985, source: 'legacy' }, { userId: 985, agen
   for (const layout of [false, true]) for (const agent of [false, true]) {
     test(`agent route user=${JSON.stringify(user)} layout=${layout} agent=${agent}`, async () => {
       const approved = [];
-      const load = loader({
+      const mocks = {
         'next/headers': { headers: async () => new Headers() },
         'next/navigation': { notFound: () => { throw Error('notFound'); }, redirect: (url) => { throw Error(url); } },
         '@/lib/auth/currentUser': { loadCurrentUser: async () => user },
@@ -157,10 +133,10 @@ for (const user of [null, { userId: 985, source: 'legacy' }, { userId: 985, agen
           assert.ok([layoutKey, agentKey].includes(key));
           return key === layoutKey ? layout : agent;
         } },
-      });
+      };
       const allowed = layout && agent && user && !user.agentId && user.source !== 'cli-bearer';
       const expected = !layout || !agent || (user && !allowed) ? 'notFound' : user ? '/cli-auth?agent=1' : '/login?returnTo=%2Flogin%2Fagent';
-      await assert.rejects(load('src/app/login/agent/page.ts').default, error => error.message === expected);
+      await assert.rejects(loadModule('src/app/login/agent/page.ts', mocks).default, error => error.message === expected);
       assert.deepEqual(approved, allowed ? [985] : []);
     });
   }
@@ -168,7 +144,7 @@ for (const user of [null, { userId: 985, source: 'legacy' }, { userId: 985, agen
 
 test('server login evaluates both flags for the real session and keeps guests out of restricted UI', async () => {
   for (const userId of [null, 985]) for (const layout of [false, true]) for (const agent of [false, true]) {
-    const load = loader({
+    const mocks = {
       'next/headers': { cookies: async () => ({ get: () => undefined }) },
       '@/lib/auth/session': { SESSION_COOKIE: 'ht_session', verifySession: () => userId === null ? null : { id: userId } },
       '@/lib/telemetry/activationAnalytics': { isActivationEligible: async () => false },
@@ -179,8 +155,8 @@ test('server login evaluates both flags for the real session and keeps guests ou
         assert.equal(id, userId ?? 0);
         return id === 985 && (key === layoutKey ? layout : agent);
       } },
-    });
-    const tree = await load('src/app/login/page.tsx').default();
+    };
+    const tree = await loadModule('src/app/login/page.tsx', mocks).default();
     const login = tree.props.children[2];
     assert.equal(login.type, 'LoginComponent');
     assert.deepEqual(login.props, layout && userId === 985 ? { boatDevModel: true, agentCodeSignIn: agent } : {});

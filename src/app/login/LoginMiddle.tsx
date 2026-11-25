@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/utils/undoActions/helperFuncs";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   FormEvent,
@@ -327,9 +328,9 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
 
       {boatDevModel && agentCodeSignIn && (
         <div className="mt-6 border-t border-border-light-gray-thin pt-6">
-          <a href="/login/agent" className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border">
+          <Link href="/login/agent" className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border">
             Sign in an agent
-          </a>
+          </Link>
           <p className="mt-2 text-meta text-text-light-gray">Connect your agent with a sign-in code.</p>
         </div>
       )}

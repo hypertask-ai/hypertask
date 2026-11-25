@@ -5,7 +5,6 @@ import { cookies } from "next/headers";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { isActivationEligible } from "@/lib/telemetry/activationAnalytics";
 import SignupPageViewed from "./SignupPageViewed";
-import { HTPR_9277_BOAT_DEV_MODEL_FLAG, HTPR_7552_AGENT_CODE_SIGNIN_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 export const metadata: Metadata = {
@@ -38,6 +37,7 @@ const Login = async () => {
 		enabled = false;
 	}
 	try {
+		const { HTPR_9277_BOAT_DEV_MODEL_FLAG, HTPR_7552_AGENT_CODE_SIGNIN_FLAG, isFeatureEnabled } = await import("@/lib/flags");
 		const boatDevModel = await isFeatureEnabled(HTPR_9277_BOAT_DEV_MODEL_FLAG, userId ?? 0);
 		if (boatDevModel) {
 			const agentCodeSignIn = await isFeatureEnabled(HTPR_7552_AGENT_CODE_SIGNIN_FLAG, userId ?? 0);
