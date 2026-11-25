@@ -54,6 +54,8 @@ creates only fixtures its own cleanup removes, and never prints a cookie, token 
 
 Settings CLI screenshots (desktop and phone, four themes when the layout changed), the llms.txt lines, and the install transcript with the version or checksum line. For login, collect redacted JSON/human output, exit status, elapsed fallback time and confirmation the token stayed saved, never its value.
 
+Onboarding starter task: only a board created after the deploy carries the new sentence, and a free account at its three-board cap cannot create one. On a QA account with a free slot, `POST /api/ai/generate-board` with `{"skipAi":true}` creates the board; read the Terminal / CLI sentence on its first task and require bare `hypertask login` opening the browser while `htpr-9530-onboarding-cli-browser-login` is on.
+
 ### Cleanup
 
 Delete the scratch install folders and temporary login homes. Nothing is written to the board.
