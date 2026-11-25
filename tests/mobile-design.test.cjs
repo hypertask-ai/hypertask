@@ -26,6 +26,9 @@ test('mobile design ratchet compares stable violation identities and catches sub
   assert.deepEqual(mod.evaluateMobileDesign('board-kanban', 'porcelain', atBase, baseline).failures, [])
   const res = mod.evaluateMobileDesign('board-kanban', 'porcelain', m({ elements: [...atBase.elements.slice(1), el({ key: 'b:new', stableId: 'button[aria=New tiny icon]', label: 'New tiny icon', w: 20, h: 20 })] }), baseline)
   assert.equal(res.failures.length, 1); assert.match(res.failures[0], /board-kanban.*rule=tap-target.*New tiny icon/)
+  const drift = m({ elements: [el({ key: 'd:1', stableId: 'div:Column 7', label: 'Column 7', w: 20, h: 20 })] }), driftBase = { screens: { inbox: { porcelain: { 'tap-target': ['div:Column 1', 'div:Column 2'] } } } }
+  assert.deepEqual(mod.evaluateMobileDesign('inbox', 'porcelain', drift, driftBase).failures, [], 'a changed count keeps the identity')
+  assert.equal(mod.evaluateMobileDesign('inbox', 'porcelain', m({ elements: [el({ key: 'd:2', stableId: 'button#task-2', label: 'Task', w: 20, h: 20 })] }), { screens: { inbox: { porcelain: { 'tap-target': ['button#task-1'] } } } }).failures.length, 1, 'a stable element id keeps its digits')
   for (const [tag, attrs, exp] of [['select', {}, false], ['button', { role: 'combobox' }, false], ['input', { type: 'checkbox' }, false], ['input', { type: 'text' }, true], ['input', { type: 'search' }, true], ['textarea', {}, true], ['div', { contenteditable: 'true' }, true], ['div', { role: 'textbox' }, true]]) assert.equal(mod.classifyTextField(tag, attrs).is, exp, tag)
   for (const screen of mod.MOBILE_SCREENS) assert.ok(screen.ready, `${screen.id} has no readiness landmark`)
   assert.deepEqual(mod.evaluateMobileDesign('inbox', 'porcelain', m({ elements: [el({ label: 'Card surface', interactive: false, w: 120, h: 20 }), el({ tag: 'a', role: '', label: 'inline prose link', display: 'inline', w: 60, h: 20, proseLink: true })] }), null, true).failures, [])

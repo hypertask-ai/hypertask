@@ -131,11 +131,12 @@ export function findViolations(screen: string, theme: string, m: MobileScreenMet
   const occ = new Map<string, number>(); for (const v of out) { const k = `${v.rule}|${v.id}`, n = (occ.get(k) ?? 0) + 1; occ.set(k, n); if (n > 1) v.id = `${v.id}~${n}` }
   return out
 }
+export const stableKey = (id: string) => { const occ = /~\d+$/.exec(id)?.[0] ?? '', bare = occ ? id.slice(0, -occ.length) : id, sep = bare.indexOf(':'); return (sep < 0 ? bare : `${bare.slice(0, sep)}:${bare.slice(sep + 1).replace(/\d+/g, '#')}`) + occ }
 export function evaluateMobileDesign(screen: string, theme: string, metrics: MobileScreenMetrics, baseline: MobileDesignBaseline | null, strict = false) {
   const violations = findViolations(screen, theme, metrics), idsByRule = {} as Record<MobileRule, string[]>, counts = {} as Record<MobileRule, number>, failures: string[] = []
   for (const rule of MOBILE_RULES) {
-    const byId = new Map<string, MobileViolation>(); for (const v of violations) if (v.rule === rule && !byId.has(v.id)) byId.set(v.id, v)
-    const ids = [...byId.keys()].sort(), allowed = strict ? new Set<string>() : new Set(baseline?.screens?.[screen]?.[theme]?.[rule] ?? []), regressed = ids.filter((id) => !allowed.has(id)).map((id) => byId.get(id)!)
+    const byId = new Map<string, MobileViolation>(); for (const v of violations) if (v.rule === rule && !byId.has(stableKey(v.id))) byId.set(stableKey(v.id), v)
+    const ids = [...byId.keys()].sort(), allowed = strict ? new Set<string>() : new Set((baseline?.screens?.[screen]?.[theme]?.[rule] ?? []).map(stableKey)), regressed = ids.filter((id) => !allowed.has(id)).map((id) => byId.get(id)!)
     idsByRule[rule] = ids; counts[rule] = ids.length
     if (regressed.length) failures.push(`[${screen}/${theme}] rule=${rule}: ${regressed.length} new violation(s) not in baseline — ${regressed.slice(0, 5).map((v) => `${v.element} [${v.measured}] (id=${v.id})`).join('; ')}`)
   }
