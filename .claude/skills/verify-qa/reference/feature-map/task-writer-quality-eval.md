@@ -19,7 +19,7 @@
 GitHub Actions: Task writer live eval. No app UI changes.
 Sources: `scripts/task-writer-eval.cjs`, `.github/workflows/task-writer-eval.yml`.
 
-Ctrl+J (Cmd+J on a Mac) opens New Task from a board. The writer draft, priority, and duplicate sentence show on the saved ticket. The New Task window and the AI writer on a ticket are the screens that record a writer note for board memory. Timing shows up on the `app_task_create_latency` event as `ai_task_writer_ms` and `ai_title_ms`, not as new copy on the ticket.
+The one screen worth opening is the writer window: the board path is exactly `/project?id={id}`, and Ctrl+J (Cmd+J on a Mac) opens New Task there. That window is the writer surface and it opens without a model call, because the draft is only requested once a note is sent, so open it and capture it rather than typing a note. On phone the rail shows only the plus icon, so reach the window with the Ctrl+J key press instead of a rail label. The writer draft, priority, and duplicate sentence show on the saved ticket. The New Task window and the AI writer on a ticket are the screens that record a writer note for board memory. Timing shows up on the `app_task_create_latency` event as `ai_task_writer_ms` and `ai_title_ms`, not as new copy on the ticket.
 
 Agent creates that must follow the plain-language block or the house writing rules go through the agent task tools, including POST /api/mcp/tasks/create. An agent save from the app uses POST /api/tasks/createGlobally. Boards 15 and 4060 are the internal boards for the plain-language block. The Valentin Review column is a section on those boards, not a separate page.
 
