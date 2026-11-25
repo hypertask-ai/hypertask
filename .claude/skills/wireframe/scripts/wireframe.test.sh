@@ -688,6 +688,7 @@ assert "Phone layout" in body and "Desktop layout" not in body
 assert 'font-family:"IBM Plex Sans"' in body or 'font-family: "IBM Plex Sans"' in body
 ok("new --mobile clones the live phone page, keeps real CSS and fonts, strips scripts, adds the ticket link and publishes")
 
+app_page.with_name("screen.json").write_text(json.dumps({"sourceUrl": app_url + "/screen.html"}))
 for bad_state, message in ((D / "missing-state.json", "QA storage state is missing"), (D / "expired-state.json", "QA session required"), (D / "wrong-user.json", "QA session required")):
     if bad_state.name != "missing-state.json":
         data = json.loads(state.read_text())
