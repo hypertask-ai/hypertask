@@ -33,7 +33,8 @@ VIEWPORTS = {"mobile": (390, 844), "desktop": (1440, 900)}
 RADII = (0.0, 2.0, 4.0)
 CAPTURE_MAX_AGE = timedelta(days=14)
 QA_STATE = Path("~/.config/hypertask-videos/storageState-qa.json").expanduser()
-APP = os.environ.get("WIREFRAME_APP_BASE") or "https://app.hypertask.ai"
+APP = "https://app.hypertask.ai"
+CAPTURE_BASE = os.environ.get("WIREFRAME_APP_BASE") or APP
 TOKEN_MESSAGE = ("publish refused: this page uses fonts, colours, sizes or radii outside the app's design system; "
                  "start from `wireframe new <TICKET>` (the live-app base kit) and reuse its classes")
 TODAY_MESSAGE = ("publish refused: live captures of the changed screen are missing; run: wireframe capture <TICKET> <app URL path> "
@@ -44,6 +45,8 @@ LIVE_STYLES_MESSAGE = ("publish refused: create {record} beside index.html using
 BASE_IDENTITY_MESSAGE = ("publish refused: base.html changed after it was recorded, or has no base.json beside it; "
                          "the base is what exempts copied live CSS, so rerun `wireframe new <TICKET> --mobile <app URL path>` "
                          "in a fresh folder instead of editing it")
+CAPTURE_ORIGIN_MESSAGE = ("publish refused: today.json says the captures came from {origin}, not https://app.hypertask.ai; "
+                          "WIREFRAME_APP_BASE is for local capture tests only, so take the eight screenshots from the live app")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -265,8 +268,30 @@ const check = (row) => {
     }
     return problems.length ? row.tag + ' uses ' + [...new Set(problems)].join(', ') : null;
 };
+const SWITCHERS = ['data-option', 'data-viewer', 'data-theme', 'data-panel'];
 (async () => {
     const browser = await chromium.launch({ headless: true });
+    const problems = [];
+    const checkRows = (rows, baseRows, width, height) => {
+        const base = new Map();
+        for (const row of baseRows) {
+            if (!row.key) continue;
+            if (!base.has(row.key)) base.set(row.key, []);
+            base.get(row.key).push(JSON.stringify(row));
+        }
+        for (const row of rows) {
+            const identity = JSON.stringify(row);
+            const seen = row.key ? base.get(row.key) : null;
+            const at = seen ? seen.indexOf(identity) : -1;
+            if (at >= 0) {
+                seen.splice(at, 1);
+                continue;
+            }
+            const problem = check(row);
+            const detail = width + 'x' + height + ': ' + problem;
+            if (problem && !problems.includes(detail)) problems.push(detail);
+        }
+    };
     try {
         const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, javaScriptEnabled: false, serviceWorkers: 'block', offline: true });
         await page.route('**/*', (route) => route.abort());
@@ -274,18 +299,33 @@ const check = (row) => {
             await page.setContent(fs.readFileSync(file, 'utf8'), { waitUntil: 'load' });
             return page.evaluate(collect);
         };
-        const problems = [];
+        const switched = async (html, width, height) => {
+            const runtime = await browser.newPage({ viewport: { width, height }, serviceWorkers: 'block', offline: true });
+            try {
+                await runtime.route('**/*', (route) => route.abort());
+                await runtime.setContent(html, { waitUntil: 'load' });
+                const states = [await runtime.evaluate(collect)];
+                for (const [attribute, value] of await runtime.evaluate((names) => names.flatMap((name) =>
+                    [...new Set([...document.querySelectorAll('[' + name + ']')].map((el) => el.getAttribute(name)))]
+                        .map((state) => [name, state])), SWITCHERS)) {
+                    await runtime.evaluate(([name, state]) => {
+                        const el = [...document.querySelectorAll('[' + name + ']')].find((node) => node.getAttribute(name) === state);
+                        if (el) el.click();
+                    }, [attribute, value]);
+                    await runtime.waitForTimeout(50);
+                    states.push(await runtime.evaluate(collect));
+                }
+                return states;
+            } finally {
+                await runtime.close();
+            }
+        };
         for (const [width, height] of [[390, 844], [1440, 900]]) {
             await page.setViewportSize({ width, height });
-            const base = new Map((await load(process.argv[3])).filter((row) => row.key).map((row) => [row.key, JSON.stringify(row)]));
-            for (const row of await load(process.argv[2])) {
-                const unchanged = row.key && base.get(row.key) === JSON.stringify(row);
-                base.delete(row.key);
-                if (unchanged) continue;
-                const problem = check(row);
-                const detail = width + 'x' + height + ': ' + problem;
-                if (problem && !problems.includes(detail)) problems.push(detail);
-            }
+            const baseRows = (await load(process.argv[3]))
+                .concat((await switched(fs.readFileSync(process.argv[3], 'utf8'), width, height)).flat());
+            checkRows(await load(process.argv[2]), baseRows, width, height);
+            for (const rows of await switched(fs.readFileSync(process.argv[2], 'utf8'), width, height)) checkRows(rows, baseRows, width, height);
         }
         console.log(JSON.stringify({ ok: problems.length === 0, problems: problems.slice(0, 8) }));
     } finally {
@@ -375,7 +415,9 @@ def read_manifest(file):
         seen.add((theme, viewport))
         source_url = urlparse(source)
         app_url = urlparse(APP)
-        if source_url.scheme != app_url.scheme or source_url.netloc != app_url.netloc or len(source_url.path) < 2:
+        if source_url.scheme != app_url.scheme or source_url.netloc != app_url.netloc:
+            raise SystemExit(CAPTURE_ORIGIN_MESSAGE.format(origin=f"{source_url.scheme}://{source_url.netloc}"))
+        if len(source_url.path) < 2:
             raise SystemExit(TODAY_MESSAGE)
         try:
             captured = datetime.fromisoformat(str(entry.get("capturedAt")).replace("Z", "+00:00"))
@@ -652,21 +694,21 @@ def capture(ticket, route):
             expected_source = json.loads(screen.read_text())["sourceUrl"]
         except (OSError, ValueError, KeyError, TypeError):
             raise SystemExit(f"capture refused: invalid {screen}; start from wireframe new {ticket}")
-        if expected_source != APP + route:
+        if expected_source != CAPTURE_BASE + route:
             raise SystemExit(f"capture source does not match the cloned screen in {screen}; run wireframe capture {ticket} with that app URL path")
     shots = folder.parent / "today"
     shots.mkdir(exist_ok=True)
     state = qa_state()
-    node(CAPTURE_JS, APP, route, shots, state)
+    node(CAPTURE_JS, CAPTURE_BASE, route, shots, state)
     captured = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     manifest = [{"file": f"today/{name}-{theme}.png", "viewport": f"{VIEWPORTS[name][0]}x{VIEWPORTS[name][1]}",
-                 "theme": theme, "sourceUrl": APP + route, "capturedAt": captured}
+                 "theme": theme, "sourceUrl": CAPTURE_BASE + route, "capturedAt": captured}
                 for theme in THEMES for name in ("mobile", "desktop")]
     for entry in manifest:
         image = folder.parent / entry["file"]
         if not image.is_file() or png_dimensions(image.read_bytes()) != VIEWPORTS["mobile" if entry["viewport"] == "390x844" else "desktop"]:
             raise SystemExit(f"capture failed: no complete {entry['viewport']} PNG at {image}")
-    screen.write_text(json.dumps({"sourceUrl": APP + route}) + "\n")
+    screen.write_text(json.dumps({"sourceUrl": CAPTURE_BASE + route}) + "\n")
     (folder.parent / "today.json").write_text(json.dumps(manifest, indent=2) + "\n")
     figures = []
     for entry in manifest:
@@ -692,7 +734,7 @@ def mobile_base(ticket, route):
     handle, path = tempfile.mkstemp(suffix=".html")
     os.close(handle)
     try:
-        node(CLONE_JS, APP + route, path, VIEWPORTS["mobile"][0], VIEWPORTS["mobile"][1], state)
+        node(CLONE_JS, CAPTURE_BASE + route, path, VIEWPORTS["mobile"][0], VIEWPORTS["mobile"][1], state)
         cloned = Path(path).read_text()
     finally:
         Path(path).unlink(missing_ok=True)
@@ -702,7 +744,7 @@ def mobile_base(ticket, route):
     dst.write_text(cloned)
     shutil.copy(dst, dst.with_name("base.html"))
     record_base(dst.with_name("base.html"))
-    dst.with_name("screen.json").write_text(json.dumps({"sourceUrl": APP + route}) + "\n")
+    dst.with_name("screen.json").write_text(json.dumps({"sourceUrl": CAPTURE_BASE + route}) + "\n")
     print(dst)
 
 

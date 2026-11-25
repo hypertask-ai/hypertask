@@ -109,6 +109,7 @@ TURL = "https://app.hypertask.ai/detail/project-15/255"
 TOKENS = f"publish refused: this page uses fonts, colours, sizes or radii outside the app's design system; start from `wireframe new <TICKET>` (the live-app base kit) and reuse its classes"
 TODAY = "publish refused: live captures of the changed screen are missing; run: wireframe capture <TICKET> <app URL path> to take 390x844 and 1440x900 screenshots in Porcelain, Graphite, AMOLED and Dia and show them in a Today section"
 BASE_IDENTITY = "publish refused: base.html changed after it was recorded, or has no base.json beside it; the base is what exempts copied live CSS, so rerun `wireframe new <TICKET> --mobile <app URL path>` in a fresh folder instead of editing it"
+CAPTURE_ORIGIN = "publish refused: today.json says the captures came from {origin}, not https://app.hypertask.ai; WIREFRAME_APP_BASE is for local capture tests only, so take the eight screenshots from the live app"
 
 def invoke(*args, fail=False, **env):
     logfile.write_text("")
@@ -145,6 +146,15 @@ def png_for(width, height):
 def record_base(folder):
     """Write the base identity publish checks, as `wireframe new` does."""
     (folder / "base.json").write_text(json.dumps({"sha256": hashlib.sha256((folder / "base.html").read_bytes()).hexdigest()}))
+
+def live_captures(folder, route="/screen.html"):
+    """Point captured evidence at the production origin publish trusts."""
+    manifest = folder / "today.json"
+    data = json.loads(manifest.read_text())
+    for entry in data:
+        entry["sourceUrl"] = "https://app.hypertask.ai" + route
+    manifest.write_text(json.dumps(data))
+    (folder / "screen.json").write_text(json.dumps({"sourceUrl": "https://app.hypertask.ai" + route}))
 
 def add_today(folder):
     screen = folder / "screen.json"
@@ -468,6 +478,23 @@ page.write_text(valid_page)
 add_today(page.parent)
 ok("styles inside hidden variant panels are refused, so a switcher cannot hide off-token values")
 
+bad_panel = '<div style="color:#ff0000;border-radius:19px">Runtime option B</div>'
+runtime_variant = ('<button data-option="b">Option B</button><div id="runtime-panel"></div><script>'
+                   'document.addEventListener("click", function (event) { if (event.target.dataset.option) '
+                   'document.getElementById("runtime-panel").innerHTML = ' + json.dumps(bad_panel) + '; });</script>')
+page.write_text(valid_page.replace("</body>", runtime_variant + "</body>"))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "radius 19px" in p.stderr and not events(log, "http")
+good_variant = runtime_variant.replace("#ff0000", "#4455bb").replace("19px", "4px")
+page.write_text(valid_page.replace("</body>", good_variant + "</body>"))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment")
+assert len(uploaded(log, "waiting")) == 1
+page.write_text(valid_page)
+add_today(page.parent)
+ok("a variant panel a click handler builds at runtime is checked, so a switcher cannot add off-token values after load")
+
 for viewport, media in (("390x844", "max-width:600px"), ("1440x900", "min-width:1000px")):
     page.write_text(valid_page.replace("</style>", "@media (" + media + "){body{background-color:#ff0000}}</style>"))
     add_today(page.parent)
@@ -636,9 +663,12 @@ manifest = json.loads((app_page.parent / "today.json").read_text())
 assert len(manifest) == 8 and {(e["theme"], e["viewport"]) for e in manifest} == {(t, v) for t in ("porcelain", "graphite", "amoled", "dia") for v in ("390x844", "1440x900")}
 assert all((app_page.parent / e["file"]).read_bytes()[:8] == b"\x89PNG\r\n\x1a\n" for e in manifest)
 assert app_page.read_text().count('data-capture="') == 8
-p, log = invoke("publish", "HTPR-400", "--no-comment", **qa_env)
+p, log = invoke("publish", "HTPR-400", "--no-comment", fail=True, **qa_env)
+assert p.stderr.strip() == CAPTURE_ORIGIN.format(origin=app_url) and not events(log, "http")
+live_captures(app_page.parent)
+p, log = invoke("publish", "HTPR-400", "--no-comment")
 assert len(uploaded(log, "waiting", "HTPR-400")) == 1
-ok("capture takes eight live screenshots, writes today.json and the page publishes from the base kit")
+ok("capture takes eight live screenshots in today.json, and publish refuses them until sourceUrl reads the live app origin")
 
 invoke("new", "HTPR-401", "--mobile", "/screen.html", **qa_env)
 cloned = home / "HTPR-401/index.html"
@@ -649,7 +679,10 @@ assert f'href="{TURL}"' in body and "HTPR-401" in body
 assert "Live task entry" in body
 (cloned.parent / "live-styles.json").write_text(json.dumps(styles))
 add_today(cloned.parent)
-p, log = invoke("publish", "HTPR-401", "--no-comment", **qa_env)
+p, log = invoke("publish", "HTPR-401", "--no-comment", fail=True, **qa_env)
+assert p.stderr.strip() == CAPTURE_ORIGIN.format(origin=app_url) and not events(log, "http")
+live_captures(cloned.parent)
+p, log = invoke("publish", "HTPR-401", "--no-comment")
 assert len(uploaded(log, "waiting", "HTPR-401")) == 1
 assert "Phone layout" in body and "Desktop layout" not in body
 assert 'font-family:"IBM Plex Sans"' in body or 'font-family: "IBM Plex Sans"' in body
