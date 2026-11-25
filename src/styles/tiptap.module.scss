@@ -1,3 +1,5 @@
+@reference "tailwind-entry.css";
+
 // we need to clean this file up someday.
 
 .ProseMirror {
@@ -641,5 +643,7 @@
   
   }
 
-  
+  .aiChatInput .editorContainer p {
+    @apply text-emphasis;
+  }
 }
