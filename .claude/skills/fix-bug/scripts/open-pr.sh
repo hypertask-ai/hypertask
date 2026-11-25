@@ -184,20 +184,17 @@ preflight() {
 }
 
 owner_name() {  # who this session is, the way the rest of the repo names it
-  local name=${SHIP_SESSION_NAME:-}
-  if [ -z "$name" ]; then
-    name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity") || return 1
-    name=${name%%$'\t'*}
-  fi
-  printf '%s' "${name%% | *}"
+  local name
+  name=$("$REPO_ROOT/.claude/skills/ship/scripts/ship-identity") || return 1
+  printf '%s' "${name%%$'\t'*}"
 }
 
 refuse_second_pr() {  # HTPR-9519: one open PR per runner at a time
   local name branch prs mine
   name="$(owner_name)" \
-    || die "the session identity could not be read, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name, or check that .claude/skills/ship/scripts/ship-identity runs; nothing was pushed."
+    || die "this chat has no board login of its own, so $SELF cannot tell whether it already has an open PR." "Add the session token the ship-identity message above names, then re-run; nothing was pushed and no PR was opened."
   [ -n "$name" ] \
-    || die "the session identity is empty, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name and re-run; nothing was pushed."
+    || die "the session identity is empty, so $SELF cannot tell whether this runner already has an open PR." "Set SHIP_SESSION_NAME to this session's name, add its session token, then re-run; nothing was pushed."
   case "$name" in
     'Valentins Claude Code') return 0 ;;  # the owner's own session, not a runner
   esac
