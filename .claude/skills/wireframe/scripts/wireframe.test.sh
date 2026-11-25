@@ -96,7 +96,7 @@ chmod +x "$D/bin/stub"
 for cmd in hypertask vcc npx; do ln -s stub "$D/bin/$cmd"; done
 export PATH="$D/bin:$PATH"
 python3 - <<'PY'
-import atexit, base64, html, json, os, re, struct, subprocess, zlib
+import atexit, base64, hashlib, html, json, os, re, struct, subprocess, zlib
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -108,6 +108,7 @@ PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4
 TURL = "https://app.hypertask.ai/detail/project-15/255"
 TOKENS = f"publish refused: this page uses fonts, colours, sizes or radii outside the app's design system; start from `wireframe new <TICKET>` (the live-app base kit) and reuse its classes"
 TODAY = "publish refused: live captures of the changed screen are missing; run: wireframe capture <TICKET> <app URL path> to take 390x844 and 1440x900 screenshots in Porcelain, Graphite, AMOLED and Dia and show them in a Today section"
+BASE_IDENTITY = "publish refused: base.html changed after it was recorded, or has no base.json beside it; the base is what exempts copied live CSS, so rerun `wireframe new <TICKET> --mobile <app URL path>` in a fresh folder instead of editing it"
 
 def invoke(*args, fail=False, **env):
     logfile.write_text("")
@@ -140,6 +141,10 @@ def png_for(width, height):
         return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
     return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
             + chunk(b"IDAT", zlib.compress((b"\0" + b"\xff" * (width * 3)) * height)) + chunk(b"IEND", b""))
+
+def record_base(folder):
+    """Write the base identity publish checks, as `wireframe new` does."""
+    (folder / "base.json").write_text(json.dumps({"sha256": hashlib.sha256((folder / "base.html").read_bytes()).hexdigest()}))
 
 def add_today(folder):
     screen = folder / "screen.json"
@@ -342,6 +347,18 @@ assert p.stderr.strip() == TODAY and not events(log, "http")
 add_today(page.parent)
 ok("embedded Today images must be the declared capture files, not swapped or duplicated ones")
 
+add_today(page.parent)
+shot = page.parent / manifest[0]["file"]
+complete = shot.read_bytes()
+cut = complete[:33]
+shot.write_bytes(cut)
+page.write_text(page.read_text().replace(base64.b64encode(complete).decode(), base64.b64encode(cut).decode()))
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.strip() == TODAY and not events(log, "http")
+shot.write_bytes(complete)
+add_today(page.parent)
+ok("a capture truncated after its header cannot pass as a PNG")
+
 for fixture in ("rejected-ai-chat.html", "rejected-task-entry.html"):
     rejected = (fixtures / fixture).read_text()
     page.write_text(rejected.replace("<body>", "<body>" + link))
@@ -356,6 +373,12 @@ add_today(page.parent)
 p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and not events(log, "http")
 ok("a wireframe that adds an off-token radius is refused")
+
+page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;border-radius:4px/19px">Changed card</div>'))
+add_today(page.parent)
+p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+assert p.stderr.startswith(TOKENS) and "radius" in p.stderr and not events(log, "http")
+ok("an elliptical clause on a token radius is refused")
 
 page.write_text(valid_page.replace('padding:8px">Changed card</div>', 'padding:8px;border:2px solid #ff0000">Changed card</div>'))
 add_today(page.parent)
@@ -435,6 +458,16 @@ for pseudo in ("::before", "::after"):
             assert len(uploaded(log, "waiting")) == 1
 ok("visible pseudo-elements obey tokens while token-coloured and non-painted pseudo-elements pass")
 
+for markup in ('<div hidden style="color:#ff0000">Graphite variant</div>',
+               '<style>.variant{display:none}</style><div class="variant" style="border-radius:19px">Dia variant</div>'):
+    page.write_text(valid_page.replace("</body>", markup + "</body>"))
+    add_today(page.parent)
+    p, log = invoke("publish", "HTPR-255", "--no-comment", fail=True)
+    assert p.stderr.startswith(TOKENS) and not events(log, "http")
+page.write_text(valid_page)
+add_today(page.parent)
+ok("styles inside hidden variant panels are refused, so a switcher cannot hide off-token values")
+
 for viewport, media in (("390x844", "max-width:600px"), ("1440x900", "min-width:1000px")):
     page.write_text(valid_page.replace("</style>", "@media (" + media + "){body{background-color:#ff0000}}</style>"))
     add_today(page.parent)
@@ -447,6 +480,7 @@ invoke("new", "HTPR-402")
 cloned = (kit.read_text().replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:5px;background-color:#262a30">Live 5px</div></body>'))
 (live / "index.html").write_text(cloned.replace("<body>", "<body>" + link))
 (live / "base.html").write_text(cloned)
+record_base(live)
 (live / "live-styles.json").write_text(json.dumps(styles))
 add_today(live)
 p, log = invoke("publish", "HTPR-402", "--no-comment")
@@ -456,6 +490,24 @@ ok("copied live CSS radii pass because the token check skips what the base alrea
 p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
 assert p.stderr.startswith(TOKENS) and "radius 5px" in p.stderr and not events(log, "http")
 ok("new elements cannot borrow a copied live element's off-token exemption")
+
+forged = cloned.replace("</body>", '<div data-wireframe-base="live-radius" style="border-radius:19px;background-color:#262a30">Forged</div></body>')
+(live / "base.html").write_text(forged)
+(live / "index.html").write_text(forged.replace("<body>", "<body>" + link))
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
+assert p.stderr.strip() == BASE_IDENTITY and not events(log, "http")
+(live / "base.html").write_text(cloned)
+(live / "base.json").unlink()
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment", fail=True)
+assert p.stderr.strip() == BASE_IDENTITY and not events(log, "http")
+record_base(live)
+(live / "index.html").write_text(cloned.replace("<body>", "<body>" + link))
+add_today(live)
+p, log = invoke("publish", "HTPR-402", "--no-comment")
+assert len(uploaded(log, "waiting", "HTPR-402")) == 1
+ok("a rewritten base.html or a missing base.json is refused as design-token evidence")
 
 frame_kit = D / "frame-kit.html"
 inner = kit.read_text().replace('</body>', '<div style="border-radius:8px">Copied live radius</div></body>').replace('</style>', 'body::before{content:"Copied live pseudo";border-radius:8px}</style>')

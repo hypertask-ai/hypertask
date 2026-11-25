@@ -21,7 +21,7 @@
 Home: $WIREFRAME_HOME or ~/.local/share/hypertask-wireframes.
 Screenshots: ~/.local/state/vcc-evidence/<TICKET>/wireframe/ at 1440x900.
 """
-import argparse, base64, html, importlib.machinery, importlib.util, json, os, re, shutil, struct, subprocess, sys, tempfile
+import argparse, base64, hashlib, html, importlib.machinery, importlib.util, json, os, re, shutil, struct, subprocess, sys, tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -41,6 +41,10 @@ TODAY_MESSAGE = ("publish refused: live captures of the changed screen are missi
 LIVE_STYLES_MESSAGE = ("publish refused: create {record} beside index.html using headless Playwright getComputedStyle on every "
                        "existing live element as QA user 985; save non-empty JSON entries with sourceUrl on https://app.hypertask.ai "
                        "and styles (or the HTPR-7724 sourceTicket/themes format)")
+BASE_IDENTITY_MESSAGE = ("publish refused: base.html changed after it was recorded, or has no base.json beside it; "
+                         "the base is what exempts copied live CSS, so rerun `wireframe new <TICKET> --mobile <app URL path>` "
+                         "in a fresh folder instead of editing it")
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def share():
@@ -189,9 +193,6 @@ function collect(doc = document, prefix = '') {
     const solid = (value) => value && value !== 'none' && value !== 'transparent' && value !== 'rgba(0, 0, 0, 0)';
     for (const el of doc.body ? [doc.documentElement, doc.body, ...doc.body.querySelectorAll('*')] : []) {
         if (el.closest('[data-wireframe-today]')) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) continue;
-        if (el.checkVisibility && !el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
         for (const pseudo of ['', '::before', '::after']) {
             const style = getComputedStyle(el, pseudo || null);
             if (pseudo && (['none', 'normal'].includes(style.content) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0)) continue;
@@ -249,6 +250,7 @@ const rgba = (value) => {
     return channels.join(' ');
 };
 const px = (value) => value.endsWith('px') ? parseFloat(value) : NaN;
+const corners = (value) => value.split(/[\s/]+/).filter(Boolean).map(px);
 const check = (row) => {
     const family = fontFamily(row.font);
     const problems = [];
@@ -259,7 +261,7 @@ const check = (row) => {
         if (!colors.has(rgba(color))) problems.push(kind + ' ' + color);
     }
     for (const corner of row.radii) {
-        if (!radii.has(px(corner))) problems.push('radius ' + corner);
+        if (corners(corner).some((value) => !radii.has(value))) problems.push('radius ' + corner);
     }
     return problems.length ? row.tag + ' uses ' + [...new Set(problems)].join(', ') : null;
 };
@@ -293,11 +295,44 @@ const check = (row) => {
 """
 
 
+def png_dimensions(raw):
+    if raw[:8] != PNG_SIGNATURE:
+        return None
+    offset = 8
+    size = None
+    while offset + 12 <= len(raw):
+        length = struct.unpack(">I", raw[offset:offset + 4])[0]
+        kind = raw[offset + 4:offset + 8]
+        end = offset + 12 + length
+        if end > len(raw):
+            return None
+        if size is None:
+            if kind != b"IHDR" or length != 13:
+                return None
+            size = struct.unpack(">II", raw[offset + 8:offset + 16])
+        if kind == b"IEND":
+            return size if length == 0 and end == len(raw) else None
+        offset = end
+    return None
+
+
+def record_base(base):
+    digest = hashlib.sha256(base.read_bytes()).hexdigest()
+    base.with_name("base.json").write_text(json.dumps({"sha256": digest}) + "\n")
+
+
 def token_guard(file):
     tokens = design_tokens()
     tokens["radii"] = list(RADII)
     base = file.with_name("base.html")
     temp = []
+    if base.is_file():
+        try:
+            recorded = json.loads(base.with_name("base.json").read_text())["sha256"]
+        except (OSError, ValueError, KeyError, TypeError):
+            raise SystemExit(BASE_IDENTITY_MESSAGE)
+        if hashlib.sha256(base.read_bytes()).hexdigest() != recorded:
+            raise SystemExit(BASE_IDENTITY_MESSAGE)
     if not base.is_file():
         handle, path = tempfile.mkstemp(suffix=".html")
         os.close(handle)
@@ -353,10 +388,7 @@ def read_manifest(file):
             raw = image.read_bytes()
         except OSError:
             raise SystemExit(TODAY_MESSAGE)
-        if image.suffix.lower() != ".png" or raw[:8] != b"\x89PNG\r\n\x1a\n" or len(raw) < 24:
-            raise SystemExit(TODAY_MESSAGE)
-        expected = tuple(int(part) for part in viewport.split("x"))
-        if struct.unpack(">II", raw[16:24]) != expected:
+        if image.suffix.lower() != ".png" or png_dimensions(raw) != tuple(int(part) for part in viewport.split("x")):
             raise SystemExit(TODAY_MESSAGE)
     if seen != {(t, v) for t in THEMES for v in ("390x844", "1440x900")}:
         raise SystemExit(TODAY_MESSAGE)
@@ -632,8 +664,8 @@ def capture(ticket, route):
                 for theme in THEMES for name in ("mobile", "desktop")]
     for entry in manifest:
         image = folder.parent / entry["file"]
-        if not image.is_file() or image.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
-            raise SystemExit(f"capture failed: no PNG at {image}")
+        if not image.is_file() or png_dimensions(image.read_bytes()) != VIEWPORTS["mobile" if entry["viewport"] == "390x844" else "desktop"]:
+            raise SystemExit(f"capture failed: no complete {entry['viewport']} PNG at {image}")
     screen.write_text(json.dumps({"sourceUrl": APP + route}) + "\n")
     (folder.parent / "today.json").write_text(json.dumps(manifest, indent=2) + "\n")
     figures = []
@@ -669,6 +701,7 @@ def mobile_base(ticket, route):
     cloned = re.sub(r"(<body[^>]*>)", lambda match: match.group(1) + link, cloned, count=1)
     dst.write_text(cloned)
     shutil.copy(dst, dst.with_name("base.html"))
+    record_base(dst.with_name("base.html"))
     dst.with_name("screen.json").write_text(json.dumps({"sourceUrl": APP + route}) + "\n")
     print(dst)
 
@@ -759,6 +792,7 @@ def main():
         shutil.copy(kit, dst)
         stamp_base(dst)
         shutil.copy(dst, dst.with_name("base.html"))
+        record_base(dst.with_name("base.html"))
         print(dst)
     elif cmd == "capture":
         if len(a) < 3:
