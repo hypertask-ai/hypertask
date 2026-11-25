@@ -596,6 +596,10 @@ export async function updateTaskSingle(
           updateData.projectId !== currentState.projectId ||
           updateData.uniqueIndex !== currentState.uniqueIndex
         ) {
+          const sourcePrefix = currentState.ticketNumber?.trim()
+            ? null
+            : (await tx.project.findUnique({ where: { id: currentState.projectId }, select: { uniqueIdentifier: true } }))?.uniqueIdentifier;
+          const aliasTicketNumber = currentState.ticketNumber?.trim() || (sourcePrefix ? `${sourcePrefix}-${currentState.uniqueIndex}` : null);
           await tx.taskNumberAlias.upsert({
             where: {
               projectId_uniqueIndex: {
@@ -606,11 +610,11 @@ export async function updateTaskSingle(
             create: {
               projectId: currentState.projectId,
               uniqueIndex: currentState.uniqueIndex,
-              ticketNumber: currentState.ticketNumber,
+              ticketNumber: aliasTicketNumber,
               taskId: currentState.id,
             },
             update: {
-              ticketNumber: currentState.ticketNumber,
+              ticketNumber: aliasTicketNumber,
               taskId: currentState.id,
             },
           });

@@ -20,7 +20,7 @@ import {
   mapTaskToMcpGetResponse,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
-import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
+import { findReusedKeyCollisions, findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { nameMovedTicketKeys } from '@/lib/mcp/tasks/previousTicketNumbers';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
@@ -82,14 +82,12 @@ export async function GET(request: NextRequest) {
     }
 
     const searchParams = request.nextUrl.searchParams;
-    const taskIdResult = parseRequiredPositiveInteger(searchParams, 'task_id');
-    if (!taskIdResult.ok) return taskIdResult.response;
-
-    const projectIdResult = parseRequiredPositiveInteger(
-      searchParams,
-      'project_id'
-    );
-    if (!projectIdResult.ok) return projectIdResult.response;
+    const rawTicketNumber = searchParams.get('ticket_number')?.trim() || null;
+    const hasUniqueIndex = searchParams.get('unique_index') !== null && searchParams.get('task_id') === null;
+    const idResult = rawTicketNumber ? null : parseRequiredPositiveInteger(searchParams, hasUniqueIndex ? 'unique_index' : 'task_id');
+    if (idResult && !idResult.ok) return idResult.response;
+    const projectIdResult = !rawTicketNumber || searchParams.get('project_id') !== null ? parseRequiredPositiveInteger(searchParams, 'project_id') : null;
+    if (projectIdResult && !projectIdResult.ok) return projectIdResult.response;
 
     const summaryParam = searchParams.get('summary');
     if (
@@ -100,21 +98,24 @@ export async function GET(request: NextRequest) {
       return validationError("summary must be either 'true' or 'false'");
     }
 
-    const taskId = taskIdResult.value;
-    const projectId = projectIdResult.value;
+    const taskId = !rawTicketNumber && !hasUniqueIndex ? idResult!.value : null;
+    const uniqueIndex = !rawTicketNumber && hasUniqueIndex ? idResult!.value : null;
+    const requestedProjectId = projectIdResult ? projectIdResult.value : null;
     const summary = summaryParam === 'true';
 
     const resolvedTask = await findTaskByIdentifier(
       ctx.user,
-      { task_id: taskId },
+      { task_id: taskId, ticket_number: rawTicketNumber, unique_index: uniqueIndex, project_id: taskId != null ? null : requestedProjectId },
       ctx.agentId, undefined, ctx.teamScope
     );
-    if (!resolvedTask || resolvedTask.projectId !== projectId) {
+    const movedFromOldProject = resolvedTask && taskId != null && requestedProjectId != null && resolvedTask.projectId !== requestedProjectId && prisma.taskNumberAlias?.findFirst ? await prisma.taskNumberAlias.findFirst({ where: { taskId: resolvedTask.id, projectId: requestedProjectId }, select: { id: true } }) : null;
+    if (!resolvedTask || (taskId != null && requestedProjectId != null && resolvedTask.projectId !== requestedProjectId && !movedFromOldProject)) {
       return NextResponse.json(
         { success: false, error: 'Task not found or access denied' },
         { status: 404 }
       );
     }
+    const projectId = resolvedTask.projectId;
 
     const commentWhere = {
       taskId: resolvedTask.id,
@@ -310,8 +311,11 @@ export async function GET(request: NextRequest) {
         )
       : undefined;
 
+    const reusedKeyCollisions = typeof findReusedKeyCollisions === 'function' && (rawTicketNumber || uniqueIndex != null) ? await findReusedKeyCollisions(ctx.user, [task], { ticketNumbers: rawTicketNumber ? [rawTicketNumber] : undefined, uniqueIndex, projectId: requestedProjectId }, ctx.agentId, undefined, ctx.teamScope) : [];
+
     return NextResponse.json({
       success: true,
+      ...(reusedKeyCollisions.length ? { reusedKeyCollisions } : {}),
       task: {
         id: mappedTask.id,
         ticketNumber: mappedTask.ticketNumber,

@@ -290,6 +290,7 @@ test("an event missed during initial connection is recovered after subscription"
       "@tanstack/react-query": { useQueryClient: () => queryClient },
       "@/lib/realtime/client": {
         connectRealtimeClient: () => clientPromise,
+        localRealtimeOptedIn: () => false,
         releaseRealtimeClientIfIdle() {},
       },
       "@/lib/projectPlanning": {
@@ -341,10 +342,11 @@ test("an event missed during initial connection is recovered after subscription"
   cleanup?.();
 });
 
-function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}) {
+function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID, hostname = "" } = {}) {
   let cleanup;
   const timers = new Map();
   const listeners = new Map();
+  const expectedDelay = hostname === "127.0.0.1" ? 2_000 : 10_000;
   const originals = {
     setInterval: global.setInterval,
     clearInterval: global.clearInterval,
@@ -353,7 +355,7 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
     navigator: Object.getOwnPropertyDescriptor(global, "navigator"),
   };
   global.setInterval = (callback, delay) => {
-    assert.equal(delay, 10_000);
+    assert.equal(delay, expectedDelay);
     timers.set(callback, callback);
     return callback;
   };
@@ -364,7 +366,7 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
     removeEventListener: (event) => listeners.delete(`${name}:${event}`),
   });
   global.document = target("document", { visibilityState: "visible" });
-  global.window = target("window");
+  global.window = target("window", { location: { hostname } });
   Object.defineProperty(global, "navigator", {
     configurable: true,
     value: { onLine: true },
@@ -388,6 +390,7 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
       "@tanstack/react-query": { useQueryClient: () => queryClient },
       "@/lib/realtime/client": {
         connectRealtimeClient: connect ?? (async () => null),
+        localRealtimeOptedIn: (name) => name === "127.0.0.1" || name === "localhost",
         releaseRealtimeClientIfIdle() {},
       },
       "@/lib/projectPlanning": { projectPlanningQueryKey: (id) => ["planning", id] },
@@ -415,6 +418,24 @@ function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}
     cleanup: () => cleanup?.(),
   };
 }
+
+test("an opted-in local copy reconciles every two seconds", async (t) => {
+  const { queryClient, operations, cachedProjects } = buildQueryClient(buildProjects());
+  const harness = mountFallbackHook(t, { queryClient, hostname: "127.0.0.1" });
+  await settle();
+  assert.equal(harness.timers.size, 1);
+  operations.length = 0;
+  harness.tick();
+  await settle();
+  assert.deepEqual(cachedProjects()[1].tasks, changedPayload.tasks);
+  assert.deepEqual(operations, [
+    ["cancel", ["boardTasks", USER_ID, PROJECT_ID]],
+    ["refetch", ["planning", PROJECT_ID]],
+    ["fetch", ["boardTasks", USER_ID, PROJECT_ID]],
+  ]);
+  harness.cleanup();
+  assert.equal(harness.timers.size, 0);
+});
 
 test("unavailable realtime silently updates only the visible board without a flag", async (t) => {
   const { queryClient, operations, cachedProjects } = buildQueryClient(buildProjects());

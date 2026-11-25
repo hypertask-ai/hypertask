@@ -164,6 +164,7 @@ function verifyPusherEnv(baseUrl) {
     NEXT_PUBLIC_BASEURL: baseUrl,
     BETTER_AUTH_URL: baseUrl,
     NEXT_TELEMETRY_DISABLED: "1",
+    NEXT_PUBLIC_HT_LOCAL_REALTIME: "1",
     NEXT_PUBLIC_PUSHER_KEY: "app-key",
     NEXT_PUBLIC_PUSHER_HOST: "127.0.0.1",
     NEXT_PUBLIC_PUSHER_PORT: String(soketiPort),

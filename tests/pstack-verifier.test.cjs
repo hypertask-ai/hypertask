@@ -1159,10 +1159,11 @@ test("the drive fills archived, board and task ids in an api body", async () => 
     CORE_SMOKE_PROJECT_ID: "4",
     [ARCHIVED_SMOKE_PROJECT_ENV]: "2",
     CORE_SMOKE_TASK_ID: "7",
+    CORE_SMOKE_AGENT_ID: "8f14e45f-eaab-4c3e-9c1e-0c7ff4f3d0a1",
     CORE_SMOKE_MCP_TOKEN: "smoke-token",
     CORE_SMOKE_AGENT_TOKEN: "agent-token",
   });
-  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", bearer: "smoke-token", agentBearer: "agent-token" });
+  assert.deepEqual(ids, { projectId: "4", archivedProjectId: "2", taskId: "7", agentId: "8f14e45f-eaab-4c3e-9c1e-0c7ff4f3d0a1", bearer: "smoke-token", agentBearer: "agent-token" });
   const calls = [];
   const action = {
     op: "api",
@@ -1197,8 +1198,33 @@ test("the drive fills archived, board and task ids in an api body", async () => 
   assert.match(missing.steps[0].error, /archived project id is not allowed/);
   const prompt = buildPrompt({ kind: "plan", title: "t", body: "b", diff: "d", boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" }, "<<<fence>>>");
   assert.match(prompt, /\{archived\} is the seeded archived board/);
+  assert.match(prompt, /\{agent\} is the seeded agent id/);
   assert.match(prompt, /seeded agent token/);
   assert.match(prompt, /agent inbox is empty/);
+  const patched = [];
+  const agentRun = await runPlan({
+    page: { request: { async fetch(url, options) { patched.push({ url, data: options.data, headers: options.headers }); return { status: () => 403, async text() { return '{"success":false,"error":"Ask a member of board 4 to run: hypertask project invite 4 --user 8f14e45f-eaab-4c3e-9c1e-0c7ff4f3d0a1"}'; } }; } } },
+    plan: plan([{ op: "api", method: "PATCH", path: "/api/mcp/agents/{agent}", body: { add_project_ids: ["{id}"], owner: "{agent}" }, auth: "agent", expectStatus: 403, expectText: "hypertask project invite" }]),
+    base: "http://127.0.0.1:3100",
+    ...ids,
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.equal(agentRun.steps[0].ok, true);
+  assert.equal(patched[0].url, "http://127.0.0.1:3100/api/mcp/agents/8f14e45f-eaab-4c3e-9c1e-0c7ff4f3d0a1");
+  assert.deepEqual(patched[0].data, { add_project_ids: [4], owner: "8f14e45f-eaab-4c3e-9c1e-0c7ff4f3d0a1" });
+  assert.deepEqual(patched[0].headers, { Authorization: "Bearer agent-token" });
+  const noAgent = await runPlan({
+    page: { request: { async fetch() { return { status: () => 403, async text() { return "nope"; } }; } } },
+    plan: plan([{ op: "api", method: "PATCH", path: "/api/mcp/agents/{agent}", body: {}, expectStatus: 403, expectText: "nope" }]),
+    base: "http://127.0.0.1:3100",
+    projectId: "4",
+    taskId: "7",
+    bearer: "smoke-token",
+    shotsDir: "/tmp",
+    navigations: [],
+  });
+  assert.match(noAgent.steps[0].error, /agent id is not allowed/);
   } finally {
     if (savedToken === undefined) delete process.env.GH_TOKEN;
     else process.env.GH_TOKEN = savedToken;
@@ -1211,6 +1237,7 @@ test("the seed mints an agent token for the seeded agent and exports it", async 
   assert.match(source, /createMcpToken\(user\.id, user\.email, undefined, agent\.id\)/);
   assert.match(source, /agentTokenCredentialFields\(agentToken\)/);
   assert.match(source, /CORE_SMOKE_AGENT_TOKEN: agentToken/);
+  assert.match(source, /CORE_SMOKE_AGENT_ID: agent\.id/);
   assert.match(source, /prisma\.chatSession\.create\(/);
   assert.match(source, /replyToMessageId: lastQuestion\.id/);
 });

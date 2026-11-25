@@ -22,7 +22,10 @@ function createHarness(board, flagEnabled) {
     project: { findFirst: async () => board },
     section: { findFirst: async () => ({ id: 9, section_title: "Backlog" }) },
     task: { count: async () => 0 },
-    team_Activity: { update: async () => undefined },
+    team_Activity: {
+      updateMany: async () => ({ count: 1 }),
+      create: async () => undefined,
+    },
     drafts: { create: async () => undefined },
   };
   const create = load("src/utils/controllers/tasks/create.ts", {

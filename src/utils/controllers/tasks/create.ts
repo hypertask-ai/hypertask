@@ -76,6 +76,16 @@ export const getUniqueTaskCount = async (
     return (await getNextUniqueTaskIndex(projectId, db)) - 1;
 };
 
+const recordTeamTaskCreated = async (teamId: string | null | undefined): Promise<void> => {
+    if (!teamId) return;
+    const increment = { total_tasks: { increment: 1 } };
+    const updated = await prisma.team_Activity.updateMany({ where: { teamId }, data: increment });
+    if (updated.count > 0) return;
+    await prisma.team_Activity
+        .create({ data: { teamId, total_tasks: 1 } })
+        .catch(() => prisma.team_Activity.updateMany({ where: { teamId }, data: increment }));
+};
+
 const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
             try {
@@ -174,15 +184,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 }, "web", null, projectId)
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
-                await prisma.team_Activity.update({
-                    where:{
-                        teamId:task.project.teamId??undefined,
-                        
-                    },
-                    data:{
-                        total_tasks:{increment:1}
-                    }
-                })
+                await recordTeamTaskCreated(task.project.teamId)
             }
             else{
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
@@ -206,15 +208,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 }, "web", null, projectId)
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
-                await prisma.team_Activity.update({
-                    where:{
-                        teamId:task.project.teamId??undefined,
-                        
-                    },
-                    data:{
-                        total_tasks:{increment:1}
-                    }
-                })
+                await recordTeamTaskCreated(task.project.teamId)
             }
             await logPersonal(userId, "create task", { projectId, sectionId, taskId: task.id, outcome: "created" }, body)
             await publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
