@@ -71,6 +71,8 @@ test("switching the flag off restores the plain border and moves nothing else", 
   assert.ok(!offClasses.some((name) => name.includes("--bs-border-color")));
   assert.deepEqual(classes(on).filter((name) => name !== HAIRLINE), offClasses);
   assert.deepEqual(on.props.style, off.props.style);
+  assert.equal(on.props.className, on.props.className.trim());
+  assert.equal(off.props.className, off.props.className.trim());
   for (const name of ["border", "border-border-light-gray-thin", "rounded-full", "md:hidden"]) {
     assert.ok(offClasses.includes(name), name);
   }
