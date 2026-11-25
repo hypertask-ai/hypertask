@@ -1,12 +1,8 @@
 # Hypertask agent map
 
-Start with `/ship` and [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
-House rules live in the shared source.
-Load each skill when its step starts.
-Read the relevant reference section before acting.
-Reference command paths are repo-relative.
+Start with `/ship` and [.claude/skills/INDEX.md](.claude/skills/INDEX.md). House rules live in the shared source. Load each skill when its step starts and read its reference section before acting. Command paths are repo-relative.
 
-[HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) have separate role references. Shared house rules remain authoritative.
+[HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) have role references; shared house rules stay authoritative.
 
 ## Always
 
@@ -39,21 +35,20 @@ Read linked sections on demand.
 |---|---|
 | Checking what enforces an agent rule | [Rule checks](.claude/reference/rule-checks.md) |
 | Starting, claiming, delegating, shipping | [Session rules](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claim rules](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
-| Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [ticket template](docs/ticket-template.md) |
+| Reading or writing tickets | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [template](docs/ticket-template.md) |
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
 | Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup) |
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
 | Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
 | UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
 | Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
-| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
+| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md) |
 | App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
 | pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
 | AI models, keys, plans, Auto routing or AI outages | [Model rules](.claude/reference/architecture.md#ai-models), [AI funding](.claude/reference/architecture.md#ai-funding) |
 | Access or security changes | [Still-allowed tests](.claude/reference/workflow.md#repo-workflow-detail) |
 
-Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first.
-Runners never switch a flag Off; Off is Valentin's own safety switch.
+Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first. Runners never switch a flag Off; Off is Valentin's own switch.
 `src/` enforces comment rules through `local/no-comments`.
 
 Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.

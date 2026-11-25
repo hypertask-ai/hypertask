@@ -231,8 +231,8 @@ async function wrapAnthropicStreamWithFallback<
   TChunk extends { type: string; error?: unknown },
   TResult extends { stream: ReadableStream<TChunk> },
 >(
-  startDirectStream: () => Promise<TResult>,
-  startFallbackStream: (error: unknown) => Promise<TResult>,
+  startDirectStream: () => PromiseLike<TResult>,
+  startFallbackStream: (error: unknown) => PromiseLike<TResult>,
   reportDirectError: (error: unknown) => void,
   canFallback: () => boolean,
   isAborted: () => boolean,

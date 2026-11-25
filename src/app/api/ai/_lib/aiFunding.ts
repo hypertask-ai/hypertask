@@ -794,15 +794,10 @@ export async function resolveHypertaskAnthropicCredential(args: {
 }> {
   const now = args.now ?? new Date();
   const anthropicCredit = await getAnthropicMonthlyCreditState(now);
-  let creditFirstEnabled = true;
-  try {
-    creditFirstEnabled = await isFeatureEnabled(
-      HTPR_9685_ANTHROPIC_CREDIT_FIRST_FLAG,
-      args.userId ?? 0,
-    );
-  } catch {
-    creditFirstEnabled = true;
-  }
+  const creditFirstEnabled = await isFeatureEnabled(
+    HTPR_9685_ANTHROPIC_CREDIT_FIRST_FLAG,
+    args.userId ?? 0,
+  );
   if (!creditFirstEnabled) {
     return {
       route: "hypertask-gateway",
