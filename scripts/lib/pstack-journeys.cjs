@@ -40,8 +40,16 @@ const TEST_PATH = /^tests?\//;
 const SOURCE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 const SURFACE_FILE = /^src\/(?:pages\/|app\/)/;
 const TRACE_HOPS = 2;
+const ROUTE_HOPS = 4;
 const HUB_IMPORTERS = 30;
 const TRACE_LIMIT = 6;
+const APP_ROUTE = /^src\/app\/(?!api\/)/;
+const PAGE_FILE = /^page\.(?:tsx|ts|jsx|js)$/;
+const NOT_A_SCREEN = /^(?:layout|template|error|global-error|not-found|loading|default)\.(?:tsx|ts|jsx|js)$/;
+const ROUTE_GROUP = /^\(.*\)$/;
+const CATCH_ALL = /^\[\[\.\.\..*\]\]$|^\[\.\.\..*\]$/;
+const DYNAMIC = /^\[\[?.+?\]\]?$/;
+const SEED_PARAM = { agentid: "{agent}", projectid: "{id}" };
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort();
@@ -108,6 +116,60 @@ function importSpecifiers(text) {
   return [...specs];
 }
 
+function appDirKey(dir) {
+  const parts = String(dir).slice("src/app".length).split("/").filter((part) => part && !ROUTE_GROUP.test(part));
+  return ["src/app", ...parts].join("/");
+}
+
+function pageRouteDirs(sources) {
+  const dirs = new Set();
+  for (const entry of Array.isArray(sources) ? sources : []) {
+    const file = String(entry);
+    if (!APP_ROUTE.test(file) || !PAGE_FILE.test(file.slice(file.lastIndexOf("/") + 1))) continue;
+    dirs.add(appDirKey(path.posix.dirname(file)));
+  }
+  return dirs;
+}
+
+function routeBase(dir, pageDirs) {
+  let current = String(dir);
+  while (current === "src/app" || current.startsWith("src/app/")) {
+    if (pageDirs.has(appDirKey(current))) return current;
+    current = path.posix.dirname(current);
+  }
+  return "";
+}
+
+function routeSegments(dir) {
+  return String(dir).slice("src/app/".length).split("/").filter((part) => part && !ROUTE_GROUP.test(part));
+}
+
+function seededPath(prefix, boardPath, taskPath, optional) {
+  const usable = (value) => typeof value === "string" && value.startsWith("/");
+  if (!prefix.length) return usable(boardPath) ? boardPath : usable(taskPath) ? taskPath : "";
+  const want = prefix.join("/").toLowerCase();
+  for (const value of [taskPath, boardPath]) {
+    if (!usable(value)) continue;
+    const parts = value.split("?")[0].replace(/^\//, "").toLowerCase().split("/");
+    if (parts.length > prefix.length && parts.slice(0, prefix.length).join("/") === want) return value;
+  }
+  return optional ? `/${prefix.join("/")}` : "";
+}
+
+function appRoute(file, { boardPath = "", taskPath = "", pageDirs = new Set() } = {}) {
+  if (!APP_ROUTE.test(file) || NOT_A_SCREEN.test(String(file).slice(String(file).lastIndexOf("/") + 1))) return "";
+  const dir = routeBase(path.posix.dirname(file), pageDirs);
+  if (!dir) return "";
+  const parts = [];
+  for (const segment of routeSegments(dir)) {
+    if (CATCH_ALL.test(segment)) return seededPath(parts, boardPath, taskPath, segment.startsWith("[["));
+    const named = DYNAMIC.test(segment) ? SEED_PARAM[segment.replace(/[[\]]/g, "").toLowerCase()] : null;
+    if (DYNAMIC.test(segment) && !named) return "";
+    parts.push(named || segment);
+  }
+  return `/${parts.join("/")}`;
+}
+
 function importKey(from, spec) {
   const value = String(spec);
   if (value.startsWith("@/")) return moduleKey(path.posix.join("src", value.slice(2)));
@@ -143,10 +205,42 @@ function reverseImports(sources, readSource) {
   return reverse;
 }
 
-function traceImports({ files, pages = [], sources, readSource = defaultReadSource } = {}) {
+function routeEntries({ changed, reverse, pages, boardPath, taskPath, pageDirs }) {
+  const seeded = { boardPath, taskPath, pageDirs };
+  const named = normalizePages(pages);
+  const found = new Map();
+  const seen = new Set();
+  let frontier = [];
+  for (const file of changed) {
+    const route = appRoute(file, seeded);
+    if (route) found.set(route, { file, route });
+    seen.add(moduleKey(file));
+    frontier.push(file);
+  }
+  for (let hop = 1; hop <= ROUTE_HOPS && frontier.length; hop += 1) {
+    const next = [];
+    for (const file of frontier) {
+      const importers = reverse.get(moduleKey(file)) ?? [];
+      if (importers.length > HUB_IMPORTERS) continue;
+      for (const importer of importers) {
+        const key = moduleKey(importer);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const route = appRoute(importer, seeded);
+        if (route && !found.has(route)) found.set(route, { file: importer, route });
+        if (!PAGE_FILE.test(path.posix.basename(importer))) next.push(importer);
+      }
+    }
+    frontier = next;
+  }
+  return [...found.values()].map((entry) => ({ ...entry, pages: pagesForFiles({ files: [entry.file], pages: named }).map((item) => item.page).slice(0, 3) }));
+}
+
+function traceImports({ files, pages = [], sources, readSource = defaultReadSource, boardPath = "", taskPath = "" } = {}) {
   const changed = uniqueSorted((Array.isArray(files) ? files : []).map(String))
     .filter((file) => file.startsWith("src/") && !TEST_PATH.test(file) && SOURCE_EXT.includes(path.extname(file)));
-  const reverse = changed.length ? reverseImports(Array.isArray(sources) ? sources : defaultSources(), readSource) : new Map();
+  const listed = Array.isArray(sources) ? sources : changed.length ? defaultSources() : [];
+  const reverse = changed.length ? reverseImports(listed, readSource) : new Map();
   const surfaces = new Map();
   for (const file of changed) {
     if (SURFACE_FILE.test(file)) surfaces.set(file, { via: [file], depth: 0 });
@@ -173,7 +267,9 @@ function traceImports({ files, pages = [], sources, readSource = defaultReadSour
   }
   const ordered = [...surfaces.entries()].sort((left, right) => left[1].depth - right[1].depth || left[0].localeCompare(right[0]));
   const named = normalizePages(pages);
+  const routes = changed.length ? routeEntries({ changed, reverse, pages: named, boardPath, taskPath, pageDirs: pageRouteDirs(listed) }) : [];
   return {
+    routes,
     surfaces: ordered.slice(0, TRACE_LIMIT).map(([file, entry]) => ({
       file,
       via: entry.via,
