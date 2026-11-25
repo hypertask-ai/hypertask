@@ -108,10 +108,6 @@ export async function createComposedTask({
       : `<p><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></p>`).join("");
   const uploadMedia = extractTaskWriterMedia(embedAgentImages(draftDescription, { enabled: inlineAgentImages, instructions: text, attachments: uploads }), nextMediaToken);
   const media = { html: uploadMedia.html, media: [...promptMedia.media, ...uploadMedia.media] };
-  const rawDescription = restoreTaskWriterMedia(media.html, media.media);
-  let title = text;
-  let description = rawDescription;
-  let writerFailed = false;
   let skills: TaskWriterSkills | undefined;
   let writerFailureReason: string | undefined;
   let drafts: ({ title: string; description: string; writerDueDate?: string; writerLabelIds?: string[]; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
@@ -235,18 +231,14 @@ export async function createComposedTask({
       return { ...draft, title: stripTaskWriterMediaTokens(draft.title) || text.trim(), description: body };
     });
     skills = readTaskWriterSkills(response.headers?.get(TASK_WRITER_SKILLS_HEADER));
-    title = drafts[0].title;
-    description = drafts[0].description;
   } catch (error) {
     if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED") throw error;
-    writerFailed = true;
-    drafts = [];
+    throw new Error(`The task writer failed. Your note is still here. Try again.${writerFailureReason ? ` ${writerFailureReason}` : ""}`);
   } finally {
     if (measureAiSteps && typeof performance !== "undefined") {
       writerMs = performance.now() - writerStartedAt;
     }
   }
-  if (!drafts.length) drafts = [{ title, description }];
   if (guaranteeScreenshots && drafts.length === 1) {
     drafts = [{
       ...drafts[0],
@@ -255,7 +247,6 @@ export async function createComposedTask({
         attachments: creationScreenshotCandidates(uploads, text),
       }),
     }];
-    description = drafts[0].description;
   }
   if (existingTaskId && drafts.length > 1) {
     defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
@@ -333,7 +324,7 @@ export async function createComposedTask({
     }
   }
   if (!tasks.length) failCreate(new Error("Couldn’t create the tasks. Your note is still here. Try again."));
-  return { task: tasks[0], writerFailed, ...(!writerFailed && skills ? { skills } : {}), ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles, traceScope };
+  return { task: tasks[0], writerFailed: false, ...(skills ? { skills } : {}), tasks, failedTitles, traceScope };
 }
 
 export async function requestComposeSkillFollowup(taskId: number, skills: TaskWriterSkills, originalInput: string): Promise<{ questions: string[]; followup: string } | null> {

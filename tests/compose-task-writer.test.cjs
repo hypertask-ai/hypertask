@@ -171,17 +171,17 @@ test('HTPR-7051 a media token the writer puts in the title is removed, and the i
 });
 
 test('compose retains the unfurled image URL and uploaded images use distinct tokens', async () => {
-    await withWriter({}, async ({ createComposedTask, project, creates, writes }) => {
-      const url = 'https://screencast2.com/hCUBu.png';
-      const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985 });
-      assert.equal(result.writerFailed, false);
-      const body = new JSDOM(creates[0].description);
-      try {
-        assert.equal(body.window.document.querySelector('a').href, url);
-        assert.deepEqual([...body.window.document.querySelectorAll('img')].map((image) => image.src), [url, 'https://files.hypertask.app/attached.png']);
-        assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p><p>[[HT_MEDIA_2]]</p>');
-      } finally { body.window.close(); }
-    });
+  await withWriter({}, async ({ createComposedTask, project, creates, writes }) => {
+    const url = 'https://screencast2.com/hCUBu.png';
+    const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985 });
+    assert.equal(result.writerFailed, false);
+    const body = new JSDOM(creates[0].description);
+    try {
+      assert.equal(body.window.document.querySelector('a').href, url);
+      assert.deepEqual([...body.window.document.querySelectorAll('img')].map((image) => image.src), [url, 'https://files.hypertask.app/attached.png']);
+      assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p><p>[[HT_MEDIA_2]]</p>');
+    } finally { body.window.close(); }
+  });
 });
 
 test('compose keeps non-image URLs as plain links and does not unfurl image URLs embedded in prose', async () => {
