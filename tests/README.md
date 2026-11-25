@@ -40,6 +40,23 @@ must copy those sources; its consumers are not exempt. The existing root
 `docker-compose.yml` is local-only PostgreSQL 14 and is not used by CI, so it
 is left unchanged rather than silently upgrading a developer's data directory.
 
+## HTPR-9617 chat verification
+
+In the isolated preview, open `/chat` on desktop and phone. Fill the `Message`
+textbox with `HTPR-9617 persisted question` and click `Send message`. Check that
+it appears in the conversation. With the same signed-in browser cookies, GET
+`/api/ai-chat/all-sessions` and expect HTTP 200 with that text in the response.
+This checks saved history, not only the optimistic message display. The UI
+supplies the chat-session ID and the required nested `message` request body;
+a board ID cannot substitute for a session ID.
+
+This browser check covers persistence through the changed transaction. The
+lookup/insert race is deterministic in
+`tests/htpr-9617-chat-order-postgres.test.cjs`: the real route runs against
+Postgres while a reply insert is attempted between lookup and human insert.
+CI must also keep the expected `QueuedStoredBeforeReply` violation in
+`verification/formal/chat-send-queue/BugLookupRace.cfg` and pass the fixed model.
+
 ## Feature flag stubs
 
 `tests/helpers/flags.ts` exports `stubFlags(overrides?)`. It builds `FEATURE_FLAG_DEFINITIONS`
