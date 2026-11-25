@@ -37,13 +37,24 @@ const Login = async () => {
 	} catch {
 		enabled = false;
 	}
-	const boatDevModel = await isFeatureEnabled(HTPR_9277_BOAT_DEV_MODEL_FLAG, userId ?? 0).catch(() => false);
-	const agentCodeSignIn = boatDevModel && await isFeatureEnabled(HTPR_7552_AGENT_CODE_SIGNIN_FLAG, userId ?? 0).catch(() => false);
+	try {
+		const boatDevModel = await isFeatureEnabled(HTPR_9277_BOAT_DEV_MODEL_FLAG, userId ?? 0);
+		if (boatDevModel) {
+			const agentCodeSignIn = await isFeatureEnabled(HTPR_7552_AGENT_CODE_SIGNIN_FLAG, userId ?? 0);
+			return (
+				<>
+					<SignupPageViewed enabled={enabled} userId={userId} />
+					<UTMCookieHandler />
+					<LoginComponent boatDevModel agentCodeSignIn={agentCodeSignIn} />
+				</>
+			);
+		}
+	} catch {}
 	return (
 		<>
 			<SignupPageViewed enabled={enabled} userId={userId} />
 			<UTMCookieHandler />
-			{boatDevModel ? <LoginComponent boatDevModel agentCodeSignIn={agentCodeSignIn} /> : <LoginComponent />}
+			<LoginComponent />
 		</>
 	);
 };
