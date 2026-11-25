@@ -23,4 +23,6 @@ Verdicts:
 - a change that reaches a screen but whose plan found no user path: the run could not evaluate the change, so the status is error, never FAIL on the change itself.
 - non-app files only, and a `[BUGFIX]` with no app code: PASS+NOTES, no app path.
 
+The plan is read against the head source at the pull request's own commit before it is driven: a click, fill, expect or `expectText` the source cannot show, an API path the source does not serve, a leftover `{placeholder}` the seed does not fill, and a failure state that names no way to force it are named as offending steps. One re-plan is allowed; a step that still names text the source lacks makes the run unevaluated rather than FAIL on the change. The planner is given the `data-testid` values, accessible names, placeholders and visible text the changed components hold, and an icon-only control is reached by its accessible name or its `data-testid`, never by text it does not show.
+
 An identical diff is not an identity: a rebase onto a new base can bring production files the diff never shows, and `git patch-id --stable` ignores whitespace inside a value. Reuse is therefore anchored on the head tree, and the recheck re-runs a green head whose base has moved.

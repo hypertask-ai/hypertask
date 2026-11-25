@@ -1,0 +1,88 @@
+{
+  "pr-3844-icon-only-dictation": {
+    "why": "PR 3844 (HTPR-9670): the plan clicked the icon-only mic by text it does not show and expected the placeholder Message as visible text.",
+    "corpus": "<button aria-label=\"Start dictation\" data-testid=\"chat-mic\" className=\"p-2\" />\n<Tiptap placeholder=\"Message\" />\n<span>Recording</span>\n<button data-testid={agentsOnly ? \"chat-mic-agent\" : \"chat-mic-user\"}>Send</button>\n<span>Board rooms and agents</span>",
+    "routes": [
+      "src/pages/api/chat/index.ts"
+    ],
+    "journeys": [
+      {
+        "journey": "change:repro",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/chat"
+          },
+          {
+            "op": "click",
+            "text": "Mic"
+          }
+        ],
+        "expect": [
+          {
+            "text": "Message"
+          }
+        ]
+      },
+      {
+        "journey": "change:named",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/chat"
+          },
+          {
+            "op": "click",
+            "text": "Start dictation"
+          }
+        ],
+        "expect": [
+          {
+            "path": "/chat"
+          },
+          {
+            "text": "Board rooms"
+          }
+        ]
+      },
+      {
+        "journey": "change:testid",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/chat"
+          },
+          {
+            "op": "click",
+            "testid": "chat-mic"
+          }
+        ],
+        "expect": [
+          {
+            "text": "Send"
+          }
+        ]
+      },
+      {
+        "journey": "change:wrong-testid",
+        "actions": [
+          {
+            "op": "goto",
+            "path": "/chat"
+          },
+          {
+            "op": "click",
+            "testid": "microphone"
+          }
+        ],
+        "expect": []
+      }
+    ],
+    "problems": [
+      "change:repro step 2 click: \"Mic\" is not in the head source",
+      "change:repro expect 1: \"Message\" is a placeholder, not visible text",
+      "change:wrong-testid step 2 click: testid \"microphone\" is not in the head source"
+    ],
+    "dropped": []
+  }
+}
