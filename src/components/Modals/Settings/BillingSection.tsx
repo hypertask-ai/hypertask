@@ -16,6 +16,7 @@ import { getSettingsPath } from "./settingsNavigation";
 import { useSettingsTeam } from "./useSettingsTeam";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7980_STRIPE_PORTAL_BILLING_FLAG } from "@/lib/flags/definitions/htpr-7980-stripe-portal-billing";
+import { settingsBillingDisplay } from "@/lib/settingsBillingDisplay";
 import { settingsBillingSummary } from "@/lib/settingsBillingSummary";
 import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
@@ -81,40 +82,51 @@ const BillingSection = () => {
       id: type.stripePriceId ?? "",
       label: `${plan.name} · ${type.title} · ${type.price} ${type.description}`,
     }))).filter((option) => option.id.startsWith("price_"));
-  const planLabel = billing?.storePlanId ?? "Free";
-  const billingCycle = billing?.billingInterval ?? "Free Plan";
+  const display = settingsBillingDisplay(team, billing);
+  const planLabel = display.plan;
+  const billingCycle = display.billingCycle;
   const usedSeats =
     (ownerAndMembers.owner ? 1 : 0) + ownerAndMembers.members.length;
   const hasPaidPlan = Boolean(team?.activeSubscriptionPlanId);
   const latestInvoice = billingData?.invoices[0] ?? null;
   const upcomingInvoice = billingData?.upcomingInvoice ?? null;
   const paymentMethod = formatPaymentMethod(latestInvoice);
-  const nextInvoiceDate = hasPaidPlan
-    ? billingLoading
-      ? "Loading"
-      : formatTimestamp(
-          upcomingInvoice?.nextPaymentAttempt ?? upcomingInvoice?.created
-        )
-    : "Free Plan";
-  const renewalDate = hasPaidPlan
-    ? billingLoading
-      ? "Loading"
-      : formatTimestamp(
-          upcomingInvoice?.periodEnd ??
-            upcomingInvoice?.nextPaymentAttempt ??
-            upcomingInvoice?.created
-        )
-    : "Free Plan";
-  const invoiceTotal = hasPaidPlan
-    ? billingLoading
-      ? "Loading"
-      : formatMoney(upcomingInvoice?.amountDue, upcomingInvoice?.currency)
-    : "Free Plan";
-  const fullPrice = hasPaidPlan
-    ? billingLoading
-      ? "Loading"
-      : formatMoney(upcomingInvoice?.subtotal, upcomingInvoice?.currency)
-    : "Free Plan";
+  const compedRenewalDate = display.compedUntil
+    ? formatTimestamp(display.compedUntil.getTime() / 1000)
+    : null;
+  const subscriptionRows = hasPaidPlan
+    ? {
+        fullPrice: billingLoading
+          ? "Loading"
+          : formatMoney(upcomingInvoice?.subtotal, upcomingInvoice?.currency),
+        nextInvoice: billingLoading
+          ? "Loading"
+          : formatTimestamp(
+              upcomingInvoice?.nextPaymentAttempt ?? upcomingInvoice?.created
+            ),
+        renewal: billingLoading
+          ? "Loading"
+          : formatTimestamp(
+              upcomingInvoice?.periodEnd ??
+                upcomingInvoice?.nextPaymentAttempt ??
+                upcomingInvoice?.created
+            ),
+        total: billingLoading
+          ? "Loading"
+          : formatMoney(upcomingInvoice?.amountDue, upcomingInvoice?.currency),
+      }
+    : {
+        fullPrice: "Free Plan",
+        nextInvoice: "Free Plan",
+        renewal: "Free Plan",
+        total: "Free Plan",
+      };
+  const nextInvoiceDate = display.comped
+    ? "Not billed"
+    : subscriptionRows.nextInvoice;
+  const renewalDate = compedRenewalDate ?? subscriptionRows.renewal;
+  const invoiceTotal = display.comped ? "—" : subscriptionRows.total;
+  const fullPrice = display.comped ? "—" : subscriptionRows.fullPrice;
   const discountAmount = upcomingInvoice?.discountTotal ?? 0;
   const hasDiscount = discountAmount > 0;
   const perSeatAmount =
@@ -517,6 +529,8 @@ const BillingSection = () => {
           <EmptyState>Loading invoices</EmptyState>
         ) : billingData?.invoices.length ? (
           <InvoiceTable invoices={billingData.invoices} />
+        ) : display.comped ? (
+          <EmptyState>No invoices needed on a comped plan</EmptyState>
         ) : (
           <EmptyState>No invoices found</EmptyState>
         )}

@@ -1,0 +1,143 @@
+const assert = require("node:assert/strict");
+const { test, beforeEach, afterEach } = require("node:test");
+const React = require("react");
+const { createRoot } = require("react-dom/client");
+const { JSDOM } = require("jsdom");
+const axios = require("axios");
+const { loadModule } = require("./helpers/loadModule.cjs");
+
+const slots = ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"];
+for (const [i, slot] of slots.entries()) process.env[`NEXT_PUBLIC_STRIPE_${slot}`] = `price_choice_${i}`;
+
+const compedUntil = new Date("2099-01-01T12:00:00.000Z");
+const upcomingPeriodEnd = 1793000000;
+const expectedDate = (seconds) =>
+  new Date(seconds * 1000).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+
+let team, dom, mounted, billingData;
+const { deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
+const { default: BillingSection } = loadModule("src/components/Modals/Settings/BillingSection.tsx", {
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
+  "@/store": { currentUserAtom: {} },
+  "./SettingsSectionShell": { default: ({ children }) => React.createElement("main", null, children) },
+  "./settingsNavigation": { getSettingsPath: (section) => `/settings/${section}` },
+  "next/navigation": { useRouter: () => ({ push() {}, refresh() {} }) },
+  "./useSettingsTeam": { useSettingsTeam: () => ({
+    billing: deriveTeamBilling(team),
+    ownerAndMembers: { owner: { id: 985 }, members: [] },
+    project: null,
+    team,
+    refetchTeam: async () => team,
+  }) },
+});
+
+function subscribed(status = "active") {
+  return {
+    ...team,
+    activeSubscriptionPlanId: "sub_current",
+    subscriptionPlan: [{
+      subscriptionId: "sub_current",
+      subscriptionStatus: status,
+      priceId: "price_choice_2",
+      subscriptionObject: { cancel_at_period_end: false, items: { data: [{ price: {
+        id: "price_choice_2", currency: "usd", unit_amount: 2000, recurring: { interval: "month", interval_count: 1 },
+      } }] } },
+    }],
+  };
+}
+
+beforeEach(() => {
+  team = {
+    id: "team_selected",
+    title: "Selected",
+    stripe_customer_id: "",
+    totalSeats: 3,
+    googleAccountId: "account_owned",
+    subscriptionPlan: [],
+    googleAccount: { userId: 985 },
+  };
+  billingData = {
+    customerEmail: "billing@example.invalid",
+    invoices: [],
+    upcomingInvoice: {
+      amountDue: 2000, subtotal: 2000, discountTotal: 0, created: upcomingPeriodEnd,
+      currency: "usd", nextPaymentAttempt: upcomingPeriodEnd, periodEnd: upcomingPeriodEnd,
+    },
+  };
+  global.React = React;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  axios.get = async (url) => {
+    if (url === "/api/stripe/billing-portal") return { data: { available: false } };
+    return { data: billingData };
+  };
+});
+
+afterEach(async () => {
+  if (mounted) await React.act(async () => mounted.unmount());
+  mounted = null;
+  if (dom) dom.window.close();
+  dom = null;
+  delete global.window;
+  delete global.document;
+  delete global.React;
+  delete global.IS_REACT_ACT_ENVIRONMENT;
+});
+
+async function render() {
+  dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/settings/billing" });
+  global.window = dom.window;
+  global.document = dom.window.document;
+  mounted = createRoot(document.getElementById("root"));
+  await React.act(async () => mounted.render(React.createElement(BillingSection)));
+}
+
+function rowValue(label) {
+  const span = [...document.querySelectorAll("span")].find((candidate) => candidate.textContent === label);
+  assert.ok(span, `Missing row ${label}`);
+  return span.nextElementSibling?.textContent;
+}
+
+test("a comped Pro team never reads Free Plan on any billing row", async () => {
+  team.compedUntil = compedUntil;
+  team.compedPlan = "Pro";
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(rowValue("Billing cycle"), "Comped");
+  assert.equal(rowValue("Renewal"), expectedDate(compedUntil.getTime() / 1000));
+  assert.equal(rowValue("Next invoice"), "Not billed");
+  assert.equal(rowValue("Invoice total"), "—");
+  assert.match(document.body.textContent, /No invoices needed on a comped plan/);
+  assert.doesNotMatch(document.body.textContent, /Free Plan/);
+});
+
+test("a normal Free team still reads Free Plan", async () => {
+  await render();
+
+  assert.equal(rowValue("Plan"), "Free");
+  assert.equal(rowValue("Billing cycle"), "Free Plan");
+  assert.equal(rowValue("Renewal"), "Free Plan");
+  assert.equal(rowValue("Next invoice"), "Free Plan");
+  assert.match(document.body.textContent, /No invoices found/);
+});
+
+test("a paid Pro team keeps its subscription rows", async () => {
+  team = subscribed();
+  team.stripe_customer_id = "cus_selected";
+  billingData.invoices = [{
+    amountPaid: 2000, cardBrand: "visa", cardLast4: "4242", created: upcomingPeriodEnd,
+    currency: "usd", hostedInvoiceUrl: "https://stripe.test/invoice", id: "invoice_paid",
+    paymentMethodType: "card", status: "paid",
+  }];
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(rowValue("Billing cycle"), "month");
+  assert.equal(rowValue("Renewal"), expectedDate(upcomingPeriodEnd));
+  assert.equal(rowValue("Invoice total"), "$20.00");
+  assert.equal(document.querySelector('a[href="https://stripe.test/invoice"]').textContent, "View");
+  assert.doesNotMatch(document.body.textContent, /Free Plan/);
+});
