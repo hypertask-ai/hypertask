@@ -57,6 +57,16 @@ A page on a board you cannot open stays hidden either way. `/pages` loads with
 `task_id`) reads **Back to Pages** at the top left; only a page whose flags are
 off, or that has a linked ticket, reads **Back to board** / **Back to task**.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - A page with no visible ticket crashing the editor or "Back to task"

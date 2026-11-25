@@ -51,6 +51,16 @@ ht-verify press "Control+Shift+P" --wait 1500   # Your Pins 1 -> 0, still 0 afte
 
 With `htpr-8218-comment-pin-star` on, pin a readable comment, then pin it again. The states come back pinned, then unpinned. Star it the same way and confirm a person's star on that comment does not change. With `htpr-8217-agent-follow-reminder` on, follow, star, and remind one throwaway task, then `read` it. Unfollow and unstar it. Both flags read EVERYONE live, so the off answer is proven by `tests/htpr-8218*` and `tests/htpr-8217*`, never by switching a production flag. The agent call itself needs an agent token: verified-unreachable without one; the route answers 401 for a cookie-only run.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - A saved row index can outlive a removed row or a longer tab, causing

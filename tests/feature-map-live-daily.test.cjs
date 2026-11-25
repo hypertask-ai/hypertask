@@ -37,8 +37,8 @@ test('the map index gives one row per area and a driver only when the map names 
   assert.deepEqual(activation.invocations.map(driveInvocationKey), ['feature-map-drive.mjs\0activation-analytics'])
   const commandPalette = plan.find((feature) => feature.file === 'command-palette.md')
   assert.equal(commandPalette.scripts.includes('ctrl-j-drive.mjs'), false)
-  const figma = plan.find((feature) => feature.file === 'figma-connect.md')
-  assert.match(figma.reason, /no live driver/)
+  const canary = plan.find((feature) => feature.file === 'model-canary.md')
+  assert.match(canary.reason, /no live driver/)
 })
 
 test('grading says pass, fail or not-drivable per mapped feature', () => {

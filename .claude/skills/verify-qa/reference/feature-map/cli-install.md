@@ -31,6 +31,16 @@ Install surfaces read `src/lib/onboarding/installCommands.ts`; the Windows note 
 8. Repeat with a trailing slash in `--api-url`, and test failure injection only against a local endpoint: a hello failure or no response within about 1.5 s must print the saved output, exit 0 and keep the token saved. Never point failure injection at production, and never run the create step there.
 9. The hosted guided-start checker is `node ~/.local/state/vcc-evidence/HTPR-7519/live-check.mjs` with `HT_QA_AGENT_TOKEN`, `CLI_BIN`, `API_URL` (including `/api`) and optional `MCP_URL`. It uses temporary homes, calls MCP `tools/list`, requires the advertised `hypertask_tasks` list/create actions and `hypertask_projects` playbook, and runs only list/playbook reads.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - hypertask.ai serving the homepage HTML instead of the script (the installers live in the `hypertask-ai/astro` repo, `public/install.sh`, `public/install.ps1`, `_redirects`, `_headers`).

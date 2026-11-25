@@ -18,6 +18,16 @@ Settings > Accounts (`/settings/accounts`, `src/components/Modals/Settings/Accou
 With the CLI: `ht-verify api GET /api/figma/connection --state ~/.config/hypertask-videos/storageState-qa.json`
 returns `{"configured":true,"connection":null}` for user 985.
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs {slug} --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`{slug} ok`. It refuses any base except `https://app.hypertask.ai`, uses the `qa-login` identities,
+creates only fixtures its own cleanup removes, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 - The **Connected apps** card disappears, or the Figma routes answer 404 for a signed-in user.

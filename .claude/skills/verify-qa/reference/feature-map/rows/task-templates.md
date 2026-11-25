@@ -1,1 +1,1 @@
-| Board task templates | [task-templates.md](task-templates.md) | flag OFF: `ht-verify` GET/POST/DELETE `/api/task-templates` and PATCH 403; settings section absent |
+| Board task templates | [task-templates.md](task-templates.md) | `feature-map-drive.mjs task-templates` read-only API |

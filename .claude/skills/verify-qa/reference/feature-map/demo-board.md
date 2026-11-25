@@ -58,6 +58,16 @@ Verified on production 2026-11-20:
    `funnel_completed=true` on end switches the heading to "Let's get your team
    setup!".
 
+### Hands-free drive on production
+
+```bash
+node .claude/skills/verify-qa/scripts/feature-map-drive.mjs demo-board --dir /tmp/feature-map-drive
+```
+
+Prints `PASS` or `FAIL` per step, writes `result.json` and screenshots into `--dir`, and ends with
+`demo-board ok`. It refuses any base except `https://app.hypertask.ai`, makes one guest board per run
+inside the 5-per-hour cap, and never prints a cookie, token or email address.
+
 ## Gotchas
 
 Few demo-specific fixes on record. General hydration mismatches on first

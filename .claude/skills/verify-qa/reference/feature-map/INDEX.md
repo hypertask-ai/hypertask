@@ -41,23 +41,23 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | pinned PR-2034 replay with today's evaluator: first fails, final writes `feature-gated-ui` |
 | Required-check settings | [ci-settings.md](ci-settings.md) | live ruleset read, hourly `verify`/`chain` run log, no settings step in `ci-tests` |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | `ci-prepare` then 4 PR / 8 push shards, `Run independent static checks`, `shard-proof … duplicates=0` |
-| CLI install commands and login | [cli-install.md](cli-install.md) | Settings CLI desktop/phone, `llms.txt`, real install, Ctrl+K `#cliInstallModal`, management-key Team row |
-| Command palette | [command-palette.md](command-palette.md) | Ctrl+K/Ctrl+J via ht-verify session; `;`/`SHIFT ;` chips, plus composer; loopback ctrl-j-drive only (stale on QA 985) |
+| CLI install commands and login | [cli-install.md](cli-install.md) | `feature-map-drive.mjs cli-install`; Settings > CLI commands and `llms.txt` |
+| Command palette | [command-palette.md](command-palette.md) | `feature-map-drive.mjs command-palette`; Ctrl+K Search and Ctrl+J writer, never submitted |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | post, `@` picker, reload and delete on board 7049; `comments-drive-live.mjs` for loopback |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | Ctrl+K Create task, attach file, `Save`, request chain 200, reload |
-| Board custom instructions | [custom-instructions.md](custom-instructions.md) | board 7049 GET, save, reload/reopen, unsaved edit, restore |
-| Demo board | [demo-board.md](demo-board.md) | one guest `/demo`, `/onboarding?resumeKey=…`, tutorial URLs recorded unreachable (tutorial disabled) |
-| Desktop human CLI login | [desktop-login.md](desktop-login.md) | `/cli-auth` consent and cancel, `/login/agent` code, human bearer sessions and revoke, no-token 401 |
+| Board custom instructions | [custom-instructions.md](custom-instructions.md) | `feature-map-drive.mjs custom-instructions`; read-only GET and the editor on the sandbox board |
+| Demo board | [demo-board.md](demo-board.md) | `feature-map-drive.mjs demo-board`; one guest `/demo` board per run, `/learn` signed out |
+| Desktop human CLI login | [desktop-login.md](desktop-login.md) | `feature-map-drive.mjs desktop-login`; consent screen and the signed-out redirects |
 | Drafts | [drafts.md](drafts.md) | `feature-map-drive.mjs drafts` read-only |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `data-rfd-*` mouse steps, reload proof, restore column, delete fixture |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | PR vs schedule job selection, `evaluated N, skipped M`, UX dispatch log, cancelled-run census |
-| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `ht-flag get`, refused same-mode set 403, `/admin/flags` 404 for QA, identical `/api/flags` |
-| Figma connect | [figma-connect.md](figma-connect.md) | no smoke id; drive steps in figma-connect.md (Settings > Accounts, `/api/figma/connection`, OAuth leave) |
+| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | `feature-map-drive.mjs feature-flags-api`; `/api/flags` read and `/admin/flags` 404 for QA |
+| Figma connect | [figma-connect.md](figma-connect.md) | `feature-map-drive.mjs figma-connect`; connection read and the Accounts row |
 | In-app feedback | [in-app-feedback.md](in-app-feedback.md) | POST /api/feedback on board 15; brain-medium only when the flag is on |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Integrations | [integrations.md](integrations.md) | `feature-map-drive.mjs integrations` read-only |
 | Login | [login.md](login.md) | `login` (write journey) |
-| Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
+| Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | `feature-map-drive.mjs mcp-legacy-sse`; no-token JSON-RPC refusals |
 | Next-task pick | [mcp-next-task.md](mcp-next-task.md) | read-only next-task and task context for project 15 |
 | MCP and CLI project listing | [mcp-project-list.md](mcp-project-list.md) | read-only pagination, malformed-input refusals, metadata and scoped caller checks |
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
@@ -65,26 +65,34 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | MCP token revoke | [mcp-token-revoke.md](mcp-token-revoke.md) | no smoke id; single-token mint/revoke steps in the file; never revoke-all on QA 2343 (MCP watcher) or on 985 (shared agent token) |
 | Mobile | [mobile.md](mobile.md) | `@mobile` journeys (`open-board`, `open-task`, `create-task`, `reply-inbox`, `ai-chat`, `switch-boards`, `switch-column`) and `e2e/smoke/mobile-design.spec.ts` |
 | AI model canary | [model-canary.md](model-canary.md) | internal cron, dedicated internal-key request identity, read-only MCP status |
-| My Tasks | [my-tasks.md](my-tasks.md) | no smoke id; drive steps in my-tasks.md (list, settings button, `/scheduled`, board-tab absence) |
+| My Tasks | [my-tasks.md](my-tasks.md) | `feature-map-drive.mjs my-tasks`; list shell at desktop and phone, plus `/scheduled` |
 | OAuth and API clients | [oauth-and-api-clients.md](oauth-and-api-clients.md) | `feature-map-drive.mjs oauth-and-api-clients` read-only |
-| Pages | [pages.md](pages.md) | no smoke id; drive steps in pages.md (snippets create/reload/delete, `/pages`, standalone Back to Pages) |
+| Pages | [pages.md](pages.md) | `feature-map-drive.mjs pages`; list shell, board scopes and page search |
 | Pinned and archived | [pinned-and-archived.md](pinned-and-archived.md) | `feature-map-drive.mjs pinned-and-archived` read-only |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
-| Public sites | [public-sites.md](public-sites.md) | public marketing, docs and help paths; anonymous live check and screenshot |
+| Pricing and trial | [pricing-and-trial.md](pricing-and-trial.md) | `feature-map-drive.mjs pricing-and-trial` read-only |
+| Public sites | [public-sites.md](public-sites.md) | `feature-map-drive.mjs public-sites`; three public hosts and the `/developers` redirect |
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and drafts via the steps in quick-entry-cards.md; Table view needs a board view |
-| Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | `ht-verify open /report` and one saved row; velocity page; the two MCP doors need an agent token (401 without) |
+| Reminders | [reminders.md](reminders.md) | `feature-map-drive.mjs reminders` read-only |
+| Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | `feature-map-drive.mjs reports-agent-doors`; door refusals and the `/report` screen |
+| Saved reports and velocity | [saved-reports-and-velocity.md](saved-reports-and-velocity.md) | `feature-map-drive.mjs saved-reports-and-velocity` read-only |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only); `ht-verify` filter icon > Tags > cycle Match ANY / Match ALL / Hide tags; flags EVERYONE |
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); `ht-verify` /search tips, type `fr` then Tab, full load of a `searchTerm` URL |
-| Slack app | [slack-app.md](slack-app.md) | `ht-verify` page loads, `/api/slack/install` redirect, manifest events; live workspace parity UNREACHABLE |
-| Starred tasks and comments | [starred.md](starred.md) | `ht-verify` /starred and /pinned with `toggleSaved` fixtures; Ctrl+Shift+S and Ctrl+Shift+P removal, reload |
+| Settings: account | [settings-account.md](settings-account.md) | `feature-map-drive.mjs settings-account` read-only |
+| Settings: board | [settings-board.md](settings-board.md) | `feature-map-drive.mjs settings-board` read-only |
+| Slack app | [slack-app.md](slack-app.md) | `feature-map-drive.mjs slack-app`; install, support and invalid-link pages |
+| Snippets | [snippets.md](snippets.md) | `feature-map-drive.mjs snippets` read-only write+delete one fixture |
+| Starred tasks and comments | [starred.md](starred.md) | `feature-map-drive.mjs starred`; `/starred` and `/pinned` tabs |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-qa/scripts/task-drive-live.mjs`; `ht-verify` description PUT + reload, right column, /time empty |
+| Task labels and followers | [task-labels-and-followers.md](task-labels-and-followers.md) | `feature-map-drive.mjs task-labels-and-followers` read-only API |
 | Task share links | [task-share-links.md](task-share-links.md) | `ht-verify` createShareLink, 401 members/share, public /share HTML; agent door 401 without a token |
-| Board task templates | [task-templates.md](task-templates.md) | flag OFF: `ht-verify` GET/POST/DELETE `/api/task-templates` and PATCH 403; settings section absent |
+| Board task templates | [task-templates.md](task-templates.md) | `feature-map-drive.mjs task-templates` read-only API |
 | Task writer quality eval | [task-writer-quality-eval.md](task-writer-quality-eval.md) | newest scheduled task-writer-eval run plus its score artifact; Ctrl+J window |
 | Team credential database races | [team-credential-db-races.md](team-credential-db-races.md) | CI Tests run log with 62 `real PG` cases; `/my-tasks` and the core inbox cycle |
-| Themes | [themes.md](themes.md) | `ht-verify` Appearance pick, `html[data-theme]` + `theme` cookie, Ctrl+K switch, AMOLED switch inner span |
-| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | `ht-verify` taskDeleteReminder > /trash/<board> > recover > deleteTask, then the 409 and 404 refusals |
-| Webhooks | [webhooks.md](webhooks.md) | Playwright request with `Origin` to `/api/settings/webhooks` create/test/delete; `lastDeliveryOk` true |
+| Themes | [themes.md](themes.md) | `feature-map-drive.mjs themes`; Appearance list and the resolved `html[data-theme]` |
+| Time tracking | [time-tracking.md](time-tracking.md) | `feature-map-drive.mjs time-tracking` read-only |
+| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | `feature-map-drive.mjs trash-and-permanent-delete`; trash heading, archive tabs and the refusals |
+| Webhooks | [webhooks.md](webhooks.md) | `feature-map-drive.mjs webhooks`; team endpoint and event list |
 <!-- shared-list rows end -->
 
 Load-only ids come from `prod.spec.ts`'s per-view smoke check (page loads,
