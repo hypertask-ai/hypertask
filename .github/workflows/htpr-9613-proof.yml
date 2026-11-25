@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 4
+          fetch-depth: 5
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with: {node-version: '^24.22.1', check-latest: true}
@@ -31,11 +31,9 @@ jobs:
           cp "$RUNNER_TEMP/pstack-verifier-fixed.mjs" scripts/pstack-verifier.mjs
           test "$status" -eq 1
           grep -q 'not ok.*run 45516805008' "$RUNNER_TEMP/replay-red.log"
-      - name: Install the workflow parser
-        run: timeout 90 npm ci --prefix .github/scripts/node-version-guard --ignore-scripts --no-audit --no-fund
+      - name: Install locked test dependencies
+        run: timeout 300 npm ci --ignore-scripts --no-audit --no-fund
       - name: Replay and related files pass with the fix
-        env:
-          NODE_PATH: ${{ github.workspace }}/.github/scripts/node-version-guard/node_modules
         run: |
           timeout 90 node --test tests/pstack-verifier.test.cjs
           timeout 90 node --test tests/pstack-verifier-workflow.test.cjs
