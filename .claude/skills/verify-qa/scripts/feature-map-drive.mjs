@@ -379,11 +379,16 @@ const featureRuns = {
         await shot(page, dir, "chat-session-1440x900.png");
       }
       await open(page, `/project?id=${SBX}`, 4000);
-      const chatButton = page.locator('[aria-label="Open AI chat"]').first();
+      await page.locator(".kanban-column-title").first().waitFor({ state: "visible", timeout: 30_000 }).catch(() => {});
+      const chatButton = page.locator('[aria-label="Open AI chat"]:visible').first();
       if (await chatButton.count()) {
-        await chatButton.click({ timeout: 15_000 }).catch(() => null);
-        await page.waitForTimeout(3500);
-        step("the board sidebar opens AI chat with a composer", (await page.locator("textarea, [contenteditable=true]").count()) > 0, {});
+        let opened = false;
+        for (let attempt = 0; attempt < 2 && !opened; attempt += 1) {
+          opened = await chatButton.click({ timeout: 20_000 }).then(() => true, async () => { await page.waitForTimeout(1500); return false; });
+        }
+        await page.waitForTimeout(4000);
+        const composer = await page.locator("textarea, [contenteditable=true]").first().waitFor({ state: "visible", timeout: 15_000 }).then(() => true, () => false);
+        step("the board sidebar opens AI chat with a composer", opened && composer, { attempted: opened });
         await shot(page, dir, "chat-board-sidebar-1440x900.png");
       } else {
         step("the board sidebar opens AI chat with a composer", false, { reason: "no AI Chat control on the board rail" });
