@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import prisma from "@/lib/prisma";
+import { VISIBLE_ROW_STATUS } from "@/lib/db/softDeleteReads";
 import { IUser } from "@/models/model";
 import {
   defaultStripeAmountMonth,
@@ -216,7 +217,7 @@ export async function findTeam(user: IUser) {
           },
         },
         include: {
-          projects: true,
+          projects: { where: { status: VISIBLE_ROW_STATUS } },
           members: true,
           googleAccount: true,
           team_activity: true,

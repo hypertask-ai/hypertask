@@ -3,6 +3,7 @@
 import { ITeam } from "@/models/model";
 
 import prisma from "@/lib/prisma";
+import { VISIBLE_ROW_STATUS } from "@/lib/db/softDeleteReads";
 
 
 const getAllTeams = async (userId:number) => {
@@ -32,6 +33,7 @@ const getAllTeams = async (userId:number) => {
                 },
                 include:{
                     projects:{
+                        where: {status: VISIBLE_ROW_STATUS},
                         include: {
                             tasks: {
                                 include: {
@@ -93,7 +95,7 @@ const getAllTeams = async (userId:number) => {
                 include:{
                     projects:{
                         where:{
-
+                            status: VISIBLE_ROW_STATUS,
                             id:{
                                 in:projectIds
                             }

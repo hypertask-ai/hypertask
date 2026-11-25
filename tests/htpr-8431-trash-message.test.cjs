@@ -84,6 +84,7 @@ test("a ticket the caller cannot see still says not found", async () => {
   assert.equal(body.message, "Task not found or access denied");
   assert.deepEqual(calls.permanentlyDeleted, []);
   assert.deepEqual(calls.findFirst[0].where.status, { in: ["Normal", "Archive", "Deleted"] });
+  assert.equal(calls.findFirst[0].where.anyStatus, true);
 });
 
 test("a trashed ticket is still permanently deleted", async () => {
@@ -104,5 +105,6 @@ test("the lookup stays scoped to the caller's projects", async () => {
     id: 4711,
     project: { teamMembers: { some: { userId: 7 } } },
     status: { in: ["Normal", "Archive", "Deleted"] },
+    anyStatus: true,
   });
 });

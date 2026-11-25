@@ -11,12 +11,23 @@ export const SOFT_DELETE_READ_OPERATIONS = [
   "groupBy",
 ] as const;
 
+type TaskStatus = "Normal" | "Archive" | "Deleted";
+
+const DELETED: TaskStatus = "Deleted";
 const MODELS: ReadonlySet<string> = new Set(SOFT_DELETE_MODELS);
 const READ_OPERATIONS: ReadonlySet<string> = new Set(SOFT_DELETE_READ_OPERATIONS);
 
-export const VISIBLE_ROW_STATUS = { not: "Deleted" } as const;
+export const VISIBLE_ROW_STATUS = { not: DELETED } as const;
 
-export const anyStatus: { status: { in: ("Normal" | "Archive" | "Deleted")[] } } = {
+export type AnyStatusScope = {
+  anyStatus: true;
+  status: { in: TaskStatus[] };
+};
+
+export const anyStatusMarker: { anyStatus: true } = { anyStatus: true };
+
+export const anyStatus: AnyStatusScope = {
+  ...anyStatusMarker,
   status: { in: ["Normal", "Archive", "Deleted"] },
 };
 
@@ -33,19 +44,34 @@ function isRecord(value: unknown): value is WhereRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function whereConstrainsStatus(where: unknown): boolean {
-  if (!isRecord(where)) return false;
-  if (where.status !== undefined) return true;
-  return ["AND", "OR", "NOT"].some((key) => {
-    const value = where[key];
-    if (Array.isArray(value)) return value.some(whereConstrainsStatus);
-    return whereConstrainsStatus(value);
-  });
+export function isAnyStatusRead(where: unknown): boolean {
+  return isRecord(where) && where.anyStatus === true;
+}
+
+export function withoutAnyStatusMarker(where: WhereRecord): WhereRecord {
+  const rest: WhereRecord = {};
+  for (const [key, value] of Object.entries(where)) {
+    if (key !== "anyStatus") rest[key] = value;
+  }
+  return rest;
+}
+
+function isLiveStatus(value: unknown): boolean {
+  return value === "Normal" || value === "Archive";
+}
+
+export function statusExcludesDeleted(status: unknown): boolean {
+  if (isLiveStatus(status)) return true;
+  if (!isRecord(status)) return false;
+  if (isLiveStatus(status.equals)) return true;
+  if (status.not === DELETED) return true;
+  return Array.isArray(status.in) && status.in.length > 0 && status.in.every(isLiveStatus);
 }
 
 export function guardedWhere(where: unknown): WhereRecord {
-  if (!isRecord(where)) return { status: VISIBLE_ROW_STATUS };
-  return { ...where, status: VISIBLE_ROW_STATUS };
+  const scope = isRecord(where) ? where : {};
+  if (statusExcludesDeleted(scope.status)) return scope;
+  return { ...scope, status: VISIBLE_ROW_STATUS };
 }
 
 export async function guardSoftDeleteRead({
@@ -54,17 +80,13 @@ export async function guardSoftDeleteRead({
   args,
   query,
 }: SoftDeleteReadArgs): Promise<unknown> {
-  if (!model || !MODELS.has(model) || !READ_OPERATIONS.has(operation)) {
-    return query(args);
-  }
+  if (!model || !MODELS.has(model)) return query(args);
   const input = isRecord(args) ? args : {};
-  if (whereConstrainsStatus(input.where)) return query(args);
-  return query({ ...input, where: guardedWhere(input.where) });
-}
-
-export function excludeDeletedRows() {
-  return {
-    name: "excludeDeletedRows",
-    query: { $allOperations: guardSoftDeleteRead },
-  };
+  if (isAnyStatusRead(input.where)) {
+    return query({ ...input, where: withoutAnyStatusMarker(input.where as WhereRecord) });
+  }
+  if (!READ_OPERATIONS.has(operation)) return query(args);
+  const where = guardedWhere(input.where);
+  if (where === input.where) return query(args);
+  return query({ ...input, where });
 }

@@ -13,12 +13,12 @@ const {
   VISIBLE_ROW_STATUS,
   anyStatus,
   guardSoftDeleteRead,
-  whereConstrainsStatus,
+  statusExcludesDeleted,
 } = loadModule("src/lib/db/softDeleteReads.ts");
 
 async function run(args) {
   const seen = [];
-  const result = await guardSoftDeleteRead({
+  await guardSoftDeleteRead({
     model: "Task",
     query: async (next) => {
       seen.push(next);
@@ -26,7 +26,24 @@ async function run(args) {
     },
     ...args,
   });
-  return { seen, result };
+  return { seen };
+}
+
+function prismaOperationsHook() {
+  let hook;
+  const previous = globalThis.prismaGlobal;
+  delete globalThis.prismaGlobal;
+  loadModule("src/lib/prisma.ts", {
+    "@prisma/client": { PrismaClient: class { $extends(extension) { hook = extension.query.$allOperations; return this } } },
+    "@prisma/adapter-pg": { PrismaPg: class {} },
+    "@/lib/mcp/dbTiming": { createMcpTimingPool: () => ({}), mcpDbTimings: { getStore: () => undefined } },
+    "@/lib/queryCountTracker": { trackPrismaQuery: () => {} },
+    "@/lib/apiKeyExpiry": { isApiKeyAuthLookup: () => false },
+  });
+  if (previous === undefined) delete globalThis.prismaGlobal;
+  else globalThis.prismaGlobal = previous;
+  assert.ok(hook, "the default client must install a query extension");
+  return hook;
 }
 
 test("every read of a soft-delete model excludes Deleted rows by default", async () => {
@@ -45,36 +62,35 @@ test("a read without a where clause still excludes Deleted rows", async () => {
   assert.deepEqual(noArgs.seen[0].where, { status: VISIBLE_ROW_STATUS });
 });
 
-test("a read that states its own status keeps it, so trash and restore still work", async () => {
-  for (const where of [
-    { id: 7, ...anyStatus },
-    { id: 7, status: "Deleted" },
-    { id: 7, status: { equals: "Deleted" } },
-    { id: 7, status: { in: ["Normal", "Archive"] } },
-    { id: 7, status: { not: "Deleted" } },
-    { id: 7, AND: [{ status: { not: "Deleted" } }] },
-    { id: 7, OR: [{ status: "Deleted" }] },
-    { id: 7, NOT: { status: "Deleted" } },
-  ]) {
-    const { seen } = await run({ model: "Task", operation: "findFirst", args: { where } });
-    assert.deepEqual(seen[0], { where }, JSON.stringify(where));
-    assert.equal(whereConstrainsStatus(where), true);
+test("a scope that cannot match Deleted keeps its own filter", async () => {
+  for (const status of ["Normal", "Archive", { equals: "Normal" }, { in: ["Normal", "Archive"] }, { not: "Deleted" }]) {
+    const { seen } = await run({ model: "Task", operation: "findFirst", args: { where: { id: 7, status } } });
+    assert.deepEqual(seen[0], { where: { id: 7, status } }, JSON.stringify(status));
+    assert.equal(statusExcludesDeleted(status), true);
   }
 });
 
-test("the trash scope accepts every status and the default review refuses Deleted", async () => {
-  assert.deepEqual(anyStatus.status.in, ["Normal", "Archive", "Deleted"]);
-  const { seen } = await run({ model: "Task", operation: "findUnique", args: { where: { id: 7, ...anyStatus } } });
-  assert.deepEqual(seen[0], { where: { id: 7, ...anyStatus } });
+test("a caller that asks for Deleted without the marker still gets only live rows", async () => {
+  for (const status of ["Deleted", { equals: "Deleted" }, { in: ["Normal", "Deleted"] }, { not: "Normal" }]) {
+    const { seen } = await run({ model: "Project", operation: "findMany", args: { where: { id: 7, status } } });
+    assert.deepEqual(seen[0].where, { id: 7, status: VISIBLE_ROW_STATUS }, JSON.stringify(status));
+    assert.equal(statusExcludesDeleted(status), false);
+  }
 });
 
-test("a filter on a related row is not the row's own status", async () => {
+test("a nested status filter never lifts the row's own filter", async () => {
   const { seen } = await run({
     model: "Task",
     operation: "findMany",
     args: { where: { project: { id: 15, status: "Deleted" } } },
   });
   assert.deepEqual(seen[0].where, { project: { id: 15, status: "Deleted" }, status: VISIBLE_ROW_STATUS });
+});
+
+test("spreading anyStatus opts a trash or restore read into every status", async () => {
+  assert.deepEqual(anyStatus.status.in, ["Normal", "Archive", "Deleted"]);
+  const { seen } = await run({ model: "Task", operation: "findUnique", args: { where: { id: 7, ...anyStatus } } });
+  assert.deepEqual(seen[0], { where: { id: 7, status: { in: ["Normal", "Archive", "Deleted"] } } });
 });
 
 test("writes and models without a trash column pass through untouched", async () => {
@@ -91,19 +107,14 @@ test("a deleted board can no longer answer a board lookup", async () => {
   assert.deepEqual(seen[0], { where: { id: 15, status: VISIBLE_ROW_STATUS }, select: { id: true } });
 });
 
-test("the default client hides Deleted rows and the trash paths ask for every status", () => {
-  assert.match(fs.readFileSync(path.join(root, "src/lib/prisma.ts"), "utf8"), /excludeDeletedRows\(\)/);
-  const trashReads = [
-    "src/lib/api/task-writes/recover.ts",
-    "src/lib/api/task-writes/delete.ts",
-    "src/pages/api/queues/tasks/taskDeleteReminder.ts",
-    "src/utils/controllers/tasks/invokeTaskDelete.ts",
-  ];
-  for (const file of trashReads) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /import \{ anyStatus \} from ["']@\/lib\/db\/softDeleteReads["']/, file);
-    assert.match(source, /\.\.\.anyStatus/, file);
-  }
+test("the default client filters a board read and lets the trash scope through", async () => {
+  const hook = prismaOperationsHook();
+  const seen = [];
+  const query = async (args) => { seen.push(args); return { rows: [] }; };
+  await hook({ model: "Project", operation: "findMany", args: { where: { ownerId: 7 } }, query });
+  await hook({ model: "Task", operation: "findFirst", args: { where: { id: 9, ...anyStatus } }, query });
+  assert.deepEqual(seen[0].where, { ownerId: 7, status: VISIBLE_ROW_STATUS });
+  assert.deepEqual(seen[1].where, { id: 9, status: { in: ["Normal", "Archive", "Deleted"] } });
 });
 
 async function lint(code, file = "src/lib/soft-delete-probe.ts") {
