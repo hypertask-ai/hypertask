@@ -62,8 +62,7 @@ test(`open task`, { tag: [idTag('open-task'), '@mobile'] }, async ({ page, reque
   const guard = watchForLoops(page)
   const detailPath = `/detail/project-${board.projectId}/${created.uniqueIndex}`
   if (isPhone(page)) {
-    await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' }); await page.locator('.kanban-column-title').first().waitFor({ state: 'visible', timeout: 10_000 })
-    const cardLink = page.locator(`#task-${created.id} a[href="${detailPath}"]`).first(); await expect(cardLink, `mobile task card ${created.id} did not become visible on the board`).toBeVisible({ timeout: 15_000 }); await cardLink.tap()
+    await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' }); await page.locator('.kanban-column-title').first().waitFor({ state: 'visible', timeout: 10_000 }); const cardLink = page.locator(`#task-${created.id} a[href="${detailPath}"]`).first(); await expect(cardLink, `mobile task card ${created.id} did not become visible on the board`).toBeVisible({ timeout: 15_000 }); await cardLink.tap()
   } else await page.goto(withRealtime(detailPath), { waitUntil: 'load' })
   await expect(page.locator('#title-input'), 'task detail title input did not render').toBeVisible({ timeout: 10_000 })
   assertNoLoop(guard, 'open task')
@@ -109,23 +108,15 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
 
   if (isPhone(page)) {
     test.setTimeout(120_000)
-    const createResponse = page.waitForResponse(
-      (res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST',
-      { timeout: 45_000 },
-    )
+    const createResponse = page.waitForResponse((res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST', { timeout: 45_000 })
     await page.getByRole('button', { name: 'Commands', exact: true }).tap(); await page.getByRole('tab', { name: 'New Task' }).tap()
     const writer = page.locator('[aria-label="Describe the task"]').first(); await writer.tap(); await writer.fill(title)
     await page.locator('[data-compose-task-writer] [aria-label="Create task"], [data-compose-task-writer] [aria-label="Send message"]').first().tap()
     const created = await (await createResponse).json(), createdId = (created.newTask?.newTask ?? created.newTask ?? created)?.id; if (createdId) createdTaskIds.push(createdId)
     const taskDetailTitle = page.locator('#title-input'), boardCard = createdId ? page.locator(`#task-${createdId}`) : page.locator('[id^="task-"]').filter({ hasText: title }).first()
-    await expect.poll(
-      async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()),
-      { message: 'created task did not appear after save', timeout: 25_000 },
-    ).toBe(true)
+    await expect.poll(async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()), { message: 'created task did not appear after save', timeout: 25_000 }).toBe(true)
     if (await taskDetailTitle.isVisible()) {
-      await expect(taskDetailTitle, 'created task did not open after save').toHaveValue(title, { timeout: 10_000 })
-      await page.reload()
-      await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 }); return
+      await expect(taskDetailTitle, 'created task did not open after save').toHaveValue(title, { timeout: 10_000 }); await page.reload(); await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 }); return
     }
     await page.reload(); await expect(boardCard, 'task did not persist after reload').toBeVisible({ timeout: 10_000 }); return
   }
@@ -300,8 +291,7 @@ test(`reply in inbox`, { tag: [idTag('reply-inbox'), '@mobile'] }, async ({ page
   const created = await createTask(request, { title, projectId: board.projectId, userId: board.userId }); createdTaskIds.push(created.id)
   expect((await request.post('/api/notifications/moveTaskToInbox', { data: { taskId: created.id, projectId: board.projectId } })).ok()).toBe(true)
   await page.goto(withRealtime('/inbox'), { waitUntil: 'load' })
-  const row = page.getByText(title).first(); await expect(row).toBeVisible({ timeout: 15_000 }); await (isPhone(page) ? row.tap() : row.click()); await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
-  const editor = page.locator('[data-testid="comment-composer"] .ProseMirror[contenteditable="true"], #comment-input .ProseMirror[contenteditable="true"]').first()
+  const row = page.getByText(title).first(); await expect(row).toBeVisible({ timeout: 15_000 }); await (isPhone(page) ? row.tap() : row.click()); await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 }); const editor = page.locator('[data-testid="comment-composer"] .ProseMirror[contenteditable="true"], #comment-input .ProseMirror[contenteditable="true"]').first()
   if (!(await editor.isVisible())) await (isPhone(page) ? page.locator('#comment-input, #comment-input-input').first().tap() : page.locator('#comment-input').click())
   await (isPhone(page) ? editor.tap() : editor.click()); await page.keyboard.insertText(replyText)
   const saved = page.waitForResponse((res) => res.url().includes('/api/comments/create') && res.request().method() === 'POST', { timeout: 15_000 })
@@ -316,8 +306,7 @@ test(`switch column`, { tag: [idTag('switch-column'), '@mobile'] }, async ({ pag
   const created = await createTask(request, { title: `${QA_TASK_PREFIX} switch-column journey ${Date.now()}`, projectId: board.projectId, userId: board.userId }); createdTaskIds.push(created.id)
   await page.goto(withRealtime(`/detail/project-${board.projectId}/${created.uniqueIndex}`), { waitUntil: 'load' }); await expect(page.locator('#title-input')).toBeVisible({ timeout: 10_000 })
   const rail = page.locator('[data-task-properties-rail]').first(), targetTitle = sections[1].section_title, moved = page.waitForResponse((res) => /\/api\/tasks\/moveTask/.test(res.url()) && res.request().method() === 'PUT', { timeout: 15_000 })
-  const trigger = rail.getByText(sections[0].section_title, { exact: true }).first(); await (isPhone(page) ? trigger.tap() : trigger.click())
-  const option = page.getByText(targetTitle, { exact: true }).last(); await (isPhone(page) ? option.tap() : option.click())
+  const trigger = rail.getByText(sections[0].section_title, { exact: true }).first(); await (isPhone(page) ? trigger.tap() : trigger.click()); const option = page.getByText(targetTitle, { exact: true }).last(); await (isPhone(page) ? option.tap() : option.click())
   expect((await moved).ok(), 'column move request failed').toBe(true); await page.reload(); await expect(rail.getByText(targetTitle, { exact: true }).first(), 'column change did not persist after reload').toBeVisible({ timeout: 10_000 })
 })
 

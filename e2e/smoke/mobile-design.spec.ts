@@ -1,12 +1,9 @@
 import { test, expect } from '@playwright/test'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import path from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'; import path from 'node:path'
 import { MOBILE_SCREENS, MOBILE_THEMES, MOBILE_VIEWPORT, collectMobileMetrics, evaluateMobileDesign, type MobileDesignBaseline, type MobileRule } from './lib/mobile-design'
 const BASELINE_PATH = process.env.MOBILE_DESIGN_BASELINE || path.join(__dirname, '__snapshots__', 'mobile-design.baseline.json'), UPDATE = process.env.MOBILE_DESIGN_UPDATE === '1', STRICT = process.env.MOBILE_DESIGN_STRICT === '1'
-const list = (v?: string) => v?.split(',').map((s: string) => s.trim()).filter(Boolean), SCREEN_FILTER = list(process.env.MOBILE_DESIGN_SCREENS), THEME_FILTER = list(process.env.MOBILE_DESIGN_THEMES)
-if (UPDATE) test.describe.configure({ mode: 'serial' })
-const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
-for (const theme of MOBILE_THEMES) {
+const list = (v?: string) => v?.split(',').map((s: string) => s.trim()).filter(Boolean), SCREEN_FILTER = list(process.env.MOBILE_DESIGN_SCREENS), THEME_FILTER = list(process.env.MOBILE_DESIGN_THEMES); if (UPDATE) test.describe.configure({ mode: 'serial' })
+const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'; for (const theme of MOBILE_THEMES) {
   test(`mobile design audit (${theme})`, { tag: ['@id:mobile-design'] }, async ({ browser, baseURL }, testInfo) => {
     test.skip(Boolean(THEME_FILTER?.length && !THEME_FILTER.includes(theme)), `filtered to ${THEME_FILTER?.join(',')}`); test.setTimeout(360_000)
     const origin = baseURL || process.env.SMOKE_BASE_URL || process.env.BASE_URL || 'https://app.hypertask.ai', boardPath = process.env.SMOKE_BOARD_PATH || '/project?id=7049&surface=board', boardId = new URL(boardPath, origin).searchParams.get('id') || '7049', taskPath = process.env.SMOKE_TASK_PATH || `/detail/project-${boardId}/6283`

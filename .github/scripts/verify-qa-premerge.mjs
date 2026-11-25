@@ -373,8 +373,7 @@ export async function runTaggedJourneys({ base, journey, outDir, runner = 'deskt
   const reportFile = path.join(outDir, 'journeys.json')
   const run = execute(process.execPath, [
     path.join(root, 'node_modules/@playwright/test/cli.js'),
-    'test', '-c', suite.config, ...suite.projects.map((project) => `--project=${project}`),
-    '--grep', `@id:(${ids.join('|')})(\\s|$)`,
+    'test', '-c', suite.config, ...suite.projects.map((project) => `--project=${project}`), '--grep', `@id:(${ids.join('|')})(\\s|$)`,
     `--workers=${suite.audit ? 4 : 1}`, '--retries=0', `--global-timeout=${suite.audit ? 420000 : 140000}`, '--reporter=json',
     `--output=${path.join(outDir, 'test-results')}`,
   ], {

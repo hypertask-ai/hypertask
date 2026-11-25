@@ -60,25 +60,21 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
     const radii: MobileScreenMetrics['radii'] = [], clips: MobileScreenMetrics['clips'] = [], directText = (el: Element) => Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent || '').trim())
     for (const el of body.querySelectorAll('*')) {
       const tag = el.tagName.toLowerCase(); if (SKIP.has(tag) || keptEls.has(el)) continue
-      const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, false)) continue
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, false)) continue; const direct = directText(el)
       const cls = (el.getAttribute('class') || '').slice(0, 80), label = labelOf(el), roundMarker = `${cls} ${el.getAttribute('data-testid') || ''}`.split(/\s+/).some((n) => /^(?:[\w-]*[-_])?(?:avatar|status-dot)(?:[-_][\w-]*)?$/i.test(n)), stableId = stableIdOf(el, tag, (el.getAttribute('role') || '').toLowerCase(), label, cls)
       const rad = radiusOf(cs, r.width, r.height, roundMarker); if (rad.bad && surfaceOf(cs)) radii.push({ key: keyOf(el), stableId, label, radius: rad.radius })
       const ellipsis = cs.textOverflow === 'ellipsis' || Boolean(el.firstElementChild && getComputedStyle(el.firstElementChild).textOverflow === 'ellipsis')
-      if (directText(el) && !['input', 'textarea', 'select', 'svg'].includes(tag) && !ellipsis && el.scrollWidth > el.clientWidth + 1 && ['hidden', 'clip'].includes(cs.overflowX)) clips.push({ key: keyOf(el), stableId, label, scrollW: el.scrollWidth, clientW: el.clientWidth })
+      if (direct && !['input', 'textarea', 'select', 'svg'].includes(tag) && !ellipsis && el.scrollWidth > el.clientWidth + 1 && ['hidden', 'clip'].includes(cs.overflowX)) clips.push({ key: keyOf(el), stableId, label, scrollW: el.scrollWidth, clientW: el.clientWidth })
     }
     const MIC_RE = /dictat|microphone|\bmic\b|voice|speech|record/i, AI_RE = /\bai\b|ask-?ai|writer|sparkl|magic|assistant|\bwand\b|copilot|\bagent/i
     const isShown = (el: Element) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width >= 1 && r.height >= 1 && cs.display !== 'none' && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none' }
     const isMic = (b: Element) => { const svg = b.querySelector('svg'); return [b.getAttribute('aria-label'), b.getAttribute('title'), b.getAttribute('data-testid'), b.getAttribute('class'), (b as HTMLElement).innerText?.slice(0, 80), svg?.getAttribute('class'), svg?.getAttribute('data-icon')].some((v) => Boolean(v && MIC_RE.test(v))) }
     const textFields: MeasuredTextField[] = [], purple: MeasuredPurple[] = []
     for (const k of kept) {
-      if (k.dropped || !k.rec.textField) continue
-      let mic: Element | null = null; const fr = k.el.getBoundingClientRect(), fcy = fr.top + fr.height / 2
-      const sameRow = (b: Element) => { const br = b.getBoundingClientRect(); return Math.abs(br.top + br.height / 2 - fcy) <= Math.max(fr.height, br.height) / 2 + 4 && br.left + br.width / 2 >= fr.left + fr.width / 2 }
+      if (k.dropped || !k.rec.textField) continue; let mic: Element | null = null; const fr = k.el.getBoundingClientRect(), fcy = fr.top + fr.height / 2, const sameRow = (b: Element) => { const br = b.getBoundingClientRect(); return Math.abs(br.top + br.height / 2 - fcy) <= Math.max(fr.height, br.height) / 2 + 4 && br.left + br.width / 2 >= fr.left + fr.width / 2 }
       for (let anc = k.el.parentElement, d = 0; anc && anc !== body && d < 8; d++, anc = anc.parentElement) {
-        const others = Array.from(anc.querySelectorAll(SEL)).filter((f) => f !== k.el && tfOf(f).is && isShown(f) && isVis(f, f.getBoundingClientRect(), getComputedStyle(f), false))
-        if (others.length) break
-        mic = Array.from(anc.querySelectorAll('button,[role="button"]')).find((b) => isShown(b) && isMic(b) && sameRow(b)) || null
-        if (mic) break
+        const others = Array.from(anc.querySelectorAll(SEL)).filter((f) => f !== k.el && tfOf(f).is && isShown(f) && isVis(f, f.getBoundingClientRect(), getComputedStyle(f), false)); if (others.length) break
+        mic = Array.from(anc.querySelectorAll('button,[role="button"]')).find((b) => isShown(b) && isMic(b) && sameRow(b)) || null; if (mic) break
       }
       if (!mic) { textFields.push({ key: k.rec.key, stableId: k.rec.stableId, label: k.rec.label, kind: k.tf.kind, disabled: k.rec.disabled, x: k.rec.x, y: k.rec.y, w: k.rec.w, h: k.rec.h, micFound: false, micLabel: '', micW: 0, micH: 0, micBgAlpha: 0, micRightBound: false, micIsPrimaryRight: false }); continue }
       const mr = mic.getBoundingClientRect(), mcs = getComputedStyle(mic), cy = mr.top + mr.height / 2, tol = Math.max(4, mr.height / 2)
@@ -87,8 +83,7 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
     }
     const isAi = (el: Element) => { for (let n: Element | null = el, d = 0; n && d <= 7; n = n.parentElement, d++) if ([n.getAttribute('aria-label'), n.getAttribute('title'), n.getAttribute('data-testid'), n.id, n.getAttribute('class'), n.getAttribute('href'), d === 0 ? (n.textContent || '').slice(0, 120) : ''].some((v) => Boolean(v && AI_RE.test(v)))) return true; return false }
     for (const el of body.querySelectorAll('*')) {
-      const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, false)) continue
-      const hits: string[] = []
+      const r = el.getBoundingClientRect(), cs = getComputedStyle(el); if (!isVis(el, r, cs, false)) continue; const hits: string[] = []
       if (Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent || '').trim()) && isPurple(cs.color)) hits.push(`text ${norm(cs.color)}`)
       if (isPurple(cs.backgroundColor)) hits.push(`bg ${norm(cs.backgroundColor)}`)
       for (const s of ['top', 'right', 'bottom', 'left']) if ((parseFloat(cs.getPropertyValue(`border-${s}-width`)) || 0) > 0 && !['none', 'hidden'].includes(cs.getPropertyValue(`border-${s}-style`)) && isPurple(cs.getPropertyValue(`border-${s}-color`))) hits.push(`border-${s} ${norm(cs.getPropertyValue(`border-${s}-color`))}`)
@@ -108,11 +103,9 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
     return { moved: Math.abs(sc.scrollTop - before) > 2 }
   }, { i: index, f: frac })
   const scrollers = await scrollTargets(); let samples = 0
-  for (let index = 0; index < scrollers && samples < 24; index++) {
-    for (let frac = 1; samples < 24; frac++) {
-      const step = await scrollStep(index, frac); if (!step?.moved) break
-      await page.waitForTimeout(150); const next = await sample(); maxOverflow = Math.max(maxOverflow, next.docOverflowX); merge(next); samples++
-    }
+  for (let index = 0; index < scrollers && samples < 24; index++) for (let frac = 1; samples < 24; frac++) {
+    const step = await scrollStep(index, frac); if (!step?.moved) break
+    await page.waitForTimeout(150); const next = await sample(); maxOverflow = Math.max(maxOverflow, next.docOverflowX); merge(next); samples++
   }
   return { coarsePointer: first.coarsePointer, docOverflowX: maxOverflow, elements: [...elMap.values()], textFields: [...tfMap.values()], purple: [...pMap.values()], radii: rList, clips: cList }
 }

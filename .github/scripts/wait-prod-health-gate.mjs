@@ -15,8 +15,7 @@ export async function waitForProdHealthGate({ eventName, repo, sha, token, budge
     if (newest?.state === 'failure') return { ok: false, unreadable: false, reason: `prod-health-gate failure for ${sha} invalidates run ${run.id}` }
     const match = statuses.find((s) => s.context === 'prod-health-gate' && String(s.target_url || '').includes(`/runs/${run.id}`) && String(s.created_at || '') >= String(run.created_at || ''))
     if (match?.state === 'success') return { ok: true, unreadable: false, reason: `prod-health-gate success for ${sha} (run ${run.id})` }
-    if (run.status === 'completed' && completedAt === null) completedAt = now()
-    if (match?.state === 'failure' || (completedAt !== null && now() - completedAt >= 120_000)) return { ok: false, unreadable: false, reason: `prod-health run ${run.id} ${match?.state === 'failure' ? 'reported a prod-health-gate failure' : 'published no prod-health-gate status within 120s of completing'} for ${sha}` }
+    if (run.status === 'completed' && completedAt === null) completedAt = now(); if (match?.state === 'failure' || (completedAt !== null && now() - completedAt >= 120_000)) return { ok: false, unreadable: false, reason: `prod-health run ${run.id} ${match?.state === 'failure' ? 'reported a prod-health-gate failure' : 'published no prod-health-gate status within 120s of completing'} for ${sha}` }
     await sleep(pollMs)
   }
   return unread ? { ok: false, unreadable: true, reason: unread } : { ok: false, unreadable: false, reason: `prod-health did not conclude for ${sha} within budget` }
