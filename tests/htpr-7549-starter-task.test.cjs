@@ -67,10 +67,12 @@ for (const cliEnabled of [false, true]) {
     assert.equal(code.find((value) => value === "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp"), "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp");
     assert.equal(code.find((value) => value === "curl -fsSL https://hypertask.ai/install | sh"), "curl -fsSL https://hypertask.ai/install | sh");
     assert.equal(code.find((value) => value === "irm https://hypertask.ai/install.ps1 | iex"), "irm https://hypertask.ai/install.ps1 | iex");
-    assert.ok(code.includes("hypertask login --token <your-agent-token>"));
+    assert.ok(code.includes("hypertask login"));
     assert.match(text, /Approve and connect/);
     assert.match(text, /Never post the token in a task or chat/);
-    assert.match(text, /Bare hypertask login does not sign in today/);
+    assert.match(text, /hypertask login: it opens your browser to authorize/);
+    assert.doesNotMatch(text, /does not sign in today/);
+    assert.doesNotMatch(text, /login --token/);
     assert.doesNotMatch(task.description, /npm|login --code/);
     assert.deepEqual(reads, [key]);
     assert.deepEqual(markers, [{ firstTaskPointerTaskId: 71, firstTaskPointerSectionId: 10 }]);
@@ -87,6 +89,16 @@ for (const cliEnabled of [false, true]) {
     assert.deepEqual(markers, []);
   });
 }
+
+test("HTPR-9530 onboarding CLI step uses browser sign-in", async () => {
+  const { task } = await seed(true, true);
+  const dom = new JSDOM(task.description);
+  const text = dom.window.document.body.textContent;
+  assert.match(text, /hypertask login: it opens your browser to authorize/);
+  assert.doesNotMatch(text, /does not sign in today/);
+  assert.doesNotMatch(text, /login --token/);
+  dom.window.close();
+});
 
 test("legacy factory remains byte-identical to the production baseline", () => {
   const { createHash } = require("node:crypto");

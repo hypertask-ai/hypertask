@@ -153,7 +153,7 @@ const CONNECT_YOUR_AI_TASK = {
     "<p><strong>Claude or ChatGPT:</strong> add <code>https://mcp.hypertask.ai/mcp</code> as an MCP server, then use the Hypertask <strong>Approve and connect</strong> page. You do not need to generate a token for this sign-in flow.</p>",
     "<p><strong>Claude Code:</strong> <code>claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp</code> and approve the connection when prompted.</p>",
     "<p><strong>Codex, Cursor or VS Code:</strong> add the same remote HTTP MCP server in your client's MCP settings and approve if supported. For clients that require a config file/token instead, open the board's existing Connect/MCP instructions and use its client-specific configuration. Never post the token in a task or chat.</p>",
-    "<p><strong>Terminal / CLI:</strong> install with <code>curl -fsSL https://hypertask.ai/install | sh</code>. Windows PowerShell: <code>irm https://hypertask.ai/install.ps1 | iex</code>. Create or open an agent at <code>https://app.hypertask.ai/agents</code>, copy its token, then run <code>hypertask login --token &lt;your-agent-token&gt;</code>. Bare <code>hypertask login</code> does not sign in today.</p>",
+    "<p><strong>Terminal / CLI:</strong> install with <code>curl -fsSL https://hypertask.ai/install | sh</code>. Windows PowerShell: <code>irm https://hypertask.ai/install.ps1 | iex</code>. Then run <code>hypertask login</code>: it opens your browser to authorize this Hypertask account.</p>",
   ].join(""),
 };
 
