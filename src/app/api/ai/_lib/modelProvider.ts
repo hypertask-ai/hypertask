@@ -148,23 +148,18 @@ const allowanceFundedModels = new WeakMap<object, number>();
 const runtimeProviderOverrides = new WeakMap<object, { provider?: string }>();
 
 const USER_VISIBLE_STREAM_CHUNK_TYPES = new Set([
-  "text-start",
   "text-delta",
-  "text-end",
-  "reasoning-start",
   "reasoning-delta",
-  "reasoning-end",
-  "tool-input-start",
   "tool-input-delta",
-  "tool-input-end",
   "tool-call",
   "file",
   "source",
   "finish",
 ]);
 
-function isUserVisibleStreamChunk(chunk: { type?: string }): boolean {
-  return typeof chunk.type === "string" && USER_VISIBLE_STREAM_CHUNK_TYPES.has(chunk.type);
+function isUserVisibleStreamChunk(chunk: { type?: string; delta?: string }): boolean {
+  return typeof chunk.type === "string" && USER_VISIBLE_STREAM_CHUNK_TYPES.has(chunk.type) &&
+    (!("delta" in chunk) || Boolean(chunk.delta));
 }
 
 function createGatewayFailureReportingMiddleware(
@@ -237,91 +232,83 @@ async function wrapAnthropicStreamWithFallback<
   canFallback: () => boolean,
   isAborted: () => boolean,
 ): Promise<TResult> {
+  let result: TResult;
   try {
-    const result = await startDirectStream();
-    if (!canFallback()) return result;
-    const reader = result.stream.getReader();
-    const buffered: TChunk[] = [];
-    while (true) {
-      let item: Awaited<ReturnType<typeof reader.read>>;
-      try {
-        item = await reader.read();
-      } catch (error) {
-        await reader.cancel().catch(() => undefined);
-        if (isAborted()) throw error;
-        reportDirectError(error);
-        return startFallbackStream(error);
-      }
-      if (item.done) {
-        return {
-          ...result,
-          stream: new ReadableStream<TChunk>({
-            start(controller) {
-              for (const chunk of buffered) controller.enqueue(chunk);
-              controller.close();
-            },
-          }),
-        };
-      }
-      if (item.value.type === "error") {
-        await reader.cancel().catch(() => undefined);
-        if (isAborted()) {
-          return {
-            ...result,
-            stream: new ReadableStream<TChunk>({
-              start(controller) {
-                for (const chunk of buffered) controller.enqueue(chunk);
-                controller.enqueue(item.value);
-                controller.close();
-              },
-            }),
-          };
-        }
-        reportDirectError(item.value.error);
-        return startFallbackStream(item.value.error);
-      }
-      buffered.push(item.value);
-      if (isUserVisibleStreamChunk(item.value)) {
-        break;
-      }
-    }
-    let bufferedIndex = 0;
-    return {
-      ...result,
-      stream: new ReadableStream<TChunk>({
-        async pull(controller) {
-          if (bufferedIndex < buffered.length) {
-            controller.enqueue(buffered[bufferedIndex]);
-            bufferedIndex += 1;
-            return;
-          }
-          try {
-            const item = await reader.read();
-            if (item.done) {
-              controller.close();
-              return;
-            }
-            if (item.value.type === "error" && !isAborted()) {
-              reportDirectError(item.value.error);
-            }
-            controller.enqueue(item.value);
-          } catch (error) {
-            if (!isAborted()) {
-              reportDirectError(error);
-            }
-            controller.error(error);
-          }
-        },
-        async cancel(reason) {
-          await reader.cancel(reason);
-        },
-      }),
-    };
+    result = await startDirectStream();
   } catch (error) {
-    if (isAborted() || !canFallback()) throw error;
     reportDirectError(error);
+    if (isAborted() || !canFallback()) throw error;
     return startFallbackStream(error);
   }
+  const reader = result.stream.getReader();
+  const buffered: TChunk[] = [];
+  while (true) {
+    let item: Awaited<ReturnType<typeof reader.read>>;
+    try {
+      item = await reader.read();
+    } catch (error) {
+      reportDirectError(error);
+      await reader.cancel().catch(() => undefined);
+      if (isAborted() || !canFallback()) throw error;
+      return startFallbackStream(error);
+    }
+    if (item.done) {
+      return {
+        ...result,
+        stream: new ReadableStream<TChunk>({
+          start(controller) {
+            for (const chunk of buffered) controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+      };
+    }
+    if (item.value.type === "error") {
+      reportDirectError(item.value.error);
+      await reader.cancel().catch(() => undefined);
+      if (!isAborted() && canFallback()) return startFallbackStream(item.value.error);
+      return {
+        ...result,
+        stream: new ReadableStream<TChunk>({
+          start(controller) {
+            for (const chunk of buffered) controller.enqueue(chunk);
+            controller.enqueue(item.value);
+            controller.close();
+          },
+        }),
+      };
+    }
+    buffered.push(item.value);
+    if (isUserVisibleStreamChunk(item.value)) break;
+  }
+  let bufferedIndex = 0;
+  return {
+    ...result,
+    stream: new ReadableStream<TChunk>({
+      async pull(controller) {
+        if (bufferedIndex < buffered.length) {
+          controller.enqueue(buffered[bufferedIndex]);
+          bufferedIndex += 1;
+          return;
+        }
+        try {
+          const item = await reader.read();
+          if (item.done) {
+            controller.close();
+            return;
+          }
+          if (item.value.type === "error") reportDirectError(item.value.error);
+          controller.enqueue(item.value);
+        } catch (error) {
+          reportDirectError(error);
+          controller.error(error);
+        }
+      },
+      async cancel(reason) {
+        await reader.cancel(reason);
+      },
+    }),
+  };
 }
 
 function createDirectAnthropicWithGatewayFallbackMiddleware(
@@ -577,7 +564,6 @@ function resolveUntracedAiModel(
       directModelId,
       byokCredential.apiKey,
     );
-    if (!byokCredential.fallbackGatewayApiKey) return directModel;
     const runtimeProvider: { provider?: string } = {
       provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
     };

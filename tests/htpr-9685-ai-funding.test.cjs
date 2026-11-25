@@ -137,9 +137,11 @@ function createHarness({
       if (providerName === "anthropic" && anthropicStreamChunks) {
         return {
           stream: new ReadableStream({
-            start(controller) {
-              for (const chunk of anthropicStreamChunks) controller.enqueue(chunk);
-              controller.close();
+            pull(controller) {
+              const chunk = anthropicStreamChunks.shift();
+              if (chunk instanceof Error) controller.error(chunk);
+              else if (chunk) controller.enqueue(chunk);
+              else controller.close();
             },
           }),
         };
@@ -519,13 +521,15 @@ test("direct Anthropic runtime error falls back automatically to Vercel Gateway,
 
     assert.equal(h.providerCalls.filter((c) => c.provider === "anthropic").length, 2);
     assert.equal(h.providerCalls.filter((c) => c.provider === "gateway").length, 2);
-    assert.ok(h.usageRows.every((row) => row.provider === "gateway"), "fallback usage must log as gateway, never platform:anthropic");
+    assert.equal(h.usageRows.length, 2);
+    assert.ok(h.usageRows.every((row) => row.provider === "gateway" && row.outcome === "ok"), "fallback usage must log as gateway, never platform:anthropic");
     assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 12.5, "gateway fallback must not consume Anthropic monthly credit");
     const fundingReports = h.reportedErrors.filter((r) => r.extra?.cause === "anthropic_error");
     assert.equal(fundingReports.length, 1);
     assert.equal(fundingReports[0].urgent, true);
     assert.equal(fundingReports[0].extra.anthropicSpentUsd, 12.5);
-    assert.match(fundingReports[0].message, /HTTP 529 overloaded/);
+    assert.match(fundingReports[0].message, /overloaded/);
+    assert.equal(fundingReports[0].extra.statusCode, 529);
   } finally {
     h.restore();
   }
@@ -567,6 +571,127 @@ test("direct Anthropic stream error after initial metadata chunk falls back seam
     const reports = h.reportedErrors.filter((r) => r.extra?.cause === "anthropic_error");
     assert.equal(reports.length, 1);
     assert.equal(reports[0].urgent, true);
+  } finally {
+    h.restore();
+  }
+});
+
+for (const route of ["platform-credential", "managed-gateway"]) {
+  for (const failure of ["error-chunk", "read-rejection"]) {
+    test(`${route} ${failure} after text-start but before text falls back and never charges Anthropic credit`, async () => {
+      const error = Object.assign(new Error("overloaded"), { statusCode: 529 });
+      const h = createHarness({
+        anthropicSpentUsd: 8,
+        anthropicStreamChunks: [
+          { type: "stream-start", warnings: [] },
+          { type: "text-start", id: "direct-text" },
+          { type: "text-delta", id: "direct-text", delta: "" },
+          failure === "error-chunk" ? { type: "error", error } : error,
+        ],
+      });
+      try {
+        h.modelProvider.registerManagedGatewayKey(MANAGED_KEY);
+        const credential = route === "managed-gateway" ? MANAGED_KEY : {
+          kind: "platform-anthropic",
+          apiKey: PLATFORM_ANTHROPIC_KEY,
+          fallbackGatewayApiKey: MANAGED_KEY,
+        };
+        const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", credential);
+        const result = await model.doStream({ prompt: [] });
+        const chunks = [];
+        for await (const chunk of result.stream) chunks.push(chunk);
+        await h.flush();
+
+        assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
+        assert.ok(chunks.some((chunk) => chunk.type === "text-delta" && chunk.delta.startsWith("ok:gateway:")));
+        assert.ok(chunks.every((chunk) => chunk.type !== "error" && chunk.id !== "direct-text"));
+        assert.deepEqual(h.usageRows.map((row) => [row.provider, row.outcome]), [["gateway", "ok"]]);
+        assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 8);
+        const reports = h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error");
+        assert.equal(reports.length, 1);
+        assert.equal(reports[0].urgent, true);
+      } finally {
+        h.restore();
+      }
+    });
+  }
+}
+
+for (const failure of ["error-chunk", "read-rejection"]) {
+  test(`Anthropic ${failure} after visible text reports without restarting generation`, async () => {
+    const error = new Error("overloaded after text");
+    const h = createHarness({
+      anthropicStreamChunks: [
+        { type: "text-delta", id: "direct-text", delta: "already visible" },
+        failure === "error-chunk" ? { type: "error", error } : error,
+      ],
+    });
+    try {
+      const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", {
+        kind: "platform-anthropic",
+        apiKey: PLATFORM_ANTHROPIC_KEY,
+        fallbackGatewayApiKey: MANAGED_KEY,
+      });
+      const result = await model.doStream({ prompt: [] });
+      const reader = result.stream.getReader();
+      assert.equal((await reader.read()).value.delta, "already visible");
+      if (failure === "read-rejection") await assert.rejects(reader.read(), error);
+      else {
+        assert.equal((await reader.read()).value.error, error);
+        assert.equal((await reader.read()).done, true);
+      }
+      await h.flush();
+      assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic"]);
+      assert.equal(h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error").length, 1);
+    } finally {
+      h.restore();
+    }
+  });
+}
+
+for (const aborted of [false, true]) {
+  test(`Anthropic stream errors are reported without a gateway key, aborted=${aborted}`, async () => {
+    const error = new Error("Anthropic stream failed");
+    const h = createHarness({ anthropicStreamChunks: [{ type: "error", error }] });
+    try {
+      const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", {
+        kind: "platform-anthropic",
+        apiKey: PLATFORM_ANTHROPIC_KEY,
+      });
+      const abort = new AbortController();
+      if (aborted) abort.abort();
+      const result = await model.doStream({ prompt: [], abortSignal: abort.signal });
+      const chunks = [];
+      for await (const chunk of result.stream) chunks.push(chunk);
+      await h.flush();
+      assert.equal(chunks[0].error, error);
+      assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic"]);
+      assert.equal(h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error").length, 1);
+    } finally {
+      h.restore();
+    }
+  });
+}
+
+test("provider credentials never enter funding messages, fingerprints, or signed exception text", async () => {
+  const h = createHarness();
+  try {
+    for (const [cause, secret] of [
+      ["anthropic_error", PLATFORM_ANTHROPIC_KEY],
+      ["gateway_error", MANAGED_KEY],
+    ]) {
+      await h.aiFunding.reportAiFundingIncident({
+        cause,
+        reason: "AI provider failed",
+        error: Object.assign(new Error(secret), { name: secret, statusCode: 529, apiKey: secret, fallbackGatewayApiKey: secret }),
+      });
+      const report = h.reportedErrors.at(-1);
+      assert.equal(report.message.includes(secret), false);
+      assert.equal(report.fingerprintKey.includes(secret), false);
+      assert.match(report.message, /\(overloaded\)/);
+      assert.doesNotMatch(report.message, /529/);
+      assert.equal(report.extra.statusCode, 529);
+    }
   } finally {
     h.restore();
   }

@@ -700,7 +700,7 @@ export function classifySafeProviderError(error: unknown): {
   } else if (/timeout|timed out|econn|enotfound|fetch failed|network/.test(text)) {
     category = "timeout_or_network";
   }
-  const summary = statusCode !== null ? `HTTP ${statusCode} ${category}` : category;
+  const summary = category;
   return { statusCode, category, summary };
 }
 
