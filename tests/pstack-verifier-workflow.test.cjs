@@ -318,6 +318,7 @@ test("a listening preview stays ready when node -e imports the verifier", async 
   copyFileSync(join(root, "scripts/pstack-verifier.mjs"), join(dir, "trusted", "scripts", "pstack-verifier.mjs"));
   copyFileSync(join(root, "scripts/lib/pstack-journeys.cjs"), join(dir, "trusted", "scripts", "lib", "pstack-journeys.cjs"));
   copyFileSync(join(root, "scripts/lib/pstack-compare.cjs"), join(dir, "trusted", "scripts", "lib", "pstack-compare.cjs"));
+  copyFileSync(join(root, "scripts/lib/pstack-ground.cjs"), join(dir, "trusted", "scripts", "lib", "pstack-ground.cjs"));
   writeFileSync(join(bin, "docker"), dockerStub(join(dir, "docker.log")), { mode: 0o755 });
   const ready = join(dir, "ready.env");
   const stop = join(dir, "stop");
