@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "eslint-plugin-tailwindcss";
 
 const rootDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
+const radiusBaselineText = readFileSync(new URL("./radius-baseline.json", import.meta.url), "utf8");
+const radiusBaseline = JSON.parse(radiusBaselineText);
 const themeDirectory = join(rootDirectory, "src/styles/tailwindThemes");
 const colorTokenFiles = [
   join(rootDirectory, "tailwind.config.ts"),
@@ -137,7 +140,12 @@ const noUnapprovedColorLiterals = {
 
 function forbiddenUtility(token, filename) {
   const importantFree = token.replace(/(^|:)!/, "$1").replace(/!$/, "");
-  const base = importantFree.split(":").at(-1);
+  const base = importantFree.split(/:(?![^\[]*\])/).at(-1);
+  const radius = base.match(/^rounded(?:-(?:[trblse]|ss|se|ee|es|tl|tr|br|bl))?-\[(.+)\]$/)
+    || base.match(/^\[(?:--[\w-]*radius[\w-]*|border(?:-(?:top-left|top-right|bottom-left|bottom-right|start-start|start-end|end-start|end-end))?-radius):(.+)\]$/);
+  if (radius && !/^(?:0|0px|2px|4px|var\(--radius-[\w-]+\))$/.test(radius[1])) {
+    return "unapproved radius";
+  }
 
   if (/^border-white(?:\/.*)?$/.test(base)) return "white border";
   if (base === "border-white-black") {
@@ -160,26 +168,41 @@ const noForbiddenUtilities = {
   meta: {
     type: "problem",
     docs: { description: "Disallow Tailwind utilities forbidden by the Hypertask style guide" },
-    schema: [],
+    schema: [{
+      type: "object",
+      properties: { ignoreRadiusBaseline: { type: "boolean" } },
+      additionalProperties: false,
+    }],
     messages: {
       forbiddenUtility: "Remove forbidden {{kind}} utility '{{className}}' and use the style-guide pattern.",
+      forbiddenRadius: "Corners are 0, 2 or 4px only: use rounded-[2px] or rounded-[4px] instead of '{{className}}'.",
     },
   },
   create(context) {
     const filename = (context.filename || context.getFilename())
       .replaceAll("\\", "/")
       .replace(`${rootDirectory.replaceAll("\\", "/")}/`, "");
+    const radii = [];
     return {
       JSXAttribute(node) {
         for (const token of classTokens(node)) {
           const kind = forbiddenUtility(token, filename);
-          if (kind) {
-            context.report({
-              node,
-              messageId: "forbiddenUtility",
-              data: { kind, className: token },
-            });
-          }
+          if (!kind) continue;
+          const report = {
+            node,
+            messageId: kind === "unapproved radius" || kind === "oversized radius"
+              ? "forbiddenRadius"
+              : "forbiddenUtility",
+            data: { kind, className: token },
+          };
+          if (report.messageId === "forbiddenRadius") radii.push(report);
+          else context.report(report);
+        }
+      },
+      "Program:exit"() {
+        const allowance = context.options[0]?.ignoreRadiusBaseline ? 0 : radiusBaseline[filename] ?? 0;
+        for (const report of radii.sort((a, b) => a.node.range[0] - b.node.range[0]).slice(allowance)) {
+          context.report(report);
         }
       },
     };
@@ -187,7 +210,10 @@ const noForbiddenUtilities = {
 };
 
 export const styleGuidePlugin = {
-  meta: { name: "hypertask-style-guide", version: "1.0.0" },
+  meta: {
+    name: "hypertask-style-guide",
+    version: createHash("sha256").update(readFileSync(new URL(import.meta.url))).update(radiusBaselineText).digest("hex"),
+  },
   rules: {
     "no-raw-tailwind-colors": noRawTailwindColors,
     "no-unapproved-color-literals": noUnapprovedColorLiterals,
