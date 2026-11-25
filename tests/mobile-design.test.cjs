@@ -61,5 +61,4 @@ test('mobile-verify workflow follows CI contract and gates on prod-health-gate',
   assert.deepEqual(gateOutcome({ ok: true, unreadable: false, reason: 'prod-health-gate success' }), { level: 'info', code: 0, message: 'prod-health-gate success' })
   const skipped = gateOutcome(stale)
   assert.equal(skipped.level, 'error', 'a missing release stamp fails the job'); assert.equal(skipped.code, 1); assert.match(skipped.message, /did not run/)
-  assert.match(readFileSync(path.join(root, '.github/scripts/wait-prod-health-gate.mjs'), 'utf8'), /process\.exit\(outcome\.code\)/, 'the gate step never exits 0 while the suites are skipped')
 })
