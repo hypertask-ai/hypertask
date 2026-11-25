@@ -204,7 +204,7 @@ test("a Dependabot pull request refreshed by the update-branch API resolves as d
     assert.equal(live.request.botLogin, "dependabot[bot]");
     assert.equal(live.request.author, "");
     assert.equal(live.calls.filter((call) => call.includes("/compare/")).length, 1);
-    const plain = await resolve({ commits: [refreshed3829.commits[0]] });
+    const plain = await resolve({ commits: [{ ...refreshed3829.commits[0], sha: refreshHead }] });
     assert.match(plain.output, /stop=false/);
     assert.equal(plain.request.botLogin, "dependabot[bot]");
     assert.equal(plain.calls.filter((call) => call.includes("/compare/")).length, 0);
