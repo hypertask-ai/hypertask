@@ -61,6 +61,7 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
   const [isPasskeySupported, setIsPasskeySupported] = useState(false);
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
+  const [returnTo, setReturnTo] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
 
@@ -142,12 +143,9 @@ export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSig
     const safe = parseSafeReturnTo(searchParams?.get("returnTo"));
     if (safe) {
       sessionStorage.setItem(POST_LOGIN_REDIRECT_STORAGE_KEY, safe);
+      setReturnTo(safe);
     }
   }, [hasOAuthParams, searchParams]);
-
-  const returnTo = hasOAuthParams
-    ? null
-    : parseSafeReturnTo(searchParams?.get("returnTo"));
 
   useEffect(() => {
     if (!hasOAuthParams) return;
