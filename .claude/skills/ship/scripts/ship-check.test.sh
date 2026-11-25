@@ -49,32 +49,59 @@ MOCK
 title_tests
 
 fresh_tests() {
-  local PATH=$PATH BEHIND_FIXTURE
+  local PATH=$PATH BEHIND_FIXTURE FRESH_COMPARE_FILES FRESH_PR_FILES FRESH_COMPARE_STATUS FRESH_PR_STATUS
   mkdir -p "$E/fresh-bin"; PATH="$E/fresh-bin:$PATH"
   cat > "$E/fresh-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
-if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/pulls/4242 ]]; then echo 0123456789abcdef0123456789abcdef01234567; exit 0; fi
-if [[ $1 == api && $2 == repos/hypertask-ai/hypertask/compare/production...0123456789abcdef0123456789abcdef01234567 ]]; then echo "$BEHIND_FIXTURE"; exit 0; fi
+R=repos/hypertask-ai/hypertask
+SHA=0123456789abcdef0123456789abcdef01234567
+if [[ $1 == api && $2 == "$R/pulls/4242" ]]; then echo "$SHA"; exit 0; fi
+if [[ $1 == api && $2 == "$R/compare/production...$SHA" ]]; then printf '%s\n' "$BEHIND_FIXTURE"; exit 0; fi
+if [[ $1 == api && $2 == "$R/compare/$SHA...production" ]]; then
+  [ "${FRESH_COMPARE_STATUS:-ok}" = ok ] || exit 1
+  printf '%s\n' "${FRESH_COMPARE_FILES:-}"; exit 0
+fi
+if [[ $1 == api && $2 == "$R/pulls/4242/files" ]]; then
+  [ "${FRESH_PR_STATUS:-ok}" = ok ] || exit 1
+  printf '%s\n' "${FRESH_PR_FILES:-}"; exit 0
+fi
 exit 1
 MOCK
   chmod +x "$E/fresh-bin/gh"
-  F() {
-    local want=$1; shift; out=$(BEHIND_FIXTURE="$1" ./ship-check fresh 4242 2>&1); got=$?
-    [ "$got" = "$want" ] && ok "fresh: behind_by $1" || bad "fresh: want $want got $got <- behind_by $1 ($out)"
+  local base_notes='{"files":[{"filename":"src/app/notes.ts"}]}' base_page='{"files":[{"filename":"src/app/page.tsx"}]}'
+  local base_many; base_many=$(jq -cn '{files: [range(0; 300) | {filename: "src/gen/f\(.).ts"}]}')
+  upto() { SHIP_MERGE_PIN= BEHIND_FIXTURE="$1" ./ship-check fresh 4242 2>&1; }
+  hit() {
+    local want=$1 label=$2; shift 2
+    out=$(env "$@" ./ship-check fresh 4242 2>&1); got=$?
+    [ "$got" = "$want" ] && ok "fresh: $label" || bad "fresh: want $want got $got <- $label ($out)"
   }
-  F 0 0
-  F 1 3
-  F 1 ''
-  out=$(BEHIND_FIXTURE=3 ./ship-check fresh 4242 2>&1)
-  [[ $out == *'update the branch'* && $out == *'3 commit(s) behind production'* ]] \
-    && ok 'fresh: refusal names the update and the distance' || bad "fresh: refusal message <- $out"
+  out=$(upto 0); got=$?
+  [ "$got" = 0 ] && ok 'fresh: an up-to-date branch passes' || bad "fresh: up to date got $got <- $out"
+  out=$(upto ''); got=$?
+  [ "$got" = 1 ] && ok 'fresh: an unreadable behind_by refuses' || bad "fresh: empty behind_by got $got <- $out"
+  hit 0 'behind with no shared files passes' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_notes" FRESH_PR_FILES='src/app/settings.ts'
+  [[ $out == *'3 commit(s) behind production, no shared files'* ]] \
+    && ok 'fresh: the no-overlap pass names the distance' || bad "fresh: no-overlap message <- $out"
+  hit 1 'a shared file refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_page" FRESH_PR_FILES='src/app/page.tsx'
+  [[ $out == *'src/app/page.tsx'* && $out == *'update the branch'* && $out == *'3 commit(s) behind production'* ]] \
+    && ok 'fresh: the overlap refusal names the file, the distance and the update' || bad "fresh: overlap message <- $out"
+  hit 1 'a failed compare read refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_STATUS=fail FRESH_PR_FILES='src/app/page.tsx'
+  hit 1 'a failed PR files read refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_notes" FRESH_PR_STATUS=fail
+  hit 1 'a comparison GitHub cuts short refuses' BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_many" FRESH_PR_FILES='src/gen/f7.ts'
+  [[ $out == *'cannot be checked'* ]] \
+    && ok 'fresh: the truncated refusal says the overlap cannot be checked' || bad "fresh: truncated message <- $out"
   local pin=$E/fresh-pin
+  : > "$pin"
   SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=0 ./ship-check fresh 4242 >/dev/null 2>&1
   [ "$(cat "$pin" 2>/dev/null)" = 0123456789abcdef0123456789abcdef01234567 ] \
     && ok 'fresh: the checked head is recorded for the merge pin' || bad "fresh: pin not recorded <- $(cat "$pin" 2>/dev/null)"
   : > "$pin"
-  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=3 ./ship-check fresh 4242 >/dev/null 2>&1
-  [ -s "$pin" ] && bad 'fresh: a behind branch was pinned' || ok 'fresh: a behind branch is never pinned'
+  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_page" FRESH_PR_FILES='src/app/page.tsx' ./ship-check fresh 4242 >/dev/null 2>&1
+  [ -s "$pin" ] && bad 'fresh: a refused branch was pinned' || ok 'fresh: a refused branch is never pinned'
+  : > "$pin"
+  SHIP_MERGE_PIN=$pin BEHIND_FIXTURE=3 FRESH_COMPARE_FILES="$base_notes" FRESH_PR_FILES='src/app/settings.ts' ./ship-check fresh 4242 >/dev/null 2>&1
+  [ -s "$pin" ] && ok 'fresh: a stale branch with no shared files is pinned' || bad 'fresh: a no-overlap pass did not pin its head'
 }
 fresh_tests
 if [ "${1:-}" = --title-only ]; then
@@ -1244,7 +1271,7 @@ SHIP_REPO=hypertask-ai/hypertask EL elsewhere YPER4-778 902 >/dev/null && bad "e
 EL bind YPER4-778 902 >/dev/null && [ ! -e "$E/YPER4-778/elsewhere" ] && ok "bind clears elsewhere" || bad "bind did not clear elsewhere"
 
 export CI_FIXTURE_DIR="$PWD/fixtures/yper4-312" CI_CALL_LOG="$E/ci-calls"
-export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG CI_BEHIND
+export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG CI_BEHIND CI_PR_FILES CI_COMPARE_FILES
 CI_HEAD=$(jq -r '.check_runs[0].head_sha' "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
 CI_PR_RUNS=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
 CI_BASE_RUNS=$(jq '.check_runs[0].conclusion = "success"' "$CI_FIXTURE_DIR/production.check-runs.json")
@@ -1265,8 +1292,12 @@ gh() {
       printf '%s\n' "$CI_PR_RUNS" ;;
     api:*/actions/jobs/114565456089/logs) cat "$CI_FIXTURE_DIR/production.log" ;;
     api:*/actions/jobs/*/logs) printf '%s\n' "$CI_LOG" ;;
-    api:*/pulls/1392/files\?*) echo '[]' ;;
-    api:*/compare/*) printf '%s\n' "${CI_BEHIND:-0}" ;;
+    api:*/pulls/1392/files) printf '%s\n' "${CI_PR_FILES:-src/app/page.tsx}" ;;
+    api:*/pulls/1392/files\?*) printf '%s\n' "${CI_PR_FILES:-src/app/page.tsx}" ;;
+    api:*/compare/production...*) printf '%s\n' "${CI_BEHIND:-0}" ;;
+    api:*/compare/*)
+      if [ -n "${CI_COMPARE_FILES:-}" ]; then printf '%s\n' "$CI_COMPARE_FILES"
+      else echo '{"files":[{"filename":"src/app/page.tsx"}]}'; fi ;;
     api:*/pulls/1392\?*)
       jq -n --arg sha "$CI_HEAD" '{head:{sha:$sha},base:{sha:$sha},title:"HTPR-6971 [FEATURE] Fixture",changed_files:0}' ;;
     api:*/statuses/*) return 0 ;;

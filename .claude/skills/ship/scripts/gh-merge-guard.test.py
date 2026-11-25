@@ -178,6 +178,8 @@ elif args[0] == 'api':
         sys.exit(1)
     if endpoint.endswith('/pulls/42'):
         print(head)
+    elif endpoint.endswith('/pulls/42/files'):
+        print('src/app/page.tsx')
     elif '/check-runs?' in endpoint:
         production = '/commits/production/' in endpoint
         missing = not production and os.environ.get('MISSING_HEAD')
@@ -187,7 +189,10 @@ elif args[0] == 'api':
                'html_url': 'https://example.invalid/run'}
         print(json.dumps({'check_runs': [] if missing else [run]}))
     elif '/compare/' in endpoint:
-        print(os.environ.get('BEHIND', '0'))
+        if endpoint.split('/compare/', 1)[1].endswith('...production'):
+            print(json.dumps({'files': [{'filename': 'src/app/page.tsx'}]}))
+        else:
+            print(os.environ.get('BEHIND', '0'))
     elif '/statuses/' in endpoint:
         print('{}')
     elif '/actions/jobs/' in endpoint:

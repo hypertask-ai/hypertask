@@ -189,17 +189,41 @@ check_ci_tests() {
   fail "$reason"$'\n'"run ci-why $1 for the failed step"
 }
 
+fresh_update_advice() {
+  echo "update the branch (gh api -X PUT repos/$REPO/pulls/$1/update-branch), wait for fresh checks, then merge"
+}
+
+# Files both this PR and BASE's newer commits touch, at most five, one per line.
+# Prints the refusal reason and returns 1 when either side cannot be read in full.
+fresh_shared_files() {
+  local pr=$1 head=$2 json count files
+  json=$(gh api "repos/$REPO/compare/$head...$BASE" 2>/dev/null) \
+    || { echo "cannot read the files $BASE changed since ${head:0:7} branched; retry"; return 1; }
+  count=$(jq -er 'if (.files | type) == "array" then (.files | length) else error("no files") end' <<<"$json" 2>/dev/null) \
+    || { echo "cannot read the files $BASE changed since ${head:0:7} branched; retry"; return 1; }
+  # GitHub lists at most 300 files in a comparison, so a full list may be cut short.
+  [ "$count" -lt 300 ] \
+    || { echo "$BASE changed $count files since ${head:0:7} branched, more than GitHub lists in full, so the overlap cannot be checked; $(fresh_update_advice "$pr")"; return 1; }
+  files=$(gh api "repos/$REPO/pulls/$pr/files" --paginate --jq '.[].filename' 2>/dev/null) \
+    || { echo "cannot read the files of PR $pr; retry"; return 1; }
+  comm -12 <(jq -r '.files[].filename' <<<"$json" | sort -u) <(printf '%s\n' "$files" | sort -u) \
+    | awk 'NF && NR <= 5'
+}
+
 check_fresh() {
-  local head behind
+  local head behind shared
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   head=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "cannot read the head of PR $1; retry"
   [[ $head =~ ^[0-9a-f]{40}$ ]] || fail "cannot read the head of PR $1; retry"
   behind=$(gh api "repos/$REPO/compare/$BASE...$head" --jq .behind_by 2>/dev/null) || fail "cannot compare PR $1 with $BASE; retry"
   [[ $behind =~ ^[0-9]+$ ]] || fail "cannot compare PR $1 with $BASE; retry"
-  [ "$behind" -eq 0 ] \
-    || fail "head ${head:0:7} is $behind commit(s) behind $BASE, so its green checks predate that work; update the branch (gh api -X PUT repos/$REPO/pulls/$1/update-branch), wait for fresh checks, then merge"
+  if [ "$behind" -ne 0 ]; then
+    shared=$(fresh_shared_files "$1" "$head") || fail "$shared"
+    [ -z "$shared" ] \
+      || fail "head ${head:0:7} is $behind commit(s) behind $BASE and both sides change the same file(s), so its green checks predate that work: $(tr '\n' ' ' <<<"$shared" | sed -E 's/ +$//; s/ /, /g'); $(fresh_update_advice "$1")"
+  fi
   record_fresh_head "$head"
-  echo "branch up to date"
+  [ "$behind" -eq 0 ] && echo "branch up to date" || echo "branch $behind commit(s) behind $BASE, no shared files"
 }
 
 record_fresh_head() {
