@@ -7,6 +7,7 @@ import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
 import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import { aiFundingProviderClientsLintConfig } from "./eslint-local-rules/ai-funding-provider-clients.mjs";
 import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
+import { callerRefusalsLintConfig } from "./eslint-local-rules/caller-refusals.mjs";
 import { flagStubsLintConfig } from "./eslint-local-rules/flag-stubs.mjs";
 import path from "node:path";
 import { readFileSync } from "node:fs";
@@ -51,6 +52,7 @@ export default defineConfig([
   noCommentsLintConfig,
   aiFundingProviderClientsLintConfig,
   testHarnessLintConfig,
+  callerRefusalsLintConfig,
   flagStubsLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser

@@ -49,6 +49,7 @@ run_key=$(printf '%s-%s-%s' "${GITHUB_RUN_ID:-$$}" "${GITHUB_RUN_ATTEMPT:-1}" "$
 network="ht-smoke-net-$run_key"
 egress_network="ht-smoke-egress-$run_key"
 database="ht-smoke-db-$run_key"
+redis="ht-smoke-redis-$run_key"
 app="ht-smoke-app-$run_key"
 install="ht-smoke-install-$run_key"
 generate="ht-smoke-generate-$run_key"
@@ -73,7 +74,7 @@ cleanup() {
   result=${1:-$?}
   trap - EXIT INT TERM
   if [ "$result" -ne 0 ]; then docker logs "$app" 2>/dev/null | tail -200 || true; fi
-  docker rm -f "$app" "$database" "$install" "$generate" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" "$relay" >/dev/null 2>&1 || true
+  docker rm -f "$app" "$database" "$redis" "$install" "$generate" "$engine_fetch" "$posthog_fetch" "$registry_proxy" "$prepare" "$seed" "$builder" "$probe" "$harness" "$mock" "$volume_keeper" "$relay" >/dev/null 2>&1 || true
   docker network rm "$network" "$egress_network" "$publish_network" >/dev/null 2>&1 || true
   docker volume rm "$build" "$state" "$dependencies" >/dev/null 2>&1 || true
   docker image rm "$runtime_image" >/dev/null 2>&1 || true
@@ -305,8 +306,25 @@ docker exec "$database" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE ROLE core_smoke LOGIN PASSWORD 'core_smoke' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION" \
   -c "CREATE DATABASE hypertask_smoke OWNER core_smoke"
 
+docker run -d --name "$redis" --network "$network" \
+  --user 999:1000 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --pids-limit 64 \
+  --memory 128m \
+  ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf >/dev/null
+
+for attempt in $(seq 1 30); do
+  if docker exec "$redis" redis-cli ping >/dev/null 2>&1; then
+    break
+  fi
+  [ "$attempt" -lt 30 ] || { echo "Redis did not become ready." >&2; exit 1; }
+  sleep 1
+done
+
 common_env=(
   -e DATABASE_URL=postgresql://core_smoke:core_smoke@"$database":5432/hypertask_smoke # trufflehog:ignore
+  -e REDIS_URL=redis://"$redis":6379
   -e SESSION_SECRET=core-actions-"$run_key"
   -e JWT_SECRET=core-mcp-"$run_key"
   -e NEXT_TELEMETRY_DISABLED=1
@@ -327,6 +345,7 @@ docker run --rm --name "$seed" --network "$network" "${trusted_runtime[@]}" "${c
   "${database_client_mounts[@]}" \
   -e CORE_SMOKE_APP_ROOT=/trusted \
   -e CORE_SMOKE_ENV_FILE=/state/smoke.env \
+  -e CORE_SMOKE_FLAG_KEYS="${CORE_SMOKE_FLAG_KEYS:-}" \
   -v "$state:/state" \
   "$runtime_image" timeout --signal=KILL 2m node /trusted/scripts/seed-core-actions-smoke.mjs
 

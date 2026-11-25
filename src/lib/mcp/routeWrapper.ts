@@ -3,7 +3,8 @@ import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import jwt from 'jsonwebtoken'
-import type { NextRequest } from 'next/server'
+import type { NextRequest, NextResponse } from 'next/server'
+import { refusalOf, refusalResponse } from '@/lib/api/refusal'
 import {
   checkMcpRateLimit,
   mcpUnauthorizedResponse,
@@ -14,7 +15,7 @@ import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { getMcpOperationContext } from './operationContext'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
 import { createMcpDbTiming, mcpDbTimings, mcpDbTimingHeader } from './dbTiming'
-import { reportUnexplainedMcpServerError } from './operationCrashReport'
+import { reportMcpOperationCrash, reportUnexplainedMcpServerError } from './operationCrashReport'
 
 const instanceStarted = performance.now()
 const instanceId = randomBytes(4).toString('hex')
@@ -76,32 +77,42 @@ function scopeFor(request: NextRequest): RouteScope | undefined {
   return scope?.request === request ? scope : undefined
 }
 
+const reportedServerFaults = new WeakSet<Request>()
+
+export function reportServerFault(request: Request, error: unknown): void {
+  if (reportedServerFaults.has(request)) return
+  reportedServerFaults.add(request)
+  console.error('[MCP] operation failed', error)
+  reportMcpOperationCrash(request, error)
+  try { queueRestFailure(request, 500) } catch {}
+}
+
 export function wrapMcpRoute<Args extends unknown[], Result>(
   legacy: (request: NextRequest, ...args: Args) => Promise<Result>,
-): (request: NextRequest, ...args: Args) => Promise<Result> {
+): (request: NextRequest, ...args: Args) => Promise<Result | NextResponse> {
   return (request, ...args) => withAgentScopeRequest(request, async () => {
     const started = performance.now()
     const operationContext = getMcpOperationContext(request)
-    if (operationContext) {
-      await prepareAgentScope(operationContext.auth.user.id, operationContext.auth.agentId)
-      const result = await legacy(request, ...args)
-      if (result instanceof Response) reportUnexplainedMcpServerError(request, result.status)
-      return result
-    }
     const execute = async (input: NextRequest) => {
       try {
+        if (operationContext) await prepareAgentScope(operationContext.auth.user.id, operationContext.auth.agentId)
         const result = await legacy(input, ...args)
-        if (result instanceof Response) {
+        if (result instanceof Response && result.status >= 500 && !reportedServerFaults.has(input)) {
           try { queueRestFailure(request, result.status) } catch {}
           reportUnexplainedMcpServerError(input, result.status)
         }
         return result
       } catch (error) {
-        try { queueRestFailure(request, 500) } catch {}
+        const refusal = refusalOf(error)
+        if (refusal) {
+          console.warn('[MCP] caller refusal', refusal)
+          return refusalResponse(refusal)
+        }
+        reportServerFault(input, error)
         throw error
       }
     }
-    if (!shouldUseMcpRouteWrapper(request)) return execute(request)
+    if (operationContext || !shouldUseMcpRouteWrapper(request)) return execute(request)
     const wrappedStarted = performance.now()
     const scope: RouteScope = { originalRequest: request, request, failure: {}, timings: {} }
     const wrappedRequest = new Proxy(request, {

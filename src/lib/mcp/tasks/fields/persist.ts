@@ -1,4 +1,5 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import { refusalOf } from '@/lib/api/refusal';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { getMcpSessionAgentSummary } from "@/lib/mcp/agents";
 import prisma from "@/lib/prisma";
@@ -19,11 +20,6 @@ import { updateTaskLabels } from './labels';
 import { updateTaskContract } from './contract';
 import { updateTaskPullRequest } from './pullRequest';
 import { updateTaskAssignees } from './assignees';
-
-function isCallerRefusal(error: unknown): error is Error & { status: number; code: string; field?: string } {
-    const { status, code } = (error ?? {}) as { status?: unknown; code?: unknown }
-    return error instanceof Error && typeof status === 'number' && status >= 400 && status < 500 && typeof code === 'string'
-}
 
 export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks: TaskUpdateTarget[]): Promise<UpdateTaskResponse> {
     const { ctx, user, requestBody, hasDueDate } = context;
@@ -69,7 +65,14 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 const refusal = planLimitResponse(error);
                 return { ...refusal.body, taskId: task.id, status: refusal.status };
             }
-            const codedError = error instanceof PullRequestLinkError || isCallerRefusal(error) ? error : null
+            const refusal = refusalOf(error)
+            const codedError = error instanceof PullRequestLinkError ? error : refusal
+                ? {
+                    status: refusal.status,
+                    code: error instanceof Error && 'code' in error && typeof error.code === 'string' ? error.code : refusal.reason,
+                    ...('field' in refusal ? { field: refusal.field } : {}),
+                }
+                : null
             const refusalField = (codedError as { field?: unknown } | null)?.field
             const callerMistake = codedError !== null && codedError.status < 500
             const log = callerMistake ? console.warn : console.error

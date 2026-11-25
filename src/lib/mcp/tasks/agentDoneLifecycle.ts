@@ -1,12 +1,13 @@
+import { RefusalError } from '@/lib/api/refusal'
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
 import type { Prisma } from '@prisma/client'
 
-export class AgentDoneLifecycleDeniedError extends Error {
+export class AgentDoneLifecycleDeniedError extends RefusalError {
   readonly status = 403
   readonly code = 'agent_done_lifecycle_denied'
 
   constructor(message = 'Authenticated agents cannot delete tasks in Done') {
-    super(message)
+    super({ status: 403, reason: 'forbidden', message })
     this.name = 'AgentDoneLifecycleDeniedError'
   }
 }

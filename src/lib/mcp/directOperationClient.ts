@@ -7,6 +7,7 @@ import { checkMcpRateLimit } from './auth'
 import type { McpAuthContext } from './auth/types'
 import { bindMcpOperationContext } from './operationContext'
 import { executeMcpOperation } from './operations'
+import { reportServerFault } from './routeWrapper'
 
 const OPERATION_ORIGIN = 'http://mcp.internal'
 
@@ -38,7 +39,12 @@ export function createDirectOperationClient(
       let response: Response
       try {
         response = limited ? limited.clone() : await executeMcpOperation(request)
-      } catch {
+      } catch (error) {
+        if (error instanceof ApiError && error.httpStatus !== undefined && error.httpStatus >= 400 && error.httpStatus < 500) {
+          console.warn('[MCP] caller refusal', error.message)
+          throw mapHttpErrorToMcpError(error.httpStatus, error.message, requestCorrelationId, error.httpResponse)
+        }
+        reportServerFault(request, error)
         throw mapHttpErrorToMcpError(500, 'HTTP 500: Internal Server Error', requestCorrelationId)
       }
 

@@ -46,7 +46,7 @@ jobs:
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with: { name: "pstack-request-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/request" }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: { repository: valentinyeo/token-ladder, ref: 33001d32edcddeb639b0c75aff234bebb57a1051, path: token-ladder, fetch-depth: 1, persist-credentials: false }
+        with: { repository: valentinyeo/token-ladder, ref: 26f7770e33e397ed850e73fa6116e1f3beeb7b27, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - id: plan
         env:
           GH_TOKEN: "${{ github.token }}"
@@ -101,7 +101,7 @@ jobs:
         continue-on-error: true
         with: { name: "pstack-evidence-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/evidence" }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-        with: { repository: valentinyeo/token-ladder, ref: 33001d32edcddeb639b0c75aff234bebb57a1051, path: token-ladder, fetch-depth: 1, persist-credentials: false }
+        with: { repository: valentinyeo/token-ladder, ref: 26f7770e33e397ed850e73fa6116e1f3beeb7b27, path: token-ladder, fetch-depth: 1, persist-credentials: false }
       - name: Ask the model about the head journeys
         if: needs.plan.outputs.empty != 'true'
         env:

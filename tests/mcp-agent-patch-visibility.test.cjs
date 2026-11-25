@@ -31,6 +31,7 @@ function loadReal(relativePath) {
   const loaded = new Module(filePath, null);
   loaded.filename = filePath;
   loaded.require = (request) => {
+    if (request === "@/lib/api/refusal") return require("./helpers/loadModule.cjs").loadModule("src/lib/api/refusal.ts", { "@/lib/planLimits": { isPlanLimitReachedError: () => false } });
     if (request === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
     if (request === "@/lib/mcp/agents/delegatedAccess") {
       return require("./task-route-loader.cjs").load("src/lib/mcp/agents/delegatedAccess.ts", {

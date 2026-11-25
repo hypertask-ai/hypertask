@@ -4,6 +4,7 @@ import path from "node:path";
 import { generateKeyPairSync, randomBytes, randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { ARCHIVED_SMOKE_PROJECT_ENV, archivedSmokeProject, boardRecords, buildCoreSmokeSeedPlan, teamRoster } from "./lib/core-smoke-seed-plan.mjs";
+import { parseFlagKeys, seedFlagKeys } from "./lib/core-smoke-flags.mjs";
 
 const envFile = process.env.CORE_SMOKE_ENV_FILE;
 if (!envFile) throw new Error("CORE_SMOKE_ENV_FILE is required");
@@ -18,12 +19,14 @@ const jiti = createRequire(path.join(appRoot, "package.json"))("jiti")(
   },
 );
 const prisma = jiti(path.join(appRoot, "src/lib/prisma.ts"));
+const { withFlagModeInvalidation } = jiti(path.join(appRoot, "src/lib/flags/modeCache.ts"));
 const { signSession } = jiti(path.join(appRoot, "src/lib/auth/session.ts"));
 const { agentTokenCredentialFields, createMcpToken } = jiti(path.join(appRoot, "src/lib/mcp/auth/verifyJwt.ts"));
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 const displayName = `Core smoke user ${runKey}`;
 const agentName = `Core smoke agent ${runKey}`;
+const flagKeys = parseFlagKeys(process.env.CORE_SMOKE_FLAG_KEYS);
 
 const plan = buildCoreSmokeSeedPlan({ runKey });
 const commented = new Set(plan.comments.map((comment) => `${comment.boardKey}:${comment.uniqueIndex}`));
@@ -188,6 +191,8 @@ try {
     }
   }
 
+  await seedFlagKeys({ keys: flagKeys, prisma, withFlagModeInvalidation });
+
   const values = {
     CORE_SMOKE_COOKIE: cookie,
     CORE_SMOKE_MCP_TOKEN: mcpToken,
@@ -216,6 +221,11 @@ try {
   console.log(
     `Seeded core-actions fixture on board ${project.id}, task ${task.id}, archived board ${archived.id}, tickets ${plan.tasks.length}, members ${plan.members.length}.`,
   );
+  if (flagKeys.length) console.log(`Seeded ${flagKeys.length} feature flags on for the smoke user: ${flagKeys.join(", ")}.`);
 } finally {
   await prisma.$disconnect();
+  if (process.env.REDIS_URL) {
+    const { getRedis } = jiti(path.join(appRoot, "src/lib/redis.ts"));
+    (await getRedis()).disconnect();
+  }
 }

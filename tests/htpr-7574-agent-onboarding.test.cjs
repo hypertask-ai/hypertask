@@ -5,6 +5,7 @@ const path = require("node:path");
 const Module = require("node:module");
 const ts = require("typescript");
 const { z } = require("zod");
+const refusal = require("./helpers/loadModule.cjs").loadModule("src/lib/api/refusal.ts", { "@/lib/planLimits": { isPlanLimitReachedError: () => false } });
 
 const root = path.resolve(__dirname, "..");
 const selfRefusal = "Ask a member of board 15 to run: hypertask project invite 15 --user acting";
@@ -26,6 +27,7 @@ function load(relativePath, mocks = {}) {
   loaded.require = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     if (specifier === "zod") return { z };
+    if (specifier === "@/lib/api/refusal") return refusal;
     if (specifier === "next/server") return nextServer;
     if (specifier === "@/lib/auth/crossTeamContext") return { crossTeamRequestFence: () => null };
     if (specifier === "@/lib/agents/crossTeam") return { crossTeamAgentsEnabled: async () => false };

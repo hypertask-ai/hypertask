@@ -23,6 +23,7 @@ function load(file, stubs = {}) {
   const mod = new Module(filename);
   mod.filename = filename;
   mod.require = request => {
+    if (request === "@/lib/api/refusal") return require("./helpers/loadModule.cjs").loadModule("src/lib/api/refusal.ts", { "@/lib/planLimits": { isPlanLimitReachedError: () => false } });
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
