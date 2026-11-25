@@ -300,7 +300,7 @@ test("flag is a low-risk feature on for Everyone and runtime gates cover both ch
   for (const file of [inboxFile, navigationFile]) {
     assert.match(read(file), /useFlag\(HTPR_7311_DECISION_COMMENT_LINK_FLAG\)/);
   }
-  assert.match(read(".claude/skills/verify-qa/reference/feature-map/inbox.md"), /htpr-7311-decision-comment-link/);
+  assert.match(read(".claude/skills/verify-hypertask/features/inbox.md"), /htpr-7311-decision-comment-link/);
 });
 
 test("click and reply opens queue blocked tickets in visible order only while the bugfix flag is on", async () => {

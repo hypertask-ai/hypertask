@@ -25,7 +25,7 @@ test('the map index gives one row per area and a driver only when the map names 
   assert.equal(passStep.env.FEATURE_MAP_LIVE, '1', 'the pass step needs the live opt-in')
   assert.deepEqual(rows.find((row) => row.file === 'inbox.md').tokens.slice(0, 1), ['view-inbox'])
   const scripts = ['board-drive-live.mjs', 'feature-map-drive.mjs']
-  assert.equal(driveScriptName('node .claude/skills/verify-qa/scripts/board-drive-live.mjs', scripts), 'board-drive-live.mjs')
+  assert.equal(driveScriptName('node .claude/skills/verify-hypertask/scripts/board-drive-live.mjs', scripts), 'board-drive-live.mjs')
   assert.deepEqual(parseDriveToken('feature-map-drive.mjs activation-analytics', scripts), {
     script: 'feature-map-drive.mjs', args: ['activation-analytics'], token: 'feature-map-drive.mjs activation-analytics',
   })

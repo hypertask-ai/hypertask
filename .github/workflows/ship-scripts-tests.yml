@@ -18,8 +18,9 @@ on:
       - 'scripts/premerge-local.sh'
       - 'scripts/premerge-local-*.mjs'
       - '.claude/skills/verify-hypertask/bin/**'
-      - '.claude/skills/verify-qa/scripts/**'
-      - '.claude/skills/verify-design/**'
+      - '.claude/skills/verify-hypertask/scripts/**'
+      - '.claude/skills/verify-hypertask/design/**'
+      - '.claude/skills/verify-hypertask/features/**'
       - '.claude/skills/wireframe/**'
       - '.github/scripts/ux-signoff-gate.mjs'
       - 'tests/ux-signoff-gate.test.cjs'
@@ -104,11 +105,11 @@ jobs:
           python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
           bash .claude/skills/ship/scripts/runner-pickup.test.sh
-          python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
-          node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
-          node --test .claude/skills/verify-design/scripts/design-check.test.mjs
-          node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
-          node --test .claude/skills/verify-qa/scripts/fixture-cleanup.test.mjs
+          python3 .claude/skills/verify-hypertask/scripts/evidence-prune.test.py
+          node --test .claude/skills/verify-hypertask/scripts/qa-identity.test.mjs .claude/skills/verify-hypertask/scripts/qa-login.test.mjs
+          node --test .claude/skills/verify-hypertask/scripts/design-check.test.mjs
+          node --test .claude/skills/verify-hypertask/scripts/qa-teams.test.mjs
+          node --test .claude/skills/verify-hypertask/scripts/fixture-cleanup.test.mjs
           node --test .claude/skills/verify-hypertask/bin/*.test.mjs .claude/skills/verify-hypertask/bin/lib/*.test.mjs .claude/skills/verify-hypertask/bin/lib/commands/*.test.mjs
 
       - name: Replay incident grouping and claim collision checks

@@ -6,7 +6,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const script = path.join(__dirname, "../.github/scripts/feature-map-change-guard.mjs");
-const folder = ".claude/skills/verify-qa/reference/feature-map";
+const folder = ".claude/skills/verify-hypertask/features";
 
 const load = () => import(script);
 
@@ -117,7 +117,7 @@ test("a citation to another area's changed file does not cover this area", async
 
 test("editing only the map index or a generated row fails", async () => {
   const { evaluate } = await load();
-  for (const pagePath of [`${folder}/INDEX.md`, `${folder}/rows/settings.md`]) {
+  for (const pagePath of [`${folder}/README.md`, `${folder}/rows/settings.md`]) {
     const result = evaluate({
       title: "HTPR-1 [FEATURE] Add settings",
       changedFiles: ["src/app/settings/page.tsx"],
@@ -173,6 +173,6 @@ test("the command exits non-zero and prints the fix", async t => {
   const head = commit({ "src/app/settings/page.tsx": "export default 2;\n" }, "change");
   const run = spawnSync(process.execPath, [script, base, head, "HTPR-1 [FEATURE] Add settings"], { cwd: root, encoding: "utf8" });
   assert.equal(run.status, 1);
-  assert.match(run.stdout, /Map folder: \.claude\/skills\/verify-qa\/reference\/feature-map\//);
+  assert.match(run.stdout, /Map folder: \.claude\/skills\/verify-hypertask\/features\//);
   assert.match(run.stdout, /src\/app\/settings/);
 });

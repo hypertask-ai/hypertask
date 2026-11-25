@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
-const retired = '.claude/skills/verify-qa/reference';
+const retired = '.claude/skills/verify-hypertask/reference';
 const archive = `${retired}/archive`;
 
 function markdownFiles(directory) {
@@ -43,7 +43,7 @@ function checkE2eReadme() {
 }
 
 function checkRecipe() {
-  const file = '.claude/skills/verify-qa/reference/local-launch.md';
+  const file = '.claude/skills/verify-hypertask/reference/local-launch.md';
   const text = readFileSync(path.join(root(), file), 'utf8');
   const problems = [];
   if (!text.includes('# Local launch and teardown')) problems.push(`${file} has no local launch and teardown section`);

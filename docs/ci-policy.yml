@@ -370,7 +370,7 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/setup-runner/scripts/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", ".claude/hooks/runner-inbox-stop.sh", ".claude/skills/drain-board/scripts/drain-board", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", "scripts/premerge-local-*.mjs", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/setup-runner/scripts/**", ".claude/skills/verify-hypertask/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", ".claude/hooks/runner-inbox-stop.sh", ".claude/skills/drain-board/scripts/drain-board", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", "scripts/premerge-local-*.mjs", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
   node_major: 24
   commands:
     - node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs
@@ -390,8 +390,8 @@ ship_scripts_tests:
     - python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
     - bash .claude/skills/ship/scripts/runner-pickup.test.sh
-    - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
-    - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
+    - python3 .claude/skills/verify-hypertask/scripts/evidence-prune.test.py
+    - node --test .claude/skills/verify-hypertask/scripts/qa-identity.test.mjs .claude/skills/verify-hypertask/scripts/qa-login.test.mjs
     - bash .claude/skills/ship/scripts/error-collector.test.sh
     - node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
     - bash .claude/skills/ship/scripts/ship-claim.test.sh
@@ -416,7 +416,7 @@ feature_map_weekly:
   cron_utc: "37 3 * * 1"
   triggers: [schedule, workflow_dispatch]
   pull_request_trigger_moved_to: skills-evals
-  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-qa/reference/feature-map/**", ".claude/skills/verify-qa/reference/ops-map/**", ".github/workflows/feature-map-weekly.yml"]
+  paths: [".claude/skills/maintain-verification-skill/**", ".claude/skills/verify-hypertask/features/**", ".claude/skills/verify-hypertask/ops-map/**", ".github/workflows/feature-map-weekly.yml"]
   node_major: 24
   permissions: [contents_read]
   commands:
@@ -735,7 +735,7 @@ ci_tests:
     exempt_tags: [BUGFIX, INFRA, REFACTOR]
     user_facing_paths: ["src/app/**", "src/components/**"]
     area: first_directory_under_user_facing_root
-    map_folder: .claude/skills/verify-qa/reference/feature-map
+    map_folder: .claude/skills/verify-hypertask/features
     failure_names_map_folder: true
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
   pull_request_concurrency:

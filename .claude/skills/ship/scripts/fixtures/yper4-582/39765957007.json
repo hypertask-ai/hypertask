@@ -60,7 +60,7 @@
       "title": "HTPR-7567 [REFACTOR] Remove feature flag htpr-6752-instant-ticket-open",
       "url": "https://github.com/hypertask-ai/hypertask/pull/1832",
       "files": [
-        ".claude/skills/verify-qa/reference/feature-map/task-detail-and-description.md",
+        ".claude/skills/verify-hypertask/features/task-detail-and-description.md",
         "docs/htpr-6509-slices.md",
         "e2e/smoke/layout-lock.spec.ts",
         "e2e/smoke/production-flag-modes.json",

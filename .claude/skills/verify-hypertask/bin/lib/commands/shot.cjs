@@ -21,7 +21,7 @@ Usage:
   --dry-run         print the exact helper command and take no shot.
   --session         shoot the persistent session's page instead of a new browser.
 
-Wraps .claude/skills/verify-on-phone/scripts/phone-shot.sh, which refuses a login
+Wraps .claude/skills/verify-hypertask/scripts/phone-shot.sh, which refuses a login
 landing and a missing state. A redirect away from the requested path is a failure
 unless --allow-redirect. The PNG is the only evidence.
 
@@ -67,18 +67,18 @@ module.exports = {
       if (isLoopback(url) && existsSync(runState)) state = runState;
       else {
         const account = values.account || "flags";
-        const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [account, "--state"], { timeout: 15_000 });
+        const selected = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-login"), [account, "--state"], { timeout: 15_000 });
         if (selected.status !== 0) fail(`unknown account ${account}`, "Pass --account with one of the qa-login names, or --state with a state file.", "usage", 2);
         state = selected.stdout.trim();
       }
     }
-    const helper = path.join(repoRoot, ".claude/skills/verify-on-phone/scripts/phone-shot.sh");
+    const helper = path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/phone-shot.sh");
     const args = [url, values.out, "--state", state];
     if (values.viewport) args.push("--viewport", values.viewport);
     if (values.theme) args.push("--theme", values.theme);
     if (values["allow-redirect"]) args.push("--allow-redirect");
     if (values["dry-run"]) {
-      const plan = [`.claude/skills/verify-on-phone/scripts/phone-shot.sh ${args.join(" ")}`];
+      const plan = [`.claude/skills/verify-hypertask/scripts/phone-shot.sh ${args.join(" ")}`];
       const local = localEnv();
       return { target: isLoopback(url) ? "local" : "production", data: dryRun("shot", plan, { out: values.out, state, url, baseUrl: local.baseUrl || null }).data };
     }

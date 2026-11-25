@@ -813,7 +813,7 @@ unset -f gh
 sha=$(gh pr view 809 -R hypertask-ai/hypertask --json mergeCommit --jq .mergeCommit.oid)
 R=$E/HTPR-6570/2026-10-01-qa-run-1; mkdir -p "$R"; : > "$R/a.png"
 T() { if ./ship-check proof HTPR-6570 >/dev/null; then [ "$1" = pass ] && ok "$2" || bad "$2"; else [ "$1" = fail ] && ok "$2" || bad "$2"; fi; }
-printf 'Feature map: .claude/skills/verify-qa/reference/feature-map/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\nLeftovers: none\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
+printf 'Feature map: .claude/skills/verify-hypertask/features/my-tasks.md\nDoctor: sha deadbeef0 deployment success\nRun: 2026-10-01-qa-run-1\nLeftovers: none\n## Cases\n- PASS: x -> a.png\n' > "$E/HTPR-6570/proof.md"
 T fail "stale proof rejected"
 sed -i "s/deadbeef0/${sha:0:9}/" "$E/HTPR-6570/proof.md"
 T fail "empty screenshot rejected"
@@ -823,7 +823,7 @@ grep -v '^Leftovers:' "$E/HTPR-6570/proof.md" > "$E/HTPR-6570/proof.md.no-leftov
 mv "$E/HTPR-6570/proof.md.no-leftovers" "$E/HTPR-6570/proof.md"
 T fail "proof without leftovers rejected"
 mv "$E/HTPR-6570/proof.md.with-leftovers" "$E/HTPR-6570/proof.md"
-sed -i 's@feature-map/my-tasks.md@feature-map/public-sites.md@' "$E/HTPR-6570/proof.md"
+sed -i 's@features/my-tasks.md@features/public-sites.md@' "$E/HTPR-6570/proof.md"
 T pass "public-site proof accepted"
 echo '- PASS: y -> missing output.png' >> "$E/HTPR-6570/proof.md"; T fail "malformed PASS line rejected"
 sed -i '$d' "$E/HTPR-6570/proof.md"; echo '- PASS: z -> old.png' >> "$E/HTPR-6570/proof.md"; printf 'png' > "$E/HTPR-6570/old.png"
@@ -1401,7 +1401,7 @@ leftovers_proof_tests() {
 printf '%s\n' '{"number":4242,"title":"HTPR-9360 [INFRA] Leftovers proof","state":"MERGED","mergeCommit":{"oid":"0123456789abcdef0123456789abcdef01234567"},"baseRefName":"production"}'
 MOCK
   chmod +x "$bin/gh"
-  head=$'Feature map: .claude/skills/verify-qa/reference/feature-map/inbox.md\nDoctor: sha 012345678 deployment success\nRun: 2026-11-16-qa-run-1\n'
+  head=$'Feature map: .claude/skills/verify-hypertask/features/inbox.md\nDoctor: sha 012345678 deployment success\nRun: 2026-11-16-qa-run-1\n'
   tail=$'## Cases\n- PASS: open -> a.png\n'
   P() {
     local want=$1 label=$2

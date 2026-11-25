@@ -1,0 +1,1 @@
+| Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `node .claude/skills/verify-hypertask/scripts/task-drive-live.mjs`; `ht-verify` description PUT + reload, right column, /time empty |

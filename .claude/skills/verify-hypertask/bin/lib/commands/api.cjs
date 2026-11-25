@@ -34,7 +34,7 @@ const WRITE = ["POST", "PUT", "PATCH", "DELETE"];
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"];
 
 function accountState(account) {
-  const selected = run(path.join(repoRoot, ".claude/skills/verify-qa/scripts/qa-login"), [account, "--state"], { timeout: 15_000 });
+  const selected = run(path.join(repoRoot, ".claude/skills/verify-hypertask/scripts/qa-login"), [account, "--state"], { timeout: 15_000 });
   if (selected.status !== 0) fail(`unknown account ${account}`, "Pass --account with one of the qa-login names, or --state with a state file.", "usage", 2);
   return selected.stdout.trim();
 }
@@ -81,7 +81,7 @@ module.exports = {
     }).catch((error) => fail(`request failed: ${error.message}`, "Check the base URL and that the server is up, then retry.", "unreadable", 2));
     const text = (await response.text()).slice(0, 4_000);
     if (response.status === 401) {
-      fail(`identity expired: the server refused this state (401)`, "Refresh the state through verify-qa reference/logins.md, then retry.", "identity-expired", 3);
+      fail(`identity expired: the server refused this state (401)`, "Refresh the state through verify-hypertask reference/logins.md, then retry.", "identity-expired", 3);
     }
     if (response.status === 403) {
       return {

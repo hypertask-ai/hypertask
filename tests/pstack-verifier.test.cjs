@@ -1520,10 +1520,10 @@ test("a real plan with no evidence file fails as evidence missing", async () => 
       expect: [{ path: "/detail/project-{id}/1" }],
       reason: "Task detail screen is the user-facing path for this ticket; the diff only adds QA driver scripts with no new user screen.",
       files: [
-        ".claude/skills/verify-qa/scripts/area-click-drive.mjs",
-        ".claude/skills/verify-qa/scripts/area-clicks.mjs",
-        ".claude/skills/verify-qa/scripts/drive-cli.mjs",
-        ".claude/skills/verify-qa/scripts/drive-grade.mjs",
+        ".claude/skills/verify-hypertask/scripts/area-click-drive.mjs",
+        ".claude/skills/verify-hypertask/scripts/area-clicks.mjs",
+        ".claude/skills/verify-hypertask/scripts/drive-cli.mjs",
+        ".claude/skills/verify-hypertask/scripts/drive-grade.mjs",
         ".github/scripts/verify-qa-premerge.mjs",
         "tests/htpr-9383-area-clicks.test.cjs",
         "tests/verify-qa-premerge.test.cjs",
@@ -1758,9 +1758,9 @@ test("run 45311010610's non-app plan drives nothing, asks nothing, and a missing
   const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
   const { planFromRequest, driveNeeded, askNeeded, judgeAskCommand, postCommand, decide, settleWaiting, REQUIRED_CI_CONTEXTS } = await load();
   const files = [
-    ".claude/skills/verify-qa/reference/feature-map/INDEX.md",
-    ".claude/skills/verify-qa/reference/feature-map/mobile.md",
-    ".claude/skills/verify-qa/reference/feature-map/rows/mobile.md",
+    ".claude/skills/verify-hypertask/features/README.md",
+    ".claude/skills/verify-hypertask/features/mobile.md",
+    ".claude/skills/verify-hypertask/features/rows/mobile.md",
     ".github/scripts/feature-map-live-daily.mjs",
     ".github/scripts/verify-qa-premerge.mjs",
     ".github/scripts/wait-prod-health-gate.mjs",

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const mapDirectories = [
-  '.claude/skills/verify-qa/reference/feature-map',
+  '.claude/skills/verify-hypertask/features',
 ];
 
 export const shape = [
@@ -90,7 +90,7 @@ export function pages(root) {
     const full = path.join(root, directory);
     if (!existsSync(full)) return [];
     return readdirSync(full)
-      .filter(name => name.endsWith('.md') && name !== 'INDEX.md')
+      .filter(name => name.endsWith('.md') && name !== 'README.md')
       .sort()
       .map(name => path.join(directory, name));
   });

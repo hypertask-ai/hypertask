@@ -116,10 +116,10 @@
     }
   ],
   "functions": [
-    { "id": "board-drive", "label": "Seeded board drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/board-drive-live.mjs", "token": "await driveMain" }] },
-    { "id": "task-drive", "label": "Seeded task drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/task-drive-live.mjs", "token": "await driveMain" }] },
-    { "id": "comments-drive", "label": "Seeded comments drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/comments-drive-live.mjs", "token": "await driveMain" }] },
-    { "id": "flags-drive", "label": "Seeded flags drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-qa/scripts/flags-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "board-drive", "label": "Seeded board drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-hypertask/scripts/board-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "task-drive", "label": "Seeded task drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-hypertask/scripts/task-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "comments-drive", "label": "Seeded comments drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-hypertask/scripts/comments-drive-live.mjs", "token": "await driveMain" }] },
+    { "id": "flags-drive", "label": "Seeded flags drive", "detail": "On-demand normal and broken-feature runs; not production coverage.", "checkIds": ["hands-free-drives"], "sources": [{ "file": ".claude/skills/verify-hypertask/scripts/flags-drive-live.mjs", "token": "await driveMain" }] },
     {
       "id": "build-start",
       "label": "Build and start the app",

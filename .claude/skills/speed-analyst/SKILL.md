@@ -25,7 +25,7 @@ This is the map, not a parallel `/ship`. Read [PLAYBOOK.md](PLAYBOOK.md) first a
 
 ## Build scratch is not evidence
 
-Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-qa/reference/evidence-storage.md).
+Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-hypertask/reference/evidence-storage.md).
 
 ## Research without a fixed ceiling
 
@@ -37,7 +37,7 @@ An upgrade that changes product behavior, price, login/access or a hard-to-undo 
 
 ## Safety and existing probes
 
-- QA-normal saved state and fixture only, per the QA logins reference `.claude/skills/verify-qa/reference/logins.md`. Never owner/customer credentials, live load tests, auth dumps, token-bearing traces or app writes during measurement. The timer never files tickets.
+- QA-normal saved state and fixture only, per the QA logins reference `.claude/skills/verify-hypertask/reference/logins.md`. Never owner/customer credentials, live load tests, auth dumps, token-bearing traces or app writes during measurement. The timer never files tickets.
 - Query counts: existing `src/lib/queryCountTracker.ts` `[n+1-detector]` app logs and existing PostHog/readiness/realtime telemetry, not Prisma/SQL/database-client lookups of board content. The detector warns at 11+ in a chain, not an exact per-request counter. Missing app instrumentation says unavailable; add a reviewed app probe only when justified.
 - Reuse `scripts/report-app-project-vitals.mjs` (`npm run performance:field`), `scripts/check-app-performance-budget.mjs` and existing `scripts/check-speed-pr-evidence.mjs`; do not replace field p75 with synthetic medians. Traces are private and captured separately from timed samples.
 - Helpers have no board-write identity. Only the owning SPEED RUNNER files, claims and updates via `vcc`; never assign/remove a human or add Valentin. Identical-output performance is flag-exempt; deliberate behavior changes follow the app flag rules.

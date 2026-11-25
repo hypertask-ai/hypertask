@@ -10,7 +10,7 @@ import { mapPath, repoPaths, apiRoutes, routePatterns, routeExists, checkFeature
 const here = path.dirname(fileURLToPath(import.meta.url));
 const checker = path.join(here, 'feature-map-check.mjs');
 const runner = path.join(here, 'maintain-verification-weekly');
-const opsPath = '.claude/skills/verify-qa/reference/ops-map';
+const opsPath = '.claude/skills/verify-hypertask/ops-map';
 
 function fixture(t, count = 1) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'feature-map-'));
@@ -26,9 +26,9 @@ function fixture(t, count = 1) {
   git('config', 'user.email', 'fixture@example.invalid');
   git('config', 'user.name', 'Offline fixture');
   const pages = Array.from({ length: count }, (_, index) => `area-${String(index).padStart(2, '0')}.md`);
-  put(`${mapPath}/INDEX.md`, '| Area | File |\n|---|---|\n' + pages.map(page => `| ${page} | [${page}](${page}) |`).join('\n') + '\n');
+  put(`${mapPath}/README.md`, '| Area | File |\n|---|---|\n' + pages.map(page => `| ${page} | [${page}](${page}) |`).join('\n') + '\n');
   for (const page of pages) put(`${mapPath}/${page}`, '# Area\n\n`src/shared.ts`\n\n## How to drive it\nOpen area, reload and collect proof.\n');
-  put(`${opsPath}/INDEX.md`, '# Ops map\n');
+  put(`${opsPath}/README.md`, '# Ops map\n');
   put('src/shared.ts', 'export const fixture = true;\n');
   git('add', '.');
   git('commit', '-m', 'fixture');
@@ -71,7 +71,7 @@ const path = require('node:path');
 const home = process.env.FIXTURE_HOME;
 const args = process.argv.slice(2);
 const prompt = args.at(-1);
-const page = prompt.match(/feature-map\\/((?:\\.\\.\\/ops-map\\/)?[a-z0-9-]+\\.md)/)?.[1];
+const page = prompt.match(/features\\/((?:\\.\\.\\/ops-map\\/)?[a-z0-9-]+\\.md)/)?.[1];
 if (!page || !prompt.startsWith('Token ladder: CODEX mode.') || !prompt.includes('Use the unlazy skill') || !prompt.includes('Only read source.') || !args.includes('--provider=codex') || !args.includes('--no-session')) process.exit(9);
 fs.appendFileSync(path.join(home, 'helpers'), page + '\\n');
 fs.appendFileSync(path.join(home, 'events'), 'start ' + page + '\\n');
@@ -113,21 +113,21 @@ test('checker exports return concrete success and failure values', t => {
 
 test('index requires table coverage, existing siblings and unique entries and rows', t => {
   const f = fixture(t, 2);
-  f.put(`${mapPath}/INDEX.md`, '[area-01.md](area-01.md) outside the table\n| A | [a](area-00.md) |\n| B | [b](area-00.md) |\n| Missing | [missing](gone.md) |\n| Missing | [missing](gone.md) |\n');
+  f.put(`${mapPath}/README.md`, '[area-01.md](area-01.md) outside the table\n| A | [a](area-00.md) |\n| B | [b](area-00.md) |\n| Missing | [missing](gone.md) |\n| Missing | [missing](gone.md) |\n');
   const problems = checkFeatureMap(f.repo);
   assert.ok(problems.some(value => value.kind === 'unindexed page' && value.value === 'area-01.md'));
   assert.ok(problems.some(value => value.kind === 'missing file' && value.value === 'gone.md'));
   assert.ok(problems.some(value => value.kind === 'duplicate entry' && value.value === 'area-00.md'));
   assert.ok(problems.some(value => value.kind === 'duplicate row'));
-  rmSync(path.join(f.repo, mapPath, 'INDEX.md'));
+  rmSync(path.join(f.repo, mapPath, 'README.md'));
   assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing index'));
   rmSync(path.join(f.repo, mapPath), { recursive: true });
-  assert.deepEqual(checkFeatureMap(f.repo), [{ page: 'INDEX.md', kind: 'missing directory', value: mapPath }]);
+  assert.deepEqual(checkFeatureMap(f.repo), [{ page: 'README.md', kind: 'missing directory', value: mapPath }]);
 });
 
 test('ops map receives the same index, path and route checks as customer recipes', t => {
   const f = fixture(t);
-  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
+  f.put(`${opsPath}/README.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
   f.put(`${opsPath}/build.md`, '`src/shared.ts`');
   assert.deepEqual(checkFeatureMap(f.repo), []);
   f.put(`${opsPath}/build.md`, '`src/missing.ts` POST /api/missing');
@@ -137,19 +137,19 @@ test('ops map receives the same index, path and route checks as customer recipes
   ]);
   f.put(`${opsPath}/build.md`, '`src/shared.ts`');
   f.put(`${opsPath}/unlisted.md`, '# Unlisted');
-  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/INDEX.md' && value.kind === 'unindexed page' && value.value === 'unlisted.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/README.md' && value.kind === 'unindexed page' && value.value === 'unlisted.md'));
   rmSync(path.join(f.repo, opsPath, 'unlisted.md'));
   rmSync(path.join(f.repo, opsPath, 'build.md'));
-  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/INDEX.md' && value.kind === 'missing file' && value.value === 'build.md'));
-  rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
-  assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing index' && value.page === '../ops-map/INDEX.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/README.md' && value.kind === 'missing file' && value.value === 'build.md'));
+  rmSync(path.join(f.repo, opsPath, 'README.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing index' && value.page === '../ops-map/README.md'));
   rmSync(path.join(f.repo, opsPath), { recursive: true });
   assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing directory' && value.value === opsPath));
 });
 
 test('CLI fails for ops drift and weekly reports its moved recipe', t => {
   const f = weeklyFixture(t);
-  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
+  f.put(`${opsPath}/README.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
   f.put(`${opsPath}/build.md`, '`docs/removed.md`\n\n## How to drive it\nRead the hosted build log.\n');
   const result = spawnSync(process.execPath, [checker, f.repo], { encoding: 'utf8' });
   assert.equal(result.status, 1);
@@ -160,11 +160,11 @@ test('CLI fails for ops drift and weekly reports its moved recipe', t => {
   const report = readFileSync(path.join(firstRun, 'description.html'), 'utf8');
   assert.match(report, /ops-map\/build.md:1: missing path: docs\/removed.md/);
   assert.match(report, /Read the hosted build log/);
-  rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
+  rmSync(path.join(f.repo, opsPath, 'README.md'));
   f.git('add', '.'); f.git('commit', '-m', 'missing ops index');
   ok(f.run('--dry-run'));
   const missingIndexReport = readFileSync(path.join(f.runs().find(run => run !== firstRun), 'description.html'), 'utf8');
-  assert.match(missingIndexReport, /ops-map\/INDEX.md:1: missing index/);
+  assert.match(missingIndexReport, /ops-map\/README.md:1: missing index/);
 });
 
 test('repo paths strip citations, punctuation, commands and anchors; ignore globs, placeholders and explicit external-repo scopes', t => {
@@ -266,7 +266,7 @@ test('weekly first run caps eight helpers, max two concurrent, and drains backlo
 
 test('weekly keeps moved ops recipes in incremental audits and pending retries without name collisions', t => {
   const f = weeklyFixture(t);
-  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Ops | [ops](area-00.md) |\n');
+  f.put(`${opsPath}/README.md`, '| Area | File |\n|---|---|\n| Ops | [ops](area-00.md) |\n');
   f.put(`${opsPath}/area-00.md`, '`src/ops.ts`');
   f.put('src/ops.ts', 'first');
   f.git('add', '.'); f.git('commit', '-m', 'ops recipe');
@@ -431,7 +431,7 @@ test('checker-only drift files recipes without starting unchanged page helpers',
   assert.equal(existsSync(path.join(f.home, 'helpers')), false);
   assert.equal(readFileSync(path.join(f.home, 'vcc-calls'), 'utf8').trim().split('\n').length, 1);
   const report = readFileSync(path.join(f.runs()[0], 'description.html'), 'utf8');
-  assert.match(report, /feature-map\/area-00.md:1: missing path: docs\/deleted.md/);
+  assert.match(report, /features\/area-00.md:1: missing path: docs\/deleted.md/);
   assert.match(report, /Live recipe.*Doctor first.*Open the account area/);
 });
 

@@ -24,7 +24,7 @@ Source: pstack benchmark-checklist and principle-explain-the-number by Lauren Ta
 
 ## Build scratch is not evidence
 
-Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-qa/reference/evidence-storage.md).
+Never build on the VPS. On an approved build host, use `mktemp -d /tmp/ht-qa-build.XXXXXX` for app copies, dependencies, `.next` and `build-candidate`/`build-baseline`/`build-a`/`build-profile` trees, with an EXIT trap to remove it (INT/TERM must exit through that trap). The optional `scripts/premerge-local.sh` already owns this lifecycle. Copy only small sanitized numbers, logs, screenshots and HTML reports to `~/.local/state/vcc-evidence/<TICKET>/`; never copy a build, browser cache or toolchain there. See [QA evidence storage](../verify-hypertask/reference/evidence-storage.md).
 
 ## Steps
 

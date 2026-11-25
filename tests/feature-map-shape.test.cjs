@@ -3,9 +3,9 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const featureMapDir = process.env.FEATURE_MAP_DIR || path.join(__dirname, "..", ".claude", "skills", "verify-qa", "reference", "feature-map");
+const featureMapDir = process.env.FEATURE_MAP_DIR || path.join(__dirname, "..", ".claude", "skills", "verify-hypertask", "features");
 const pages = fs.readdirSync(featureMapDir, { withFileTypes: true })
-  .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md")
+  .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "README.md")
   .map((entry) => entry.name)
   .sort();
 const requiredHeadings = [
@@ -49,19 +49,19 @@ test("the feature-map folder contains at least one page", () => {
   assert.ok(pages.length > 0, `No feature-map pages found in ${featureMapDir}`);
 });
 
-test("INDEX.md links every feature-map page and has no dead markdown links", () => {
-  const index = fs.readFileSync(path.join(featureMapDir, "INDEX.md"), "utf8");
+test("README.md links every feature-map page and has no dead markdown links", () => {
+  const index = fs.readFileSync(path.join(featureMapDir, "README.md"), "utf8");
   const links = [...index.matchAll(/\[[^\]]*\]\(<?([^\s)>]+\.md)(?:#[^\s)>]*)?>?(?:\s+"[^"]*")?\)/g)]
     .map((match) => match[1]);
   const failures = [];
   for (const page of pages) {
     if (!links.some((link) => link === page || link.endsWith(`/${page}`))) {
-      failures.push(`INDEX.md: missing link to ${page}`);
+      failures.push(`README.md: missing link to ${page}`);
     }
   }
   for (const link of links) {
     if (!fs.existsSync(path.join(featureMapDir, link))) {
-      failures.push(`INDEX.md: dead link "${link}"`);
+      failures.push(`README.md: dead link "${link}"`);
     }
   }
   assert.equal(failures.length, 0, failures.join("\n"));

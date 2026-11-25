@@ -7,7 +7,7 @@
 - Tokens: 7 theme files in `src/styles/tailwindThemes/`. Brand colours in `tailwind.config.ts`.
 - Docs: `design-system/README.md`, `design-system/AUDIT.md` (6 ranked debts), `docs/DESIGN.md`, `.claude/skills/reuse-existing-ui/reference/style-guide.md`.
 - CI: `eslint-local-rules/ui-patterns.mjs` with `ui-patterns-baseline.json`, `e2e/smoke/layout-lock*.spec.ts`, `visual-regression.yml`, `ux-signoff-gate.yml`.
-- Repo skill `verify-visual`: Visual Regression diff PNGs. Use it next to layout-lock.
+- Repo skill `verify-hypertask`: Visual Regression diff PNGs. Use it next to layout-lock.
 - Known broken: `.claude/skills/design-compliance/SKILL.md` points at `docs/design/STYLE-GUIDE.md`, `scripts/design-lint.mjs` and a design-gate check that do not exist.
 - Live branch for audits: `production`.
 
