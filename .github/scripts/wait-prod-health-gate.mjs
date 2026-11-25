@@ -15,18 +15,26 @@ export async function waitForProdHealthGate({ eventName, repo, sha, token, budge
     if (newest?.state === 'failure') return { ok: false, unreadable: false, reason: `prod-health-gate failure for ${sha} invalidates run ${run.id}` }
     const match = statuses.find((s) => s.context === 'prod-health-gate' && String(s.target_url || '').includes(`/runs/${run.id}`) && String(s.created_at || '') >= String(run.created_at || ''))
     if (match?.state === 'success') return { ok: true, unreadable: false, reason: `prod-health-gate success for ${sha} (run ${run.id})` }
-    if (run.status === 'completed' && completedAt === null) completedAt = now(); if (match?.state === 'failure' || (completedAt !== null && now() - completedAt >= 120_000)) return { ok: false, unreadable: false, reason: `prod-health run ${run.id} ${match?.state === 'failure' ? 'reported a prod-health-gate failure' : 'published no prod-health-gate status within 120s of completing'} for ${sha}` }
+    if (run.status === 'completed' && completedAt === null) completedAt = now(); if (match?.state === 'failure') return { ok: false, unreadable: false, reason: `prod-health run ${run.id} reported a prod-health-gate failure for ${sha}` }
+    if (completedAt !== null && now() - completedAt >= 120_000) {
+      const deployments = await readJson(`https://api.github.com/repos/${repo}/deployments?sha=${sha}&per_page=100`, token, fetchImpl).catch(() => null)
+      const reason = `prod-health run ${run.id} published no prod-health-gate status within 120s of completing for ${sha}`
+      if (Array.isArray(deployments) && !deployments.some((entry) => entry?.production_environment === true || String(entry?.environment || '').toLowerCase() === 'production')) return { ok: false, unreadable: false, notDeployed: true, reason: `no production deployment was built for ${sha}, so prod-health had nothing to check` }
+      return { ok: false, unreadable: false, reason }
+    }
     await sleep(pollMs)
   }
   return unread ? { ok: false, unreadable: true, reason: unread } : { ok: false, unreadable: false, reason: `prod-health did not conclude for ${sha} within budget` }
 }
 export const gateOutcome = (res) => res.ok
   ? { level: 'info', code: 0, message: res.reason }
-  : { level: 'error', code: 1, message: `Mobile verification did not run: ${res.reason}` }
+  : res.notDeployed
+    ? { level: 'notice', code: 0, message: `Mobile verification has no release verdict: ${res.reason}. It audits the production that is live.` }
+    : { level: 'error', code: 1, message: `Mobile verification did not run: ${res.reason}` }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const res = await waitForProdHealthGate({ eventName: process.env.EVENT_NAME || process.env.GITHUB_EVENT_NAME || '', repo: process.env.GITHUB_REPOSITORY || '', sha: process.env.SHA || process.env.GITHUB_SHA || '', token: process.env.GITHUB_TOKEN || '', budgetMs: Number(process.env.GATE_BUDGET_SECONDS || 1980) * 1000, pollMs: Number(process.env.GATE_POLL_SECONDS || 20) * 1000, maxPolls: Number(process.env.GATE_MAX_POLLS || 1000) })
   const outcome = gateOutcome(res)
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `ok=${res.ok}\nreason=${res.reason}\n`)
-  console[outcome.code ? 'error' : 'log'](`::${outcome.level}::${outcome.message}`)
+  console[outcome.level === 'error' ? 'error' : 'log'](`::${outcome.level}::${outcome.message}`)
   process.exit(outcome.code)
 }
