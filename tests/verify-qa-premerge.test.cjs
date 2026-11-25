@@ -38,7 +38,7 @@ test('changed pages select their own drivers, never an inbox fallback', async ()
   }
   for (const files of [[], ['docs/ci.md'], ['.github/scripts/verify-qa-premerge.mjs']]) {
     assert.deepEqual(selectJourney(files), {
-      matchedPage: null, journey: null, reason: 'no feature-map page matched the diff', featureMap: null, counts: {},
+      matchedPage: null, journey: null, runner: 'desktop', reason: 'no feature-map page matched the diff', featureMap: null, counts: {},
     })
   }
   const unsupported = selectJourney(['src/app/my-tasks/page.tsx'])
@@ -60,6 +60,12 @@ test('catalog drivers cover the journey tags and refer to real feature-map pages
   for (const entry of FEATURE_MAP_CATALOG) {
     assert.equal(fs.existsSync(`.claude/skills/verify-qa/reference/feature-map/${entry.page}`), true, entry.page)
   }
+})
+
+test('the mobile catalog entry drives the phone project and its design audit', async (t) => {
+  const { runTaggedJourneys, selectJourney } = await load(), outDir = tempDir(t), choice = selectJourney(['e2e/smoke/lib/mobile-design.ts']), calls = [], pass = (id) => ({ tags: [`id:${id}`], tests: [{ results: [{ status: 'passed' }] }] })
+  const result = await runTaggedJourneys({ base: 'http://127.0.0.1:3100', outDir, journey: choice.journey, runner: choice.runner }, (command, args, options) => { calls.push(args.slice(1, 6).join(' ')); fs.writeFileSync(options.env.PLAYWRIGHT_JSON_OUTPUT_NAME, JSON.stringify({ suites: [{ specs: [...choice.journey, 'mobile-design'].map(pass) }] })); return { status: 0 } })
+  assert.deepEqual(calls, ['test -c e2e/smoke/playwright.config.mobile.ts --project=mobile-journeys --project=mobile-design']); assert.equal(choice.runner, 'mobile'); assert.equal(result.verdict, 'PASS'); assert.equal(result.steps.at(-1).name, 'mobile-design'); assert.ok(result.steps.slice(0, -1).every((step) => step.pass))
 })
 
 test('longest prefix wins and the most changed page wins', async () => {

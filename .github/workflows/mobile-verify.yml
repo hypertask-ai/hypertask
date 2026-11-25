@@ -1,0 +1,24 @@
+name: Mobile Verification
+on:
+  push: { branches: [production] }
+  workflow_dispatch:
+permissions: { contents: read, actions: read, statuses: read }
+concurrency: { group: mobile-verify, cancel-in-progress: false }
+jobs:
+  mobile-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: ^24.22.1, check-latest: true, cache: npm }
+      - run: npm ci --no-audit --no-fund && npx prisma generate && bash .github/scripts/install-chromium.sh
+        timeout-minutes: 15
+      - { id: gate, timeout-minutes: 34, env: { GITHUB_TOKEN: '${{ github.token }}', GITHUB_REPOSITORY: '${{ github.repository }}', SHA: '${{ github.sha }}', EVENT_NAME: '${{ github.event_name }}' }, run: node .github/scripts/wait-prod-health-gate.mjs }
+      - if: steps.gate.outputs.ok == 'true'
+        env: { SMOKE_BASE_URL: 'https://app.hypertask.ai', SMOKE_POSTDEPLOY: '1', HT_QA_JOURNEYS: '1', QA_LOGIN_EMAIL: '${{ secrets.QA_LOGIN_EMAIL }}', QA_LOGIN_PASSWORD: '${{ secrets.QA_LOGIN_PASSWORD }}', SMOKE_BOARD_PATH: '/project?id=7049&surface=board', SMOKE_TASK_PATH: '/detail/project-7049/6283' }
+        run: timeout 900 npx playwright test -c e2e/smoke/playwright.config.mobile.ts --project=mobile-design --project=mobile-journeys
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: mobile-verify-failures, path: test-results/**/*.png, if-no-files-found: ignore, retention-days: 7 }

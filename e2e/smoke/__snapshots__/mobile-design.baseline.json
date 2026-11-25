@@ -1,0 +1,1970 @@
+{
+  "generatedAt": "2026-11-24T02:14:17.198Z",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "touchEmulation": true,
+  "themes": [
+    "porcelain",
+    "graphite",
+    "amoled",
+    "dia"
+  ],
+  "screens": {
+    "my-tasks": {
+      "porcelain": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:1~2",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:2",
+          "li[row]>span:2~2",
+          "li[row]>span:2~3",
+          "li[row]>span:2~4",
+          "li[row]>span:2~5",
+          "li[row]>span:2~6",
+          "li[row]>span:2~7",
+          "li[row]>span:3",
+          "li[row]>span:3~2",
+          "li[row]>span:3~3",
+          "li[row]>span:3~4",
+          "li[row]>span:3~5",
+          "li[row]>span:3~6",
+          "li[row]>span:3~7"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back",
+          "div:Later 1 KEY-# KEY-# renamed #",
+          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "li#inbox-*:*",
+          "li#inbox-*:*~2",
+          "li#inbox-*:*~3",
+          "li#inbox-*:*~4",
+          "li#inbox-*:*~5",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [
+          "span:Live list updates on"
+        ],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "graphite": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:1~2",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:2",
+          "li[row]>span:2~2",
+          "li[row]>span:2~3",
+          "li[row]>span:2~4",
+          "li[row]>span:2~5",
+          "li[row]>span:2~6",
+          "li[row]>span:2~7",
+          "li[row]>span:3",
+          "li[row]>span:3~2",
+          "li[row]>span:3~3",
+          "li[row]>span:3~4",
+          "li[row]>span:3~5",
+          "li[row]>span:3~6",
+          "li[row]>span:3~7"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back",
+          "div:Later 1 KEY-# KEY-# renamed #",
+          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "li#inbox-*:*",
+          "li#inbox-*:*~2",
+          "li#inbox-*:*~3",
+          "li#inbox-*:*~4",
+          "li#inbox-*:*~5",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [
+          "span:Live list updates on"
+        ],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "amoled": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:1~2",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:2",
+          "li[row]>span:2~2",
+          "li[row]>span:2~3",
+          "li[row]>span:2~4",
+          "li[row]>span:2~5",
+          "li[row]>span:2~6",
+          "li[row]>span:2~7",
+          "li[row]>span:3",
+          "li[row]>span:3~2",
+          "li[row]>span:3~3",
+          "li[row]>span:3~4",
+          "li[row]>span:3~5",
+          "li[row]>span:3~6",
+          "li[row]>span:3~7"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back",
+          "div:Later 1 KEY-# KEY-# renamed #",
+          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "li#inbox-*:*",
+          "li#inbox-*:*~2",
+          "li#inbox-*:*~3",
+          "li#inbox-*:*~4",
+          "li#inbox-*:*~5",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [
+          "span:Live list updates on"
+        ],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "dia": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:All",
+          "button:TICKET",
+          "button:TITLE",
+          "div:Back",
+          "div[role=button]:Later #",
+          "div[role=button]:No due date #",
+          "li[row]>span:1",
+          "li[row]>span:1~2",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:2",
+          "li[row]>span:2~2",
+          "li[row]>span:2~3",
+          "li[row]>span:2~4",
+          "li[row]>span:2~5",
+          "li[row]>span:2~6",
+          "li[row]>span:2~7",
+          "li[row]>span:3",
+          "li[row]>span:3~2",
+          "li[row]>span:3~3",
+          "li[row]>span:3~4",
+          "li[row]>span:3~5",
+          "li[row]>span:3~6",
+          "li[row]>span:3~7"
+        ],
+        "input-font": [],
+        "radius": [
+          "div:Back",
+          "div:Later 1 KEY-# KEY-# renamed #",
+          "div:No due date 6 KEY-# Use Hypertask in Claude, Ch",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [
+          "span:Live list updates on"
+        ],
+        "purple-non-ai": [],
+        "mic-action": []
+      }
+    },
+    "board-kanban": {
+      "porcelain": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div#task-*~2",
+          "div#task-*~3",
+          "div#task-*~4",
+          "div#task-*~5",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "graphite": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div#task-*~2",
+          "div#task-*~3",
+          "div#task-*~4",
+          "div#task-*~5",
+          "div#task-*~6",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #",
+          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:0>a:0>div:0~2",
+          "div[row]>div:0>a:0>div:0~3",
+          "div[row]>div:0>a:0>div:1"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "amoled": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div#task-*~2",
+          "div#task-*~3",
+          "div#task-*~4",
+          "div#task-*~5",
+          "div#task-*~6",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #",
+          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:0>a:0>div:0~2",
+          "div[row]>div:0>a:0>div:0~3",
+          "div[row]>div:0>a:0>div:1"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "dia": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div#task-*",
+          "div#task-*~2",
+          "div#task-*~3",
+          "div#task-*~4",
+          "div#task-*~5",
+          "div#task-*~6",
+          "div#task-*~7",
+          "div#task-*~8",
+          "div#task-*~9",
+          "div:div.group",
+          "div[role=button]:Doing #",
+          "div[role=button]:Todo #",
+          "div[row]>div:0>a:0>div:0",
+          "div[row]>div:0>a:0>div:1"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      }
+    },
+    "board-table": {
+      "porcelain": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:0~10",
+          "li[row]>span:0~11",
+          "li[row]>span:0~12",
+          "li[row]>span:0~13",
+          "li[row]>span:0~14",
+          "li[row]>span:0~15",
+          "li[row]>span:0~16",
+          "li[row]>span:0~17",
+          "li[row]>span:0~18",
+          "li[row]>span:0~19",
+          "li[row]>span:0~2",
+          "li[row]>span:0~20",
+          "li[row]>span:0~21",
+          "li[row]>span:0~22",
+          "li[row]>span:0~23",
+          "li[row]>span:0~24",
+          "li[row]>span:0~25",
+          "li[row]>span:0~26",
+          "li[row]>span:0~27",
+          "li[row]>span:0~28",
+          "li[row]>span:0~3",
+          "li[row]>span:0~4",
+          "li[row]>span:0~5",
+          "li[row]>span:0~6",
+          "li[row]>span:0~7",
+          "li[row]>span:0~8",
+          "li[row]>span:0~9",
+          "li[row]>span:1",
+          "li[row]>span:1~10",
+          "li[row]>span:1~11",
+          "li[row]>span:1~12",
+          "li[row]>span:1~13",
+          "li[row]>span:1~14",
+          "li[row]>span:1~15",
+          "li[row]>span:1~16",
+          "li[row]>span:1~17",
+          "li[row]>span:1~18",
+          "li[row]>span:1~19",
+          "li[row]>span:1~2",
+          "li[row]>span:1~20",
+          "li[row]>span:1~21",
+          "li[row]>span:1~22",
+          "li[row]>span:1~23",
+          "li[row]>span:1~24",
+          "li[row]>span:1~25",
+          "li[row]>span:1~26",
+          "li[row]>span:1~27",
+          "li[row]>span:1~28",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:1~8",
+          "li[row]>span:1~9",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Doing 8 KEY-# [qa-runner] board drive #",
+          "div:Done",
+          "div:Todo 34 KEY-# [qa-runner] task drive #",
+          "div:ht7381 column #",
+          "li#inbox-*:*",
+          "li#inbox-*:*~10",
+          "li#inbox-*:*~11",
+          "li#inbox-*:*~12",
+          "li#inbox-*:*~13",
+          "li#inbox-*:*~14",
+          "li#inbox-*:*~15",
+          "li#inbox-*:*~16",
+          "li#inbox-*:*~17",
+          "li#inbox-*:*~18",
+          "li#inbox-*:*~19",
+          "li#inbox-*:*~2",
+          "li#inbox-*:*~20",
+          "li#inbox-*:*~21",
+          "li#inbox-*:*~22",
+          "li#inbox-*:*~23",
+          "li#inbox-*:*~24",
+          "li#inbox-*:*~25",
+          "li#inbox-*:*~26",
+          "li#inbox-*:*~27",
+          "li#inbox-*:*~3",
+          "li#inbox-*:*~4",
+          "li#inbox-*:*~5",
+          "li#inbox-*:*~6",
+          "li#inbox-*:*~7",
+          "li#inbox-*:*~8",
+          "li#inbox-*:*~9",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "graphite": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:ASSIGNEE~2",
+          "button:TICKET",
+          "button:TICKET~2",
+          "button:TITLE",
+          "button:TITLE~2",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:0~10",
+          "li[row]>span:0~11",
+          "li[row]>span:0~12",
+          "li[row]>span:0~13",
+          "li[row]>span:0~14",
+          "li[row]>span:0~15",
+          "li[row]>span:0~16",
+          "li[row]>span:0~17",
+          "li[row]>span:0~18",
+          "li[row]>span:0~19",
+          "li[row]>span:0~2",
+          "li[row]>span:0~20",
+          "li[row]>span:0~21",
+          "li[row]>span:0~22",
+          "li[row]>span:0~23",
+          "li[row]>span:0~24",
+          "li[row]>span:0~25",
+          "li[row]>span:0~26",
+          "li[row]>span:0~27",
+          "li[row]>span:0~28",
+          "li[row]>span:0~29",
+          "li[row]>span:0~3",
+          "li[row]>span:0~30",
+          "li[row]>span:0~31",
+          "li[row]>span:0~32",
+          "li[row]>span:0~33",
+          "li[row]>span:0~4",
+          "li[row]>span:0~5",
+          "li[row]>span:0~6",
+          "li[row]>span:0~7",
+          "li[row]>span:0~8",
+          "li[row]>span:0~9",
+          "li[row]>span:1",
+          "li[row]>span:1~10",
+          "li[row]>span:1~11",
+          "li[row]>span:1~12",
+          "li[row]>span:1~13",
+          "li[row]>span:1~14",
+          "li[row]>span:1~15",
+          "li[row]>span:1~16",
+          "li[row]>span:1~17",
+          "li[row]>span:1~18",
+          "li[row]>span:1~19",
+          "li[row]>span:1~2",
+          "li[row]>span:1~20",
+          "li[row]>span:1~21",
+          "li[row]>span:1~22",
+          "li[row]>span:1~23",
+          "li[row]>span:1~24",
+          "li[row]>span:1~25",
+          "li[row]>span:1~26",
+          "li[row]>span:1~27",
+          "li[row]>span:1~28",
+          "li[row]>span:1~29",
+          "li[row]>span:1~3",
+          "li[row]>span:1~30",
+          "li[row]>span:1~31",
+          "li[row]>span:1~32",
+          "li[row]>span:1~33",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:1~8",
+          "li[row]>span:1~9",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Doing 8 KEY-# [qa-runner] board drive #",
+          "div:Done",
+          "div:Todo 34 KEY-# [qa-runner] task drive #",
+          "div:ht7381 column #",
+          "li#inbox-*:*",
+          "li#inbox-*:*~10",
+          "li#inbox-*:*~11",
+          "li#inbox-*:*~12",
+          "li#inbox-*:*~13",
+          "li#inbox-*:*~14",
+          "li#inbox-*:*~15",
+          "li#inbox-*:*~16",
+          "li#inbox-*:*~17",
+          "li#inbox-*:*~18",
+          "li#inbox-*:*~19",
+          "li#inbox-*:*~2",
+          "li#inbox-*:*~20",
+          "li#inbox-*:*~21",
+          "li#inbox-*:*~22",
+          "li#inbox-*:*~23",
+          "li#inbox-*:*~24",
+          "li#inbox-*:*~25",
+          "li#inbox-*:*~26",
+          "li#inbox-*:*~27",
+          "li#inbox-*:*~3",
+          "li#inbox-*:*~4",
+          "li#inbox-*:*~5",
+          "li#inbox-*:*~6",
+          "li#inbox-*:*~7",
+          "li#inbox-*:*~8",
+          "li#inbox-*:*~9",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "amoled": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:0~10",
+          "li[row]>span:0~11",
+          "li[row]>span:0~12",
+          "li[row]>span:0~13",
+          "li[row]>span:0~14",
+          "li[row]>span:0~15",
+          "li[row]>span:0~16",
+          "li[row]>span:0~17",
+          "li[row]>span:0~18",
+          "li[row]>span:0~19",
+          "li[row]>span:0~2",
+          "li[row]>span:0~20",
+          "li[row]>span:0~21",
+          "li[row]>span:0~22",
+          "li[row]>span:0~23",
+          "li[row]>span:0~24",
+          "li[row]>span:0~25",
+          "li[row]>span:0~26",
+          "li[row]>span:0~27",
+          "li[row]>span:0~28",
+          "li[row]>span:0~3",
+          "li[row]>span:0~4",
+          "li[row]>span:0~5",
+          "li[row]>span:0~6",
+          "li[row]>span:0~7",
+          "li[row]>span:0~8",
+          "li[row]>span:0~9",
+          "li[row]>span:1",
+          "li[row]>span:1~10",
+          "li[row]>span:1~11",
+          "li[row]>span:1~12",
+          "li[row]>span:1~13",
+          "li[row]>span:1~14",
+          "li[row]>span:1~15",
+          "li[row]>span:1~16",
+          "li[row]>span:1~17",
+          "li[row]>span:1~18",
+          "li[row]>span:1~19",
+          "li[row]>span:1~2",
+          "li[row]>span:1~20",
+          "li[row]>span:1~21",
+          "li[row]>span:1~22",
+          "li[row]>span:1~23",
+          "li[row]>span:1~24",
+          "li[row]>span:1~25",
+          "li[row]>span:1~26",
+          "li[row]>span:1~27",
+          "li[row]>span:1~28",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:1~8",
+          "li[row]>span:1~9",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Doing 8 KEY-# [qa-runner] board drive #",
+          "div:Done",
+          "div:Todo 34 KEY-# [qa-runner] task drive #",
+          "div:ht7381 column #",
+          "li#inbox-*:*",
+          "li#inbox-*:*~10",
+          "li#inbox-*:*~11",
+          "li#inbox-*:*~12",
+          "li#inbox-*:*~13",
+          "li#inbox-*:*~14",
+          "li#inbox-*:*~15",
+          "li#inbox-*:*~16",
+          "li#inbox-*:*~17",
+          "li#inbox-*:*~18",
+          "li#inbox-*:*~19",
+          "li#inbox-*:*~2",
+          "li#inbox-*:*~20",
+          "li#inbox-*:*~21",
+          "li#inbox-*:*~22",
+          "li#inbox-*:*~23",
+          "li#inbox-*:*~24",
+          "li#inbox-*:*~25",
+          "li#inbox-*:*~26",
+          "li#inbox-*:*~27",
+          "li#inbox-*:*~3",
+          "li#inbox-*:*~4",
+          "li#inbox-*:*~5",
+          "li#inbox-*:*~6",
+          "li#inbox-*:*~7",
+          "li#inbox-*:*~8",
+          "li#inbox-*:*~9",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "dia": {
+        "tap-target": [
+          "button:ASSIGNEE",
+          "button:TICKET",
+          "button:TITLE",
+          "button[aria=Ask AI]",
+          "button[aria=Create task in the selected column]",
+          "div[role=button]:Doing #",
+          "div[role=button]:Done",
+          "div[role=button]:Todo #",
+          "div[role=button]:ht7381 column #",
+          "li#table-more-*",
+          "li[row]>span:0",
+          "li[row]>span:0~10",
+          "li[row]>span:0~11",
+          "li[row]>span:0~12",
+          "li[row]>span:0~13",
+          "li[row]>span:0~14",
+          "li[row]>span:0~15",
+          "li[row]>span:0~16",
+          "li[row]>span:0~17",
+          "li[row]>span:0~18",
+          "li[row]>span:0~19",
+          "li[row]>span:0~2",
+          "li[row]>span:0~20",
+          "li[row]>span:0~21",
+          "li[row]>span:0~22",
+          "li[row]>span:0~23",
+          "li[row]>span:0~24",
+          "li[row]>span:0~25",
+          "li[row]>span:0~26",
+          "li[row]>span:0~27",
+          "li[row]>span:0~28",
+          "li[row]>span:0~3",
+          "li[row]>span:0~4",
+          "li[row]>span:0~5",
+          "li[row]>span:0~6",
+          "li[row]>span:0~7",
+          "li[row]>span:0~8",
+          "li[row]>span:0~9",
+          "li[row]>span:1",
+          "li[row]>span:1~10",
+          "li[row]>span:1~11",
+          "li[row]>span:1~12",
+          "li[row]>span:1~13",
+          "li[row]>span:1~14",
+          "li[row]>span:1~15",
+          "li[row]>span:1~16",
+          "li[row]>span:1~17",
+          "li[row]>span:1~18",
+          "li[row]>span:1~19",
+          "li[row]>span:1~2",
+          "li[row]>span:1~20",
+          "li[row]>span:1~21",
+          "li[row]>span:1~22",
+          "li[row]>span:1~23",
+          "li[row]>span:1~24",
+          "li[row]>span:1~25",
+          "li[row]>span:1~26",
+          "li[row]>span:1~27",
+          "li[row]>span:1~28",
+          "li[row]>span:1~3",
+          "li[row]>span:1~4",
+          "li[row]>span:1~5",
+          "li[row]>span:1~6",
+          "li[row]>span:1~7",
+          "li[row]>span:1~8",
+          "li[row]>span:1~9",
+          "li[row]>span:2"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Doing 8 KEY-# [qa-runner] board drive #",
+          "div:Done",
+          "div:Todo 34 KEY-# [qa-runner] task drive #",
+          "div:ht7381 column #",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      }
+    },
+    "calendar": {
+      "porcelain": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span:24",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "graphite": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span:24",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "amoled": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span:24",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "dia": {
+        "tap-target": [
+          "button[aria=Ask AI]",
+          "div:Everything"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span:24",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      }
+    },
+    "task-detail": {
+      "porcelain": {
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div:Add a comment\u2026",
+          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
+          "div:div.h-8",
+          "div[testid=comment-composer]",
+          "div[testid=ticket-description]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap",
+          "textarea#title-input"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div:Add a comment\u2026",
+          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
+          "div:div.h-8",
+          "div[testid=comment-composer]",
+          "div[testid=ticket-description]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap",
+          "textarea#title-input"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div:Add a comment\u2026",
+          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
+          "div:div.h-8",
+          "div[testid=comment-composer]",
+          "div[testid=ticket-description]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap",
+          "textarea#title-input"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "button#markAsDone",
+          "button:Log time",
+          "button:Not enough content for summary",
+          "button:Start",
+          "button[aria=Ask AI]",
+          "div#share-task-button",
+          "div:QA Sandbox",
+          "div:VA valentin",
+          "span#description-ai-writer-button",
+          "span:Add field",
+          "span:Doing",
+          "span:ID",
+          "span:Project",
+          "span:Status",
+          "span:Time",
+          "span:span.relative"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#share-task-button",
+          "div:Add a comment\u2026",
+          "div:ID KEY-# Status Doing Project QA Sandbox Tim",
+          "div:div.h-8",
+          "div[testid=comment-composer]",
+          "div[testid=ticket-description]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap",
+          "textarea#title-input"
+        ]
+      }
+    },
+    "inbox": {
+      "porcelain": {
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "graphite": {
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "amoled": {
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "dia": {
+        "tap-target": [
+          "button[aria=Ask AI]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      }
+    },
+    "ai-chat-sheet": {
+      "porcelain": {
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "div:source-sidebar-attachment.png",
+          "div[row]>div:0>a:0>div:0",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "div:source-sidebar-attachment.png",
+          "div[row]>div:0>a:0>div:0",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "div:source-sidebar-attachment.png",
+          "div[row]>div:0>a:0>div:0",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "a:[qa-runner] KEY-# sidebar-attachment #",
+          "button[attr=QA Sandbox]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy response]",
+          "svg[aria=Create task from response]",
+          "svg[aria=Edit message]",
+          "svg[aria=Retry message]"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "div:source-sidebar-attachment.png",
+          "div[row]>div:0>a:0>div:0",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      }
+    },
+    "ai-chat-full": {
+      "porcelain": {
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "a:An agent's MCP call to hypertask_tasks failed (2~2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "li[row]>a:0",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy message]~2",
+          "svg[aria=Copy message]~3",
+          "svg[aria=Copy message]~4",
+          "svg[aria=Copy response]",
+          "svg[aria=Copy response]~2",
+          "svg[aria=Create task from response]",
+          "svg[aria=Create task from response]~2",
+          "svg[aria=Edit message]",
+          "svg[aria=Edit message]~2",
+          "svg[aria=Edit message]~3",
+          "svg[aria=Edit message]~4",
+          "svg[aria=Retry message]",
+          "svg[aria=Retry message]~2",
+          "svg[aria=Retry message]~3",
+          "svg[aria=Retry message]~4"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]",
+          "code:list_token",
+          "code:next_cursor",
+          "div:div.w-full"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "a:An agent's MCP call to hypertask_tasks failed (2~2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "li[row]>a:0",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy message]~2",
+          "svg[aria=Copy message]~3",
+          "svg[aria=Copy message]~4",
+          "svg[aria=Copy response]",
+          "svg[aria=Copy response]~2",
+          "svg[aria=Create task from response]",
+          "svg[aria=Create task from response]~2",
+          "svg[aria=Edit message]",
+          "svg[aria=Edit message]~2",
+          "svg[aria=Edit message]~3",
+          "svg[aria=Edit message]~4",
+          "svg[aria=Retry message]",
+          "svg[aria=Retry message]~2",
+          "svg[aria=Retry message]~3",
+          "svg[aria=Retry message]~4"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]",
+          "code:list_token",
+          "code:next_cursor",
+          "div:div.w-full"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "a:An agent's MCP call to hypertask_tasks failed (2~2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "li[row]>a:0",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy message]~2",
+          "svg[aria=Copy message]~3",
+          "svg[aria=Copy message]~4",
+          "svg[aria=Copy response]",
+          "svg[aria=Copy response]~2",
+          "svg[aria=Create task from response]",
+          "svg[aria=Create task from response]~2",
+          "svg[aria=Edit message]",
+          "svg[aria=Edit message]~2",
+          "svg[aria=Edit message]~3",
+          "svg[aria=Edit message]~4",
+          "svg[aria=Retry message]",
+          "svg[aria=Retry message]~2",
+          "svg[aria=Retry message]~3",
+          "svg[aria=Retry message]~4"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]",
+          "code:list_token",
+          "code:next_cursor",
+          "div:div.w-full"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "a:An agent's MCP call to hypertask_tasks failed (2",
+          "a:An agent's MCP call to hypertask_tasks failed (2~2",
+          "button[aria=Exit full-screen AI chat]",
+          "button[aria=Scroll to latest messages]",
+          "svg[aria=Copy message]",
+          "svg[aria=Copy message]~2",
+          "svg[aria=Copy message]~3",
+          "svg[aria=Copy response]",
+          "svg[aria=Copy response]~2",
+          "svg[aria=Create task from response]",
+          "svg[aria=Create task from response]~2",
+          "svg[aria=Edit message]",
+          "svg[aria=Edit message]~2",
+          "svg[aria=Edit message]~3",
+          "svg[aria=Retry message]",
+          "svg[aria=Retry message]~2",
+          "svg[aria=Retry message]~3"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Scroll to latest messages]",
+          "code:list_token",
+          "code:next_cursor",
+          "div:div.w-full"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      }
+    },
+    "commands-search": {
+      "porcelain": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Search New Task BOARD Zoom board out Create task",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "li[row]>span:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Search New Task BOARD Zoom board out Create task",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "li[row]>span:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Search New Task BOARD Zoom board out Create task",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "li[row]>span:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:Search New Task BOARD Zoom board out Create task",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "li[row]>span:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#htc-mobile-search"
+        ]
+      }
+    },
+    "commands-new-task": {
+      "porcelain": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:QA Sandbox",
+          "div:Search New Task QA Sandbox",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:QA Sandbox",
+          "div:Search New Task QA Sandbox",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:QA Sandbox",
+          "div:Search New Task QA Sandbox",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "button[role=tab]:New Task",
+          "button[role=tab]:Search",
+          "div#compose-task-audio-button"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:QA Sandbox",
+          "div:Search New Task QA Sandbox",
+          "div[aria=Commands mode]",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "textarea[aria=Describe the task]"
+        ]
+      }
+    },
+    "new-task-modal": {
+      "porcelain": {
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#createTaskModal",
+          "div:Board: QA Sandbox Section: Doing Priority: None",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#createTaskModal",
+          "div:Board: QA Sandbox Section: Doing Priority: None",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#createTaskModal",
+          "div:Board: QA Sandbox Section: Doing Priority: None",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "button#create-task-modal-ai-writer-button",
+          "textarea#title-input-modal"
+        ],
+        "input-font": [
+          "div[role=textbox]:div.tiptap"
+        ],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div#createTaskModal",
+          "div#description-container-create-task-modal",
+          "div:Board: QA Sandbox Section: Doing Priority: None",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]",
+          "span[aria=valentin avatar]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "div[role=textbox]:div.tiptap"
+        ]
+      }
+    },
+    "board-switcher": {
+      "porcelain": {
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span:span.flex",
+          "span:span.flex~2",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span:span.flex",
+          "span:span.flex~2",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span:span.flex",
+          "span:span.flex~2",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "span:Willow & Basket",
+          "span:span.flex"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:BOARDS QA Sandbox Hypertask Product KEY-# QA",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span:span.flex",
+          "span:span.flex~2",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#mobile-board-switcher-search"
+        ]
+      }
+    },
+    "view-switcher": {
+      "porcelain": {
+        "tap-target": [],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "graphite": {
+        "tap-target": [],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "amoled": {
+        "tap-target": [],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      },
+      "dia": {
+        "tap-target": [],
+        "input-font": [],
+        "radius": [
+          "button[aria=Ask AI]",
+          "button[aria=Create task]",
+          "div:VIEWS QA Sandbox 42 QA7098 broken 21 QA7098 run2",
+          "div[row]>div:0>a:0>div:0",
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": []
+      }
+    },
+    "search": {
+      "porcelain": {
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "input#search-input"
+        ],
+        "input-font": [],
+        "radius": [
+          "span:span.absolute",
+          "span[aria=Settings]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#search-input"
+        ]
+      }
+    },
+    "settings-menu": {
+      "porcelain": {
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "a[aria=Contact us]",
+          "button:Back to app",
+          "button:Sign out",
+          "button[aria=Send feedback]",
+          "button[role=tab]:Board",
+          "button[role=tab]:Connect",
+          "button[role=tab]:Help",
+          "button[role=tab]:Profile",
+          "button[role=tab]:Team",
+          "input[attr=Search settings]"
+        ],
+        "input-font": [],
+        "radius": [
+          "button[role=tab]:Profile"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input[attr=Search settings]"
+        ]
+      }
+    },
+    "settings-general": {
+      "porcelain": {
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [
+          "span[aria=Profile picture]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
+      },
+      "graphite": {
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [
+          "span[aria=Profile picture]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
+      },
+      "amoled": {
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [
+          "span[aria=Profile picture]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
+      },
+      "dia": {
+        "tap-target": [
+          "button:Change",
+          "button:Delete account",
+          "button:Remove",
+          "button[aria=Back to settings]",
+          "input#settings-display-name"
+        ],
+        "input-font": [],
+        "radius": [
+          "span[aria=Profile picture]"
+        ],
+        "overflow-x": [],
+        "purple-non-ai": [],
+        "mic-action": [
+          "input#settings-display-name"
+        ]
+      }
+    }
+  }
+}

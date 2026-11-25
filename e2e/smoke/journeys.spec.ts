@@ -1,11 +1,12 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 import { withRealtime } from './lib/realtime'
 import { watchForLoops, assertColumnsStayVisible, assertNoLoop } from './lib/loopGuard'
 import { readQaRunnerBoard } from './lib/readBoard'
-import { createTask, deleteTask, fetchBootstrapWithTeams } from './lib/api'
+import { createTask, deleteTask, fetchBoardTasks, fetchBootstrapWithTeams } from './lib/api'
 import { QA_TASK_PREFIX } from './lib/boardSetup'
 import { tieredId, readExpectedPlanLabel, readTier } from './lib/tier'
 
+const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 768
 
 const LOGIN_PATH = '/login'
 const createdTaskIds: number[] = []
@@ -14,9 +15,10 @@ function idTag(name: string) {
   return `@id:${tieredId(name)}`
 }
 
-test.beforeEach(() => {
+test.beforeEach(async ({ page }) => {
   test.skip(process.env.HT_QA_JOURNEYS !== '1', 'HT_QA_JOURNEYS not set, write journeys are opt-in')
   createdTaskIds.length = 0
+  if (isPhone(page)) await page.setViewportSize({ width: 390, height: 844 })
 })
 
 test.afterEach(async ({ request }) => {
@@ -58,19 +60,23 @@ test(`open task`, { tag: [idTag('open-task'), '@mobile'] }, async ({ page, reque
   createdTaskIds.push(created.id)
 
   const guard = watchForLoops(page)
-  await page.goto(withRealtime(`/detail/project-${board.projectId}/${created.uniqueIndex}`), { waitUntil: 'load' })
+  const detailPath = `/detail/project-${board.projectId}/${created.uniqueIndex}`
+  if (isPhone(page)) {
+    await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' }); await page.locator('.kanban-column-title').first().waitFor({ state: 'visible', timeout: 10_000 }); const cardLink = page.locator(`#task-${created.id} a[href="${detailPath}"]`).first(); await expect(cardLink, `mobile task card ${created.id} did not become visible on the board`).toBeVisible({ timeout: 15_000 }); await cardLink.tap()
+  } else await page.goto(withRealtime(detailPath), { waitUntil: 'load' })
   await expect(page.locator('#title-input'), 'task detail title input did not render').toBeVisible({ timeout: 10_000 })
   assertNoLoop(guard, 'open task')
   guard.stop()
 })
 
-test(`switch boards`, { tag: [idTag('switch-boards')] }, async ({ page, request }) => {
+test(`switch boards`, { tag: [idTag('switch-boards'), '@mobile'] }, async ({ page, request }) => {
   const board = requireBoard()
   const { teams } = await fetchBootstrapWithTeams(request)
   const other = teams.flatMap((t) => t.projects).find((p) => p.id !== board.projectId)
   test.skip(!other, 'account has no other board to switch to besides "QA runner board"')
 
   const openBoard = async (projectId: number) => {
+    if (isPhone(page)) { await page.getByRole('button', { name: 'Switch board', exact: true }).tap(); await page.locator(`#mobile-board-option-${projectId}`).tap(); await expect(page).toHaveURL(new RegExp(`[?&]id=${projectId}(?:&|$)`)); return }
     const entry = page.locator(`#project-${projectId}:visible`)
     if ((await entry.count()) === 0) {
       await page.keyboard.press('Control+b')
@@ -99,6 +105,21 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
 
   await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
+
+  if (isPhone(page)) {
+    test.setTimeout(120_000)
+    const createResponse = page.waitForResponse((res) => /\/api\/tasks\/(create|createGlobally)/.test(res.url()) && res.request().method() === 'POST', { timeout: 45_000 })
+    await page.getByRole('button', { name: 'Commands', exact: true }).tap(); await page.getByRole('tab', { name: 'New Task' }).tap()
+    const writer = page.locator('[aria-label="Describe the task"]').first(); await writer.tap(); await writer.fill(title)
+    await page.locator('[data-compose-task-writer] [aria-label="Create task"], [data-compose-task-writer] [aria-label="Send message"]').first().tap()
+    const created = await (await createResponse).json(), createdId = (created.newTask?.newTask ?? created.newTask ?? created)?.id; if (createdId) createdTaskIds.push(createdId)
+    const taskDetailTitle = page.locator('#title-input'), boardCard = createdId ? page.locator(`#task-${createdId}`) : page.locator('[id^="task-"]').filter({ hasText: title }).first()
+    await expect.poll(async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()), { message: 'created task did not appear after save', timeout: 25_000 }).toBe(true)
+    if (await taskDetailTitle.isVisible()) {
+      await expect(taskDetailTitle, 'created task did not open after save').toHaveValue(title, { timeout: 10_000 }); await page.reload(); await expect(taskDetailTitle, 'task did not persist after reload').toHaveValue(title, { timeout: 10_000 }); return
+    }
+    await page.reload(); await expect(boardCard, 'task did not persist after reload').toBeVisible({ timeout: 10_000 }); return
+  }
 
   const modalTitleInput = page.locator('#title-input-modal')
   const inlineInput = page.locator('#newTask textarea[aria-label="Title"]')
@@ -130,8 +151,7 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   if (createdId) createdTaskIds.push(createdId)
 
   if ((page.viewportSize()?.width ?? 1280) < 768) {
-    const taskDetailTitle = page.locator('#title-input')
-    const boardCard = page.locator(`text=${title}`).first()
+    const taskDetailTitle = page.locator('#title-input'), boardCard = page.locator(`text=${title}`).first()
     await expect.poll(
       async () => (await taskDetailTitle.isVisible()) || (await boardCard.isVisible()),
       { message: 'created task did not appear after save', timeout: 10_000 },
@@ -266,7 +286,31 @@ test(`drag card between columns`, { tag: [idTag('drag-card')] }, async ({ page, 
   ).toBeVisible({ timeout: 10_000 })
 })
 
-test(`ai chat replies`, { tag: [idTag('ai-chat')] }, async ({ page }) => {
+test(`reply in inbox`, { tag: [idTag('reply-inbox'), '@mobile'] }, async ({ page, request }) => {
+  const board = requireBoard(), title = `${QA_TASK_PREFIX} reply-inbox journey ${Date.now()}`, replyText = `QA inbox reply ${Date.now()}`
+  const created = await createTask(request, { title, projectId: board.projectId, userId: board.userId }); createdTaskIds.push(created.id)
+  expect((await request.post('/api/notifications/moveTaskToInbox', { data: { taskId: created.id, projectId: board.projectId } })).ok()).toBe(true)
+  await page.goto(withRealtime('/inbox'), { waitUntil: 'load' })
+  const row = page.getByText(title).first(); await expect(row).toBeVisible({ timeout: 15_000 }); await (isPhone(page) ? row.tap() : row.click()); await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 }); const editor = page.locator('[data-testid="comment-composer"] .ProseMirror[contenteditable="true"], #comment-input .ProseMirror[contenteditable="true"]').first()
+  if (!(await editor.isVisible())) await (isPhone(page) ? page.locator('#comment-input, #comment-input-input').first().tap() : page.locator('#comment-input').click())
+  await (isPhone(page) ? editor.tap() : editor.click()); await page.keyboard.insertText(replyText)
+  const saved = page.waitForResponse((res) => res.url().includes('/api/comments/create') && res.request().method() === 'POST', { timeout: 15_000 })
+  if (isPhone(page)) await page.getByRole('button', { name: 'Send comment' }).tap(); else await page.keyboard.press('Control+Enter')
+  expect((await saved).ok(), 'inbox reply create failed').toBe(true)
+  await page.goto(withRealtime(`/detail/project-${board.projectId}/${created.uniqueIndex}`), { waitUntil: 'load' }); await expect(page.getByText(replyText).first(), 'inbox reply did not persist after reload').toBeVisible({ timeout: 10_000 })
+  await request.post('/api/notifications/markAsDone', { data: { taskId: created.id, userId: board.userId } }).catch(() => {})
+})
+
+test(`switch column`, { tag: [idTag('switch-column'), '@mobile'] }, async ({ page, request }) => {
+  const board = requireBoard(), { project } = await fetchBoardTasks(request, board.projectId), sections = project.section ?? []; test.skip(sections.length < 2, 'board has fewer than 2 columns')
+  const created = await createTask(request, { title: `${QA_TASK_PREFIX} switch-column journey ${Date.now()}`, projectId: board.projectId, userId: board.userId }); createdTaskIds.push(created.id)
+  await page.goto(withRealtime(`/detail/project-${board.projectId}/${created.uniqueIndex}`), { waitUntil: 'load' }); await expect(page.locator('#title-input')).toBeVisible({ timeout: 10_000 })
+  const rail = page.locator('[data-task-properties-rail]').first(), targetTitle = sections[1].section_title, moved = page.waitForResponse((res) => /\/api\/tasks\/moveTask/.test(res.url()) && res.request().method() === 'PUT', { timeout: 15_000 })
+  const trigger = rail.getByText(sections[0].section_title, { exact: true }).first(); await (isPhone(page) ? trigger.tap() : trigger.click()); const option = page.getByText(targetTitle, { exact: true }).last(); await (isPhone(page) ? option.tap() : option.click())
+  expect((await moved).ok(), 'column move request failed').toBe(true); await page.reload(); await expect(rail.getByText(targetTitle, { exact: true }).first(), 'column change did not persist after reload').toBeVisible({ timeout: 10_000 })
+})
+
+test(`ai chat replies`, { tag: [idTag('ai-chat'), '@mobile'] }, async ({ page }) => {
   test.setTimeout(60_000)
   await page.goto(withRealtime('/chat'), { waitUntil: 'load' })
   test.skip(page.url().includes(LOGIN_PATH), 'no chat access for this session')
@@ -274,10 +318,11 @@ test(`ai chat replies`, { tag: [idTag('ai-chat')] }, async ({ page }) => {
   const prompt = 'In one short sentence, what is Hypertask?'
   const editor = page.locator('#ai-chat-tiptap-editor .ProseMirror')
   await editor.waitFor({ state: 'visible', timeout: 10_000 })
-  await editor.click()
+  await (isPhone(page) ? editor.tap() : editor.click())
   await expect(editor, 'chat editor did not take focus').toBeFocused()
   await page.keyboard.type(prompt)
-  await page.keyboard.press('Enter')
+  if (isPhone(page)) await page.getByRole('button', { name: /^Send(?: message)?$/ }).last().tap()
+  else await page.keyboard.press('Enter')
 
   const delivered = page.locator('.submessage-container.delivered [data-chat-content-html]')
   await expect(delivered, 'no AI reply arrived within the timeout').toHaveCount(2, { timeout: 45_000 })
