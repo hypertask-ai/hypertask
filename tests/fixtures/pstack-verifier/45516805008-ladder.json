@@ -1,0 +1,15 @@
+{
+  "run": "45516805008",
+  "pr": 3836,
+  "authorFamily": "deepseek",
+  "verifierModel": "zai/glm-5.3-flash",
+  "ladderRef": "33001d32edcddeb639b0c75aff234bebb57a1051",
+  "lanes": [
+    { "name": "opencode-go", "key_env": "OPENCODE_API_KEY", "url": "https://opencode.ai/inference/go/v1/chat/completions", "model": "deepseek-v4.1-flash" },
+    { "name": "vercel-ai-gateway", "key_env": "AI_GATEWAY_API_KEY", "url": "https://ai-gateway.vercel.sh/v1/chat/completions", "model": "deepseek/deepseek-v4.1-flash", "gateway": { "only": ["token-pass"] } },
+    { "name": "vercel-ai-gateway-zai", "key_env": "AI_GATEWAY_API_KEY", "url": "https://ai-gateway.vercel.sh/v1/chat/completions", "model": "zai/glm-5.3-flash", "gateway": { "only": ["token-pass"] } },
+    { "name": "openrouter", "key_env": "OPENROUTER_API_KEY", "url": "https://openrouter.ai/api/v1/chat/completions", "model": "deepseek/deepseek-v4.1-flash-1017", "provider": { "only": ["StreamLake"], "allow_fallbacks": false } },
+    { "name": "google", "key_env": "GEMINI_API_KEY", "url": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "model": "gemini-2.5-flash" },
+    { "name": "cursor", "key_env": "CURSOR_API_KEY", "kind": "cursor", "model": "composer-2.5" }
+  ]
+}
