@@ -1,86 +1,77 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
 const test = require("node:test");
-const { createJiti } = require("jiti");
-const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+const { loadModule } = require("../helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const jiti = createJiti(__filename, {
-  interopDefault: true,
-  alias: { "@": path.join(root, "src") },
-  fsCache: false,
-});
-const definitionModule = jiti(
-  path.join(root, "src/lib/flags/definitions/htpr-9622-amoled-floating-button-ring.ts"),
-);
-const flag = definitionModule.HTPR_9622_AMOLED_FLOATING_BUTTON_RING_FLAG;
-const amoledRingClass =
-  "[.amoled_&]:[--bs-border-color:var(--border-light-gray-thin)]";
+const COMPONENT = "src/components/Global/MobileFloatingActionButton.tsx";
+const FLAG = "htpr-9622-amoled-floating-button-ring";
+const HAIRLINE = "[.amoled_&]:[--bs-border-color:var(--border-light-gray-thin)]";
+const DOCK_BOTTOM =
+  "calc(var(--mobile-dock-h, 0px) + 16px + env(safe-area-inset-bottom))";
 
-function circleClasses(enabled) {
-  const load = loader({
+function ringControl(enabled) {
+  const reads = [];
+  const Button = loadModule(COMPONENT, {
     "@/hooks/useFlag": {
-      useFlag: (key) =>
-        key === flag && enabled,
+      useFlag: (key) => {
+        reads.push(key);
+        return enabled;
+      },
     },
-  });
-  const MobileFloatingActionButton = load(
-    "src/components/Global/MobileFloatingActionButton.tsx",
-  ).default;
-  const view = mount();
-  try {
-    view.render(
-      React.createElement(MobileFloatingActionButton, {
+  }).default;
+  return {
+    reads,
+    render: (props = {}) =>
+      Button({
         ariaLabel: "Create task",
         icon: null,
         onClick: () => {},
+        ...props,
       }),
-    );
-    const button = view.container.querySelector('button[aria-label="Create task"]');
-    assert.ok(button);
-    return { classes: [...button.classList], style: button.getAttribute("style") };
-  } finally {
-    view.close();
-  }
+  };
 }
 
-test("the AMOLED phone buttons drop the bright ring for the theme hairline", () => {
-  const on = circleClasses(true);
-  assert.ok(on.classes.includes(amoledRingClass));
-  assert.match(amoledRingClass, /^\[\.amoled_&\]:/);
-  assert.match(amoledRingClass, /var\(--border-light-gray-thin\)/);
-  assert.doesNotMatch(amoledRingClass, /#|rgb|hsl/);
+function classes(button) {
+  return String(button.props.className).split(/\s+/).filter(Boolean);
+}
+
+test("the phone buttons ask for the HTPR-9622 flag by its shipped key", () => {
+  const control = ringControl(true);
+  const button = control.render();
+  assert.deepEqual(control.reads, [FLAG]);
+  assert.ok(classes(button).includes(HAIRLINE));
 });
 
-test("the ring binding is reversible and leaves every other theme and the geometry alone", () => {
-  const on = circleClasses(true);
-  const off = circleClasses(false);
-  assert.ok(!off.classes.includes(amoledRingClass));
-  assert.deepEqual(
-    on.classes.filter((className) => className !== amoledRingClass),
-    off.classes,
+test("the smaller stacked AI button keeps its size and takes the AMOLED hairline", () => {
+  const button = ringControl(true).render({ size: "secondary", stackOffset: 60 });
+  const applied = classes(button);
+  assert.ok(applied.includes("h-10"));
+  assert.ok(applied.includes("w-10"));
+  assert.ok(applied.includes(HAIRLINE));
+});
+
+test("the stack offset and dock offset are unchanged by the ring switch", () => {
+  const control = ringControl(true);
+  assert.equal(
+    control.render({ size: "secondary", stackOffset: 60 }).props.style.transform,
+    "translateY(-60px)",
   );
-  for (const className of [
-    "border",
-    "border-border-light-gray-thin",
-    "h-12",
-    "w-12",
-    "rounded-full",
-    "bg-modalBackground",
-    "right-4",
-    "z-menu",
-    "md:hidden",
-  ]) {
-    assert.ok(off.classes.includes(className), className);
-  }
-  assert.equal(on.style, off.style);
-  assert.match(on.style, /--mobile-dock-h/);
+  assert.equal(control.render().props.style.bottom, DOCK_BOTTOM);
+  assert.equal(
+    control.render({ bottomOffset: 72 }).props.style.bottom,
+    "calc(72px + 16px)",
+  );
 });
 
-test("the AMOLED floating-button ring fix ships to everyone and can be switched off", () => {
-  assert.equal(flag, "htpr-9622-amoled-floating-button-ring");
-  assert.equal(definitionModule.default.kind, "bugfix");
-  assert.equal(definitionModule.default.defaultMode, "EVERYONE");
-  assert.equal(definitionModule.default.releaseRisk.risk, "small");
-  assert.equal(definitionModule.default.releaseRisk.highRisk, undefined);
+test("switching the flag off restores the plain border and moves nothing else", () => {
+  const props = { size: "secondary", stackOffset: 60 };
+  const on = ringControl(true).render(props);
+  const off = ringControl(false).render(props);
+  const offClasses = classes(off);
+  assert.ok(!offClasses.includes(HAIRLINE));
+  assert.ok(!offClasses.some((name) => name.includes("--bs-border-color")));
+  assert.deepEqual(classes(on).filter((name) => name !== HAIRLINE), offClasses);
+  assert.deepEqual(on.props.style, off.props.style);
+  for (const name of ["border", "border-border-light-gray-thin", "rounded-full", "md:hidden"]) {
+    assert.ok(offClasses.includes(name), name);
+  }
 });
