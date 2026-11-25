@@ -131,7 +131,9 @@ const BillingSection = () => {
   const nextInvoiceDate = display.comped
     ? "Not billed"
     : subscriptionRows.nextInvoice;
-  const renewalDate = compedRenewalDate ?? subscriptionRows.renewal;
+  const renewalDate = display.comped
+    ? compedRenewalDate ?? "—"
+    : subscriptionRows.renewal;
   const invoiceTotal = display.comped ? "—" : subscriptionRows.total;
   const fullPrice = display.comped ? "—" : subscriptionRows.fullPrice;
   const discountAmount = upcomingInvoice?.discountTotal ?? 0;

@@ -27,14 +27,19 @@ export function settingsBillingDisplay(
   billing: TeamBillingSnapshot | null | undefined
 ): SettingsBillingDisplay {
   const comp = teamCompPlan(team);
-  const comped = comp !== null && billing?.storePlanId === comp;
+  const compDrivesPlan = comp !== null && billing?.storePlanId === comp;
+  const comped =
+    compDrivesPlan ||
+    (billing != null &&
+      billing.storePlanId !== "Free" &&
+      billing.billingInterval === null);
   return {
     billingCycle: comped
       ? COMPED_BILLING_CYCLE
       : billing?.billingInterval ?? "Free Plan",
     comped,
     compedUntil:
-      comped && team?.compedUntil ? new Date(team.compedUntil) : null,
+      compDrivesPlan && team?.compedUntil ? new Date(team.compedUntil) : null,
     plan: comped && comp ? comp : billing?.storePlanId ?? "Free",
   };
 }

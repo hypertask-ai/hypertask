@@ -197,6 +197,18 @@ test("a comped team hides every invoice detail, including a discount and cost br
   assert.doesNotMatch(document.body.textContent, /\$\d/);
 });
 
+test("an internal comp team never reads Free Plan beside its Pro plan", async () => {
+  team.id = "08f79efd-770e-4e32-9728-65e6d29ec893";
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(rowValue("Billing cycle"), "Comped");
+  assert.equal(rowValue("Renewal"), "—");
+  assert.equal(rowValue("Next invoice"), "Not billed");
+  assert.doesNotMatch(document.body.textContent, /Free Plan/);
+});
+
 test("an expired comp falls back to the plan the team really has", async () => {
   team.compedPlan = "Pro";
   team.compedUntil = expiredComp;
