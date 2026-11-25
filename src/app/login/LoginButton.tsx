@@ -14,6 +14,7 @@ interface LoginButtonProps {
   label?: string;
   labelClassName?: string;
   align?: "center" | "start";
+  callbackURL?: string;
 }
 
 const LoginButton = ({
@@ -23,6 +24,7 @@ const LoginButton = ({
   label = "Sign in with Google",
   labelClassName,
   align = "center",
+  callbackURL,
 }: LoginButtonProps) => {
   const { loginWithGoogle } = useAuth();
   const searchParams = useSearchParams();
@@ -42,7 +44,7 @@ const LoginButton = ({
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
       void authClient.signIn.social({
         provider: "google",
-        callbackURL: authConfig.redirect.afterLogin,
+        callbackURL: callbackURL ?? authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });
       return;
