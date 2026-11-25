@@ -10,7 +10,17 @@ const READ_BUDGET = 120;
 const HEARTBEAT_MS = 60 * 60 * 1000;
 const DEFERRED = 'Ticket not read this sweep; rechecked within 10 minutes';
 const TICKET_TITLE = /^(HTPR|HYFA|YPER4|HYCI)-(\d+) \[([^\]]+)\] \S/;
-const WIREFRAME = /https:\/\/(?:hypertask\.app\/(?:wireframes|explorations)|claude\.ai\/artifact)\/[A-Za-z0-9_-]+/;
+const WIREFRAME = /https:\/\/hypertask\.app\/wireframes\/[A-Za-z0-9_-]+/;
+const LEGACY_EVIDENCE = /https:\/\/(?:hypertask\.app\/explorations|claude\.ai\/artifact)\/[A-Za-z0-9_-]+/;
+const LEGACY_EVIDENCE_UNTIL = Date.parse('2026-11-23T00:00:00Z');
+
+function evidenceLink(comment) {
+  const current = comment.text.match(WIREFRAME)?.[0];
+  if (current) return current;
+  const legacy = comment.text.match(LEGACY_EVIDENCE)?.[0];
+  const changed = Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt);
+  return legacy && changed < LEGACY_EVIDENCE_UNTIL ? legacy : null;
+}
 
 function ticketFromTitle(title) {
   const match = TICKET_TITLE.exec(title);
@@ -547,14 +557,15 @@ function asksYesToShipElements(comment, wireframeLink, designIds, newElements) {
   const named = new Set(template[2].split(/, ?/));
   if (!newElements.length || !newElements.every((name) => named.has(name))) return false;
   if (/\b(?:no|not|block|blocked|reject|defer|postpone|hold|wait|stop|cancel|revert|undo|instead|another|different|change|review|later|tests?|only)\b|n't/i.test(template[1])) return false;
-  return comment.text.match(WIREFRAME)?.[0] === wireframeLink ||
+  return evidenceLink(comment) === wireframeLink ||
     designIds.some((id) => new RegExp(`#comment-${id}(?!\\d)`).test(comment.text));
 }
 
-function valentinReacted(comment) {
+function valentinReaction(comment, before = Infinity) {
   const edited = comment.editedAt ?? comment.updatedAt;
-  return (comment.reactions ?? []).some((reaction) =>
+  return (comment.reactions ?? []).find((reaction) =>
     humanValentin(reaction, 'userId') && /^(?:👍[🏻-🏿]?|✅)️?$/u.test(reaction.emoji) &&
+    Date.parse(reaction.createdAt ?? comment.createdAt) < before &&
     (edited == null || Date.parse(reaction.createdAt) > Date.parse(edited)));
 }
 
@@ -584,17 +595,21 @@ export function evaluate({ title, author, files, comments = [], parentComments =
   }
 
   // Valentin's own comments are verdicts, even when they quote the wireframe link.
-  const wireframe = newest(comments.filter((comment) => WIREFRAME.test(comment.text) && !humanValentin(comment, 'creatorId')));
+  const wireframe = newest(comments.filter((comment) => evidenceLink(comment) && !humanValentin(comment, 'creatorId')));
   const created = wireframe ? Date.parse(wireframe.createdAt) : -Infinity;
   const edited = wireframe?.editedAt ?? wireframe?.updatedAt;
   const revision = edited != null ? Date.parse(edited) : created;
+  const legacy = Boolean(wireframe) && !WIREFRAME.test(wireframe.text);
+  const approvalBefore = legacy ? LEGACY_EVIDENCE_UNTIL : Infinity;
   const verdict = newest(comments.filter((comment) =>
-    Date.parse(comment.createdAt) > created && commentVerdict(comment)));
+    Date.parse(comment.createdAt) > created && commentVerdict(comment) &&
+    (commentVerdict(comment) === 'reject' || Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < approvalBefore)));
   const approval = verdict && commentVerdict(verdict) === 'approve' && Date.parse(verdict.createdAt) > revision ? verdict : null;
-  const reacted = wireframe && valentinReacted(wireframe);
-  const wireframeLink = wireframe?.text.match(WIREFRAME)?.[0];
+  const reaction = wireframe && valentinReaction(wireframe, approvalBefore);
+  const reacted = Boolean(reaction);
+  const wireframeLink = wireframe && evidenceLink(wireframe);
   const earlierSameWireframe = !wireframe ? [] : comments.filter((comment) => comment !== wireframe &&
-    !humanValentin(comment, 'creatorId') && comment.text.match(WIREFRAME)?.[0] === wireframeLink &&
+    !humanValentin(comment, 'creatorId') && evidenceLink(comment) === wireframeLink &&
     Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < created);
   const designIds = [wireframe, ...earlierSameWireframe].map((comment) => comment?.id).filter((id) => id != null);
   const newElements = [...new Set(ui.filter(({ filename, status }) =>
@@ -605,7 +620,8 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     }))];
   const question = wireframe && newest(comments.filter((comment) =>
     !humanValentin(comment, 'creatorId') && Date.parse(comment.createdAt) > revision &&
-    asksYesToShipElements(comment, wireframeLink, designIds, newElements) && valentinReacted(comment)));
+    Date.parse(comment.editedAt ?? comment.updatedAt ?? comment.createdAt) < approvalBefore &&
+    asksYesToShipElements(comment, wireframeLink, designIds, newElements) && valentinReaction(comment, approvalBefore)));
   const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted || question);
   const approvedNames = new Set(approved ? [
     ...(wireframe ? elementNames(wireframe) : []),
@@ -624,9 +640,9 @@ export function evaluate({ title, author, files, comments = [], parentComments =
     details.push(`New element ${missingNames.join(', ')} needs Valentin's yes by name on ${ticket.key}`);
   }
   if (details.length) {
-    const childLink = wireframe?.text.match(WIREFRAME)?.[0];
-    const parentWireframe = newest(parentComments.filter((comment) => WIREFRAME.test(comment.text) && !humanValentin(comment, 'creatorId')));
-    const sameDesignAsParent = !childLink || parentWireframe?.text.match(WIREFRAME)?.[0] === childLink;
+    const childLink = wireframe && evidenceLink(wireframe);
+    const parentWireframe = newest(parentComments.filter((comment) => evidenceLink(comment) && !humanValentin(comment, 'creatorId')));
+    const sameDesignAsParent = !childLink || (parentWireframe && evidenceLink(parentWireframe)) === childLink;
     const childDesignUnedited = edited == null;
     if (parentComments.length && !verdict && sameDesignAsParent && childDesignUnedited) {
       const parent = evaluate({ title, author, files, comments: parentComments });

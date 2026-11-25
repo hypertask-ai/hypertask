@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rejected mobile AI chat prototype (trimmed)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0e0f11;color:#ececec;font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.top{display:flex;gap:6px;align-items:center;padding:4px 8px;background:#0e0f11;border-bottom:1px solid #26282c;height:52px}
+.top .vb{height:44px;min-width:56px;padding:0 10px;border-radius:4px;background:#22252a;font-size:15px;font-weight:600;color:#9a9ba1}
+.top .vb.on{background:#ececec;color:#141414}
+.phone{width:390px;height:844px;overflow:hidden;border:1px solid #3a3d42;border-radius:4px;background:#1a1d21;color:#ececec;display:flex;flex-direction:column}
+.hdr{padding:4px 8px 6px;border-bottom:1px solid #30343a}
+.chip{height:44px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border-radius:4px;background:#262a30;color:#ececec;font-size:15px}
+.pri{width:56px;height:48px;border-radius:4px;background:#ececec;color:#141414;display:flex;align-items:center;justify-content:center}
+</style>
+</head>
+<body>
+<div class="top">
+  <button class="vb on">A</button>
+  <button class="vb">B</button>
+</div>
+<div class="phone">
+  <div class="hdr">
+    <span class="chip">Today</span>
+    <span class="chip">This week</span>
+  </div>
+  <div class="pri">Send</div>
+</div>
+</body>
+</html>
