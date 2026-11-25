@@ -34,12 +34,26 @@ const emailAuthStyleConfig: EmailAuthStyleConfig = {
   heading: "text-white",
 };
 
+const boatEmailAuthStyleConfig: EmailAuthStyleConfig = {
+  container: "w-full",
+  input: "!h-12 !rounded-sm !border-0 !bg-active-list-element !px-4 !py-0 !text-content !text-white-black placeholder:!text-text-light-gray focus:!ring-border",
+  button: "!h-12 !rounded-sm !px-4 !py-0 !text-content !shadow-none focus:!ring-border focus:!ring-offset-0",
+  buttonPrimary: "!bg-shadcn-primary !text-primary-foreground hover:!opacity-90",
+  buttonSecondary: "!border-0 !bg-active-list-element !text-white-black hover:!bg-hover-active",
+  error: "text-left",
+  text: "text-text-light-gray",
+  textSecondary: "text-text-light-gray hover:text-white-black",
+  heading: "text-white-black",
+};
+
 interface LoginMiddleProps {
   invite?: boolean;
   serifClassName: string;
+  boatDevModel?: boolean;
+  agentCodeSignIn?: boolean;
 }
 
-export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
+export const LoginMiddle = ({ serifClassName, boatDevModel = false, agentCodeSignIn = false }: LoginMiddleProps) => {
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [isAppShell, setIsAppShell] = useState(false);
@@ -200,12 +214,14 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
     <>
       <h1
         className={cn(
-          serifClassName,
-          "mb-3.5 text-balance text-[clamp(2.5rem,3.2vw,3.25rem)] font-medium leading-[1.08] tracking-[-0.02em] text-white",
+          !boatDevModel && serifClassName,
+          boatDevModel ? "mb-3 text-heading font-medium text-white-black" : "mb-3.5 text-balance text-[clamp(2.5rem,3.2vw,3.25rem)] font-medium leading-[1.08] tracking-[-0.02em] text-white",
         )}
       >
         {hasOAuthParams ? (
           "Authorize MCP Client"
+        ) : boatDevModel ? (
+          "Sign in to Hypertask"
         ) : (
           <>
             Free collaborative project boards for the{" "}
@@ -213,10 +229,12 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
           </>
         )}
       </h1>
-      <p className="mb-9 text-pretty text-[15px] leading-[1.55] text-[#8e9093]">
+      <p className={boatDevModel ? "mb-6 text-content text-text-light-gray" : "mb-9 text-pretty text-[15px] leading-[1.55] text-[#8e9093]"}>
         {hasOAuthParams
           ? "Sign in to authorize access to your Hypertask account."
-          : "AI-driven task management that keeps your team shipping. Free to join, seconds to start."}
+          : boatDevModel
+            ? "For people. Choose how you sign in."
+            : "AI-driven task management that keeps your team shipping. Free to join, seconds to start."}
       </p>
 
       {searchParams?.get("authError") === "google_signup_disabled" && (
@@ -230,21 +248,21 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
           <Suspense
             fallback={
               <div className="animate-pulse space-y-3">
-                <div className="h-12 rounded-full bg-[#212429]" />
-                <div className="h-12 rounded-lg bg-[#333B47]" />
+                <div className={boatDevModel ? "h-12 rounded-sm bg-active-list-element" : "h-12 rounded-full bg-[#212429]"} />
+                <div className={boatDevModel ? "h-12 rounded-sm bg-shadcn-primary" : "h-12 rounded-lg bg-[#333B47]"} />
               </div>
             }
           >
             <EmailAuth
               initialEmail={email}
-              styleConfig={emailAuthStyleConfig}
+              styleConfig={boatDevModel ? boatEmailAuthStyleConfig : emailAuthStyleConfig}
             />
           </Suspense>
           {!isAppShell && (
             <button
               type="button"
               onClick={() => setShowEmailForm(false)}
-              className="mt-4 text-[14px] text-[#8e9093] transition-colors hover:text-white"
+              className={boatDevModel ? "mt-4 text-content text-text-light-gray transition-colors hover:text-white-black" : "mt-4 text-[14px] text-[#8e9093] transition-colors hover:text-white"}
             >
               ← Back to login options
             </button>
@@ -256,7 +274,7 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
             <LoginButton
               size="small"
               label="Continue with Google"
-              className="!h-12 !w-full !gap-2.5 !rounded-lg !bg-white !p-0 !text-[#0e0e0e] transition-colors duration-150 hover:!bg-[#d9d9d9]"
+              className={boatDevModel ? "!h-12 !w-full !gap-2.5 !rounded-sm !border !border-border-light-gray-thin !bg-cardBackground !p-0 !text-white-black transition-colors duration-150 hover:!bg-hover-active" : "!h-12 !w-full !gap-2.5 !rounded-lg !bg-white !p-0 !text-[#0e0e0e] transition-colors duration-150 hover:!bg-[#d9d9d9]"}
               iconClassName="!h-[18px] !w-[18px]"
               labelClassName="!text-[15px]"
             />
@@ -264,7 +282,7 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
 
           <div
             aria-hidden="true"
-            className="my-[22px] flex items-center gap-3.5 text-[11px] tracking-[0.12em] text-[#8e9093] before:h-px before:flex-1 before:bg-[rgba(76,83,98,0.55)] after:h-px after:flex-1 after:bg-[rgba(76,83,98,0.55)]"
+            className={boatDevModel ? "my-5 flex items-center gap-3 text-meta text-text-light-gray before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border" : "my-[22px] flex items-center gap-3.5 text-[11px] tracking-[0.12em] text-[#8e9093] before:h-px before:flex-1 before:bg-[rgba(76,83,98,0.55)] after:h-px after:flex-1 after:bg-[rgba(76,83,98,0.55)]"}
           >
             OR
           </div>
@@ -278,11 +296,11 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="Enter your personal or work email"
               aria-label="Email address"
-              className="mb-3 h-12 w-full rounded-full border border-[#4c5362] bg-[#212429] px-[22px] text-[15px] text-white outline-none transition-colors placeholder:text-[#8e9093] focus:border-[#8e9093]"
+              className={boatDevModel ? "mb-3 h-12 w-full rounded-sm border-0 bg-active-list-element px-4 text-content text-white-black outline-none transition-colors placeholder:text-text-light-gray focus-visible:ring-1 focus-visible:ring-border" : "mb-3 h-12 w-full rounded-full border border-[#4c5362] bg-[#212429] px-[22px] text-[15px] text-white outline-none transition-colors placeholder:text-[#8e9093] focus:border-[#8e9093]"}
             />
             <button
               type="submit"
-              className="flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093]"
+              className={boatDevModel ? "flex h-12 w-full items-center justify-center rounded-sm bg-shadcn-primary text-content font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border" : "flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093]"}
             >
               Continue with email
             </button>
@@ -292,7 +310,7 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
                 type="button"
                 onClick={() => void handlePasskeySignIn()}
                 disabled={isPasskeyLoading}
-                className="mt-3 flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093] disabled:cursor-not-allowed disabled:opacity-50"
+                className={boatDevModel ? "mt-3 flex h-12 w-full items-center justify-center rounded-sm bg-active-list-element text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border disabled:cursor-not-allowed disabled:opacity-50" : "mt-3 flex h-12 w-full items-center justify-center rounded-lg bg-[#333B47] text-[15px] font-medium text-white transition-colors duration-150 hover:bg-[#4f5766] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8e9093] disabled:cursor-not-allowed disabled:opacity-50"}
               >
                 {isPasskeyLoading ? "Signing in…" : "Sign in with a passkey"}
               </button>
@@ -307,13 +325,22 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
         </>
       )}
 
-      <p className="mt-[26px] text-pretty text-center text-[12px] leading-[1.6] text-[#8e9093]">
+      {boatDevModel && agentCodeSignIn && (
+        <div className="mt-6 border-t border-border-light-gray-thin pt-6">
+          <a href="/login/agent" className="flex min-h-12 w-full items-center justify-center rounded-sm border border-border-light-gray-thin text-content font-medium text-white-black transition-colors hover:bg-hover-active focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-border">
+            Sign in an agent
+          </a>
+          <p className="mt-2 text-meta text-text-light-gray">Connect your agent with a sign-in code.</p>
+        </div>
+      )}
+
+      <p className={boatDevModel ? "mt-6 text-pretty text-center text-meta leading-relaxed text-text-light-gray" : "mt-[26px] text-pretty text-center text-[12px] leading-[1.6] text-[#8e9093]"}>
         By continuing, you agree to Hypertask&rsquo;s{" "}
         <a
           href="https://hypertask.ai/terms"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline underline-offset-2 transition-colors hover:text-white"
+          className={boatDevModel ? "underline underline-offset-2 transition-colors hover:text-white-black" : "underline underline-offset-2 transition-colors hover:text-white"}
         >
           Terms&nbsp;of&nbsp;Service
         </a>{" "}
@@ -322,7 +349,7 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
           href="https://hypertask.ai/privacy"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline underline-offset-2 transition-colors hover:text-white"
+          className={boatDevModel ? "underline underline-offset-2 transition-colors hover:text-white-black" : "underline underline-offset-2 transition-colors hover:text-white"}
         >
           Privacy&nbsp;Policy
         </a>.

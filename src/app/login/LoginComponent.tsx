@@ -64,10 +64,39 @@ const plans = [
   },
 ] as const;
 
-const LoginComponent = ({ invite = false }: { invite?: boolean }) => {
+const LoginComponent = ({ invite = false, boatDevModel = false, agentCodeSignIn = false }: { invite?: boolean; boatDevModel?: boolean; agentCodeSignIn?: boolean }) => {
   const searchParams = useSearchParams();
   const isMinimal = searchParams?.get("var") === "minimal";
   const { isAuthenticating } = useAuth();
+
+  if (boatDevModel) {
+    return (
+      <main className="flex min-h-[100svh] flex-col bg-pageBackground text-white-black lg:flex-row">
+        <header className="flex flex-col justify-between border-border-light-gray-thin p-6 lg:w-1/2 lg:border-r lg:p-16">
+          <a href="https://hypertask.ai" className={cn(ibmPlexMono.className, "flex w-fit items-center gap-3 text-heading font-semibold")}>
+            <Image src="/hypertask-glyph-white.png" alt="" width={32} height={32} className="h-8 w-8 invert dark:invert-0" priority />
+            Hypertask
+          </a>
+          <div className="hidden max-w-[400px] lg:block">
+            <p className="text-heading font-medium">One shared board.<br />People and agents, together.</p>
+            <p className="mt-4 text-content text-text-light-gray">Work with your team and your agents, from whichever AI product you already use.</p>
+          </div>
+        </header>
+        <section aria-label="Sign in" className="flex flex-1 items-center justify-center px-6 py-12 lg:min-h-[100svh] lg:px-12">
+          <div className="flex w-full max-w-[400px] flex-col rounded-sm border border-border-light-gray-thin bg-cardBackground p-6 text-center sm:p-8">
+            {isAuthenticating ? (
+              <div className="flex items-center justify-center gap-3" aria-live="polite" aria-busy="true">
+                <LoadingSpinner1 size={20} thickness={2} />
+                <span className="text-content">Signing you in…</span>
+              </div>
+            ) : (
+              <LoginMiddle invite={invite} serifClassName={newsreader.className} boatDevModel agentCodeSignIn={agentCodeSignIn} />
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   if (isMinimal) {
     return <LoginMinimal />;
