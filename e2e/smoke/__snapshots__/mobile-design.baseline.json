@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-25T03:38:16.861Z",
+  "generatedAt": "2026-11-25T03:52:36.218Z",
   "viewport": {
     "width": 390,
     "height": 844
@@ -27,8 +27,7 @@
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later # KEY-# KEY-# renamed #",
-          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
+          "div>div:group",
           "li#inbox-*:*",
           "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
@@ -54,8 +53,7 @@
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later # KEY-# KEY-# renamed #",
-          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
+          "div>div:group",
           "li#inbox-*:*",
           "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
@@ -81,8 +79,7 @@
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later # KEY-# KEY-# renamed #",
-          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
+          "div>div:group",
           "li#inbox-*:*",
           "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
@@ -108,8 +105,7 @@
         "input-font": [],
         "radius": [
           "div:Back",
-          "div:Later # KEY-# KEY-# renamed #",
-          "div:No due date # KEY-# Use Hypertask in Claude, Ch",
+          "div>div:group",
           "li[row]>span:#>div:#>span:#[role=img]",
           "span:span.absolute",
           "span[aria=Settings]"
@@ -219,8 +215,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Done",
-          "div:Ready # KEY-# KEY-# gate sub-task #",
+          "div>div:group",
           "li#inbox-*:*",
           "span:span.absolute",
           "span[aria=Settings]"
@@ -244,8 +239,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Done",
-          "div:Ready # KEY-# KEY-# gate sub-task #",
+          "div>div:group",
           "li#inbox-*:*",
           "span:span.absolute",
           "span[aria=Settings]"
@@ -269,8 +263,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Done",
-          "div:Ready # KEY-# KEY-# gate sub-task #",
+          "div>div:group",
           "li#inbox-*:*",
           "span:span.absolute",
           "span[aria=Settings]"
@@ -294,8 +287,7 @@
         "radius": [
           "button[aria=Ask AI]",
           "button[aria=Create task]",
-          "div:Done",
-          "div:Ready # KEY-# KEY-# gate sub-task #",
+          "div>div:group",
           "span:span.absolute",
           "span[aria=Settings]"
         ],
@@ -397,7 +389,7 @@
           "div#share-task-button",
           "div:Add a comment…",
           "div:ID KEY-# Status Ready Project Midscene nightly",
-          "div:div.h-#",
+          "div>div:group",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -431,7 +423,7 @@
           "div#share-task-button",
           "div:Add a comment…",
           "div:ID KEY-# Status Ready Project Midscene nightly",
-          "div:div.h-#",
+          "div>div:group",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -465,7 +457,7 @@
           "div#share-task-button",
           "div:Add a comment…",
           "div:ID KEY-# Status Ready Project Midscene nightly",
-          "div:div.h-#",
+          "div>div:group",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -499,7 +491,7 @@
           "div#share-task-button",
           "div:Add a comment…",
           "div:ID KEY-# Status Ready Project Midscene nightly",
-          "div:div.h-#",
+          "div>div:group",
           "div[testid=comment-composer]",
           "div[testid=ticket-description]",
           "span[aria=valentin avatar]"
@@ -573,10 +565,8 @@
     "ai-chat-sheet": {
       "porcelain": {
         "tap-target": [
-          "button:Any duplicate tickets here?",
-          "button:What's been stuck the longest?",
-          "button:Who should take the # unassigned?",
-          "button[attr=Midscene nightly QA fixture]"
+          "button[attr=Midscene nightly QA fixture]",
+          "div>button:group"
         ],
         "input-font": [
           "div[aria=Message]"
@@ -593,10 +583,8 @@
       },
       "graphite": {
         "tap-target": [
-          "button:Any duplicate tickets here?",
-          "button:Prioritize the # tickets in Ready",
-          "button:Top # focus this week?",
-          "button[attr=Midscene nightly QA fixture]"
+          "button[attr=Midscene nightly QA fixture]",
+          "div>button:group"
         ],
         "input-font": [
           "div[aria=Message]"
@@ -613,11 +601,8 @@
       },
       "amoled": {
         "tap-target": [
-          "button:Prioritize the # tickets in Ready",
-          "button:What's been stuck the longest?",
-          "button:What's important in my inbox?",
-          "button:Who should take the # unassigned?",
-          "button[attr=Midscene nightly QA fixture]"
+          "button[attr=Midscene nightly QA fixture]",
+          "div>button:group"
         ],
         "input-font": [
           "div[aria=Message]"
@@ -634,10 +619,8 @@
       },
       "dia": {
         "tap-target": [
-          "button:Any duplicate tickets here?",
-          "button:Prioritize the # tickets in Ready",
-          "button:Top # focus this week?",
-          "button[attr=Midscene nightly QA fixture]"
+          "button[attr=Midscene nightly QA fixture]",
+          "div>button:group"
         ],
         "input-font": [
           "div[aria=Message]"
@@ -727,7 +710,7 @@
         "tap-target": [
           "button[aria=Exit full-screen AI chat]",
           "button[aria=Scroll to latest messages]",
-          "path:path",
+          "svg>path:group",
           "svg[aria=Copy message]",
           "svg[aria=Copy response]",
           "svg[aria=Create task from response]",
@@ -1252,11 +1235,8 @@
           "button:Back to app",
           "button:Sign out",
           "button[aria=Send feedback]",
-          "button[role=tab]:Board",
-          "button[role=tab]:Connect",
-          "button[role=tab]:Help",
           "button[role=tab]:Profile",
-          "button[role=tab]:Team",
+          "div>button[role=tab]:group",
           "input[attr=Search settings]"
         ],
         "input-font": [],
@@ -1275,11 +1255,8 @@
           "button:Back to app",
           "button:Sign out",
           "button[aria=Send feedback]",
-          "button[role=tab]:Board",
-          "button[role=tab]:Connect",
-          "button[role=tab]:Help",
           "button[role=tab]:Profile",
-          "button[role=tab]:Team",
+          "div>button[role=tab]:group",
           "input[attr=Search settings]"
         ],
         "input-font": [],
@@ -1298,11 +1275,8 @@
           "button:Back to app",
           "button:Sign out",
           "button[aria=Send feedback]",
-          "button[role=tab]:Board",
-          "button[role=tab]:Connect",
-          "button[role=tab]:Help",
           "button[role=tab]:Profile",
-          "button[role=tab]:Team",
+          "div>button[role=tab]:group",
           "input[attr=Search settings]"
         ],
         "input-font": [],
@@ -1321,11 +1295,8 @@
           "button:Back to app",
           "button:Sign out",
           "button[aria=Send feedback]",
-          "button[role=tab]:Board",
-          "button[role=tab]:Connect",
-          "button[role=tab]:Help",
           "button[role=tab]:Profile",
-          "button[role=tab]:Team",
+          "div>button[role=tab]:group",
           "input[attr=Search settings]"
         ],
         "input-font": [],
@@ -1342,10 +1313,9 @@
     "settings-general": {
       "porcelain": {
         "tap-target": [
-          "button:Change",
           "button:Delete account",
-          "button:Remove",
           "button[aria=Back to settings]",
+          "div>button:group",
           "input#settings-display-name"
         ],
         "input-font": [],
@@ -1360,10 +1330,9 @@
       },
       "graphite": {
         "tap-target": [
-          "button:Change",
           "button:Delete account",
-          "button:Remove",
           "button[aria=Back to settings]",
+          "div>button:group",
           "input#settings-display-name"
         ],
         "input-font": [],
@@ -1378,10 +1347,9 @@
       },
       "amoled": {
         "tap-target": [
-          "button:Change",
           "button:Delete account",
-          "button:Remove",
           "button[aria=Back to settings]",
+          "div>button:group",
           "input#settings-display-name"
         ],
         "input-font": [],
@@ -1396,10 +1364,9 @@
       },
       "dia": {
         "tap-target": [
-          "button:Change",
           "button:Delete account",
-          "button:Remove",
           "button[aria=Back to settings]",
+          "div>button:group",
           "input#settings-display-name"
         ],
         "input-font": [],
