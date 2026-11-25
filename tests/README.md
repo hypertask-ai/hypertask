@@ -43,8 +43,11 @@ is left unchanged rather than silently upgrading a developer's data directory.
 ## HTPR-9617 chat verification
 
 In the isolated preview, open `/chat` on desktop and phone. Fill the `Message`
-textbox with `HTPR-9617 persisted question` and press Enter. Check that
-it appears in the conversation. With the same signed-in browser cookies, GET
+textbox with `HTPR-9617 persisted question` and press Enter. On a fresh account,
+this prepares the first native session but can leave the draft with
+`AI chat is still loading. Please try again.` Capture the prepared session,
+fill `Message` with the same text, and press Enter again. Check that the question
+appears in the conversation, not just in the composer. With the signed-in browser cookies, GET
 `/api/ai-chat/all-sessions` and expect HTTP 200 with that text in the response.
 This checks saved history, not only the optimistic message display. The UI
 supplies the chat-session ID and the required nested `message` request body;
