@@ -307,6 +307,7 @@ docker exec "$database" psql -v ON_ERROR_STOP=1 -U postgres -d postgres \
   -c "CREATE DATABASE hypertask_smoke OWNER core_smoke"
 
 docker run -d --name "$redis" --network "$network" \
+  --user 999:1000 \
   --cap-drop ALL \
   --security-opt no-new-privileges \
   --pids-limit 64 \
