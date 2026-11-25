@@ -312,8 +312,8 @@ function trailerLines(commit) {
   const paragraphs = String(commit?.commit?.message ?? "").trimEnd().split(/\r?\n[ \t]*\r?\n/);
   if (paragraphs.length < 2) return [];
   const block = paragraphs.at(-1);
-  if (!block.split(/\r?\n/).every((line) => /^[A-Za-z0-9][A-Za-z0-9 -]*:[ \t]*[^\r\n]*$/.test(line))) return [];
-  return [...block.matchAll(/^(Author[- ]Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)].map(([, key, value]) => ({ key: key.toLowerCase().replace(/\s+/g, "-"), value: value.trim() }));
+  if (!block.split(/\r?\n/).every((line) => /^[A-Za-z0-9-]+:[ \t]*[^\r\n]*$/.test(line))) return [];
+  return [...block.matchAll(/^(Author-Model|Co-Authored-By):[ \t]*([^\r\n]*)/gim)].map(([, key, value]) => ({ key: key.toLowerCase(), value: value.trim() }));
 }
 function proseOnly(body) {
   let fence = "";
@@ -328,20 +328,12 @@ function proseOnly(body) {
     return "";
   }).join("\n");
 }
-export function authorFamilyOf(value) {
-  const head = String(value ?? "").trim().split(/[\s(]+/)[0] ?? "";
-  const family = head.split("/")[0].toLowerCase();
-  return FAMILIES.has(family) ? family : "";
-}
-const AUTHOR_LINE = /^\s*Author[- ]Model:[ \t]*(.*)$/i;
 export function authorFamily(body, commits = [], authorLogin = "") {
   if (commits === null) return "";
   const bodyFamilies = new Set();
-  for (const line of proseOnly(body).split(/\r?\n/)) {
-    const match = AUTHOR_LINE.exec(line);
-    if (!match) continue;
-    const family = authorFamilyOf(match[1]);
-    if (!family) return "";
+  for (const [, value] of proseOnly(body).matchAll(/^Author-Model:([^\r\n]*)/gim)) {
+    const family = value.trim().split(/\s+/)[0].toLowerCase();
+    if (!FAMILIES.has(family)) return "";
     bodyFamilies.add(family);
   }
   if (bodyFamilies.size > 1) return "";
@@ -350,8 +342,8 @@ export function authorFamily(body, commits = [], authorLogin = "") {
     if (commit?.parents?.length > 1 || !commitOwnedBy(commit, authorLogin)) continue;
     for (const { key, value } of trailerLines(commit)) {
       if (key === "author-model") {
-        const family = authorFamilyOf(value);
-        if (!family) return "";
+        const family = value.split(/\s+/)[0].toLowerCase();
+        if (!FAMILIES.has(family)) return "";
         commitFamilies.add(family);
       } else {
         const domain = String(/<([^<>]+)>\s*$/.exec(value)?.[1] ?? "").split("@")[1] ?? "";

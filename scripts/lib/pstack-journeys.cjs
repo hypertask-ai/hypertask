@@ -227,12 +227,8 @@ function routeEntries({ changed, reverse, pages, boardPath, taskPath, pageDirs }
         if (seen.has(key)) continue;
         seen.add(key);
         const route = appRoute(importer, seeded);
-        if (route) {
-          if (!found.has(route)) found.set(route, { file: importer, route });
-          continue;
-        }
-        if (SURFACE_FILE.test(importer)) continue;
-        next.push(importer);
+        if (route && !found.has(route)) found.set(route, { file: importer, route });
+        if (!PAGE_FILE.test(path.posix.basename(importer))) next.push(importer);
       }
     }
     frontier = next;
