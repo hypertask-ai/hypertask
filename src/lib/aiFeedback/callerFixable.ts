@@ -1,11 +1,15 @@
+import { NAMED_REFUSAL_REASONS } from "@/lib/api/refusalReason";
+
 export type FeedbackRefusal = { code?: string; field?: string; options?: readonly unknown[] };
 
-const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big", "not_found", "missing_field", "invalid_date", "invalid_range", "invalid_element", "max_length_exceeded", "unsupported_value", "unknown_mention", "ambiguous_mention", "agent_writing"]);
+const CALLER_FIXABLE_CODES = new Set<string>(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big", "not_found", "missing_field", "invalid_date", "invalid_range", "invalid_element", "max_length_exceeded", "unsupported_value", "unknown_mention", "ambiguous_mention", "agent_writing", ...NAMED_REFUSAL_REASONS]);
+
+const CALLER_FIXABLE_WITHOUT_FIELD = new Set<string>(["unrecognized_keys", "invalid_enum_value", "invalid_value", ...NAMED_REFUSAL_REASONS]);
 
 export function callerCanFix(refusal: FeedbackRefusal): boolean {
   if (!refusal.code) return false;
   if (!CALLER_FIXABLE_CODES.has(refusal.code)) return false;
-  if (refusal.code === "unrecognized_keys" || refusal.code === "invalid_enum_value" || refusal.code === "invalid_value") return true;
+  if (CALLER_FIXABLE_WITHOUT_FIELD.has(refusal.code)) return true;
   return Boolean(refusal.field);
 }
 
