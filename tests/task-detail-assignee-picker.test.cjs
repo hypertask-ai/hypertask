@@ -139,6 +139,8 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
   }, "useTaskDetailCommentActions");
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
     ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": {}, "@/lib/api/typedClient": {},
+    "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top": { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG: "htpr-8998-ticket-jump-to-top" },
+    "@/lib/taskDetailJumpToTop": { scrollTicketToTop: () => {} },
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
   }, "useTaskDetailNavigationActions");
   const useReactions = load("src/hooks/Task Detail/CommentAndDescriptionHooks/useDescriptionReactions.ts", {

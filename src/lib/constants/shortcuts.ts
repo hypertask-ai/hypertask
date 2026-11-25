@@ -186,6 +186,7 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Speech to text", pressKey: [cmdControl, "SHIFT", "D"] },
         { shortTitle: "Dictate and Improve", pressKey: [cmdControl, "SHIFT", "F"] },
         { shortTitle: "Discard draft", pressKey: [cmdControl, "SHIFT", ","] },
+        { shortTitle: "Jump to top", pressKey: ["G", null, "G"] },
       ],
     },
     {

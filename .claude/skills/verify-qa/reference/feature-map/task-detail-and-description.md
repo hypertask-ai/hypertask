@@ -22,6 +22,7 @@
 - `right-column` With `htpr-8991-right-column` on (Owner + QA), the ticket side panel keeps Status and Project, shows the other fields only when they have a value, and adds Add field. Add field opens the command list of the empty fields. Live, `htpr-8997-id-row` (EVERYONE) also puts the ticket ID in that panel under ID; without it the ID sits beside the title and copies on click.
 - `sticky-title` With `htpr-8992-sticky-title` on (Owner + QA), the ticket title bar stays put and, once the page is scrolled, draws a 1px line under it. On a phone that line uses the border token that stays visible in dark themes. Off leaves the header as it is.
 - `ai-box-outline` With `htpr-9025-ai-box-outline` on (Owner + QA), the Write with AI box in the description and comment editors gets a 1px outline in the editor border colour. Size and corners stay the same. Off removes that outline.
+- `ticket-jump-to-top` With `htpr-8998-ticket-jump-to-top` on (Owner + QA), a long ticket on a desktop screen shows a square 32px jump to top button at the bottom right once the page has scrolled. A click, or G then G, returns to the top. Hover says Jump to top with G G. Off hides the button and G then G moves to the description again. Off proof: `tests/htpr-8998-ticket-jump-to-top.test.cjs`.
 
 ## How to get to it (user POV)
 
@@ -196,6 +197,13 @@ With `htpr-9025-ai-box-outline` on, that same box has a 1px outline in the
 editor border colour. The corners and the controls do not move. Do not
 switch `htpr-9025-ai-box-outline` Off. Follow the Batch 3 proof rule. No
 test covers this flag off.
+
+With `htpr-8998-ticket-jump-to-top` on, scroll a long ticket down, then click
+the 32px button at the bottom right and confirm the page returns to the top;
+hovering it says Jump to top with G G, and G then G does the same from the
+keyboard. Typing G twice inside the title, a comment box or any other field
+types letters instead. Do not switch `htpr-8998-ticket-jump-to-top` Off.
+Off proof: `tests/htpr-8998-ticket-jump-to-top.test.cjs`.
 
 
 ## Gotchas
