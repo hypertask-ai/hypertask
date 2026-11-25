@@ -273,20 +273,12 @@ const SWITCHERS = ['data-option', 'data-viewer', 'data-theme', 'data-panel'];
     const browser = await chromium.launch({ headless: true });
     const problems = [];
     const checkRows = (rows, baseRows, width, height) => {
-        const base = new Map();
-        for (const row of baseRows) {
-            if (!row.key) continue;
-            if (!base.has(row.key)) base.set(row.key, []);
-            base.get(row.key).push(JSON.stringify(row));
-        }
+        const base = new Map(baseRows.filter((row) => row.key).map((row) => [row.key, JSON.stringify(row)]));
         for (const row of rows) {
             const identity = JSON.stringify(row);
-            const seen = row.key ? base.get(row.key) : null;
-            const at = seen ? seen.indexOf(identity) : -1;
-            if (at >= 0) {
-                seen.splice(at, 1);
-                continue;
-            }
+            const unchanged = row.key && base.get(row.key) === identity;
+            base.delete(row.key);
+            if (unchanged) continue;
             const problem = check(row);
             const detail = width + 'x' + height + ': ' + problem;
             if (problem && !problems.includes(detail)) problems.push(detail);
@@ -322,10 +314,12 @@ const SWITCHERS = ['data-option', 'data-viewer', 'data-theme', 'data-panel'];
         };
         for (const [width, height] of [[390, 844], [1440, 900]]) {
             await page.setViewportSize({ width, height });
-            const baseRows = (await load(process.argv[3]))
-                .concat((await switched(fs.readFileSync(process.argv[3], 'utf8'), width, height)).flat());
-            checkRows(await load(process.argv[2]), baseRows, width, height);
-            for (const rows of await switched(fs.readFileSync(process.argv[2], 'utf8'), width, height)) checkRows(rows, baseRows, width, height);
+            const baseHtml = fs.readFileSync(process.argv[3], 'utf8');
+            const pageHtml = fs.readFileSync(process.argv[2], 'utf8');
+            checkRows(await load(process.argv[2]), await load(process.argv[3]), width, height);
+            const baseStates = await switched(baseHtml, width, height);
+            const states = await switched(pageHtml, width, height);
+            states.forEach((rows, state) => checkRows(rows, baseStates[state] ?? baseStates[0], width, height));
         }
         console.log(JSON.stringify({ ok: problems.length === 0, problems: problems.slice(0, 8) }));
     } finally {
