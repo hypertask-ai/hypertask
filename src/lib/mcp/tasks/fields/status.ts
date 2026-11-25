@@ -1,4 +1,6 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { forwardedRefusal } from '@/lib/api/refusal';
+import { AgentDoneLifecycleDeniedError } from '@/lib/mcp/tasks/agentDoneLifecycle';
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskStatus(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
@@ -29,8 +31,17 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
                     `Archive/status update failed: ${archiveResponse.status}`
                 )
             )
-            if (archiveResponse.status >= 400 && archiveResponse.status < 500 && typeof errorData?.code === 'string') {
-                throw Object.assign(error, errorData, { status: archiveResponse.status })
+            if (archiveResponse.status === 403 && errorData?.code === 'agent_done_lifecycle_denied') {
+                throw new AgentDoneLifecycleDeniedError(error.message)
+            }
+            if (typeof errorData?.code === 'string') {
+                const refusal = forwardedRefusal(
+                    archiveResponse.status,
+                    errorData.code,
+                    error.message,
+                    typeof errorData.field === 'string' ? errorData.field : undefined,
+                )
+                if (refusal) throw refusal
             }
             throw error
         }

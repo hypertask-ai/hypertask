@@ -13,6 +13,15 @@ class AttachmentBatchError extends Error {
   }
 }
 
+class AttachmentInputRefusalError extends Error {
+  constructor(message, failedFiles = []) {
+    super(message);
+    this.name = "AttachmentInputRefusalError";
+    this.refusal = { status: 400, reason: "invalid_field", field: "files", message };
+    this.failedFiles = failedFiles;
+  }
+}
+
 function setup() {
   const state = { failure: null, crashes: [], broadcasts: [] };
   const operation = load("src/lib/mcp/operations/tasks/attachments/operation.ts", {
@@ -28,7 +37,13 @@ function setup() {
     },
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/mcp/auth": { validateMcpAuth: async () => ({ user: { id: 985 }, teamScope: null }), checkMcpRateLimit: async () => null },
-    "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler },
+    "@/lib/mcp/routeWrapper": {
+      wrapMcpRoute: (handler) => handler,
+      reportServerFault: (_request, error) => {
+        console.error('[MCP] operation failed', error);
+        state.crashes.push(error);
+      },
+    },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: (_request, error) => state.crashes.push(error) },
     "@/lib/prisma": {
       default: {
@@ -42,7 +57,7 @@ function setup() {
       findTaskByIdentifier: async () => ({ id: 1, projectId: 15 }),
       taskIdentifierErrorResponse: () => null,
     },
-    "@/lib/mcp/attachments/storeBatch": { AttachmentBatchError },
+    "@/lib/mcp/attachments/storeBatch": { AttachmentBatchError, AttachmentInputRefusalError },
     "@/lib/mcp/attachments/storeLockedBatch": {
       storeAttachmentBatchWithTargetLock: async () => {
         throw state.failure;
@@ -127,7 +142,7 @@ test("a server failure still logs and reports as an error", async () => {
   assert.equal(response.status, 500);
   assert.deepEqual(warnings, []);
   assert.equal(errors.length, 1);
-  assert.equal(errors[0][0], "[MCP attachments]");
+  assert.equal(errors[0][0], "[MCP] operation failed");
   assert.equal(state.crashes.length, 1);
 });
 

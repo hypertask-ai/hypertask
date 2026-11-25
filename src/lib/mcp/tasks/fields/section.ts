@@ -1,4 +1,5 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
+import { RefusalError } from '@/lib/api/refusal';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7990_TASK_MOVE_REFUSAL_FLAG } from '@/lib/flags/definitions/htpr-7990-task-move-refusal';
 import { HTPR_9050_SECTION_COLUMNS_FLAG } from '@/lib/flags/definitions/htpr-9050-section-columns';
@@ -56,20 +57,29 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
             )
             if (moveResponse.status >= 400 && moveResponse.status < 500 &&
                 (requestBody.expected_section_id !== undefined || await isFeatureEnabled(HTPR_7990_TASK_MOVE_REFUSAL_FLAG, ctx.user.id))) {
-                throw Object.assign(error, { status: moveResponse.status, code: 'task_move_refused' })
+                const message = error.message
+                switch (moveResponse.status) {
+                    case 401: throw new RefusalError({ status: 401, reason: 'unauthorized', field: 'sectionId', message })
+                    case 403: throw new RefusalError({ status: 403, reason: 'forbidden', field: 'sectionId', message })
+                    case 404: throw new RefusalError({ status: 404, reason: 'not_found', field: 'sectionId', message })
+                    case 409: throw new RefusalError({ status: 409, reason: 'task_move_refused', message })
+                    case 413: throw new RefusalError({ status: 413, reason: 'payload_too_large', field: 'sectionId', message })
+                    case 429: throw new RefusalError({ status: 429, reason: 'rate_limited', message })
+                    default: throw new RefusalError({ status: 400, reason: 'invalid_field', field: 'sectionId', message })
+                }
             }
             throw error
         }
         await moveResponse.json().catch(() => null)
     } else if (requestBody.sectionId && sectionInfo && sectionInfo.projectId !== task.projectId) {
-        throw Object.assign(
-            new Error(`sectionId must be a column on the task's own board. Use hypertask_move_task_between_boards to move a task to another board.${await columnLine(context, task.projectId)}`),
-            { status: 400, code: 'invalid_value', field: 'sectionId' }
-        )
+        throw new RefusalError({
+            status: 400, reason: 'invalid_field', field: 'sectionId',
+            message: `sectionId must be a column on the task's own board. Use hypertask_move_task_between_boards to move a task to another board.${await columnLine(context, task.projectId)}`,
+        })
     } else if (requestBody.sectionId && !sectionInfo) {
-        throw Object.assign(
-            new Error(`sectionId does not match a column. Pass a column id from the task's own board.${await columnLine(context, task.projectId)}`),
-            { status: 400, code: 'not_found', field: 'sectionId' }
-        )
+        throw new RefusalError({
+            status: 400, reason: 'invalid_field', field: 'sectionId',
+            message: `sectionId does not match a column. Pass a column id from the task's own board.${await columnLine(context, task.projectId)}`,
+        })
     }
 }

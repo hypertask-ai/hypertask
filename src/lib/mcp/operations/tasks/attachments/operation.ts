@@ -1,9 +1,9 @@
-import { assertUploadAllowedForProject, isPlanLimitsEnabled, isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
+import { assertUploadAllowedForProject, isPlanLimitsEnabled } from '@/lib/planLimits';
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
-import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
-import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
+import { refusalOf } from '@/lib/api/refusal';
+import { reportServerFault, wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
@@ -17,6 +17,7 @@ import {
 } from '@/lib/mcp/attachments/readRequestBody';
 import {
   AttachmentBatchError,
+  AttachmentInputRefusalError,
 } from '@/lib/mcp/attachments/storeBatch';
 import { storeAttachmentBatchWithTargetLock } from '@/lib/mcp/attachments/storeLockedBatch';
 import {
@@ -212,30 +213,26 @@ export async function POST(request: NextRequest) {
       })),
     });
   } catch (e) {
-    if (isPlanLimitReachedError(e)) {
-      const response = planLimitResponse(e);
-      return NextResponse.json(response.body, { status: response.status });
-    }
-    const status = e instanceof AttachmentBatchError ? e.status : 500;
+    const inputRefusal = e instanceof AttachmentInputRefusalError ? e : null;
+    if (refusalOf(e) && !inputRefusal) throw e;
+    const batchError = e instanceof AttachmentBatchError ? e : null;
+    const failedFiles = batchError?.failedFiles ?? inputRefusal?.failedFiles ?? [];
+    const status = batchError ? batchError.status : inputRefusal ? inputRefusal.refusal.status : 500;
     if (status >= 500) {
-      console.error('[MCP attachments]', e);
+      reportServerFault(request, e);
     } else {
       console.warn('[MCP attachments] caller error', {
         status,
         error: e instanceof Error ? e.message : String(e),
       });
     }
-    const partialAttachments =
-      e instanceof AttachmentBatchError ? e.attachments : [];
+    const partialAttachments = batchError?.attachments ?? [];
     if (partialAttachments.length > 0) {
       if (commentId !== null) {
         void broadcastTaskComment(task.id);
       } else {
         void broadcastTaskChange(task.id);
       }
-    }
-    if (status >= 500) {
-      reportMcpOperationCrash(request, e);
     }
     return NextResponse.json(
       {
@@ -248,14 +245,12 @@ export async function POST(request: NextRequest) {
           fileSize: created.fileSize,
           url: created.fileSource,
         })),
-        ...(e instanceof AttachmentBatchError && e.failedFiles.length > 0
-          ? { failed_files: e.failedFiles }
-          : {}),
+        ...(failedFiles.length > 0 ? { failed_files: failedFiles } : {}),
         error:
-          e instanceof AttachmentBatchError
-            ? e.message
+          batchError || inputRefusal
+            ? (e as Error).message
             : 'Failed to store attachment(s)',
-        ...(e instanceof AttachmentBatchError && !e.cleanupConfirmed
+        ...(batchError && !batchError.cleanupConfirmed
           ? {
               cleanup_confirmed: false,
               retry_note: 'Cleanup could not be confirmed. Retrying the same files reuses their storage keys.',

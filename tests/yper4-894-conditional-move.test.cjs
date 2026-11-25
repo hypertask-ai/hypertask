@@ -53,7 +53,7 @@ test('MCP section dispatcher carries both conditions to the actual move route', 
       requestBody: body, sectionInfo: { projectId: 4060, section_title: 'In Progress' },
       baseUrl: 'https://app.hypertask.ai', ctx: { user: { id: 985 }, agentId: 'runner-6' },
       authCookieHeader: 'test-only',
-    }, { id: 894, projectId: 4060 }), error => error.status === 409 && error.code === 'task_move_refused');
+    }, { id: 894, projectId: 4060 }), error => error.refusal.status === 409 && error.refusal.reason === 'task_move_refused');
     assert.equal(observed.url, 'https://app.hypertask.ai/api/tasks/moveTask');
     assert.equal(observed.body.expectedSectionId, 20);
     assert.equal(observed.body.expectedUpdatedAt, body.expected_updated_at);
