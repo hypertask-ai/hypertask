@@ -1685,6 +1685,58 @@ test("at most six matched pages are planned", async () => {
   assert.equal(planned.items.filter((item) => item.journey.startsWith("area:")).length, 6);
 });
 
+test("a docs-only change plans no area journeys", async () => {
+  const { planJourneys } = await load();
+  const request = {
+    ...binding,
+    author: "deepseek",
+    title: "t",
+    body: "",
+    diff: "diff --git a/.claude/skills/agent-rooms/SKILL.md b/.claude/skills/agent-rooms/SKILL.md\nindex 1111111..2222222 100644\n--- a/.claude/skills/agent-rooms/SKILL.md\n+++ b/.claude/skills/agent-rooms/SKILL.md\n@@ -1,2 +1,3 @@\n # Agent rooms\n+Turn `htpr-9700-agent-rooms` on to see the room list at /rooms.\n",
+    files: [".claude/skills/agent-rooms/SKILL.md"],
+    filesTruncated: false,
+    boardPath: "/project?id={id}",
+    taskPath: "/detail/project-{id}/1",
+  };
+  const pages = [{ name: "agent-rooms", text: "Agent rooms live at `/rooms`. With `htpr-9700-agent-rooms` on the room list shows." }];
+  const pageCalls = [];
+  const ask = async (prompt) => {
+    if (prompt.includes("DATA: FEATURE PAGE")) pageCalls.push(prompt);
+    return { actions: [{ op: "goto", path: "/project?id={id}" }], expect: [], reason: "no user path" };
+  };
+  const planned = await planJourneys({ request, pages, ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"] });
+  assert.deepEqual(pageCalls, []);
+  assert.deepEqual(planned.items.map((item) => item.journey), ["change:primary"]);
+});
+
+test("an app change keeps the same areas and ignores docs hunks in the same diff", async () => {
+  const { planJourneys } = await load();
+  const diff = "diff --git a/.claude/skills/agent-rooms/SKILL.md b/.claude/skills/agent-rooms/SKILL.md\nindex 1111111..2222222 100644\n--- a/.claude/skills/agent-rooms/SKILL.md\n+++ b/.claude/skills/agent-rooms/SKILL.md\n@@ -1,2 +1,3 @@\n # Agent rooms\n+Turn `htpr-9700-agent-rooms` on to see the room list.\n" + "diff --git a/src/app/boards/page.tsx b/src/app/boards/page.tsx\nindex 3333333..4444444 100644\n--- a/src/app/boards/page.tsx\n+++ b/src/app/boards/page.tsx\n@@ -1 +1 @@\n-const title = \"Boards\";\n+const title = \"Boards and views\";\n";
+  const request = { ...binding, author: "deepseek", title: "t", body: "", diff, files: [".claude/skills/agent-rooms/SKILL.md", "src/app/boards/page.tsx"], filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const pages = [
+    { name: "agent-rooms", text: "Agent rooms live at `/rooms`. With `htpr-9700-agent-rooms` on the room list shows." },
+    { name: "boards-and-views", text: "Boards are rendered by `src/app/boards/page.tsx`." },
+  ];
+  const asked = [];
+  const ask = async (prompt) => {
+    if (prompt.includes("DATA: FEATURE PAGE")) asked.push(prompt);
+    return { actions: [{ op: "goto", path: "/project?id={id}" }], expect: [], reason: "open the board" };
+  };
+  const planned = await planJourneys({ request, pages, ask, key: "k", model: "deepseek/deepseek-v4.1-flash", models: ["deepseek/deepseek-v4.1-flash"] });
+  assert.deepEqual(planned.items.map((item) => item.journey), ["change:primary", "area:boards-and-views"]);
+  assert.equal(asked.length, 1);
+  assert.match(asked[0], /Boards are rendered by/);
+});
+
+test("the area diff keeps only the hunks of app files", async () => {
+  const { appDiff, appFiles } = await load();
+  const diff = "diff --git a/.claude/skills/x/SKILL.md b/.claude/skills/x/SKILL.md\n+htpr-9700-agent-rooms\n" + "diff --git a/src/app/boards/page.tsx b/src/app/boards/page.tsx\n+const flag = \"htpr-9701-boards\";\n";
+  assert.deepEqual(appFiles([".claude/skills/x/SKILL.md", "README.md", "src/app/boards/page.tsx", "tests/a.test.cjs"]), ["src/app/boards/page.tsx"]);
+  assert.equal(appDiff(diff, ["src/app/boards/page.tsx"]), "diff --git a/src/app/boards/page.tsx b/src/app/boards/page.tsx\n+const flag = \"htpr-9701-boards\";\n");
+  assert.equal(appDiff(diff, [".claude/skills/x/SKILL.md"]), "");
+  assert.equal(appDiff("+htpr-9701-boards", ["src/app/boards/page.tsx"]), "");
+});
+
 test("a fenced or prose-wrapped answer is read by the verifier and by break-it", async () => {
   const { parsePlan, parseAnswer } = await load();
   const { parseBreakTests } = await import("../.github/scripts/break-it-review.mjs");
