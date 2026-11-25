@@ -49,6 +49,13 @@ test("the smaller stacked AI button keeps its size and takes the AMOLED hairline
   assert.ok(applied.includes(HAIRLINE));
 });
 
+test("the default phone button keeps its larger size and takes the AMOLED hairline", () => {
+  const applied = classes(ringControl(true).render());
+  assert.ok(applied.includes("h-12"));
+  assert.ok(applied.includes("w-12"));
+  assert.ok(applied.includes(HAIRLINE));
+});
+
 test("the stack offset and dock offset are unchanged by the ring switch", () => {
   const control = ringControl(true);
   assert.equal(
