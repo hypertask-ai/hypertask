@@ -33,6 +33,20 @@ export const parseCardParts = (raw: unknown): CardParts => {
   );
 };
 
+export const readCardParts = (raw: unknown): CardParts | undefined => {
+  if (Array.isArray(raw)) return cardPartsWith((part) => raw.includes(part));
+  return raw && typeof raw === "object" ? parseCardParts(raw) : undefined;
+};
+
+export const shownCardParts = (parts: CardParts): CardPart[] =>
+  CARD_PARTS.filter(({ key }) => parts[key]).map(({ key }) => key);
+
+export const resolveCardParts = (saved: unknown, boot: unknown): CardParts | null =>
+  readCardParts(saved) ?? readCardParts(boot) ?? null;
+
+export const settleCardParts = (saved: unknown, boot: unknown, loaded: boolean): CardParts | null =>
+  resolveCardParts(saved, boot) ?? (loaded ? DEFAULT_CARD_PARTS : null);
+
 type CardTask = ITask & { customFieldValues?: unknown[] };
 
 export function cardPartsView<Blocker>(task: CardTask, blockingUser: Blocker | undefined, parts: CardParts) {

@@ -124,7 +124,7 @@ class DispatchTests(unittest.TestCase):
         skills = Path(__file__).resolve().parents[2]
         ship = (skills / "ship/SKILL.md").read_text()
         reflect = (skills / "reflect/SKILL.md").read_text()
-        qa = (skills / "verify-qa/SKILL.md").read_text()
+        qa = (skills / "verify-hypertask/SKILL.md").read_text()
         synthesizer = (skills / "reflect/references/synthesizer.md").read_text()
         self.assertNotIn("with SendMessage", reflect)
         self.assertIn("Do not send a session message or wait for a lead response", reflect)
@@ -774,10 +774,13 @@ class DispatchTests(unittest.TestCase):
         self.commands.assert_not_called()
         self.assertEqual(self.dispatch(load=12)[0]["ticket"], "HTPR-1")
 
-    def test_claimed_and_abdul_tickets_skipped(self):
+    def test_claimed_tickets_skipped(self):
         self.comments["HTPR-1"] = [claim("Someone else", text="Claimed.")]
-        self.boards[15][1]["assignees"] = [{"displayName": "ABDUL Rahman"}]
-        self.assertEqual(self.dispatch()[0]["ticket"], "HTPR-3")
+        self.assertEqual(self.dispatch()[0]["ticket"], "HTPR-2")
+
+    def test_human_named_abdul_is_not_skipped(self):
+        self.boards[15][0]["assignees"] = [{"displayName": "ABDUL Rahman"}]
+        self.assertEqual(self.dispatch()[0]["ticket"], "HTPR-1")
 
     def test_agent_assignees_and_do_not_touch_skipped(self):
         self.boards[15][0]["assignees"] = [{"agent": {"displayName": "Runner 3"}}]

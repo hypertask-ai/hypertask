@@ -53,12 +53,14 @@ const Provider = load('src/utils/Providers.tsx', {
     './boardDocument': require('../src/lib/firstScreen/boardDocument.ts'),
   }),
   '@/lib/firstScreen/inboxAdoption': { adoptInboxDocument() { throw Error('Shell reached inbox adoption'); } },
+  '@/lib/analytics/FathomSignupCompleted': { default: empty },
   '@/lib/firstScreen/BoardDisplayMirror': { default: empty }, '@/lib/contexts/MobileViewFlagBridge': { default: empty },
   '@/store': atoms, 'next/navigation': navigation, 'react-hot-toast': { Toaster: empty }, '@/lib/contexts/mobileContext': mobile,
   '@tanstack/react-query-persist-client': { PersistQueryClientProvider: ({ client, children }) => {
     clients.push(client); return React.createElement(QueryClientProvider, { client }, children);
   } },
   '@/lib/state': state, '@/hooks/General/useAuth': { AuthProvider: pass },
+  '@/lib/auth/ticketAccountSwitchSlot': { TicketAccountSwitchSlot: empty },
   '@/components/ProviderGlobal/GloablProviders': { default: pass }, '@/hooks/General/useUndo': { UndoProvider: pass },
   '@/lib/contexts/deviceContext': { DeviceProvider: pass }, '@/lib/contexts/ThemeListener': { default: empty },
   '@/lib/contexts/mobileBlockingContext': { MobileBlockingProvider: pass }, '@/lib/contexts/TourContext': { TourProvider: pass },

@@ -61,6 +61,7 @@ import {
   type TaskWriterSnapshotSource,
 } from "@/lib/ai/boardMemoryClient";
 import { HTPR_9010_TASK_WRITER_MEMORY_FLAG } from "@/lib/flags/definitions/htpr-9010-task-writer-memory";
+import { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG } from "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing";
 import { createDictationCoordinator } from "@/lib/dictationCoordinator";
 import { appendTitleDictation } from "@/components/Modals/CreateTaskGloballyModal/titleDictation";
 import { normalizeCreateTaskFormDate } from "@/lib/createTaskFormDate";
@@ -138,6 +139,7 @@ const useCreateTaskModalGlobalStates = () => {
   const generatedTitleTrackerRef = useRef(createAiTitleEditTracker());
   const taskWriterFieldDiffTrackerRef = useRef(createTaskWriterFieldDiffTracker());
   const taskWriterMemoryEnabled = useFlag(HTPR_9010_TASK_WRITER_MEMORY_FLAG);
+  const aiStepTimingEnabled = useFlag(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG);
   const autoTitleCoordinatorRef = useRef<ReturnType<
     typeof createAutoTitleGenerationCoordinator
   > | null>(null);
@@ -691,13 +693,17 @@ const useCreateTaskModalGlobalStates = () => {
     descriptionOverride?: string,
     titleOverride?: string,
     formValuesOverride?: IForm,
+    titleGenerationMs?: number | null,
   ) => {
     const formValuesAtSave = formValuesOverride ?? formValues;
+    let measuredTitleMs: number | null = null;
+    if (aiStepTimingEnabled) measuredTitleMs = titleGenerationMs ?? null;
     const traceScope =
       currentUser?.id && formValuesAtSave.currentProject?.id
         ? beginTaskCreatePerformanceTrace({
             accountId: currentUser.id,
             projectId: formValuesAtSave.currentProject.id,
+            titleMs: measuredTitleMs,
           })
         : null;
 

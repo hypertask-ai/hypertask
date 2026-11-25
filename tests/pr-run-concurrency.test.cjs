@@ -4,7 +4,7 @@ const { readFileSync, mkdtempSync, writeFileSync } = require('node:fs');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 const yaml = require('js-yaml');
-const { EXCEPTIONS, check, problemsFor } = require('../.github/scripts/pr-run-concurrency-guard.cjs');
+const { check, problemsFor } = require('../.github/scripts/pr-run-concurrency-guard.cjs');
 
 const WORKFLOWS = '.github/workflows';
 
@@ -14,20 +14,75 @@ test('every pull request push cancels its superseded run', () => {
   assert.deepEqual(check(WORKFLOWS), []);
 });
 
-test('ci-tests queues every synchronize without cancelling pending runs', () => {
-  const ci = workflow('ci-tests');
-  assert.equal(ci.concurrency.queue, 'max');
-  assert.equal(ci.concurrency['cancel-in-progress'], false);
+test('the gates that used to queue now cancel the same pull request', () => {
+  for (const name of ['ci-tests', 'pr-guards-trusted', 'feature-flag-gate', 'codex-review-gate', 'dependabot-lane']) {
+    const text = readFileSync(path.join(WORKFLOWS, `${name}.yml`), 'utf8');
+    assert.deepEqual(problemsFor(name, text), [], name);
+    const concurrency = workflow(name).concurrency;
+    assert.equal(concurrency['cancel-in-progress'], true, name);
+    assert.equal(concurrency.queue, undefined, name);
+    assert.equal(String(concurrency.group).includes('github.event.pull_request.number'), true, name);
+  }
+  const ux = workflow('ux-signoff-gate');
+  assert.deepEqual(Object.keys(ux.on), ['workflow_dispatch'], 'the UX gate no longer runs on a pull request event (HTPR-9450)');
+  assert.equal(ux.concurrency['cancel-in-progress'], true);
+
+  const tests = workflow('ci-tests');
+  assert.equal(tests.concurrency.group.includes("github.run_attempt > 1 && format('-{0}', github.run_id)"), true);
+  for (const job of ['ci-prepare', 'browser-build']) {
+    assert.equal(tests.jobs[job].steps.some((step) => step.run === 'node .github/scripts/stale-rerun.cjs'), true, job);
+  }
 });
 
-test('only the listed gates skip cancellation, and each cites its ticket', () => {
-  assert.deepEqual([...EXCEPTIONS.keys()],
-    ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted', 'dependabot-lane', 'ci-tests']);
-  for (const [name, reason] of EXCEPTIONS) {
-    assert.equal(workflow(name).concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
-    assert.equal(workflow(name).concurrency['cancel-in-progress'], false);
-    assert.match(reason, /[A-Z][A-Z0-9]*-\d+/);
-  }
+test('a rerun stops only when its commit is no longer the live head', () => {
+  const { shouldStop } = require('../.github/scripts/stale-rerun.cjs');
+  assert.equal(shouldStop(1, 'pull_request', 'old', 'new'), false);
+  assert.equal(shouldStop(2, 'pull_request', 'abc', 'abc'), false);
+  assert.equal(shouldStop(2, 'push', 'abc', 'def'), true);
+  assert.equal(shouldStop(2, 'schedule', 'abc', 'def'), false);
+});
+
+function eventPayload(payload) {
+  const directory = mkdtempSync(path.join(tmpdir(), 'stale-rerun-'));
+  const file = path.join(directory, 'event.json');
+  writeFileSync(file, JSON.stringify(payload));
+  return file;
+}
+
+function pullRequestEnv(head, merge) {
+  return {
+    GITHUB_RUN_ATTEMPT: '2',
+    GITHUB_EVENT_NAME: 'pull_request',
+    GITHUB_REPOSITORY: 'fixture/repository',
+    GITHUB_SHA: merge,
+    GITHUB_EVENT_PATH: eventPayload({ pull_request: { number: 42, head: { sha: head } } }),
+  };
+}
+
+const PULL_HEAD = 'a'.repeat(40);
+const MERGE_COMMIT = 'b'.repeat(40);
+const MOVED_HEAD = 'c'.repeat(40);
+
+function livePullHead(args) {
+  assert.deepEqual(args, ['api', 'repos/fixture/repository/pulls/42', '--jq', '.head.sha']);
+}
+
+test('a retried pull request run compares its own head, never the merge commit', () => {
+  const { main } = require('../.github/scripts/stale-rerun.cjs');
+  const env = pullRequestEnv(PULL_HEAD, MERGE_COMMIT);
+  assert.equal(main(env, (args) => { livePullHead(args); return `${PULL_HEAD}\n`; }), 0);
+  assert.equal(main(env, () => `${MOVED_HEAD}\n`), 1);
+  assert.equal(main({ ...env, GITHUB_RUN_ATTEMPT: '1' }, () => `${MOVED_HEAD}\n`), 0);
+});
+
+test('a retried push run still stops when the branch moved', () => {
+  const { main } = require('../.github/scripts/stale-rerun.cjs');
+  const env = { GITHUB_RUN_ATTEMPT: '2', GITHUB_EVENT_NAME: 'push', GITHUB_REPOSITORY: 'fixture/repository', GITHUB_REF_NAME: 'production', GITHUB_SHA: PULL_HEAD };
+  assert.equal(main(env, (args) => {
+    assert.deepEqual(args, ['api', 'repos/fixture/repository/commits/production', '--jq', '.sha']);
+    return `${PULL_HEAD}\n`;
+  }), 0);
+  assert.equal(main(env, () => `${MOVED_HEAD}\n`), 1);
 });
 
 test('the pilot workflow keeps both jobs and cancels per pull request', () => {
@@ -113,4 +168,80 @@ test('the guard rejects a group that names no pull request and a constant-false 
     'literal: concurrency group github.ref is not per pull request',
     'literal: cancel-in-progress is false',
   ]);
+});
+
+test('a workflow added after the exception list gets no exemption', () => {
+  const added = [
+    'on:',
+    '  pull_request:',
+    '    types: [opened, synchronize]',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('new-checks', added), ['new-checks: no concurrency block']);
+});
+
+test('a gate fails when cancel-in-progress is missing or false', () => {
+  const missing = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    'concurrency:',
+    '  group: feature-flag-gate-${{ github.event.pull_request.number }}',
+    '',
+  ].join('\n');
+  const held = missing.replace(
+    '  group: feature-flag-gate-${{ github.event.pull_request.number }}',
+    '  group: pr-guards-trusted-${{ github.event.pull_request.number }}\n  cancel-in-progress: false',
+  );
+  assert.deepEqual(problemsFor('feature-flag-gate', missing), [
+    'feature-flag-gate: cancel-in-progress is missing',
+  ]);
+  assert.deepEqual(problemsFor('pr-guards-trusted', held), [
+    'pr-guards-trusted: cancel-in-progress is false',
+  ]);
+});
+
+test('a gate fails when it loses its concurrency block', () => {
+  const bare = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('ux-signoff-gate', bare), ['ux-signoff-gate: no concurrency block']);
+});
+
+test('a gate fails when its group is unique per run', () => {
+  const perRun = [
+    'on:',
+    '  pull_request:',
+    '    types: [synchronize]',
+    'concurrency:',
+    '  group: ${{ github.run_id }}',
+    '  cancel-in-progress: true',
+    '',
+  ].join('\n');
+  const perCommit = perRun.replace('github.run_id', 'github.sha');
+  assert.deepEqual(problemsFor('ci-tests', perRun), [
+    'ci-tests: concurrency group ${{ github.run_id }} is not per pull request',
+  ]);
+  assert.deepEqual(problemsFor('ci-tests', perCommit), [
+    'ci-tests: concurrency group ${{ github.sha }} is not per pull request',
+  ]);
+});
+
+test('a job-level group does not stand in for the workflow group', () => {
+  const jobLevel = [
+    'on:',
+    '  pull_request_target:',
+    '    types: [opened, synchronize]',
+    'jobs:',
+    '  gate:',
+    '    runs-on: ubuntu-latest',
+    '    concurrency:',
+    '      group: codex-review-gate-${{ github.event.pull_request.number }}',
+    '      cancel-in-progress: true',
+    '',
+  ].join('\n');
+  assert.deepEqual(problemsFor('codex-review-gate', jobLevel), ['codex-review-gate: no concurrency block']);
 });

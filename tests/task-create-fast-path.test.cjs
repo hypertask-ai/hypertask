@@ -22,31 +22,87 @@ const {
   recordTaskCreateResponse,
 } = jiti(path.join(root, "src/lib/analytics/productPerformance.ts"));
 
-test("task index allocation uses one project-scoped max query", async () => {
-  const calls = [];
-  const db = {
-    task: {
-      aggregate: async (args) => {
-        calls.push(args);
-        return { _max: { uniqueIndex: 41 } };
+function memoryBoard({ tasks = [], aliases = [], issued = 0 } = {}) {
+  const state = {
+    tasks: [...tasks],
+    aliases: [...aliases],
+    issued,
+  };
+  const highest = (values) => values.reduce((max, value) => Math.max(max, value), null);
+  return {
+    state,
+    removeTask(uniqueIndex) {
+      state.tasks = state.tasks.filter((value) => value !== uniqueIndex);
+    },
+    db: {
+      task: {
+        aggregate: async () => ({ _max: { uniqueIndex: highest(state.tasks) } }),
+      },
+      taskNumberAlias: {
+        aggregate: async () => ({ _max: { uniqueIndex: highest(state.aliases) } }),
+      },
+      project: {
+        findUnique: async () => ({ issuedUniqueIndex: state.issued }),
+        updateMany: async ({ where, data }) => {
+          if (!(state.issued < where.issuedUniqueIndex.lt)) return { count: 0 };
+          state.issued = data.issuedUniqueIndex;
+          return { count: 1 };
+        },
       },
     },
   };
-
-  assert.equal(await getNextUniqueTaskIndex(15, db), 42);
-  assert.deepEqual(calls, [
-    { where: { projectId: 15 }, _max: { uniqueIndex: true } },
-  ]);
-});
+}
 
 test("task index allocation starts an empty project at one", async () => {
+  const board = memoryBoard();
+  assert.equal(await getNextUniqueTaskIndex(15, board.db), 1);
+  assert.equal(board.state.issued, 1);
+});
+
+test("task index allocation continues past the highest surviving task", async () => {
+  const board = memoryBoard({ tasks: [1, 3, 41] });
+  assert.equal(await getNextUniqueTaskIndex(15, board.db), 42);
+  assert.equal(board.state.issued, 42);
+});
+
+test("a task made after the highest number is deleted gets a new number", async () => {
+  const board = memoryBoard({ tasks: [6284, 6285, 6286], issued: 6286 });
+  board.removeTask(6286);
+  assert.equal(await getNextUniqueTaskIndex(15, board.db), 6287);
+  assert.equal(await getNextUniqueTaskIndex(15, board.db), 6288);
+  assert.equal(board.state.issued, 6288);
+});
+
+test("a moved-away task number is not issued again", async () => {
+  const board = memoryBoard({ tasks: [1, 41], aliases: [50] });
+  assert.equal(await getNextUniqueTaskIndex(15, board.db), 51);
+});
+
+test("many allocations at once each receive a different number", async () => {
+  const board = memoryBoard({ tasks: [10], issued: 10 });
+  const numbers = await Promise.all(
+    Array.from({ length: 12 }, () => getNextUniqueTaskIndex(15, board.db)),
+  );
+  assert.deepEqual(
+    numbers.sort((left, right) => left - right),
+    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
+  );
+  assert.equal(board.state.issued, 22);
+});
+
+test("task number allocation refuses a missing board", async () => {
   const db = {
-    task: {
-      aggregate: async () => ({ _max: { uniqueIndex: null } }),
+    task: { aggregate: async () => ({ _max: { uniqueIndex: null } }) },
+    taskNumberAlias: { aggregate: async () => ({ _max: { uniqueIndex: null } }) },
+    project: {
+      findUnique: async () => null,
+      updateMany: async () => ({ count: 1 }),
     },
   };
-
-  assert.equal(await getNextUniqueTaskIndex(15, db), 1);
+  await assert.rejects(
+    () => getNextUniqueTaskIndex(15, db),
+    /Board not found while allocating a task number/,
+  );
 });
 
 test("task create server timing parses known phases and ignores invalid values", () => {
@@ -192,6 +248,8 @@ test("task create trace emits one complete submit-to-visible sample", () => {
       duration_ms: 240,
       network_duration_ms: 240,
       submit_to_visible_ms: 590,
+      ai_task_writer_ms: null,
+      ai_title_ms: null,
       server_validate_ms: 12.1,
       server_task_create_ms: 90.4,
       server_enrich_ms: 7.5,
@@ -201,7 +259,7 @@ test("task create trace emits one complete submit-to-visible sample", () => {
       result: "success",
       response_status: 200,
       visible_completion: "task_detail",
-      task_create_measurement_version: 2,
+      task_create_measurement_version: 3,
       task_create_measurement_scope: "submit_to_visible",
     });
     assert.deepEqual(marks, [

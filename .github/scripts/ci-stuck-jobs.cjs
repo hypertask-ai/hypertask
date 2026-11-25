@@ -44,8 +44,11 @@ const { readFileSync } = require('node:fs');
 
 const STUCK_SECONDS = 45;
 const RECENT_MINUTES = 30;
-// A cancel usually settles in one or two polls; a slower one is now carried by a
-// tick that is TICK_GAP_MS away instead of a whole chain wait.
+const GUARD_WORKFLOW = 'feature-flag-gate.yml';
+const GUARD_PENDING_MINUTES = 30;
+// Only `completed` is a finished run, so the guard queue is read once for each of the other five statuses GitHub reports.
+const GUARD_UNFINISHED_STATUSES = ['queued', 'pending', 'requested', 'waiting', 'in_progress'];
+// A cancel usually settles in one or two polls; a slower one is carried by a tick, TICK_GAP_MS away.
 const SETTLE_ATTEMPTS = 10;
 const SETTLE_DELAY_MS = 2000;
 const PR_EVENT = 'pull_request';
@@ -203,6 +206,75 @@ async function plan(repo, { now = Date.now(), stuckSeconds = STUCK_SECONDS, rece
   return { decisions, unread };
 }
 
+function overdueRuns(runs, { now = Date.now(), minutes = GUARD_PENDING_MINUTES } = {}) {
+  const limit = minutes * 60 * 1000;
+  return runs.filter((run) => {
+    if (!GUARD_UNFINISHED_STATUSES.includes(run.status)) return false;
+    const created = run.created_at ? Date.parse(run.created_at) : NaN;
+    return Number.isFinite(created) && now - created >= limit;
+  });
+}
+
+async function guardRuns(repo, status, api) {
+  const payload = await api(`/repos/${repo}/actions/workflows/${GUARD_WORKFLOW}/runs?status=${status}&per_page=100`);
+  return payload.workflow_runs ?? [];
+}
+
+function refusal(error) {
+  const lines = String(error.message).split('\n');
+  return (lines.length > 1 ? lines.slice(1).join(' ') : lines[0]).trim().slice(0, 120);
+}
+
+async function cancelGuard(repo, run, api) {
+  const path = `/repos/${repo}/actions/runs/${run.id}`;
+  try {
+    await api(`${path}/cancel`, 'POST');
+    return { how: 'cancelled' };
+  } catch (refused) {
+    try {
+      await api(`${path}/force-cancel`, 'POST');
+      return { how: 'force-cancelled' };
+    } catch (forced) {
+      return { how: null, reason: `${refusal(refused)}; force-cancel: ${refusal(forced)}` };
+    }
+  }
+}
+
+async function cancelOverdueGuards(repo, { now = Date.now(), minutes = GUARD_PENDING_MINUTES, api = json, refusals = new Set() } = {}) {
+  const runs = [];
+  const seen = new Set();
+  let unread;
+  for (const status of GUARD_UNFINISHED_STATUSES) {
+    try {
+      for (const run of await guardRuns(repo, status, api)) {
+        if (seen.has(run.id)) continue;
+        seen.add(run.id);
+        runs.push(run);
+      }
+    } catch (error) {
+      unread = String(error.message).slice(0, 120);
+    }
+  }
+  let cancelled = 0;
+  let refused = 0;
+  for (const run of overdueRuns(runs, { now, minutes })) {
+    if (refusals.has(run.id)) {
+      refused += 1;
+      continue;
+    }
+    const outcome = await cancelGuard(repo, run, api);
+    if (outcome.how) {
+      cancelled += 1;
+      console.log(`::notice::guard run ${run.id} was still ${run.status} after ${minutes} minutes; ${outcome.how}.`);
+    } else {
+      refused += 1;
+      refusals.add(run.id);
+      console.log(`::warning::guard run ${run.id} could not be cancelled: ${outcome.reason}.`);
+    }
+  }
+  return { checked: runs.length, cancelled, ...(refused && { refused }), ...(unread && { unread }) };
+}
+
 async function jobsOf(repo, runId, api = json) {
   const payload = await api(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`);
   return payload.jobs ?? [];
@@ -242,8 +314,8 @@ async function apply(repo, decisions, { api = json, settle = settleCancel, befor
       }
       await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
     } catch (error) {
-      const message = String(error.message).slice(0, 80);
-      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${message}`, definitive: refusesCancel(message) });
+      const message = String(error.message);
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${message.slice(0, 80)}`, definitive: refusesCancel(message) });
       continue;
     }
     if (onConfirmed) await onConfirmed(decision);
@@ -592,15 +664,17 @@ function nowFrom(options = {}) {
 // One sweep, with its report. A tick in the middle of a link says less than the
 // first one: the JSON is for a person reading a run, and eight copies of it bury
 // the notices that matter.
-async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = {}) {
+async function sweepOnce(repo, { live, fixture, options = {}, quiet = false, refusals } = {}) {
   const now = nowFrom(options);
   let decisions = [];
   let unread = [];
   let discovery = null;
   let stored = { ok: true, pending: [] };
   let recovery = { done: [], pending: [], saved: true };
+  let guards = { checked: 0, cancelled: 0 };
   if (live) {
     ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now }));
+    guards = await cancelOverdueGuards(repo, { now, refusals });
   } else {
     try {
       ({ decisions, unread } = fixture
@@ -610,15 +684,19 @@ async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = 
       discovery = String(error.message).slice(0, 120);
     }
   }
-  const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
+  const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, guards, readOnly: !live };
   if (quiet) {
     const recovered = recovery.done.filter(outcome => outcome.action === 'recover').length;
-    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried.`);
+    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried, ${guards.cancelled} overdue guard run(s) cancelled, ${guards.refused ?? 0} guard run(s) GitHub refuses to release.`);
   } else {
     console.log(JSON.stringify(report, null, 2));
+    if (guards.refused) console.log(`::warning::${guards.refused} guard run(s) GitHub refuses to release; each is named once per link.`);
   }
   if (discovery) {
     console.log(`::warning::the run list could not be read this sweep (${discovery}); stored recoveries were still finished.`);
+  }
+  if (guards.unread) {
+    console.log(`::warning::the guard run queue could not be read this sweep (${guards.unread}).`);
   }
   for (const entry of unread) {
     console.log(`::warning::run ${entry.runId} was not judged: ${entry.reason}.`);
@@ -685,9 +763,10 @@ async function main() {
       return;
     }
   }
-  await sweepOnce(repo, { live, fixture, options });
+  const refusals = new Set();
+  await sweepOnce(repo, { live, fixture, options, refusals });
   if (!chaining) return;
-  const later = await tick(repo, { sweeps, gapMs, once: () => sweepOnce(repo, { live, fixture, options, quiet: true }) });
+  const later = await tick(repo, { sweeps, gapMs, once: () => sweepOnce(repo, { live, fixture, options, quiet: true, refusals }) });
   for (const outcome of later) {
     if (outcome && outcome.error) console.log(`::warning::a tick failed: ${outcome.error}.`);
   }
@@ -701,7 +780,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, overdueRuns, cancelOverdueGuards, guardRuns, GUARD_UNFINISHED_STATUSES, GUARD_PENDING_MINUTES, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {

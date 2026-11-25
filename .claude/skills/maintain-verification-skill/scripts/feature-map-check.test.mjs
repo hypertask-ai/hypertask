@@ -169,8 +169,8 @@ test('CLI fails for ops drift and weekly reports its moved recipe', t => {
 
 test('repo paths strip citations, punctuation, commands and anchors; ignore globs, placeholders and explicit external-repo scopes', t => {
   const f = fixture(t);
-  const markdown = '`src/shared.ts:1#anchor`, `e2e/smoke/`. `.claude/tool run args` `docs/a.md:2:3-8`; `scripts/*.sh` `public/<name>.png` `prisma/{a,b}` `src/x?.ts` (installers live in the `other/project` repo, `public/install.sh`). `src/a.ts src/b.ts`';
-  assert.deepEqual(repoPaths(markdown), ['.claude/tool', 'docs/a.md', 'e2e/smoke', 'src/a.ts', 'src/b.ts', 'src/shared.ts']);
+  const markdown = '`src/shared.ts:1#anchor`, `e2e/smoke/`. `.claude/tool run args` `docs/a.md:2:3-8`; `scripts/*.sh` `public/<name>.png` `prisma/{a,b}` `src/x?.ts` (installers live in the `other/project` repo, `public/install.sh`). `src/a.ts src/b.ts` `docs/b.md:457,559` `docs/c.md:15,45-53,60`';
+  assert.deepEqual(repoPaths(markdown), ['.claude/tool', 'docs/a.md', 'docs/b.md', 'docs/c.md', 'e2e/smoke', 'src/a.ts', 'src/b.ts', 'src/shared.ts']);
   for (const name of repoPaths(markdown)) f.put(name);
   f.put(`${mapPath}/area-00.md`, markdown);
   assert.deepEqual(checkFeatureMap(f.repo), []);
@@ -451,9 +451,14 @@ test('GitHub workflow and policy keep the tiny check free, pinned, scoped and no
   const root = path.resolve(here, '../../../..');
   const read = file => readFileSync(path.join(root, file), 'utf8');
   const workflow = read('.github/workflows/feature-map-weekly.yml');
-  assert.match(workflow, /schedule:\n    - cron: '37 3 \* \* 1'\n  workflow_dispatch:\n  pull_request:/);
-  assert.match(workflow, /branches: \[production\]/);
-  for (const scope of ['.claude/skills/maintain-verification-skill/**', '.claude/skills/verify-qa/reference/feature-map/**', '.claude/skills/verify-qa/reference/ops-map/**', '.github/workflows/feature-map-weekly.yml']) assert.ok(workflow.includes(`- '${scope}'`));
+  assert.match(workflow, /schedule:\n    - cron: '37 3 \* \* 1'\n  workflow_dispatch:\n/);
+  assert.doesNotMatch(workflow, /pull_request/, 'the pull request path moved to skills-evals (HTPR-9450)');
+  const evals = read('.github/workflows/skills-evals.yml');
+  assert.ok(evals.includes("- '.claude/skills/**'"), 'every skill and map path starts skills-evals');
+  for (const scope of ['.github/workflows/feature-map-weekly.yml', '.github/workflows/visual-regression.yml', '.github/scripts/feature-map-live-weekly-file.mjs', 'tests/feature-map-live-weekly-file.test.cjs']) {
+    assert.ok(evals.includes(`- '${scope}'`), `${scope} starts skills-evals`);
+  }
+  assert.match(evals, /feature-map-check\.mjs/);
   assert.match(workflow, /permissions:\n  contents: read\n/);
   assert.match(workflow, /runs-on: ubuntu-latest\n    timeout-minutes: 5/);
   assert.match(workflow, /node-version: \^24\.\d+\.\d+\n          check-latest: true/);

@@ -19,6 +19,7 @@ function load(file, stubs = {}) {
   new Function("module", "exports", "require", javascript)(mod, mod.exports, (request) => {
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertTicketRoom: async () => {}, assertProjectTicketRoom: async () => {}, assertBoardRoom: async () => {} };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
+    if (request === "@/utils/controllers/projects/archivedBoardTickets") return { archivedBoardTicketRefusal: async () => null };
     const listImport = resolveListImport(request);
     if (listImport !== undefined) return listImport;
     if (request in stubs) {
@@ -358,6 +359,11 @@ for (const foreignParent of [false, true]) {
       "@/lib/ai/chatStream/request": { statusSchema: require("zod").z.string(), sortOrderSchema: require("zod").z.string() },
       "@/lib/ai/tools/helpers": { getAccessibleProjectIds: async () => [10], normalizePriorityInput: () => [], sanitizeForJson: (value) => value },
       "@/lib/mcp/listQuery": require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}),
+      "@/lib/mcp/tasks/previousTicketNumbers": {
+        previousTicketNumbersFor: async () => undefined,
+        withPreviousTicketNumbers: (task) => task,
+        nameMovedTicketKeys: async (_userId, tasks) => tasks,
+      },
     });
     const output = await createListTasksTool({ user: { id: 7 }, sendStatus: () => {} }).hypertask_list_tasks.execute({ labels: [], status: "Normal", limit: 50, offset: 0, sort_by: "updatedAt", sort_order: "desc" });
     assert.equal(output.success, true);

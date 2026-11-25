@@ -3,24 +3,13 @@
 // older run, or the extra jobs sit in the queue behind the newest push
 // (YPER4-663: 108 queued jobs, oldest wait 2.5 h).
 //
-// Gates that publish a required status are excluded on purpose: a cancelled run
-// leaves that status unresolved. They keep `queue: max` instead, so a newer
-// event never drops an older pending run.
+// Every workflow that sees synchronize cancels that older run. The group names
+// the pull request, so one pull request does not cancel another (HYCI-182).
 const { readdirSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 
-const EXCEPTIONS = new Map([
-  ['feature-flag-gate', 'shared production line with queue: max; cancelling leaves the required gate status unresolved (YPER4-707)'],
-  ['ux-signoff-gate', 'shared production line with queue: max; cancelling leaves the signoff status unresolved (YPER4-707)'],
-  ['pr-guards-trusted', 'publishes the required pr-title status with queue: max; a cancelled evaluation leaves it pending (HYCI-29)'],
-  ['dependabot-lane', 'files the upgrade ticket in the same run as the lane label, so a superseded run could leave a bump labelled but unowned; one shared group serialises the sweep against the PR events (HYCI-107)'],
-  ['ci-tests', 'publishes the required ci-tests status with queue: max; cancel-in-progress together with queue: max is invalid and dropped synchronize events (HYCI-182)'],
-]);
-
 const PUSH_EVENTS = ['pull_request', 'pull_request_target'];
-// `synchronize` is the push event; without it a workflow never has a superseded run.
 const PUSH_TYPE = 'synchronize';
-// Only an expression can name the pull request, so a group without one is shared.
 const PER_PULL_REQUEST = /github\.event\.pull_request\.number|github\.head_ref|github\.ref(?!\w)/;
 
 function lines(text) {
@@ -89,7 +78,6 @@ function problemsFor(name, text) {
   const types = eventTypes(onBody);
   const pushes = [...types.values()].some(list => list.includes(PUSH_TYPE));
   if (!pushes) return [];
-  if (EXCEPTIONS.has(name)) return [];
   const concurrency = section(text, 'concurrency');
   if (!concurrency.length) return [`${name}: no concurrency block`];
   const problems = [];
@@ -117,10 +105,6 @@ function check(directory) {
 
 function main(argv) {
   const [directory = '.github/workflows'] = argv.filter(arg => !arg.startsWith('--'));
-  if (argv.includes('--list-exceptions')) {
-    console.log(`exceptions: ${[...EXCEPTIONS.keys()].join(' ')}`);
-    return 0;
-  }
   const problems = check(directory);
   if (problems.length) {
     for (const problem of problems) console.error(problem);
@@ -132,4 +116,4 @@ function main(argv) {
 
 if (require.main === module) process.exit(main(process.argv.slice(2)));
 
-module.exports = { EXCEPTIONS, check, problemsFor };
+module.exports = { check, problemsFor };

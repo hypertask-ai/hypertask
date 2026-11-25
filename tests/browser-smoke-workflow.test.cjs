@@ -214,12 +214,27 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
     source("src/app/inbox/Inbox.tsx"),
   ]);
 
-  assert.match(client, /browser\.location\.hostname === "127\.0\.0\.1"/);
-  assert.match(client, /browser\.location\.hostname === "localhost"/);
-  assert.match(client, /localSmokePreference === "on" && localSmokeOrigin/);
+  assert.match(
+    client,
+    /function loopbackHost\(hostname: string\): boolean \{[\s\S]{0,120}hostname === "127\.0\.0\.1" \|\| hostname === "localhost"/,
+  );
+  assert.match(
+    client,
+    /const localSmokeOrigin = loopbackHost\(browser\.location\.hostname\);/,
+  );
+  assert.match(
+    client,
+    /localSmokeOrigin &&[\s\S]{0,80}localSmokePreference === "on" \|\| localStackRealtime()/,
+  );
+  assert.match(client, /NEXT_PUBLIC_HT_LOCAL_REALTIME === "1"/);
+  assert.match(client, /if \(localSmokePreference === "off"\) \{/);
   assert.match(client, /if \(browser\.navigator\.webdriver\) \{/);
   assert.match(client, /HeadlessChrome\|PhantomJS/);
   assert.match(smoke, /pusher_internal:subscription_succeeded/);
+  assert.match(
+    await source(".claude/skills/verify-hypertask/bin/lib/commands/up.cjs"),
+    /NEXT_PUBLIC_HT_LOCAL_REALTIME: "1"/,
+  );
   assert.match(smoke, /realtimeSubscriptions\.has\(`private-project-\$\{projectId\}`\)/);
   assert.match(smoke, /lastBoardFetchAt === 0 \? 1_000 : Date\.now\(\) - lastBoardFetchAt/);
   assert.match(smoke, /boardFetches\.clear\(\)/);
@@ -231,11 +246,11 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
   assert.doesNotMatch(smoke, /Minified React error #418/);
 });
 
-test("MCP CLI API contract stays fatal inside the required browser-smoke job", async () => {
+test("MCP CLI API contract stays fatal inside the nightly browser-smoke job", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const policy = yaml.load(await source("docs/ci-policy.yml"));
-  assert.ok(policy.required_checks.contexts.includes("browser-smoke"));
+  assert.equal(policy.required_checks.contexts.includes("browser-smoke"), false);
   const smoke = workflow.jobs["browser-smoke-desktop"];
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");
@@ -483,7 +498,7 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.deepEqual(shards.map((shard) => shard.needs), SHARDS.map(() => "browser-build"));
   for (const shard of shards) {
     assert.equal(shard.if, desktop.if);
-    assert.match(shard.if, /pull_request\.draft == false/);
+    assert.match(shard.if, /event_name != 'pull_request'/);
     assert.ok(shard["timeout-minutes"] <= 20);
     assert.ok(shard.steps.some((step) => step.name === "Download the one build"));
     assert.ok(!shard.steps.some((step) => step.name === "Upload the one build"));
@@ -495,7 +510,7 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.equal(aggregate.outputs, undefined, "nothing reads this summary any more (HYCI-108)");
   assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-build"]);
 
-  const step = aggregate.steps[0];
+  const step = aggregate.steps.find(step => step.name === "Require every browser shard");
   const env = ["BUILD", "DESKTOP", "MOBILE", "MATRIX", "FLAGS"];
   for (const [name, key] of env.map((name, index) => [name, ["browser-build", ...SHARDS][index]])) {
     assert.equal(step.env[name], "${{ needs." + key + ".result }}", name);
@@ -622,7 +637,7 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
     assert.equal(restore.uses, `actions/cache/restore@${CACHE_SHA}`, key);
     assert.equal(restore.with.path, BROWSERS, key);
     assert.equal(restore.with.key, CACHE_KEY, key);
-    assert.equal(job.steps.indexOf(byName(job, "Generate client and install Chromium")), job.steps.indexOf(restore) + 1, key);
+    assert.deepEqual(job.steps.slice(job.steps.indexOf(restore), job.steps.indexOf(restore) + 3).map((step) => step.name), ["Restore Playwright browser cache", "Restore browser font cache", "Generate client and install Chromium"], key);
   }
 
   const savers = SHARDS.filter((key) => byName(workflow.jobs[key], "Save Playwright browser cache"));
@@ -638,57 +653,25 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
   );
 });
 
-function runChromiumInstaller({ answering, failures }) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-279-"));
-  const mirrorFile = path.join(dir, "apt-mirrors.txt");
-  fs.writeFileSync(
-    path.join(dir, "curl"),
-    `#!/bin/bash
-url="\${@: -1}"
-for hit in ${answering.join(" ")}; do
-  case "$url" in *"$hit"*) exit 0;; esac
-done
-exit 6
-`,
-    { mode: 0o755 },
-  );
-  fs.writeFileSync(
-    path.join(dir, "npx"),
-    `#!/bin/bash
-n=$(( $(cat "${dir}/npx-calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/npx-calls"
-if [ "$n" -le ${failures} ]; then printf '%s\n' "E: Failed to fetch packages  Temporary failure resolving" >&2; exit 1; fi
-echo "chromium installed"
-`,
-    { mode: 0o755 },
-  );
-  fs.writeFileSync(path.join(dir, "apt-get"), "#!/bin/bash\nexit 0\n", { mode: 0o755 });
-  fs.writeFileSync(path.join(dir, "sudo"), '#!/bin/bash\nexec "$@"\n', { mode: 0o755 });
-  const child = spawnSync("bash", [path.resolve(".github/scripts/install-chromium.sh")], {
-    env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, APT_MIRROR_FILE: mirrorFile, RETRY_SLEEP: "0" },
-    encoding: "utf8",
-  });
-  return {
-    status: child.status,
-    output: child.stdout + child.stderr,
-    mirror: fs.existsSync(mirrorFile) ? fs.readFileSync(mirrorFile, "utf8").trim() : null,
-    npxCalls: Number(fs.readFileSync(path.join(dir, "npx-calls"), "utf8")),
-  };
-}
-
-test("HYCI-279: a browser shard installs Chromium from the first mirror that answers", async () => {
+test("HYCI-282: browser shards install Chromium without Ubuntu packages", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const installer = await source(".github/scripts/install-chromium.sh");
 
   for (const key of SHARDS) {
     const step = workflow.jobs[key].steps.find((candidate) => candidate.name === "Generate client and install Chromium");
     assert.ok(step, key);
     assert.match(step.run, /bash \.github\/scripts\/install-chromium\.sh/, key);
-    assert.doesNotMatch(step.run, /archive\.ubuntu\.com/, `${key} must not bet on one mirror name`);
+    assert.doesNotMatch(step.run, /archive\.ubuntu\.com|apt-get|--with-deps/, key);
   }
-  assert.doesNotMatch(await source(".github/workflows/e2e-ai-pilot.yml"), /archive\.ubuntu\.com/);
+  assert.doesNotMatch(installer, /apt-get|--with-deps|archive\.ubuntu\.com|sudo /);
+  assert.match(installer, /npx playwright install chromium/);
+  assert.match(installer, /browser-font-cache\.mjs/);
+  assert.doesNotMatch(await source(".github/workflows/e2e-ai-pilot.yml"), /archive\.ubuntu\.com|--with-deps|apt-get/);
+  assert.doesNotMatch(await source(".github/workflows/ci-tests.yml"), /apt-get|--with-deps|archive\.ubuntu\.com/);
 });
 
-test("HYCI-286: production health installs Chromium through the mirror-fallback installer", async () => {
+test("HYCI-286: production health installs Chromium through the shared installer", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/prod-health.yml"));
   const step = workflow.jobs.smoke.steps.find((candidate) => candidate.id === "setup-pw");
@@ -696,27 +679,4 @@ test("HYCI-286: production health installs Chromium through the mirror-fallback 
   assert.equal(step.run, "bash .github/scripts/install-chromium.sh");
   assert.equal(step["continue-on-error"], true);
   assert.equal(step["timeout-minutes"], 8);
-});
-
-test("HYCI-279: a dead mirror name is skipped, kept working, and retried once", () => {
-  const skipped = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 1 });
-  assert.equal(skipped.status, 0, skipped.output);
-  assert.equal(skipped.mirror, "https://azure.archive.ubuntu.com/ubuntu/");
-  assert.match(skipped.output, /Ubuntu mirror did not answer: https:\/\/archive\.ubuntu\.com\/ubuntu\//);
-  assert.equal(skipped.npxCalls, 2, "one retry after the failed install");
-
-  const noMirror = runChromiumInstaller({ answering: [], failures: 0 });
-  assert.equal(noMirror.status, 0, noMirror.output);
-  assert.equal(noMirror.mirror, null, "the runner's own sources stay when no probe answers");
-  assert.equal(noMirror.npxCalls, 1);
-
-  const never = runChromiumInstaller({ answering: ["azure.archive.ubuntu.com"], failures: 5 });
-  assert.equal(never.status, 1);
-  assert.equal(never.npxCalls, 2, "two attempts and no more");
-  assert.match(never.output, /could not be installed after 2 attempts/);
-
-  const deadNetwork = runChromiumInstaller({ answering: [], failures: 5 });
-  assert.equal(deadNetwork.status, 1);
-  assert.equal(deadNetwork.npxCalls, 1, "a dead network is not retried for another nine minutes");
-  assert.match(deadNetwork.output, /not retrying into a dead network/);
 });

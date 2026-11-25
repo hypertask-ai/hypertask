@@ -9,6 +9,7 @@ import { getUniqueTaskCount } from './create';
 import generateRank from '@/utils/generateRank';
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create';
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml';
+import { assertBoardTakesNewTickets } from '@/utils/controllers/projects/archivedBoardTickets';
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import { autoAssignForSection } from '@/utils/controllers/assignees/autoAssignForSection';
 import { createTaskWithBoardWebhookOutbox, createProvisionedTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
@@ -79,6 +80,11 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
     } = options;
 
     const descriptionContent = normalizeBlockHtml(description);
+    const board = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { name: true, title: true, status: true }
+    });
+    if (board) await assertBoardTakesNewTickets(board, userId);
     try {
         if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
             await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent }, {}, { create: true, houseRules: true });
@@ -89,9 +95,6 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         if (error instanceof AgentWritingError) throw error;
         await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent }, {}, { create: true, houseRules: true });
     }
-    const taskCount = await getUniqueTaskCount(projectId);
-    const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;
-
     let ranking = providedRanking;
     if (!ranking) {
         const lastTask = await prisma.task.findFirst({
@@ -113,8 +116,6 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         section: sectionTitle,
         userId,
         agentId: agentId ?? null,
-        uniqueIndex: taskCount + 1,
-        ticketNumber,
         ranking,
         projectId,
         sectionId,
@@ -171,8 +172,13 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         ...(options.actingAgentId !== undefined ? { actingAgentId: options.actingAgentId } : {}),
     };
     const createdTask = await writeTask(prisma, taskCreatedActor, async (tx) => {
+        const uniqueIndex = (await getUniqueTaskCount(projectId, tx)) + 1;
         const created = await tx.task.create({
-            data: taskData,
+            data: {
+                ...taskData,
+                uniqueIndex,
+                ticketNumber: `${projectIdentifier}-${uniqueIndex}`,
+            },
             include: {
                 project: {
                     select: {

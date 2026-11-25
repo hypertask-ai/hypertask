@@ -8,28 +8,47 @@
 
 Settings > Board > Custom instructions, or
 `https://app.hypertask.ai/settings/board-ai`.
-Use QA 985 on sandbox board 7049.
+The page writes to the board currently selected in the board picker, which
+comes from the current-project store or the `previousBoard` cookie, not from
+the URL. Open board 7049 first, then Settings, and read the picker label (`QA
+Sandbox`) before saving. QA 985 on sandbox board 7049.
 
 ## Driving it with agent-browser
 
-1. Compare the textarea with
-   `GET /api/ai/project/customInstruction?projectId=7049`.
-2. Save non-empty multiline instructions. Require a successful POST and the
-   exact saved value from GET. Reload Settings and verify the same text.
-3. Leave and reopen Settings without reloading. Verify the saved text, then
-   edit without saving and reopen: only the saved text should remain.
-4. Open Custom instructions from a task's command menu. Verify the same board
-   and saved text. Do not invoke paid AI generation to check persistence.
-5. Check an empty save, a rejected save, and loading existing instructions
-   before the current-project store has hydrated. A failed save keeps the
-   draft, shows an error and does not replace the last successful value.
+Verified on production 2026-11-20, board 7049:
+
+1. `ht-verify open '/project?id=7049&surface=board'`, wait for the board, then
+   `ht-verify open /settings/board-ai`; the picker must read `QA Sandbox`.
+2. Baseline: `ht-verify api GET
+   '/api/ai/project/customInstruction?projectId=7049'`. A `null`
+   `customInstruction` means empty; compare against `""`, not `null`.
+3. Read the textarea (`textarea` on the page) before editing; it must equal the
+   baseline.
+4. Fill `QA 985 probe\nKeep replies short.` and click `Save instructions`.
+   Require the toast `Custom instructions updated` and the textarea keeps the
+   two lines.
+5. Reload Settings: the same two lines. Leave to the board and reopen Settings:
+   the same two lines.
+6. Edit to `draft only`, leave and reopen without saving: only the saved two
+   lines remain.
+7. Restore the baseline (empty string when the baseline was `""`) through the
+   same Save, then require the GET body equals the baseline exactly.
+8. The Save POST is `/api/ai/project/customInstruction`. A missing projectId
+   answers 101 and an invisible board answers 404; the UI only treats 200 as
+   success. An empty string is a valid save, not an error.
+9. The command-palette entry is `AICustomInstruction`; it is not a task command
+   menu item.
+10. Capture desktop and phone in Light, AMOLED and Graphite 2; compare controls
+    and layout against production before the fix. Run the core inbox cycle
+    after deployment.
 
 ## Gotchas
 
-Initializing from a project store before query hydration shows an empty
-editor despite a successful GET. A stale query after saving can restore the
-previous text when reopening. This saved-data fix has no flag and changes
-no prompts or models.
+Initializing from a project store before query hydration shows a blank panel,
+not an empty editor, until the query and store agree (`BoardAiSection.tsx`). A
+stale query after saving can restore the previous text when reopening. The
+saved-data fix has no flag and changes no prompts or models. A late hydration
+no longer clobbers a dirty draft; an empty save persists as empty.
 
 ### What proof to collect
 

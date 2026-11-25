@@ -17,7 +17,10 @@ const prisma = {
       return { count: 1 };
     },
   },
-  project: { findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }] }) },
+  project: {
+    findFirst: async () => ({ uniqueIdentifier: "HTPR", section: [{ id: 1, section_title: "Bugs" }] }),
+    findUnique: async () => ({ name: "project-15", title: "Hypertask Product", status: "Normal" }),
+  },
   label: { findFirst: async () => null },
   task: {
     findFirst: async () => null,
@@ -150,7 +153,8 @@ test("the real sweep saves the removal description under an adopted lease and re
   assert.equal(state.description.taskId, state.task.id);
   assert.equal(state.description.creatorId, FEATURE_FLAG_OWNER_USER_ID);
   assert.equal(state.description.agentId, FEATURE_FLAG_SWEEP_AGENT_ID);
-  assert.ok(state.description.content.includes(`<code>${key}</code>`));
+  assert.ok(state.description.content.includes(`/${key}"`));
+  assert.ok(state.description.content.includes(">Safety switch</a>"));
   assert.ok(state.description.content.includes("Everyone"));
   assert.ok(state.description.content.includes("2026-01-01"));
   assert.equal(state.flag.removalTaskId, state.task.id);

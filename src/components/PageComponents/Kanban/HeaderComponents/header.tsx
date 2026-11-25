@@ -1,7 +1,5 @@
 
 import dynamic from "next/dynamic";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7551_START_PLAN_CHECKOUT_FLAG } from "@/lib/flags/keys";
 import { StartPlanButton } from "./StartPlanButton";
 import { IMember, IProject, IUser } from "@/models/model";
 import React, { Suspense, useCallback, useContext, useEffect } from "react";
@@ -82,7 +80,6 @@ const Header = ({
     void prefetchInboxQuery(queryClient, currentUser.id);
   }, [currentUser.id, queryClient]);
 
-  const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
   const isTrialUser = !currentUser.UserSetting.trialStatus;
 
   useEffect(() => {
@@ -127,7 +124,7 @@ const Header = ({
           </div>
 
           {project && <TitleKanbanHeader project={project} />}
-          {startPlanEnabled && <StartPlanButton project={currentProject} compact />}
+          <StartPlanButton project={currentProject} compact />
 
           <Suspense
             fallback={<div className="hidden text-white md:block"> loading header...</div>}

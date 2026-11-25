@@ -64,7 +64,7 @@ function harness({ projectId = 101, taskId = 1001, subscriptionProjectId = 101 }
           },
         };
       },
-      update: async ({ data }) => Object.assign(subscription, data),
+      updateMany: async ({ data }) => { Object.assign(subscription, data); return { count: 1 }; },
     },
     agentWebhookDelivery: {
       create: async ({ data }) => {
@@ -77,7 +77,10 @@ function harness({ projectId = 101, taskId = 1001, subscriptionProjectId = 101 }
       },
       updateMany: async ({ where, data }) => {
         const rows = deliveries.filter((row) => matches(row, where));
-        rows.forEach((row) => Object.assign(row, data));
+        rows.forEach((row) => {
+          Object.assign(row, data);
+          if (data.status === "cancelled") calls.cancelled.push(row.id);
+        });
         return { count: rows.length };
       },
       findUnique: async ({ where }) => {

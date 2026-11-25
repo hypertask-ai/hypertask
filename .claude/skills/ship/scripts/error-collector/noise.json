@@ -25,6 +25,14 @@
     "name": "Stripe webhook signature rejected"
   },
   {
+    "id": "email-delivery-notice",
+    "service": "email",
+    "match": "^\\[email-event\\] email\\.(?:bounced|failed)\\b",
+    "reason": "Resend reports one notice per bounced or refused recipient (YPER4-359), and the app logs it at error level so daily email counts stay exact. One dead, blocked or mistyped address is not a system fault; a burst over the hourly limit still files one source-fix ticket.",
+    "alert": true,
+    "name": "Email bounce or refused send"
+  },
+  {
     "id": "ssl-mode-warning",
     "service": "vercel",
     "match": "Warning: SECURITY WARNING: The SSL modes",

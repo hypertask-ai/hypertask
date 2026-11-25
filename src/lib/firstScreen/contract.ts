@@ -14,6 +14,7 @@ export type FirstScreenDisplayPreferences = {
   railCollapsed: boolean;
   quickTips: boolean;
   draftsFirst: boolean;
+  cardParts?: string[];
 };
 
 export type FirstScreenScope = {
@@ -33,6 +34,8 @@ export function hasFirstScreenDisplayPreferences(
       !["porcelain", "graphite", "graphite-2", "amoled", "dia"].includes(p.theme ?? "") ||
       typeof p.railCollapsed !== "boolean" || typeof p.quickTips !== "boolean" ||
       typeof p.draftsFirst !== "boolean" || typeof p.timeZone !== "string" || typeof p.locale !== "string") return false;
+  if (p.cardParts !== undefined && (!Array.isArray(p.cardParts) || p.cardParts.length > 16 ||
+      !p.cardParts.every((key) => typeof key === "string" && /^[a-zA-Z]{1,32}$/.test(key)))) return false;
   try {
     new Intl.DateTimeFormat(p.locale, { timeZone: p.timeZone }).format(0);
     return true;

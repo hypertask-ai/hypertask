@@ -49,7 +49,7 @@ function fake({ pulls = [], files = {}, comments = {}, runs = [], guardRuns = []
           calls.runQueries.push(query);
           return { data: { workflow_runs: query.head_sha ? guardRuns : runs } };
         },
-        rerunWorkflowRun: async query => { calls.reruns.push(query); return { data: {} }; },
+        reRunWorkflow: async query => { calls.reruns.push(query); return { data: {} }; },
       },
       repos: {
         getCommit: async () => ({ data: { sha: 'production-sha' } }),
@@ -137,11 +137,13 @@ test('an over-cap agent change goes back to the guard and the rest are left alon
   const human = pull(3, { login: 'valentinyeo', type: 'User' }, { additions: 900, changed_files: 1 });
   const dependabot = pull(4, { login: 'dependabot[bot]', type: 'Bot' }, { additions: 700, changed_files: 1 });
   const guardRuns = [guardRun(3, 1, 'sha1'), guardRun(5, 1, 'sha1')];
-  const { posts, requests, calls } = await run({
+  const { result, posts, requests, calls } = await run({
     pulls: [big, small, human, dependabot],
     files: { 1: [file('src/a.ts', 500)], 2: [file('src/b.ts', 200)] },
     guardRuns,
   });
+  assert.deepEqual(result.counts.sent, [1]);
+  assert.deepEqual(result.counts.unavailable, []);
   assert.deepEqual(requests, [], 'no GitHub REST call by hand; only the client may write');
   assert.deepEqual(calls.reruns, [{ owner: 'hypertask-ai', repo: 'hypertask', run_id: 5 }], 'the newest guard run at this head is re-run');
   const guardQueries = calls.runQueries.filter(query => query.head_sha);

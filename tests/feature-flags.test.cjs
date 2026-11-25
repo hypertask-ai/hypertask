@@ -1521,9 +1521,71 @@ test("server description in the first page load is permanent and no longer regis
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("internal team saved plan stays on for old tabs and the stored switch is gone", async () => {
+  const key = "htpr-7852-internal-team-saved-plan";
+  assert.equal(flags.HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261122140000_drop_htpr_7852_internal_team_saved_plan_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  for (const userId of [6, 985, 42]) {
+    assert.equal(await flags.isFeatureEnabled(key, userId), false);
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+});
+
+test("the Free 2 GB storage cap stays on and its stored EVERYONE row stays for rollback", async () => {
+  const key = "htpr-7924-free-storage-2gb";
+  assert.equal(flags.HTPR_7924_FREE_STORAGE_2GB_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.existsSync(path.join(root, "src/prisma/migrations/20261122150000_drop_htpr_7924_free_storage_2gb_flag")), false);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/lib/planLimits.ts"), "utf8").includes(key), false);
+  for (const mode of ["EVERYONE", "OFF"]) {
+    listedRows = [{ key, mode, updatedAt: new Date() }];
+    assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+    for (const userId of [6, 985, 42]) {
+      assert.equal(await flags.isFeatureEnabled(key, userId), false);
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+});
+
+test("Ctrl+K ellipsis flag is retired and the placeholder stays on for old tabs", async () => {
+  const key = "htpr-7871-ctrlk-ellipsis";
+  assert.equal(flags.HTPR_7871_CTRLK_ELLIPSIS_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261115120000_drop_htpr_7871_ctrlk_ellipsis_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  for (const userId of [6, 985, 42]) {
+    assert.equal(await flags.isFeatureEnabled(key, userId), false);
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+});
+
 for (const [key, risk] of [
   ["htpr-7982-cancelled-free", "money"],
-  ["htpr-8215-agent-archive-delete", "data-deletion"],
+  ["htpr-7575-phone-chat-delete", "data-deletion"],
   ["yper4-651-self-follow-quiet", "customer-email"],
 ]) {
   test(`owner-authorized changes support all modes for ${risk}`, async () => {

@@ -63,7 +63,7 @@ export function plainTitle({ kind = "error", url, message, source }) {
 export function plainSummary({ url, message, source }) {
   const where = isBrowserSource(source) ? "in the browser" : "on the server";
   return (
-    `Something failed ${where} while someone was using ${plainPageName(url)} ` +
-    `(${plainProblem(message)}); they may have seen an error or a part of the page that did not load.`
+    `Something failed ${where} (${plainProblem(message)}). Someone was using ` +
+    `${plainPageName(url)} at the time. They may have seen an error or a partial page.`
   );
 }

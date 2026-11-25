@@ -42,6 +42,9 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/flags/definitions/htpr-8931-ctrlk-integrated-tabs") return { HTPR_8931_CTRLK_INTEGRATED_TABS_FLAG: "htpr-8931-ctrlk-integrated-tabs" };
     if (id === "@/lib/flags/definitions/htpr-8824-ai-chat-one-composer") return { HTPR_8824_AI_CHAT_ONE_COMPOSER_FLAG: "htpr-8824-ai-chat-one-composer" };
     if (id === "@/lib/flags/definitions/htpr-9021-no-empty-chats") return { HTPR_9021_NO_EMPTY_CHATS_FLAG: "htpr-9021-no-empty-chats" };
+    if (id === "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing") return { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG: "htpr-8095-task-create-ai-step-timing" };
+    if (id === "@/lib/flags/definitions/htpr-9300-compose-cached-open") return { HTPR_9300_COMPOSE_CACHED_OPEN_FLAG: "htpr-9300-compose-cached-open" };
+    if (id === "@/lib/analytics/productPerformance") return { beginTaskCreatePerformanceTrace: () => null, completeTaskCreatePerformanceTrace: () => {}, completeTaskCreatePerformanceTraceAfterPaint: () => {} };
     if (id === "@/components/Common/ComposerPlusActions") return { ComposerPlusActions: () => null };
     if (id === "@/lib/flags/definitions/htpr-8943-ctrlk-tabs-on-top") return { HTPR_8943_CTRLK_TABS_ON_TOP_FLAG: "htpr-8943-ctrlk-tabs-on-top" };
     if (id === "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model") return { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" };
@@ -51,6 +54,8 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/ai/prompts/registry") return registry;
     if (id === "@/lib/ai/chipEvents") return { signalAiChip: () => {} };
     if (id === "@/lib/ai/composeIntroTaskId") return { composeIntroTaskId: () => undefined };
+    if (id === "@/lib/contexts/mobileContext") return { MobileViewContext: require("react").createContext(false) };
+    if (id === "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen") return { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG: "htpr-8032-phone-chat-fullscreen" };
     if (id.startsWith("@/") || id.startsWith(".")) throw new Error(`Unstubbed ${file}: ${id}`);
     return require(id);
   }, mod, mod.exports);
@@ -365,7 +370,7 @@ async function withCompose(options, check) {
     "@/hooks/MultiPages/useAddDeleteTaskInBoards": { default: () => ({ createTaskGlobally() {} }) },
     "@/hooks/General/useProjectQuery": { useProjectQuery: () => ({ updateActiveItemAndItemInView: () => set(atoms.inViewObjectAtom, { taskId: 43, taskProjectId: 15 }) }) },
     "@/hooks/MultiPages/useUpdateTaskInBoards": { default: () => ({ updateTaskInCache() {} }) },
-    "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => ["task-43"] },
+    "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => ["task-43"], openSavedComposeTask: (fastOpen, openCached) => fastOpen && openCached(), openCachedTaskDetail: () => false },
     "@/lib/realtime/taskDetailRefresh": { preserveTaskAssigneesChangedDuringFetch: (_current, saved) => saved, refreshTaskDetailQueryCache: async () => {}, shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_current, saved) => saved },
     "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": { resolveComposeBoardTarget: () => ({ boardId: 15, showChip: false }) },
     "@/components/Common/Tooltip": { default: () => null },

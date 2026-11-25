@@ -33,7 +33,6 @@ const sourceModules = [
   "src/lib/internalCompTeams.ts",
   "src/lib/flags/definitions/htpr-7686-free-plan-limits.ts",
   "src/lib/flags/definitions/htpr-7924-free-file-25mb.ts",
-  "src/lib/flags/definitions/htpr-7924-free-storage-2gb.ts",
   "src/utils/controllers/projects/boardQuota.ts",
   "src/utils/controllers/projects/createProjectWithStableName.ts",
   "src/utils/controllers/projects/archiveProject.ts",
@@ -191,7 +190,6 @@ function fixture(options = {}) {
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       calls.push(["flag", key, userId]);
       if (key === "htpr-7924-free-file-25mb") return options.raisedFile !== false;
-      if (key === "htpr-7924-free-storage-2gb") return options.storageCap === true;
       return key === "htpr-7982-cancelled-free"
         ? options.cancelledFree === true
         : key === flag && options.enabled !== false;
@@ -352,7 +350,9 @@ test("flag Off adds no scope, plan, count or locking queries on any shared guard
   await h.policy.assertProjectTicketRoom(h.db, 15, 1, actor);
   await h.policy.assertTaskCountTransition(h.db, { projectId: 20, status: "Normal" }, { projectId: 15, status: "Normal" }, actor);
   await h.policy.assertFileSizeForProject(15, 26 * MiB, actor);
+  await h.policy.assertUploadAllowedForProject(15, 26 * MiB, actor);
   assertNoQuotaQueries(h);
+  assert.equal(h.calls.some((call) => call[1] === "htpr-7924-free-storage-2gb"), false);
 });
 
 test("file flag Off keeps the 10 MiB Free limit and its message; flag On refuses only above 25 MiB", async () => {
@@ -371,7 +371,7 @@ test("file flag Off keeps the 10 MiB Free limit and its message; flag On refuses
 
 test("storage cap refuses an upload that would pass 2 GiB and allows one that lands exactly on it", async () => {
   const GiB = 1024 * MiB;
-  const h = fixture({ storageCap: true, usedBytes: 2 * GiB - 5 * MiB });
+  const h = fixture({ usedBytes: 2 * GiB - 5 * MiB });
   await h.policy.assertUploadAllowedForProject(15, 5 * MiB, actor);
   await assert.rejects(h.policy.assertUploadAllowedForProject(15, 5 * MiB + 1, actor), (error) => {
     assert.equal(error.limit, "storage");
@@ -380,22 +380,24 @@ test("storage cap refuses an upload that would pass 2 GiB and allows one that la
     assert.equal(error.message, "Your team has used its 2 GB of free storage. Upgrade to Pro to upload more.");
     return true;
   });
+  assert.equal(h.calls.some((call) => call[1] === "htpr-7924-free-storage-2gb"), false);
 });
 
-test("storage cap is skipped with its flag Off, for a paid team and for a file already stored", async () => {
+test("storage cap stays on for a Free team, and still skips a paid team and a file already stored", async () => {
   const GiB = 1024 * MiB;
-  const off = fixture({ storageCap: false, usedBytes: 2 * GiB });
-  await off.policy.assertUploadAllowedForProject(15, MiB, actor);
-  const paid = fixture({ storageCap: true, usedBytes: 2 * GiB, entitlement: "paid" });
+  const free = fixture({ usedBytes: 2 * GiB });
+  await assert.rejects(free.policy.assertUploadAllowedForProject(15, MiB, actor), (error) => error.limit === "storage");
+  assert.equal(free.calls.some((call) => call[1] === "htpr-7924-free-storage-2gb"), false);
+  const paid = fixture({ usedBytes: 2 * GiB, entitlement: "paid" });
   await paid.policy.assertUploadAllowedForProject(15, MiB, actor);
-  const stored = fixture({ storageCap: true, usedBytes: 2 * GiB });
+  const stored = fixture({ usedBytes: 2 * GiB });
   await stored.policy.assertUploadAllowedForProject(15, MiB, actor, { alreadyStored: true });
   await assert.rejects(stored.policy.assertUploadAllowedForProject(15, MiB, actor), (error) => error.limit === "storage");
 });
 
 test("storage cap counts bytes already pending in the same batch and locks the team before reading usage", async () => {
   const GiB = 1024 * MiB;
-  const h = fixture({ storageCap: true, usedBytes: 2 * GiB - 5 * MiB });
+  const h = fixture({ usedBytes: 2 * GiB - 5 * MiB });
   await h.policy.assertUploadAllowedForProject(15, 4 * MiB, actor, { pendingBytes: 0 });
   await assert.rejects(
     h.policy.assertUploadAllowedForProject(15, 4 * MiB, actor, { pendingBytes: 4 * MiB }),
@@ -414,7 +416,7 @@ test("storage cap counts bytes already pending in the same batch and locks the t
 });
 
 test("the per-file limit still wins over the storage cap and the storage query names only attachments", async () => {
-  const h = fixture({ storageCap: true, usedBytes: 0 });
+  const h = fixture({ usedBytes: 0 });
   await assert.rejects(h.policy.assertUploadAllowedForProject(15, 26 * MiB, actor), (error) => error.limit === "file_size");
   await h.policy.assertUploadAllowedForProject(15, 1, actor);
   const used = h.calls.find((call) => call[0] === "storage.used");
@@ -811,6 +813,7 @@ function moveFixture(options = {}) {
     "@/lib/api/errorMessage": { toErrorMessage: (body, fallback) => body?.message ?? body?.error ?? fallback },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
     "../turbopuffer/turbopufferHelper": { upsertPageToTurbopuffer: async () => {} },
     "@/utils/controllers/tasks/single": {
       TASK_IDENTITY_CONFLICT_CODE: "TASK_IDENTITY_CONFLICT",
@@ -1111,7 +1114,7 @@ test("archived-board writes and positive transitions serialize with board restor
 test("split compose preserves saved tickets and surfaces the refusal for unsaved drafts", () => {
   const compose = read("src/lib/ai/composeTask.ts");
   const branch = compose.slice(compose.indexOf('if ((error as { code?: string })?.code === "PLAN_LIMIT_REACHED")'));
-  assert.match(branch, /if \(!tasks.length\) throw error/);
+  assert.match(branch, /if \(!tasks.length\) (?:throw error|failCreate\(error\));/);
   assert.match(branch, /failedTitles.push\(\.\.\.drafts.slice\(index\)/);
   assert.match(branch, /toErrorMessage\(error/);
   assert.match(branch, /break;/);

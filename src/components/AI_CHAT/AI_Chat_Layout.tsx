@@ -10,11 +10,14 @@ import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { useGlobalUIState } from "@/components/ProviderGlobal/useGlobalUIState";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { HTPR_8030_CHAT_OPEN_RACE_FLAG } from "@/lib/flags/definitions/htpr-8030-chat-open-race";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
+import { HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8988-chat-window-layout";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
 import {
   MOBILE_OVERLAY_SHEET_Z,
   mobileOverlayAppSheetBodyClass,
@@ -71,12 +74,15 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
     togglePopover,
     minimized,
   } = chat;
+  const sideBySide = useFlag(HTPR_8988_CHAT_WINDOW_LAYOUT_FLAG);
   const chatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const dockMinimizedTab = chatCleanup && minimized && !showQuickTips;
   const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const deferChatOpen = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
   const chatOpenFlagReady = useFlagReady(HTPR_8038_CHAT_OPENER_READY_FLAG);
+  const phoneViewport = useMobileVisualViewport(phoneChatFullscreen && isMbl && showAiChatInterface);
   const hydrated = useHydrated();
   const openerDisabled = !hydrated && (!chatOpenFlagReady || deferChatOpen);
   const { openAIChatInterface, toggleAIChatInterface } = useGlobalUIState();
@@ -100,9 +106,32 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
       window.__htHandleBack = previous;
     };
   }, [isMbl, showAiChatInterface]);
+  const keyboardOpen = (phoneViewport?.bottomInset ?? 0) > 0;
+  const phoneChatTop = phoneViewport
+    ? Math.max(0, phoneViewport.layoutHeight - phoneViewport.visibleHeight - phoneViewport.bottomInset)
+    : 0;
+  const phoneChatScreen = (children: React.ReactNode) => (
+    <div
+      data-ai-chat-phone-fullscreen=""
+      role="dialog"
+      aria-label="AI Chat"
+      className={cn(
+        "fixed inset-x-0 z-toast flex min-h-0 flex-col overflow-hidden bg-ai-chat text-white-black",
+        "pt-[env(safe-area-inset-top)]",
+        keyboardOpen ? "pb-0" : "pb-[env(safe-area-inset-bottom)]",
+      )}
+      style={{
+        top: phoneChatTop,
+        height: phoneViewport ? `${phoneViewport.visibleHeight}px` : "100dvh",
+      }}
+    >
+      {children}
+    </div>
+  );
   return (
       <React.Suspense fallback={null}>
         {showAiChatInterface && isSidebarMode && isMbl && (
+          phoneChatFullscreen ? phoneChatScreen(<AI_Chat_Sidebar inOffcanvas />) : (
           <AppSheet
             onClose={togglePopover}
             ariaLabel="AI Chat"
@@ -116,6 +145,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
           >
             <AI_Chat_Sidebar inOffcanvas />
           </AppSheet>
+          )
         )}
       {!showAiChatInterface && !isMbl && (
         <button
@@ -134,6 +164,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
         {showAiChatInterface && !isSidebarMode && (
         <>
           {isMbl ? (
+            phoneChatFullscreen ? phoneChatScreen(<ChatWindow />) : (
             <AppSheet
               onClose={togglePopover}
               ariaLabel="AI Chat"
@@ -150,7 +181,8 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
             >
               <ChatWindow />
             </AppSheet>
-          ) : (
+            )
+          ) : sideBySide && chat.chatWindows?.enabled ? null : (
             <div
               className={cn(
                 "fixed right-[0.5rem] z-floating",

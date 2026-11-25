@@ -7,7 +7,11 @@ import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/ht
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 import { HTPR_8868_INBOX_FIRST_ROW_FLAG } from "@/lib/flags/definitions/htpr-8868-inbox-first-row";
+import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { HTPR_9029_STICKY_SPLITS_FLAG } from "@/lib/flags/definitions/htpr-9029-sticky-splits";
+import { HTPR_9071_INBOX_ZERO_IMAGE_FLAG } from "@/lib/flags/definitions/htpr-9071-inbox-zero-image";
+import { hidesInboxZeroSplitTabs } from "@/lib/inboxSplitTabs";
+import { HTPR_9076_NARROW_INBOX_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-9076-narrow-inbox-layout";
 
 import {
   FC,
@@ -20,7 +24,7 @@ import {
   useState,
 } from "react";
 
-import { Search, Settings2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Settings2, X } from "lucide-react";
 import {
   INotification,
   ISavedContent,
@@ -78,6 +82,7 @@ import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG, HTPR_7841_INBOX_KEEPS_SCROLL_FLAG 
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
+import { useGetUserDrafts } from "@/hooks/General/useGetUserDrafts";
 import InboxZeroState from "@/components/Common/InboxZeroState";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 
@@ -131,6 +136,7 @@ const Inbox = ({
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
   const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const inboxFirstRow = useFlag(HTPR_8868_INBOX_FIRST_ROW_FLAG);
+  const narrowInboxTabs = useFlag(HTPR_9076_NARROW_INBOX_LAYOUT_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {
@@ -139,6 +145,7 @@ const Inbox = ({
     return cached?.serverDocumentGeneration === candidate?.scope.generation ? candidate : null;
   });
   const [seeded] = useState(() => Boolean(inboxDocument));
+  const { drafts } = useGetUserDrafts(currentUser.id, inboxDocument?.data.drafts);
   const InboxSplit = seeded ? SeededInboxSplit : ClientInboxSplit;
   const isMbl = useMobileView();
   const [appShellRail] = useRecoilState(appShellRailAtom);
@@ -757,6 +764,9 @@ const Inbox = ({
     toast.dismiss(toastId);
   };
   const { isInboxZero } = useInboxZeroStyling();
+  const splitRows = _notificationsTQ?.structuredData?.data ?? inboxDocument?.data.payload.structuredData.data ?? [];
+  const splitLengths = splitRows.map((rows) => rows.length);
+  const unsavedCommentDrafts = drafts.filter((draft) => draft.type === "Comment" && draft.saved !== true).length;
   const activeSplit = _notificationsTQ?.structuredData?.tabs[globalFocus.currSplit]?.project;
   const canArchiveSafe = archiveSafeEnabled &&
     (activeSplit === "Updates" || activeSplit === "Important" || activeSplit === "Agents");
@@ -874,8 +884,15 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
+              narrowLayout={narrowInboxTabs}
+              hidden={narrowInboxTabs && isMbl}
               SelectedCount={showSelectedCount ? InboxSelectedCount : null}
               trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
             >
@@ -912,6 +929,7 @@ const Inbox = ({
                 ),
               )}
             </SplitTitlesContainer>
+            </SplitTabsUnlessInboxZero>
 
             <div
               className={
@@ -983,7 +1001,12 @@ const Inbox = ({
                 </>
               ))}
             </div>
-            {!isMbl && (
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
+            {!isMbl && !narrowInboxTabs && (
               <div
                 className={`flex inbox_footer @md:hidden no-scrollbar scrollbar-none  @md:gap-8 w-100 ${
                   isInboxZero ? "bg-transparent" : "bg-hoverCardBackground"
@@ -1009,6 +1032,12 @@ const Inbox = ({
                 )}
               </div>
             )}
+            </SplitTabsUnlessInboxZero>
+            <SplitTabsUnlessInboxZero
+              isInboxZero={isInboxZero}
+              splitLengths={splitLengths}
+              unsavedCommentDrafts={unsavedCommentDrafts}
+            >
             {isMbl && (
               <MobileInboxSplitDock
                 tabs={_notificationsTQ?.structuredData?.tabs ?? []}
@@ -1017,6 +1046,7 @@ const Inbox = ({
                 trailingAction={archiveSafeEnabled ? archiveSafeAction : null}
               />
             )}
+            </SplitTabsUnlessInboxZero>
           </div>
           {!isMbl && (
             <Link
@@ -1057,20 +1087,75 @@ const Inbox = ({
 
 export default Inbox;
 
+const SplitTabsUnlessInboxZero = ({
+  isInboxZero,
+  splitLengths,
+  unsavedCommentDrafts,
+  children,
+}: {
+  isInboxZero: boolean;
+  splitLengths: readonly number[];
+  unsavedCommentDrafts: number;
+  children?: ReactNode;
+}) => {
+  const hideInboxZeroTabs = useFlag(HTPR_9071_INBOX_ZERO_IMAGE_FLAG);
+  if (hidesInboxZeroSplitTabs({ enabled: hideInboxZeroTabs, isInboxZero, splitLengths, unsavedCommentDrafts })) return null;
+  return children;
+};
+
 interface IProps {
   children?: ReactNode;
   contentGap?: boolean;
+  narrowLayout?: boolean;
+  hidden?: boolean;
   SelectedCount?: typeof InboxSelectedCount | null;
   trailingAction?: ReactNode;
 }
 const SplitTitlesContainer: FC<IProps> = ({
   children,
   contentGap = false,
+  narrowLayout = false,
+  hidden = false,
   SelectedCount = null,
   trailingAction,
 }) => {
   const stickySplits = useFlag(HTPR_9029_STICKY_SPLITS_FLAG);
+  const overflowEnabled = useFlag("htpr-9080-split-overflow");
+  const { data: preferences } = useGetUserPreferences();
+  const overflowHidden = overflowEnabled && preferences?.inboxSplitsOverflowHidden === true;
+  const [globalFocus] = useRecoilState(globalNotificationFocusAtom);
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const row = tabsRef.current;
+    if (!overflowHidden || !row) return;
+    const updateArrows = () => {
+      setCanScrollLeft(row.scrollLeft > 1);
+      setCanScrollRight(row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+    };
+    const revealSelected = () => {
+      const selected = row.children[globalFocus.currSplit];
+      if (selected instanceof HTMLElement) {
+        const bounds = row.getBoundingClientRect();
+        const tabBounds = selected.getBoundingClientRect();
+        if (tabBounds.left < bounds.left) row.scrollLeft += tabBounds.left - bounds.left;
+        else if (tabBounds.right > bounds.right) row.scrollLeft += tabBounds.right - bounds.right;
+      }
+      updateArrows();
+    };
+    revealSelected();
+    const observer = new ResizeObserver(revealSelected);
+    observer.observe(row);
+    for (const child of row.children) observer.observe(child);
+    row.addEventListener("scroll", updateArrows, { passive: true });
+    return () => {
+      observer.disconnect();
+      row.removeEventListener("scroll", updateArrows);
+    };
+  }, [overflowHidden, globalFocus.currSplit, children]);
   const [listScrolled, setListScrolled] = useState(false);
 
   useEffect(() => {
@@ -1098,13 +1183,39 @@ const SplitTitlesContainer: FC<IProps> = ({
         stickySplits
           ? `sticky top-0 z-sticky ${contentGap ? "bg-taskDetailPage" : "bg-containerBackground"} ${listScrolled ? "shadow-[0_1px_0_0_var(--border-light-gray-thin)]" : ""}`
           : "relative"
-      } hidden items-baseline pr-[16px] pt-4 ${
+      } ${hidden ? "hidden" : narrowLayout ? "flex" : "hidden @md:flex"} items-baseline pr-[16px] pt-4 ${
         contentGap ? "mx-[12px] w-[calc(100%-24px)] pb-4" : "w-full"
-      } responsive-inbox-padding @md:flex @md:gap-[9px] h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
+      } responsive-inbox-padding ${narrowLayout ? "gap-[9px]" : "@md:gap-[9px]"} h-full inbox_title overflow-x-auto scrollbar-none no-scrollbar`}
     >
-      <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
+      {overflowHidden && (canScrollLeft || canScrollRight) && (
+        <button
+          type="button"
+          aria-label="Scroll splits left"
+          disabled={!canScrollLeft}
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin bg-containerBackground p-1 text-text-light-gray disabled:opacity-30"
+          onClick={() => tabsRef.current?.scrollBy({ left: -Math.max(160, tabsRef.current.clientWidth * 0.75), behavior: "smooth" })}
+        >
+          <ChevronLeft size={14} />
+        </button>
+      )}
+      <div
+        ref={tabsRef}
+        data-testid="inbox-split-titles"
+        className={`pills-row group relative flex min-h-8 grow items-center gap-[9px] ${overflowHidden ? "min-w-0 flex-1 flex-nowrap overflow-x-auto scrollbar-none [&>div]:shrink-0" : "flex-wrap"}`}
+      >
         {children}
       </div>
+      {overflowHidden && (canScrollLeft || canScrollRight) && (
+        <button
+          type="button"
+          aria-label="Scroll splits right"
+          disabled={!canScrollRight}
+          className="shrink-0 rounded-[4px] border border-border-light-gray-thin bg-containerBackground p-1 text-text-light-gray disabled:opacity-30"
+          onClick={() => tabsRef.current?.scrollBy({ left: Math.max(160, tabsRef.current.clientWidth * 0.75), behavior: "smooth" })}
+        >
+          <ChevronRight size={14} />
+        </button>
+      )}
       {trailingAction}
       <ButtonGroup SelectedCount={SelectedCount} />
     </div>

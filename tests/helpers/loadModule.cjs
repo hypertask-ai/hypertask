@@ -43,6 +43,9 @@ function loadModule(file, stubs = {}) {
         if (specifier in plainLanguageTicketStubs) return plainLanguageTicketStubs[specifier];
         if (specifier === "@/utils/controllers/logs/quietPersonalLog") return require("./stub-map.cjs").quietPersonalLogStub();
         if (specifier === "@/utils/controllers/tasks/userCommentCounts") return { userCommentCountsByTaskId: async () => new Map() };
+        if (specifier === "@/lib/savedViews/boardDefaultSubtasks" && !(specifier in stubs)) {
+          return { boardDefaultShowsSubtasks: async () => false };
+        }
         if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return localRequire(specifier);
         const base = specifier.startsWith("@/") ? path.join(root, "src", specifier.slice(2)) : path.resolve(path.dirname(filename), specifier);
         const target = [base, ...[".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.js", "/index.mjs"].map(ext => base + ext)]
@@ -59,7 +62,7 @@ function loadModule(file, stubs = {}) {
 
 const stubContexts = new WeakMap();
 function stubModule(context, specifier, exports) {
-  const filename = requireRoot.resolve(specifier.startsWith("src/") ? path.join(root, specifier) : specifier);
+  const filename = resolvedModule(specifier);
   if (!stubContexts.has(context)) {
     const previous = new Map();
     stubContexts.set(context, previous);
@@ -76,6 +79,14 @@ function stubModule(context, specifier, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
+function resolvedModule(specifier) {
+  return requireRoot.resolve(specifier.startsWith("src/") ? path.join(root, specifier) : specifier);
+}
+
+function reloadModule(specifier) {
+  delete require.cache[resolvedModule(specifier)];
+}
+
 function findElement(element, type) {
   if (Array.isArray(element)) {
     for (const child of element) {
@@ -88,4 +99,4 @@ function findElement(element, type) {
   }
 }
 
-module.exports = { loadModule, stubModule, findElement, root };
+module.exports = { loadModule, stubModule, reloadModule, findElement, root };

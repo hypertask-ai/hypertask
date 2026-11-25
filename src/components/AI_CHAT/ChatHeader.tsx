@@ -1,4 +1,7 @@
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/definitions/htpr-7316-chat-scope-ticket";
+import { ChatScopeControl } from "./AI_Tiptap_Container";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
 import type { SidebarChatAgent, SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
@@ -152,7 +155,7 @@ function ChatSessionRow({
   );
 }
 
-export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean } = {}) => {
+export const ChatHeader = ({ sidebarChats, windowDrag = false, allowDocking = !windowDrag }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean; allowDocking?: boolean } = {}) => {
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
   const closeAgents = useCallback(() => setAgentsOpen(false), []);
@@ -178,6 +181,8 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
+  const phoneChatFullscreen = useFlag(HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG);
+  const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const headerMenus = useFlag("htpr-8956-ai-chat-header-menus");
   const keepClosedSwitch = useFlag("htpr-7530-keep-ai-chat-closed");
   const quietTicketOpen = pathname?.startsWith("/detail/");
@@ -570,7 +575,9 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
     return (
       <div
         data-ai-chat-mobile-header
-        className="z-10 flex min-h-[68px] items-center gap-1 px-2 py-2 text-white-black"
+        className={phoneChatFullscreen
+          ? "z-sticky flex h-11 shrink-0 items-center gap-1 px-2 text-white-black"
+          : "z-10 flex min-h-[68px] items-center gap-1 px-2 py-2 text-white-black"}
       >
         <button
           type="button"
@@ -600,7 +607,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             {runningIndicator}
           </div>
           )}
-          {(!sidebarChats || sidebarChats.target.kind === "ai") && <div
+          {(!sidebarChats || sidebarChats.target.kind === "ai") && !phoneChatFullscreen && <div
             data-ai-chat-mobile-model-label
             className="flex min-h-6 items-center gap-1 px-2 text-dense text-text-light-gray"
           >
@@ -610,6 +617,14 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
           </div>}
         </div>
+        {phoneChatFullscreen && !pathname?.startsWith("/chat") && (!sidebarChats || sidebarChats.target.kind === "ai") && (
+          <ChatScopeControl
+            mobile
+            compact
+            ticketScopeEnabled={ticketScopeEnabled}
+            onRestoreFocus={() => editor?.commands.focus("end")}
+          />
+        )}
         {agentsButton}
         <div className="relative shrink-0" ref={dropdownRef}>
           {historyButton}
@@ -757,7 +772,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                       }}
                     />
                   )}
-                  {!isMbl && aiSessionActionsAvailable && !windowDrag && (
+                  {!isMbl && aiSessionActionsAvailable && allowDocking && (
                     <MenuRow
                       icon={isSidebarMode ? PictureInPicture2 : PanelRight}
                       label={isSidebarMode ? "Floating window" : "Sidebar"}
@@ -838,7 +853,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && aiSessionActionsAvailable && !windowDrag && (
+              {!isMbl && aiSessionActionsAvailable && allowDocking && (
                 <button
                   type="button"
                   role="menuitem"

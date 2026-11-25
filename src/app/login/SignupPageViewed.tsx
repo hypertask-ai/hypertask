@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { captureBrowserEvent } from "@/lib/analytics/browserCapture";
+import { trackFathomEvent } from "@/lib/analytics/fathom";
 
 export default function SignupPageViewed({ enabled, userId }: { enabled: boolean; userId: number | null }) {
   const capturedRef = useRef(false);
@@ -9,6 +10,7 @@ export default function SignupPageViewed({ enabled, userId }: { enabled: boolean
   useEffect(() => {
     if (!enabled || capturedRef.current) return;
     capturedRef.current = true;
+    if (userId === null) trackFathomEvent("Login page viewed");
     captureBrowserEvent({
       event: "signup_page_viewed",
       properties: {

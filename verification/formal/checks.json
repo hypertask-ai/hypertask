@@ -1,0 +1,87 @@
+{
+  "tool": {
+    "name": "TLC",
+    "version": "1.7.4",
+    "jar": "https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar",
+    "sha256": "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
+  },
+  "checks": {
+    "seat-billing": {
+      "spec": "verification/formal/seat-billing/SeatBilling.tla",
+      "config": "verification/formal/seat-billing/SeatBilling.cfg",
+      "properties": [
+        {"name": "JoinNeverDecreases", "expect": "holds"},
+        {"name": "ReconcileMatchesSeats", "expect": "violated", "witness": ["TimedOut", "Landed"]},
+        {"name": "LeaseExcludesOverlap", "expect": "violated", "witness": ["LeaseLost", "Acquire"]}
+      ]
+    },
+    "webhook-retry": {
+      "spec": "verification/formal/webhook-retry/BoardWebhook.tla",
+      "config": "verification/formal/webhook-retry/BoardWebhook.cfg",
+      "properties": [
+        {"name": "AttemptsBound", "expect": "holds"},
+        {"name": "PostsWithinCap", "expect": "violated", "witness": ["PostOk", "Record", "PostOk"]},
+        {"name": "SuccessNotReportedFailed", "expect": "violated", "witness": ["PostOk", "Sweep", "PostFail"]}
+      ]
+    },
+    "chat-send-queue": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/ChatSendQueue.cfg",
+      "properties": [
+        {"name": "MessageConserved", "expect": "holds"},
+        {"name": "DoneNotQueued", "expect": "holds"},
+        {"name": "FailedSendKeepsQueued", "expect": "holds"},
+        {"name": "ChatSwitchKeepsQueue", "expect": "holds"},
+        {"name": "QueueOrderKept", "expect": "holds"},
+        {"name": "QueuedStoredBeforeReply", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "LookupReply", "ReplyStored", "Accept"]},
+        {"name": "StoppedReleasesSend", "expect": "holds"},
+        {"name": "StoppedStreamCloses", "expect": "holds"},
+        {"name": "ReplyEndReleasesSend", "expect": "holds"},
+        {"name": "AcquisitionWindowKept", "expect": "holds"},
+        {"name": "AcquisitionRetried", "expect": "holds"},
+        {"name": "AcquisitionAttemptsBounded", "expect": "holds"},
+        {"name": "AcquisitionNotReplayed", "expect": "holds"}
+      ]
+    },
+    "chat-send-queue-7785": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug7785.cfg",
+      "properties": [
+        {"name": "QueuedStoredBeforeReply", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "ReplyStored", "Accept"]}
+      ]
+    },
+    "chat-send-queue-7767": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug7767.cfg",
+      "properties": [
+        {"name": "MessageConserved", "expect": "violated", "witness": ["Compose", "Enqueue", "Switch"]},
+        {"name": "ChatSwitchKeepsQueue", "expect": "violated", "witness": ["Compose", "Enqueue", "Switch"]},
+        {"name": "FailedSendKeepsQueued", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "Refuse", "Switch"]},
+        {"name": "QueueOrderKept", "expect": "violated", "witness": ["Compose", "Enqueue", "Compose", "Switch", "Enqueue", "SendQueued", "Accept", "ReplyEnd"]}
+      ]
+    },
+    "chat-send-queue-7794": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug7794.cfg",
+      "properties": [
+        {"name": "StoppedReleasesSend", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "Accept", "Stop"]},
+        {"name": "StoppedStreamCloses", "expect": "violated", "witness": ["Compose", "Enqueue", "SendQueued", "Accept", "Stop"]}
+      ]
+    },
+    "chat-send-queue-9111": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug9111.cfg",
+      "properties": [
+        {"name": "AcquisitionWindowKept", "expect": "violated", "witness": ["PollStart", "PollWait", "PollWait", "AcquisitionFail"]},
+        {"name": "AcquisitionRetried", "expect": "violated", "witness": ["PollStart", "PollWait", "PollWait", "AcquisitionFail"]}
+      ]
+    },
+    "chat-send-queue-9111-replay": {
+      "spec": "verification/formal/chat-send-queue/ChatSendQueue.tla",
+      "config": "verification/formal/chat-send-queue/Bug9111Replay.cfg",
+      "properties": [
+        {"name": "AcquisitionNotReplayed", "expect": "violated", "witness": ["PollStart", "OtherReleases", "PollAcquire", "CallbackFail", "PollAcquire"]}
+      ]
+    }
+  }
+}

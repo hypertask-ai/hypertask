@@ -18,24 +18,23 @@ import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
 import Tooltip from "@/components/Common/Tooltip";
-import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/keys";
+import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG , HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG , HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG , HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG, HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG , HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
+import { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG } from "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing";
+import { HTPR_9300_COMPOSE_CACHED_OPEN_FLAG } from "@/lib/flags/definitions/htpr-9300-compose-cached-open";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
+import { beginTaskCreatePerformanceTrace, completeTaskCreatePerformanceTrace, completeTaskCreatePerformanceTraceAfterPaint, type TaskCreateTraceScope } from "@/lib/analytics/productPerformance";
 import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
+import { cachedTaskDetailKey, openCachedTaskDetail, openSavedComposeTask } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG, HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG } from "@/lib/flags/keys";
-import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
 import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
@@ -84,6 +83,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
   const guaranteeScreenshots = useFlag(HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG);
+  const aiStepTimingEnabled = useFlag(HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG);
+  const fastComposeOpen = useFlag(HTPR_9300_COMPOSE_CACHED_OPEN_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
@@ -371,7 +372,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     onBusyChange(true);
     setError(null);
     const assigneesAtFetchStart = taskContextRef.current?.currentTask?.assignees;
+    let traceScope: TaskCreateTraceScope | null = null;
     try {
+      if (fastComposeOpen) void import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").catch(() => undefined);
       let existingTaskId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       if (newTaskWindow && !destinationProject && detail && inView?.taskId &&
@@ -390,15 +393,30 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
+      const composed = await createComposedTask({
         text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(guaranteeScreenshots ? { guaranteeScreenshots } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(writerModelPicker && writerModel ? { writerModel } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
+        ...(aiStepTimingEnabled ? {
+          trace: {
+            begin: (taskWriterMs: number | null) => beginTaskCreatePerformanceTrace({
+              accountId: user.id,
+              projectId: project.id,
+              taskWriterMs,
+            }),
+            complete: completeTaskCreatePerformanceTrace,
+          },
+        } : {}),
       });
+      if (aiStepTimingEnabled) traceScope = composed.traceScope;
+      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = composed;
       let task = savedTask;
-      if (!mounted.current) return;
+      if (!mounted.current) {
+        completeTaskCreatePerformanceTrace("error", traceScope);
+        return;
+      }
       if (existingTaskId) {
         const queryKey = cachedTaskDetailKey(user.id, task.id);
         await queryClient.cancelQueries({ queryKey });
@@ -459,9 +477,18 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }
       const taskPath = `/detail/project-${projectId}/${task.uniqueIndex}`;
       setNewTicketPath(taskPath);
-      router.push(taskPath);
+      if (!openSavedComposeTask(fastComposeOpen && !window.location.pathname.startsWith("/chat"), () => openCachedTaskDetail({
+        queryClient,
+        accountId: user.id,
+        projectId,
+        uniqueIndex: task.uniqueIndex,
+        href: taskPath,
+        task,
+      }))) router.push(taskPath);
+      completeTaskCreatePerformanceTraceAfterPaint("task_detail", traceScope);
       if (!mobile || !newTaskWindow) onCreated();
     } catch (failure) {
+      completeTaskCreatePerformanceTrace("error", traceScope);
       if (mounted.current) setError(failure instanceof Error ? failure.message : "Couldn’t create the task. Your note is still here. Try again.");
     } finally {
       sending.current = false;

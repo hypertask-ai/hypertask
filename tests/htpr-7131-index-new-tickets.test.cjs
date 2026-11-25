@@ -18,8 +18,10 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
   const db = {
     project: {
       findFirst: async () => denied ? null : { id: 7049 },
-      findUnique: async () => ({ uniqueIdentifier: "QASA" }),
+      findUnique: async () => ({ uniqueIdentifier: "QASA", issuedUniqueIndex: 0 }),
+      updateMany: async () => ({ count: 1 }),
     },
+    taskNumberAlias: { aggregate: async () => ({ _max: { uniqueIndex: null } }) },
     section: { findFirst: async () => section },
     task: {
       count: async () => 1,
@@ -32,7 +34,11 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
       },
     },
     description: { findUnique: async () => ({ content: "" }) },
-    team_Activity: { update: noop },
+    team_Activity: {
+      update: noop,
+      updateMany: async () => ({ count: 1 }),
+      create: noop,
+    },
     drafts: { create: noop, createMany: noop },
     $executeRaw: noop,
   };

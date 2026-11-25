@@ -56,7 +56,7 @@ The ticket says “input words”; this implementation uses **input tokens**, ma
 3. Replace the old class version everywhere in the same PR. Preserve effort variants, plan access and automatic fallback to the previous working version for a provider failure, but do not expose the old version in any picker. Migrate/alias saved picks to the new class version. Do not bundle unrelated model classes into the finding's PR.
 4. Follow AGENTS.md's flag rules: a same-provider version swap with unchanged slots/plan gating and automatic fallback is a dependency update, not a new feature; new classes and deliberate access/price changes still follow their approval and flag rules. Premium work remains blocked on the premium-model policy above.
 5. Run verification on GitHub, not the VPS: `node --test tests/model-diff.test.cjs`, `tests/model-class-unique.test.cjs`, and the affected routing/pricing/saved-pick tests via the existing CI suite. Prove one visible model per class and that a saved old pick resolves to the replacement.
-6. After the required checks, owning-session merge and production deploy, follow `verify-qa`: each new model must return a real live chat answer on an authorized QA account. Check saved picks, routing and unchanged plan gating. Record evidence on its ticket before Done; a listing or a fixture is not live chat proof.
+6. After the required checks, owning-session merge and production deploy, follow `verify-hypertask`: each new model must return a real live chat answer on an authorized QA account. Check saved picks, routing and unchanged plan gating. Record evidence on its ticket before Done; a listing or a fixture is not live chat proof.
 
 ## Daily Action
 

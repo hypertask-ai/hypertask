@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # runner-selfupdate: refresh installed runner code from production, or install its five-minute timer.
 set -euo pipefail
-LIVE=${RUNNER_SELFUPDATE_LIVE:-$HOME/projects/ht-skills-live}
+STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
+SOURCE=${RUNNER_SELFUPDATE_SOURCE:-$HOME/projects/ht-skills-live}
+LIVE=${RUNNER_SELFUPDATE_LIVE:-$STATE/production}
 LIB=${RUNNER_SELFUPDATE_LIB:-$HOME/.local/lib/hypertask/runner-pickup}
 DISPATCH=${RUNNER_SELFUPDATE_DISPATCH:-$HOME/.claude/skills/runners/scripts/runner-dispatch}
 UNITS=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
-STATE=${RUNNER_SELFUPDATE_STATE:-$HOME/.local/state/runner-selfupdate}
 SYSTEMCTL=${RUNNER_SELFUPDATE_SYSTEMCTL:-systemctl}
 GIT=${RUNNER_SELFUPDATE_GIT:-git}
 SYNC_RETRY_DELAY=${RUNNER_SELFUPDATE_RETRY_DELAY:-5}
@@ -31,6 +32,15 @@ alert() {
 }
 
 sync_live() {
+  local remote
+  if [ ! -e "$LIVE" ]; then
+    remote=$("$GIT" -C "$SOURCE" remote get-url origin) || {
+      sync_failure='checkout|Could not identify the runner source remote'; return 1;
+    }
+    if ! "$GIT" clone -q --depth 1 --no-checkout --single-branch --branch production "$remote" "$LIVE"; then
+      sync_failure='checkout|Could not create the isolated runner checkout'; return 1
+    fi
+  fi
   if ! "$GIT" -C "$LIVE" fetch -q origin production; then
     sync_failure='fetch|Could not fetch the merged runner update'; return 1
   fi
@@ -55,8 +65,11 @@ install_timer() {
 run() {
   local scripts source changed=0 webhook_changed=0 enabled n dirty i
   local shell_files=(runner-pickup ci-wait runner-deliver runner-chat-reply ship-identity runner-selfupdate user-unit-check)
-  local unit_files=(runner-pickup@.service runner-pickup@.timer runner-webhook.service runner-selfupdate.service runner-selfupdate.timer)
+  local unit_files=(runner-webhook.service runner-selfupdate.service runner-selfupdate.timer)
   local sources=() targets=()
+  for source in runner-pickup@.service runner-pickup@.timer; do
+    [ ! -e "$UNITS/$source" ] || unit_files+=("$source")
+  done
   mkdir -p "$STATE"
   exec 9>"$STATE/update.lock"
   flock -n 9 || return 0
@@ -105,7 +118,6 @@ PY
     alert runners 'Could not list runner timers'; return 1
   fi
   n=$(awk '$1 ~ /^runner-pickup@[1-9][0-9]*\.timer$/ && $3 == "active" {sub(/^runner-pickup@/, "", $1); sub(/\.timer$/, "", $1); print $1}' <<<"$enabled" | sort -n | head -1)
-  [ -n "$n" ] || return 0
   trap interrupted TERM INT HUP
   deploying=1
   if ! backup=$(mktemp -d); then alert backup 'Could not create a backup of the running version'; return 1; fi
@@ -148,7 +160,11 @@ install_files() (
   }
   export -f systemctl install
   export RUNNER_SELFUPDATE_SYSTEMCTL=$SYSTEMCTL RUNNER_SELFUPDATE_LIB=$LIB RUNNER_PICKUP_UNIT_DIR=$UNITS
-  "$scripts/runner-pickup" install "$1" >/dev/null || exit 1
+  if [ -n "$1" ]; then
+    "$scripts/runner-pickup" install "$1" >/dev/null || exit 1
+  else
+    install_without_runner_timer || exit 1
+  fi
   "$scripts/runner-pickup" install-webhook >/dev/null || exit 1
   install -m 0755 "$scripts/runner-selfupdate" "$LIB/"
   install -D -m 0755 "$scripts/runner-dispatch" "$DISPATCH"
@@ -156,6 +172,14 @@ install_files() (
   "${USER_UNIT_CHECK:-$LIB/user-unit-check}" "$UNITS/runner-selfupdate.service" "$UNITS/runner-selfupdate.timer" || exit 1
   systemctl --user daemon-reload
 )
+
+install_without_runner_timer() {
+  local unit
+  install -m 0755 "$scripts/runner-pickup" "$scripts/runner-domain-pickup.py" "$scripts/runner_domains.py" "$LIVE/.claude/hooks/runner-inbox-stop.sh" "$LIB/" || return 1
+  for unit in runner-pickup@.service runner-pickup@.timer; do
+    [ ! -e "$UNITS/$unit" ] || install -m 0644 "$LIVE/.claude/systemd/$unit" "$UNITS/" || return 1
+  done
+}
 
 rollback() {
   local i failed=0 restore

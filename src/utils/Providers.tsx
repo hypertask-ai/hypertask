@@ -9,6 +9,7 @@ import { getTicketShellSeed, type TicketShellSeed } from "@/lib/firstScreen/tick
 import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
+import FathomSignupCompleted from "@/lib/analytics/FathomSignupCompleted";
 import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
@@ -17,13 +18,13 @@ import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, board
 import type { StateInitialValues } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { Toaster } from "react-hot-toast";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import MobileViewProvider, { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { StateRoot } from "@/lib/state";
+import { TicketAccountSwitchSlot } from "@/lib/auth/ticketAccountSwitchSlot";
 import { AuthProvider } from "@/hooks/General/useAuth";
 import GlobalProvider from "@/components/ProviderGlobal/GloablProviders";
-import MobileViewProvider from "@/lib/contexts/mobileContext";
 import { UndoProvider } from "@/hooks/General/useUndo";
 import { DeviceProvider } from "@/lib/contexts/deviceContext";
 import ThemeListener from "@/lib/contexts/ThemeListener";
@@ -210,6 +211,7 @@ export default function Provider({
         <DeviceProvider initialIsApple={initialIsApple}>
           <MobileViewProvider initialIsMobile={initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
+              <TicketAccountSwitchSlot />
               <UndoProvider>
                 <MobileBlockingProvider>
                   <AuthProvider authenticatedUserId={authenticatedUserId}>
@@ -220,6 +222,7 @@ export default function Provider({
                         <FlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags ?? shell?.flags ?? flagSeed ?? undefined}>
                           <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
+                          <FathomSignupCompleted accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}

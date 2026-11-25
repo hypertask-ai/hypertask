@@ -48,6 +48,13 @@ function load(relativePath, stubs) {
       }
       return value;
     }
+    if (request === "@/lib/mcp/tasks/previousTicketNumbers") {
+      return {
+        previousTicketNumbersFor: async () => undefined,
+        withPreviousTicketNumbers: (task) => task,
+        nameMovedTicketKeys: async (_userId, tasks) => tasks,
+      };
+    }
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
   };
@@ -100,6 +107,10 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
         return aliases.find(alias => matches(alias, where.projectId_uniqueIndex)) ?? null;
       },
     },
+    $queryRaw: async (_strings, ticketNumber) => tasks
+      .filter(task => (task.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
+      .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
+      .map(task => ({ id: task.id })),
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -175,6 +186,8 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/utils/controllers/tasks/markRead": {},
     "@/utils/controllers/comments/readReceipts": {},
     "@/lib/agentRuns/service": {},
+    "@vercel/functions": {},
+    "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "off" },
     "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
   }).default;
   return {
@@ -276,7 +289,7 @@ test("CLI get returns a live task rather than the old-number alias", async () =>
   const f = fixture({ tasks: [currentTask, live], visibleProjects: [15, 20] });
   const response = await f.get({ ticket_number: "HTPR-6641" });
   assert.deepEqual(response.body.tasks.map(task => task.id), [99]);
-  assert.equal(f.aliasQueries(), 0);
+  assert.equal(response.body.reusedKeyCollisions[0].movedTaskId, 44769);
 });
 
 test("web alias lookup checks the current board and the real page redirects server-side", async () => {

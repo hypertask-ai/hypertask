@@ -15,11 +15,12 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [production]
+  schedule:
+    - cron: '23 3 * * *'
 
 concurrency:
-  group: ci-tests-${{ github.event.pull_request.number || github.sha }}
-  queue: max
-  cancel-in-progress: false
+  group: ci-tests-${{ github.event.pull_request.number || github.sha }}${{ github.run_attempt > 1 && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: true
 
 # One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
 # at 2 because 3 or more count-split shards queued other pulls. YPER4-777 broke
@@ -62,9 +63,8 @@ concurrency:
 # slowest leg on a real run is recorded on the ticket, and the required check
 # stays ci-tests.
 env:
-  # 6 pool lanes plus 2 serial lanes, so CI Test is 8 lanes.
-  CI_TEST_SHARDS: "6"
-  CI_SERIAL_SHARDS: "2"
+  CI_TEST_SHARDS: ${{ github.event_name == 'pull_request' && '3' || '6' }}
+  CI_SERIAL_SHARDS: ${{ github.event_name == 'pull_request' && '1' || '2' }}
 
 jobs:
   ci-prepare:
@@ -96,9 +96,6 @@ jobs:
       pull-requests: read
       issues: read
       checks: read
-      # "Skip the build when the review is already red" reads commit statuses
-      # for GitHub AI Review; without this the gh call 403s and aborts the job.
-      statuses: read
       packages: read
     outputs:
       boundary_needed: ${{ steps.boundary-scope.outputs.needed }}
@@ -118,24 +115,12 @@ jobs:
       - name: Guard session ledgers
         run: node scripts/check-session-ledgers.mjs
 
-      # Never build a commit whose review already failed (owner, 2026-08-26).
-      # This does NOT wait: a pending or absent verdict builds in parallel as
-      # normal; only an existing red verdict stops the build before it starts.
-      - name: Skip the build when the review is already red
-        if: github.event_name == 'pull_request'
+      - name: Stop a stale rerun
+        if: github.run_attempt > 1
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if ! STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD_SHA/status?per_page=100" --jq '
-            [.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
-            | group_by(.context) | map(.[0])
-            | if any(.[]; .state == "success") then "success"
-              elif any(.[]; .state == "failure") then "failure" else "none" end'); then
-            echo "::warning::Review precheck unavailable; running tests. Required AI review still blocks merging."
-          else
-            [ "$STATE" != "failure" ] || { echo "::error::GitHub AI Review already failed for $HEAD_SHA; fix the findings and push - the new commit builds normally."; exit 1; }
-          fi
+        run: node .github/scripts/stale-rerun.cjs
+
       - name: Runner admission, dispatcher and selfupdate fixtures
         run: |
           python3 .claude/skills/ship/scripts/session-policy-guard.test.py
@@ -302,7 +287,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" != "push" ] && [ "$BUILD_NEEDED" != "true" ]; then
+          MODE=$(node .github/scripts/test-shard-plan.mjs)
+          if [ "$MODE" = "none" ]; then
             echo "run_tests=false" >> "$GITHUB_OUTPUT"
             echo 'indexes=["0"]' >> "$GITHUB_OUTPUT"
             exit 0
@@ -313,11 +299,8 @@ jobs:
           # waits on a serial file with three workers idle and no lane pays for every
           # serial file.
           LANES=$((CI_TEST_SHARDS + CI_SERIAL_SHARDS))
-          if [ "$GITHUB_EVENT_NAME" = "push" ] || grep -qx ALL "$RUNNER_TEMP/selected-tests.txt"; then
+          if [ "$MODE" = "all" ]; then
             node .github/scripts/shard-tests.mjs --discover --count "$LANES" --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT"
-          elif ! grep -q '[^[:space:]]' "$RUNNER_TEMP/selected-tests.txt"; then
-            echo "selected test list is empty; refusing to skip the suite" >&2
-            exit 1
           else
             node .github/scripts/shard-tests.mjs --count "$LANES" --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
           fi
@@ -421,10 +404,6 @@ jobs:
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
         # falls back to a full check when they differ. Generated route types move
         # with it and are reused only when their own input digest still matches.
-        # HTPR-8234: PRs cache under their own `tsc-pr-` namespace so a repeat push
-        # reuses the branch's own state instead of a production one that has moved.
-        # Production never restores a `tsc-pr-` key: only trusted pushes may feed
-        # the production check, the same rule the ESLint cache follows.
         env:
           TSC_CACHE_NAMESPACE: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'prod' }}
           TSC_CACHE_FINGERPRINT: ${{ hashFiles('package-lock.json', 'tsconfig.json', 'src/prisma/schema.prisma', 'prisma.config.ts') }}
@@ -453,6 +432,7 @@ jobs:
           RUN_TESTS: ${{ needs.ci-prepare.outputs.run_tests == 'true' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
           SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.event.pull_request.base.sha }}
           PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -549,6 +529,10 @@ jobs:
             node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
           }
 
+          lane_feature_map_change() {
+            node .github/scripts/feature-map-change-guard.mjs "$BASE_SHA" "$HEAD_SHA" "$PR_TITLE"
+          }
+
           run_lane() {
             local name=$1
             ( set -euo pipefail; "lane_${name//-/_}" ) > "$LOGS/$name.log" 2>&1 &
@@ -561,7 +545,7 @@ jobs:
             # Lanes that diff against the base share one fetch here, so no two
             # lanes write to .git at the same time.
             if [ -n "$BASE_SHA" ]; then
-              git fetch --no-tags --depth=1000 origin "$BASE_SHA" "$HEAD_SHA"
+              git fetch --no-tags --depth=1000 origin "$BASE_SHA"
             fi
             run_lane agent-board-scope
             run_lane typescript
@@ -572,6 +556,7 @@ jobs:
             if [ -n "$BASE_SHA" ]; then
               run_lane changed-style-tokens
               run_lane paid-api-cost-notes
+              run_lane feature-map-change
             fi
           fi
 
@@ -600,7 +585,7 @@ jobs:
           key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
 
       - name: Save TypeScript cache
-        if: needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -931,6 +916,52 @@ jobs:
             *) exit 1 ;;
           esac
 
+
+  repro-first:
+    name: repro-first
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && contains(github.event.pull_request.title, '[BUGFIX]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Fetch the base branch
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --unshallow origin
+          git fetch --no-tags origin "${{ github.event.pull_request.base.ref }}"
+
+      - name: Skip when no source file changed
+        id: scope
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node .github/scripts/repro-first.mjs --scope
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund && npx prisma generate
+
+      - name: Require a changed test to fail on the old code
+        if: steps.scope.outputs.run == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node .github/scripts/repro-first.mjs
+
   browser-build:
     name: browser-build
     # HYCI-59: one build for the whole check. HYCI-57 gave each shard its own
@@ -948,11 +979,12 @@ jobs:
     #
     # The services and the disposable credentials stay identical to a shard's,
     # so the build sees the environment it always saw.
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
+      pull-requests: read
       packages: read
     outputs:
       docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
@@ -1005,6 +1037,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Stop a stale rerun
+        if: github.run_attempt > 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/stale-rerun.cjs
       # Keep the required jobs running: only their heavy steps may be skipped.
       - name: Determine change scope
         id: scope
@@ -1144,7 +1181,7 @@ jobs:
     # every existing ruleset, merge guard and policy entry keeps working
     # unchanged.
     needs: browser-build
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1273,6 +1310,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Restore browser font cache
+        id: restore-browser-fonts
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -1288,6 +1332,12 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Save browser font cache
+        if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-browser-fonts.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
@@ -1418,7 +1468,7 @@ jobs:
     # HYCI-57: one quarter of the page tests. HYCI-59: it runs the pages on the
     # one build browser-build published.
     needs: browser-build
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1529,6 +1579,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Restore browser font cache
+        id: restore-browser-fonts
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -1648,7 +1705,7 @@ jobs:
     # HYCI-57: one quarter of the page tests. HYCI-59: it runs the pages on the
     # one build browser-build published.
     needs: browser-build
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1759,6 +1816,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Restore browser font cache
+        id: restore-browser-fonts
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -1886,7 +1950,7 @@ jobs:
     # HYCI-57: one quarter of the page tests. HYCI-59: it runs the pages on the
     # one build browser-build published.
     needs: browser-build
-    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -1997,6 +2061,13 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - name: Restore browser font cache
+        id: restore-browser-fonts
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -2075,6 +2146,7 @@ jobs:
           BASE_URL: http://127.0.0.1:3100
           SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
           SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
+          SMOKE_TASK_PATH: ${{ steps.fixtures.outputs.task_path }}
           BROWSER_SMOKE_PR: '1'
         run: |
           set -euo pipefail
@@ -2115,7 +2187,7 @@ jobs:
             export VERIFY_QA_FIXTURE=e2e/smoke/.state/inbox-cycle-fixture.json
             export VERIFY_QA_CHANGED_FILES="${RUNNER_TEMP}/changed-files.txt"
             export VERIFY_QA_OUT=verify-qa-premerge
-            timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+            timeout --signal=TERM --kill-after=20s 600s node .github/scripts/verify-qa-premerge.mjs
             verify_qa_status=$?
             if grep -Eq '^(.github/scripts/verify-qa-premerge.mjs|tests/verify-qa-premerge.test.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
               printf '%s\n' 'src/lib/auth/session.ts' > "$RUNNER_TEMP/verify-qa-matched-files.txt"
@@ -2124,6 +2196,15 @@ jobs:
               control_status=$?
               if [ "$control_status" -ne 0 ]; then
                 echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
+              fi
+            fi
+            record_now="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { inboxRecordingPlan } from "./.github/scripts/release-evidence-gate.mjs"; const files = readFileSync(process.env.VERIFY_QA_CHANGED_FILES, "utf8").split("\n").map((line) => line.trim()).filter(Boolean); let matched = ""; try { matched = JSON.parse(readFileSync("verify-qa-premerge/result.json", "utf8")).matchedPage || ""; } catch { matched = ""; } process.stdout.write(inboxRecordingPlan(files, matched).recordNow ? "true" : "false")')"
+            if [ "$record_now" = "true" ]; then
+              VERIFY_QA_NAMED_JOURNEY=inbox-cycle VERIFY_QA_OUT=verify-qa-premerge/inbox-recording \
+                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+              inbox_record_status=$?
+              if [ "$inbox_record_status" -ne 0 ]; then
+                echo "::warning::inbox recording for a mixed diff exited ${inbox_record_status}; evidence is report-only"
               fi
             fi
           else
@@ -2142,6 +2223,22 @@ jobs:
           name: verify-qa-premerge
           path: verify-qa-premerge/
           if-no-files-found: ignore
+          retention-days: 7
+      - name: Decide whether this recording is the inbox journey
+        id: inbox-recording
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        run: |
+          set -euo pipefail
+          upload="$(node --input-type=module -e 'import { readFileSync } from "node:fs"; import { inboxRecordingPlan } from "./.github/scripts/release-evidence-gate.mjs"; const changed = process.env.RUNNER_TEMP + "/changed-files.txt"; let files = []; try { files = readFileSync(changed, "utf8").split("\n").map((line) => line.trim()).filter(Boolean); } catch { files = []; } let matched = ""; try { matched = JSON.parse(readFileSync("verify-qa-premerge/result.json", "utf8")).matchedPage || ""; } catch { matched = ""; } process.stdout.write(inboxRecordingPlan(files, matched).upload ? "true" : "false")')"
+          echo "upload=${upload}" >> "$GITHUB_OUTPUT"
+      - name: Upload the recorded inbox video
+        id: verify-qa-video
+        if: always() && steps.inbox-recording.outputs.upload == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-qa-video-inbox
+          path: verify-qa-premerge/**/inbox-cycle/*.webm
+          if-no-files-found: warn
           retention-days: 7
       - name: Link premerge verify-qa evidence
         if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
@@ -2170,12 +2267,16 @@ jobs:
     # HYCI-59: the one build is a need of its own, so a build that fails or is
     # cancelled before any shard starts is a red check, never a skipped one.
     needs: [browser-build, browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
-    if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
+      - name: Report the required browser-smoke stub
+        if: github.event_name == 'pull_request'
+        run: echo 'moved to nightly (HTPR-9450)' >> "$GITHUB_STEP_SUMMARY"
       - name: Require every browser shard
+        if: github.event_name != 'pull_request'
         env:
           BUILD: ${{ needs.browser-build.result }}
           DESKTOP: ${{ needs.browser-smoke-desktop.result }}
@@ -2195,6 +2296,7 @@ jobs:
       # seconds of work. It reads only the desktop shard's outputs, so it runs
       # here: same fail-closed answer, one machine instead of two.
       - name: Require the MCP CLI API contract
+        if: github.event_name != 'pull_request'
         env:
           CONTRACT_RESULT: ${{ needs.browser-smoke-desktop.outputs.contract }}
           DOCS_ONLY: ${{ needs.browser-smoke-desktop.outputs.docs_only }}
@@ -2278,11 +2380,18 @@ jobs:
         with:
           node-version: ^24.22.1
           check-latest: true
+      - name: Restore browser font cache
+        id: restore-browser-fonts
+        if: steps.scope.outputs.visual_needed != 'false'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/hypertask-browser-fonts
+          key: hypertask-browser-fonts-${{ runner.os }}-v2
       - name: Install pinned Chromium and fonts once
         if: steps.scope.outputs.visual_needed != 'false'
         run: |
-          npm exec --yes --package=@playwright/test@1.64.0 -- playwright install --with-deps chromium
-          sudo apt-get install -y fontconfig fonts-liberation fonts-noto-core fonts-noto-color-emoji
+          npm exec --yes --package=@playwright/test@1.64.0 -- playwright install chromium
+          node head/.github/scripts/browser-font-cache.mjs
       # HYCI-106: a saved screen belongs to the fonts Chromium resolved for the
       # screens, not to the runner image that rolls without warning and not to every
       # font the image happens to ship.

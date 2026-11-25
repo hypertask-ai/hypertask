@@ -16,6 +16,7 @@ function load(file, mocks) {
   } }).outputText;
   new Function("require", "module", "exports", js)((name) => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if (name === "@/lib/flags/definitions/htpr-9245-chat-waits-for-saved-switches") return { HTPR_9245_CHAT_WAITS_FOR_SAVED_SWITCHES_FLAG: "htpr-9245-chat-waits-for-saved-switches" };
     assert.ok(name.startsWith("react"), `unmocked dependency: ${name}`);
     return require(name);
   }, loadedModule, loadedModule.exports);
@@ -45,6 +46,36 @@ test("the shared veto ignores a saved value with flag off and waits only when a 
         assert.deepEqual(useKeepAiChatClosed(), { keepAiChatClosed: enabled && saved, ready: !saved || ready });
       }
     }
+  }
+});
+
+test("the shared veto follows the per-user switches when they are on, so the header tick and the guards agree", () => {
+  const keys = ["aiChatOpenNewTickets", "aiChatOpenTickets", "aiChatOpenBoards"];
+  for (const values of [
+    { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false },
+    { aiChatOpenNewTickets: true, aiChatOpenTickets: false, aiChatOpenBoards: false },
+    { aiChatOpenNewTickets: false, aiChatOpenTickets: true, aiChatOpenBoards: true },
+  ]) {
+    for (const legacy of [false, true]) {
+      const { useKeepChatClosed } = load("src/hooks/General/useKeepChatClosed.ts", {
+        "@/hooks/useFlag": { useFlag: () => true, useFlagReady: () => true },
+        "@/lib/state": { useRecoilValue: () => legacy }, "@/store": { keepAiChatClosedAtom: "saved" },
+        "@/lib/flags/keys": flagModule,
+        "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: keys },
+        "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: true, ready: true, values }) },
+      });
+      assert.deepEqual(useKeepChatClosed(), { keepChatClosed: keys.every((key) => !values[key]), ready: true });
+    }
+  }
+  for (const legacy of [false, true]) {
+    const { useKeepChatClosed } = load("src/hooks/General/useKeepChatClosed.ts", {
+      "@/hooks/useFlag": { useFlag: () => true, useFlagReady: () => true },
+      "@/lib/state": { useRecoilValue: () => legacy }, "@/store": { keepAiChatClosedAtom: "saved" },
+      "@/lib/flags/keys": flagModule,
+      "@/lib/aiChat/autoOpenPreferences": { AI_CHAT_AUTO_OPEN_KEYS: keys },
+      "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled: false, ready: true, values: {} }) },
+    });
+    assert.deepEqual(useKeepChatClosed(), { keepChatClosed: legacy, ready: true });
   }
 });
 

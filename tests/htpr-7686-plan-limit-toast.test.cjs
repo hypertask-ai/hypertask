@@ -82,7 +82,7 @@ test("all modal save modes and phone Save show exactly one server refusal and ke
     const before = structuredClone(formValues);
     const toasts = [];
     const context = {
-      showPlanLimitToast: enabled, formValues, currentUser: { id: 6 },
+      showPlanLimitToast: enabled, aiStepTimingEnabled: false, titleGenerationMs: null, formValues, currentUser: { id: 6 },
       parentTaskInfo: undefined, createTaskFromComment: undefined,
       createNewTaskGloballyAPIHandler: async () => ({ error: true, ErrorMessage: error }),
       planLimitRefusalMessage, PlanLimitRefusal, toast: { error: text => toasts.push(text) },

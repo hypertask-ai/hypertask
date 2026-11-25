@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -406,20 +406,14 @@ test("backtests use the historical merge parent even when head is in production"
   }
 });
 
-test("the workflow reports and never blocks a merge", () => {
+test("the report-only workflow is gone and the replay library it shared with repro-first stays", () => {
   const yaml = require("js-yaml");
   const root = path.join(__dirname, "..");
-  const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/bugfix-regression.yml"), "utf8"));
-  const job = workflow.jobs["bugfix-regression"];
-  assert.equal(job.name, "bugfix-regression");
-  assert.equal(job["continue-on-error"], true);
-  assert.deepEqual(workflow.permissions, { contents: "read" });
-  assert.equal(job["runs-on"], "ubuntu-latest");
-  assert.ok(job.if.includes("github.event.pull_request.draft == false"));
+  assert.equal(existsSync(path.join(root, ".github/workflows/bugfix-regression.yml")), false);
   const policy = yaml.load(readFileSync(path.join(root, "docs/ci-policy.yml"), "utf8"));
   for (const list of [policy.required_checks.contexts, policy.required_checks.automerge_also_requires]) {
-    assert.ok(!list.includes("bugfix-regression"), "the check stays report-only until it has a week of clean runs");
+    assert.ok(!list.includes("bugfix-regression"), "a deleted report is not a required context");
   }
-  assert.equal(policy.bugfix_regression.workflow, ".github/workflows/bugfix-regression.yml");
-  assert.equal(policy.bugfix_regression.mode, "report_only");
+  assert.equal(policy.bugfix_regression.mode, "deleted");
+  assert.equal(policy.bugfix_regression.replaced_by, "repro_first");
 });

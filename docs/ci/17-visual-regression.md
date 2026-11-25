@@ -1,6 +1,7 @@
 ## Visual regression (informational v1)
 
 `Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on production pushes and on manual runs, which accept `base` and `head` refs.
+It also runs the screen comparison nightly at 03:53 UTC (HTPR-9450), now that pull requests no longer start `visual-compare`; the Monday 04:05 UTC cron keeps the `verify-qa` inbox journey and its weekly board filing, and only that cron starts them.
 Pull-request comparisons run as `visual-compare` in `.github/workflows/ci-tests.yml`, on non-draft production PRs touching screen or harness files (`.github/scripts/visual-change-scope.cjs` holds the list); HYCI-10 moved them there so the head reuses the one app build instead of building a second time; HYCI-77 made it need only that build, so it runs alongside the four page shards instead of after their summary.
 Base always builds from its own checkout with a fresh disposable database and creates temporary expected PNGs; head compares against them.
 HYCI-82 publishes those ten validated expected PNGs from the production capture as a `visual-baseline-<font fingerprint>-<render source>-<harness hash>` artifact as well as the cache entry. The 2 MB baseline shares a 10 GB cache pool with the build caches, so recent production baselines are usually evicted before a pull request asks for them: eight of the twelve captured on 2026-11-01 and 2026-11-02 were already gone, and each miss rebuilt the base app for 333 s of a 513 s step. `visual-compare` now restores the cache entry first and falls back to the newest unexpired artifact with that exact name before it builds anything; an artifact counts only when a successful `visual-regression.yml` run on a production push at the base commit produced it (`.github/scripts/published-baseline.mjs`), because the artifact list filters by name alone and a pull request could otherwise publish the screenshots another pull request compares against. Both paths hand the existing cache-hit branch ten validated screenshots, so the base build, its Next.js cache restore and its capture are skipped together. A miss still builds the base exactly as before.
@@ -31,8 +32,11 @@ HYCI-106 replaces the runner image version with a fingerprint of the fonts that 
 the screens: `scripts/visual-font-fingerprint.mjs` asks fontconfig which file backs each
 family the render can reach (`IBM Plex Sans`, `ui-sans-serif`, `system-ui`, `sans-serif`,
 `serif`, `monospace`, `emoji`), hashes those files and every file under `/etc/fonts`, and
-prints sixteen hex characters. It runs after the pinned Chromium and the three pinned
-font packages are installed, so that step now runs before the baseline is restored.
+prints sixteen hex characters. It runs after pinned Chromium and the cached browser
+fonts are registered, before the baseline is restored. HYCI-282 removes Ubuntu package
+downloads: the helper seeds its cache from the hosted image's Liberation and Noto Color Emoji
+fonts, requires both families, and fails if fontconfig cannot
+register them. The v2 cache key excludes earlier, potentially incomplete font caches.
 GitHub rolled `ubuntu-latest` twice inside one hour on 2026-11-03 and each image missed
 the other's saved screens: `visual-compare` rebuilt the base app for 316-325 s of build
 and 94-97 s of capture, against 90-107 s of head work alone when the screens are reused.

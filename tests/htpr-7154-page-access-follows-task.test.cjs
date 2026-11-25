@@ -236,6 +236,7 @@ test('moving a task synchronizes pages for its entire subtask tree inside each t
     '@/lib/api/errorMessage': { toErrorMessage: (_body, fallback) => fallback },
     '@/utils/controllers/assignees/autoAssignForSection': { autoAssignForSection: async () => 'ready' },
     '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: () => ({ allowed: true }) },
+    '@/utils/controllers/projects/archivedBoardTickets': { archivedBoardTicketRefusal: async () => null },
   });
   const result = await moveTaskToDifferentBoard({ taskId: 20, currentProjectId: 1, targetProjectId: 2, targetSectionId: 3, currentUser: { id: 7 } });
   assert.equal(result.success, true);

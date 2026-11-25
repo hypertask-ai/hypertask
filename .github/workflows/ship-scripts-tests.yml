@@ -17,8 +17,15 @@ on:
       - 'scripts/proc-watchdog*'
       - 'scripts/premerge-local.sh'
       - 'scripts/premerge-local-*.mjs'
+      - '.claude/skills/verify-hypertask/bin/**'
       - '.claude/skills/verify-qa/scripts/**'
       - '.claude/skills/verify-design/**'
+      - '.claude/skills/wireframe/**'
+      - '.github/scripts/ux-signoff-gate.mjs'
+      - 'tests/ux-signoff-gate.test.cjs'
+      - 'tailwind.config.ts'
+      - 'src/styles/tailwindThemes/**'
+      - 'src/lib/fonts/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
       - '.github/scripts/ci-runner-policy.cjs'
@@ -77,6 +84,7 @@ jobs:
         run: |
           set -euo pipefail
           bash .claude/skills/vcc/bin/vcc.test.sh
+          bash .claude/skills/ship/scripts/ship-identity.test.sh
           bash .claude/skills/setup-runner/scripts/setup-runner.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/ship-check-finish.test.py
@@ -85,11 +93,13 @@ jobs:
           python3 .claude/skills/ship/scripts/ci-wait.test.py
           bash .claude/skills/ship/scripts/gh-notify.test.sh
           python3 .claude/skills/ship/scripts/ci-why.test.py
+          python3 .claude/skills/ship/scripts/ship-chores.test.py -v
           node --test .claude/skills/ship/scripts/production-red-alert.test.mjs
           bash .claude/skills/ship/scripts/board-check.test.sh
           bash .claude/skills/ship/scripts/user-unit-check.test.sh
           python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
           python3 .claude/skills/ship/scripts/pr-drain-pick.test.py
+          python3 .claude/skills/ship/scripts/pr-merge-pass.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
           python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
@@ -99,6 +109,7 @@ jobs:
           node --test .claude/skills/verify-design/scripts/design-check.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
           node --test .claude/skills/verify-qa/scripts/fixture-cleanup.test.mjs
+          node --test .claude/skills/verify-hypertask/bin/*.test.mjs .claude/skills/verify-hypertask/bin/lib/*.test.mjs .claude/skills/verify-hypertask/bin/lib/commands/*.test.mjs
 
       - name: Replay incident grouping and claim collision checks
         env:
@@ -107,6 +118,35 @@ jobs:
           bash .claude/skills/ship/scripts/error-collector.test.sh
           node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
           bash .claude/skills/ship/scripts/ship-claim.test.sh
+
+
+  wireframe-tests:
+    name: wireframe-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Install Python and Playwright
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3
+          npm install --no-save --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright@1.64.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+          echo "$RUNNER_TEMP/pw/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Run the wireframe publish and capture tests
+        shell: bash
+        run: timeout 900 bash .claude/skills/wireframe/scripts/wireframe.test.sh
 
   ship-scripts-tests-siblings:
     name: ship-scripts-tests-siblings

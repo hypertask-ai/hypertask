@@ -279,7 +279,7 @@ test("toggling a switch updates the board at once and posts the whole card setti
     axios: { __esModule: true, default: { post: async (url, body) => { posts.push([url, body]); } } },
     "@/hooks/General/useGetUserPreferences": { USER_PREFERENCES_QUERY_KEY: ["user-preferences"], useGetUserPreferences: () => ({}) },
   })("src/hooks/General/useCardParts.ts");
-  const pending = useSetCardPart()("dueDate", true);
+  const pending = useSetCardPart(parts.DEFAULT_CARD_PARTS)("dueDate", true);
   assert.equal(client.getQueryData(["user-preferences"]).cardParts.dueDate, true, "optimistic before the save returns");
   await pending;
   assert.deepEqual(posts, [["/api/users/preferences", { cardParts: { ...parts.DEFAULT_CARD_PARTS, dueDate: true } }]]);

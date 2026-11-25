@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
+const compiledSourceCache = new Map();
 const plainLanguageTicketStubs = require("./helpers/plain-language-ticket-stubs.cjs");
 const blockingStubs = require("./helpers/mcp-task-list-blocking-stubs.cjs");
 
@@ -36,6 +37,7 @@ function load(file, mocks = {}) {
     if (specifier === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {}, assertTicketRoom: async () => {} };
     if (specifier === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
     if (specifier === "@/utils/controllers/tasks/userCommentCounts") return { userCommentCountsByTaskId: async () => new Map() };
+    if (specifier === "@/lib/savedViews/boardDefaultSubtasks") return { boardDefaultShowsSubtasks: async () => false };
     if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return require(specifier);
     const base = specifier.startsWith("@/")
       ? path.join(root, "src", specifier.slice(2))
@@ -49,10 +51,15 @@ function load(file, mocks = {}) {
     if (filename.endsWith(".json")) return JSON.parse(fs.readFileSync(filename, "utf8"));
     const loadedModule = { exports: {} };
     cache.set(filename, loadedModule);
-    const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-      fileName: filename.endsWith(".mjs") ? filename.replace(/\.mjs$/, ".ts") : filename,
-    }).outputText;
+    const sourceStamp = `${fs.statSync(filename).mtimeMs}:${fs.statSync(filename).size}`;
+    let compiled = compiledSourceCache.get(filename)?.code;
+    if (compiledSourceCache.get(filename)?.stamp !== sourceStamp) {
+      compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+        fileName: filename.endsWith(".mjs") ? filename.replace(/\.mjs$/, ".ts") : filename,
+      }).outputText;
+      compiledSourceCache.set(filename, { stamp: sourceStamp, code: compiled });
+    }
     new Function("require", "module", "exports", compiled)(
       (next) => requireSource(next, path.dirname(filename)), loadedModule, loadedModule.exports,
     );

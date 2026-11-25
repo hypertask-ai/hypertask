@@ -30,7 +30,7 @@ test("BYOK test requests use one-token provider calls without exposing keys in U
     deepseek: ["https://api.deepseek.com/chat/completions", "deepseek-flash"],
     moonshot: ["https://api.moonshot.ai/v1/chat/completions", "kimi-k2.5"],
     zhipu: ["https://api.z.ai/api/paas/v4/chat/completions", "glm-5.3-flash"],
-    alibaba: ["https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen3.7-plus"],
+    alibaba: ["https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "qwen3.8-max"],
     openrouter: ["https://openrouter.ai/api/v1/chat/completions", "openai/gpt-6-luna"],
   };
 

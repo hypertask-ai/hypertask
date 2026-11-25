@@ -15,6 +15,7 @@ import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from "@/lib/flags/definitions/htpr
 import { scheduleClassifyNewTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { ArchivedBoardTicketError, assertBoardTakesNewTickets } from "@/utils/controllers/projects/archivedBoardTickets";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import { createTaskWithBoardWebhookOutbox, WebhookTaskSnapshot } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
@@ -26,7 +27,7 @@ import {
 
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 
-type TaskDb = Pick<PrismaClient, "task">
+type TaskDb = Pick<PrismaClient, "task" | "taskNumberAlias" | "project">
 
 export function buildWebhookTaskSnapshot(
   row: {
@@ -75,6 +76,16 @@ export const getUniqueTaskCount = async (
     return (await getNextUniqueTaskIndex(projectId, db)) - 1;
 };
 
+const recordTeamTaskCreated = async (teamId: string | null | undefined): Promise<void> => {
+    if (!teamId) return;
+    const increment = { total_tasks: { increment: 1 } };
+    const updated = await prisma.team_Activity.updateMany({ where: { teamId }, data: increment });
+    if (updated.count > 0) return;
+    await prisma.team_Activity
+        .create({ data: { teamId, total_tasks: 1 } })
+        .catch(() => prisma.team_Activity.updateMany({ where: { teamId }, data: increment }));
+};
+
 const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
             try {
@@ -92,13 +103,15 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     id: projectId,
                     ...taskWriteAccessWhere(currentUser.id, agentId, teamScope),
                 },
-                select: { id: true },
+                select: { id: true, name: true, title: true, status: true },
             })
             if (!allowedProject)
             return ({
                 status:404,
                 json:{ message: "Project not found or access denied" }
             })
+
+            await assertBoardTakesNewTickets(allowedProject, currentUser.id);
 
             recordAgentBoardScopeMiss(allowedProject.id, "write");
             const sectionExists = await prisma.section.findFirst({
@@ -171,15 +184,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 }, "web", null, projectId)
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
-                await prisma.team_Activity.update({
-                    where:{
-                        teamId:task.project.teamId??undefined,
-                        
-                    },
-                    data:{
-                        total_tasks:{increment:1}
-                    }
-                })
+                await recordTeamTaskCreated(task.project.teamId)
             }
             else{
                 const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
@@ -203,15 +208,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 }, "web", null, projectId)
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
-                await prisma.team_Activity.update({
-                    where:{
-                        teamId:task.project.teamId??undefined,
-                        
-                    },
-                    data:{
-                        total_tasks:{increment:1}
-                    }
-                })
+                await recordTeamTaskCreated(task.project.teamId)
             }
             await logPersonal(userId, "create task", { projectId, sectionId, taskId: task.id, outcome: "created" }, body)
             await publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
@@ -310,6 +307,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             })
         } catch (error) {
             if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) } };
+            if (error instanceof ArchivedBoardTicketError) return { status: 400, json: { message: error.message } };
             if (isPlanLimitReachedError(error)) {
                 const refusal = planLimitResponse(error)
                 return { status: refusal.status, json: refusal.body }

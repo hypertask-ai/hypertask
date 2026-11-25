@@ -154,6 +154,7 @@ export function activationHarness() {
     "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
+    "@/lib/mcp/agents/selfJoin": { allowAgentSelfJoin: async () => ({ ok: false, projectId: 0 }) },
     "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
@@ -173,6 +174,7 @@ export function activationHarness() {
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },
     "@/utils/controllers/projects/boardQuota": { isBoardLimitReached: async () => false },
     "@/utils/controllers/projects/getAll": { getProjectViewInclude: () => ({}) },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
     "@/utils/controllers/notifications/sendNotification": { sendEmailNotification: async () => true },
     "@/lib/demo/guestGuard": { isGuestRequest: async () => false },
     "@/lib/auth/unverifiedEmailAccount": { unverifiedEmailAccount: async () => "allowed", accountNotificationsBlocked: async () => false },

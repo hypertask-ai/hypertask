@@ -13,8 +13,9 @@ import { extractTaskReferencesFromCommentText } from "@/utils/controllers/commen
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
 import { taskWriteRoute } from "./route";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import { isTaskSaveTimeout, taskSaveBudget, TASK_SAVE_LIMIT_MS, TASK_SAVE_TOO_LONG } from "@/lib/tasks/saveLimit";
 
-const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown }>(
+const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown; saveDeadline?: unknown }>(
   (body) => !!(body as { newTask?: { id?: unknown } } | null)?.newTask?.id,
 );
 
@@ -31,8 +32,12 @@ export const PUT = taskWriteRoute({
   schema,
   validationMessage: "Task id is required",
   validateBeforeAuth: true,
-  operation: async ({ newTask, agentId }, session) => {
+  operation: async ({ newTask, agentId, saveDeadline }, session) => {
+    const callerDeadline = typeof saveDeadline === "number" && Number.isFinite(saveDeadline) ? saveDeadline : Infinity;
+    const budget = taskSaveBudget(Math.min(Date.now() + TASK_SAVE_LIMIT_MS, callerDeadline));
+    let committedResponse: ReturnType<typeof NextResponse.json> | undefined;
     try {
+      return await budget.run(async () => {
       const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: agentId });
       if (!actingAgent.ok) {
         return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
@@ -69,8 +74,16 @@ export const PUT = taskWriteRoute({
         newTask.description = await inlineAgentImagesForUser(newTask.description, session.userId, { inlineImages: newTask.inline_images });
       }
       delete newTask.inline_images;
-      const response = await updateTaskSingle(newTask, currentUser, actingAgentId, { teamScope: session.teamScope });
+      budget.remaining();
+      const response = await updateTaskSingle(newTask, currentUser, actingAgentId, {
+        teamScope: session.teamScope,
+        saveDeadline: budget.deadline,
+        onCommitted: (saved) => {
+          committedResponse = NextResponse.json(saved.json, { status: saved.status });
+        },
+      });
       if (response.status === 200) {
+        committedResponse = NextResponse.json(response.json, { status: response.status });
         void broadcastBoardChange((response.json as any)?.projectId ?? newTask?.projectId, {
           originUserId: currentUser?.id,
         });
@@ -96,11 +109,15 @@ export const PUT = taskWriteRoute({
           })();
         }
       }
-      return NextResponse.json(response.json, { status: response.status });
+      return committedResponse ?? NextResponse.json(response.json, { status: response.status });
+      });
     } catch (error) {
       if (isPlanLimitReachedError(error)) {
         const refusal = planLimitResponse(error);
         return NextResponse.json(refusal.body, { status: refusal.status });
+      }
+      if (isTaskSaveTimeout(error)) {
+        return committedResponse ?? NextResponse.json({ message: TASK_SAVE_TOO_LONG }, { status: 503 });
       }
       console.log(error);
       return NextResponse.json({ message: "Internal server error" }, { status: 500 });

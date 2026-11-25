@@ -1,7 +1,7 @@
 
 "use client";
 import { useAiChatAutoOpen } from "@/hooks/General/useAiChatAutoOpen";
-import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG, HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/keys";
 import {
   lazy,
   ReactNode,
@@ -37,7 +37,6 @@ import {
   aiChatAutoOpenSuppressedAtom,
   aiChatPinnedAtom,
   openAiChatByDefaultAtom,
-  keepAiChatClosedAtom,
   showAIChatInterfaceAtom,
   isAiChatSidebarModeAtom,
   mobileCommentComposerOpenAtom,
@@ -131,6 +130,8 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from "@/hooks/MultiPages/Route/useHypertasksNavigate";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
+import { HTPR_9078_SIDEBAR_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-9078-sidebar-chat-shortcuts";
+import { sidebarChatTypingBlocksShortcuts, sidebarChatTypingCapture } from "@/lib/keyboard/sidebarChatTyping";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { shouldRenderGlobalCommandMenu } from "@/lib/constants/commandCenterShortcut";
 import { useCommandCenterShortcut } from "@/hooks/General/useCommandCenterShortcut";
@@ -180,6 +181,7 @@ import { boardFromDeviceFirst, boardFromFreshList } from "@/lib/keyboard/boardSh
 import { HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG } from "@/lib/flags/definitions/htpr-7588-board-shortcut-from-device";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useKeepChatClosed } from "@/hooks/General/useKeepChatClosed";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
@@ -345,6 +347,7 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const myTasksSingleCommandCenter = useFlag(HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG);
+  const keepSidebarChatTyping = useFlag(HTPR_9078_SIDEBAR_CHAT_SHORTCUTS_FLAG);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
@@ -433,16 +436,11 @@ export default function GlobalProvider({
   const { reserve: aiChatSwitchReserve } = useAiChatAutoOpen(mbl);
   let aiChatOpenSwitchesEnabled = !useFlagReady(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   if (useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG)) aiChatOpenSwitchesEnabled = true;
-  const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const keepAiChatClosedReady = useFlagReady(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
-  const savedKeepAiChatClosed = useRecoilValue(keepAiChatClosedAtom);
-  const chatAutoOpenReady = !savedKeepAiChatClosed || keepAiChatClosedReady;
-  let keepAiChatClosed = false;
-  if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
+  const { keepChatClosed, ready: chatAutoOpenReady } = useKeepChatClosed();
   const [reserveBoardChat, setReserveBoardChat] = useState(() =>
     firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
     firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&
-    !aiChatOpenSwitchesEnabled && !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepAiChatClosed &&
+    !aiChatOpenSwitchesEnabled && !mbl && authenticatedUserId !== null && chatAutoOpenReady && !keepChatClosed &&
     (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
   );
   useEffect(() => {
@@ -539,12 +537,12 @@ export default function GlobalProvider({
     }
     hasAttemptedChatRestoreRef.current = true;
     if (!manualChat && window.innerWidth < 768) return;
-    if (!manualChat && (keepAiChatClosed || aiChatAutoOpenSuppressed)) return;
+    if (keepChatClosed || (!manualChat && aiChatAutoOpenSuppressed)) return;
     if (!readChatOpenForSession()) return;
     setChatRuntimeMounted(true);
     setShowAiChatInterface(true);
     setAiChatExplicitOpenAt(null);
-  }, [currentUser?.id, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, keepAiChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
+  }, [currentUser?.id, aiChatOpenSwitchesEnabled, manualChat, chatAutoOpenReady, keepChatClosed, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
 
   useEffect(() => {
     if (!hasAttemptedChatRestoreRef.current) return;
@@ -750,6 +748,7 @@ export default function GlobalProvider({
   );
 
   const handleKeyPress = async (e: KeyboardEvent) => {
+    if (sidebarChatTypingBlocksShortcuts(e)) return;
     if (showTrialModal || emailVerificationBlocking) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
@@ -1235,6 +1234,11 @@ export default function GlobalProvider({
       closeAIChatInterface();
     }
   }, [pathname, showAiChatInterface, closeAIChatInterface]);
+
+  useEffect(keepSidebarChatTyping ? () => {
+    document.addEventListener("keydown", sidebarChatTypingCapture, true);
+    return () => document.removeEventListener("keydown", sidebarChatTypingCapture, true);
+  } : () => {}, [keepSidebarChatTyping]);
 
   useEffect(() => {
     document.addEventListener("keydown", handleKeyPress);

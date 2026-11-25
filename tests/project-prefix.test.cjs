@@ -47,6 +47,13 @@ function load(file, stubs = {}) {
     if (request === "@/utils/controllers/notifications/inboxZero") {
       return { loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])) };
     }
+    if (request === "@/lib/mcp/tasks/previousTicketNumbers") {
+      return {
+        previousTicketNumbersFor: async () => undefined,
+        withPreviousTicketNumbers: (task) => task,
+        nameMovedTicketKeys: async (_userId, tasks) => tasks,
+      };
+    }
     if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
   };
@@ -264,6 +271,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   let aliasQueries = 0;
   const flagCalls = [];
   const taskQueries = [];
+  const rawQueries = [];
   const prisma = {
     section: { findMany: async () => [] },
     task: {
@@ -272,6 +280,13 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     },
     projectPrefixAlias: { findMany: async ({ where }) => { aliasQueries++; return aliases.filter(row => matches(row, where)); } },
     taskNumberAlias: { findMany: async ({ where }) => moveAliases.filter(row => matches(row, where)) },
+    $queryRaw: async (strings, ticketNumber) => {
+      rawQueries.push({ text: Array.isArray(strings) ? strings.join("?") : String(strings), value: String(ticketNumber) });
+      return tasks
+        .filter(row => (row.ticketNumber ?? "").toLowerCase() === String(ticketNumber).toLowerCase())
+        .sort((left, right) => left.projectId - right.projectId || left.id - right.id)
+        .map(row => ({ id: row.id }));
+    },
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -307,7 +322,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer" }, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
     "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
-  return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
+  return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, rawQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
 test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () => {
   const f = lookups();
@@ -431,7 +446,18 @@ test("create route cannot spoof an enabled user's identity to bypass the flag", 
 test("move numbering after permanent deletion uses MAX plus one, not count", async () => {
   const next = load("src/utils/controllers/tasks/getNextUniqueTaskIndex.ts", { "@/lib/prisma": {} }).getNextUniqueTaskIndex;
   const surviving = [1, 3, 4];
-  const db = { task: { aggregate: async () => ({ _max: { uniqueIndex: Math.max(...surviving) } }) } };
+  let issued = 0;
+  const db = {
+    task: { aggregate: async () => ({ _max: { uniqueIndex: Math.max(...surviving) } }) },
+    taskNumberAlias: { aggregate: async () => ({ _max: { uniqueIndex: null } }) },
+    project: {
+      findUnique: async () => ({ issuedUniqueIndex: issued }),
+      updateMany: async ({ data }) => {
+        issued = data.issuedUniqueIndex;
+        return { count: 1 };
+      },
+    },
+  };
   assert.equal(await next(15, db), 5);
   assert.ok(surviving.includes(surviving.length + 1), "positive control: count plus one collides");
   const source = read("src/utils/controllers/tasks/moveToDifferentBoard.ts");
@@ -592,6 +618,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
     "@/utils/controllers/tasks/markRead": {}, "@/utils/controllers/comments/readReceipts": {}, "@/lib/agentRuns/service": {},
+    "@vercel/functions": { waitUntil: () => {} }, "@/app/api/ai/_lib/taskSummaryFreshness": { requestTaskSummaryRefreshOnView: async () => "off" },
     "../../unauthorized/page": { __esModule: true, default: "Unauthorized" },
   });
   const props = identifier => ({ params: Promise.resolve({ slug: [`project-${projectId}`, identifier] }), searchParams: Promise.resolve({}) });
@@ -959,4 +986,34 @@ test("round 3: MCP prefix history needs the flag, keeps legacy prefixes, and ID-
   }
   const f = lookups();
   assert.equal(await f.resolver.resolveTaskIdOnly({ ticket_number: "OLD-123" }), null);
+});
+
+test("round 4: an indexed miss does not scan Task again", async () => {
+  const f = lookups();
+  assert.equal(await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "UNKNOWN-123" }), null);
+  assert.equal(f.rawQueries.length, 1);
+  assert.match(f.rawQueries[0].text, /lower\("ticketNumber"\) = lower\(\?\)/);
+  assert.equal(f.rawQueries[0].value, "UNKNOWN-123");
+  assert.match(f.rawQueries[0].text, /WITH indexed_matches AS MATERIALIZED/);
+  assert.deepEqual(f.taskQueries.filter(where => where.ticketNumber !== undefined), [], "an unknown number must not repeat the case-insensitive Task scan");
+});
+
+test("round 4: a wildcard identifier keeps the old case-insensitive match", async () => {
+  const indexed = lookups({ prefixAliases: [] });
+  const legacy = lookups({ enabled: false, prefixAliases: [] });
+  for (const number of ["NEW_123", "TEAM%A-1", "OLD\\-123"]) {
+    const resolved = await indexed.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number });
+    assert.match(indexed.rawQueries.at(-1).text, /"ticketNumber" ILIKE \?/, `${number} must keep the wildcard predicate`);
+    assert.deepEqual(
+      resolved,
+      await legacy.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: number }),
+      `${number} must resolve the way it did before the index`,
+    );
+  }
+});
+
+test("round 4: a candidate rechecks the ticket number before it is returned", async () => {
+  const f = lookups({ prefixAliases: [] });
+  f.prisma.$queryRaw = async () => [{ id: 101 }];
+  assert.equal(await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-999" }), null);
 });

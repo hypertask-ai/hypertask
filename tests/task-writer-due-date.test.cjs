@@ -156,6 +156,7 @@ function saveHarness(enabled) {
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
+    "@/utils/controllers/projects/archivedBoardTickets": { archivedBoardTicketRefusal: async () => null },
     "@/utils/controllers/tasks/single": { updateTaskSingle: async (body) => { updates.push(body); return { status: 200, json: { ...body, projectId: 7 } }; } },
     "@/lib/realtime/server": { broadcastBoardChange: async () => {}, broadcastTaskChange: async () => {} },
     "../queues/duedateQueue": queue, "@/pages/api/queues/duedateQueue": queue,

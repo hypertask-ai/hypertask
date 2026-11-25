@@ -49,10 +49,9 @@ export async function GET(request: NextRequest) {
     const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id);
     const chatAllEnabled = await isFeatureEnabled(HTPR_7742_AGENT_CHAT_ALL_FLAG, ctx.user.id);
     const unanswered = new URL(request.url).searchParams.get("unanswered") === "true";
-    if (unanswered && !chatAllEnabled) {
-      return NextResponse.json({ success: false, error: "Chat inbox is not enabled" }, { status: 404 });
-    }
-    const result = await prisma.$transaction(async (tx) => {
+    let transactionStarted = false;
+    const loadPending = () => prisma.$transaction(async (tx) => {
+      transactionStarted = true;
       const agents = await tx.$queryRaw<Array<{ id: string; userId: number }>>`
         SELECT "id", "userId"
         FROM "Agent"
@@ -62,7 +61,7 @@ export async function GET(request: NextRequest) {
       `;
       if (agents.length !== 1) return { found: false, messages: [], readableContextIds: new Set<string>() };
       const agent = agents[0];
-      if (unanswered && !await refreshAgentChatHeartbeat(tx, agentId, ctx.user.id)) {
+      if (unanswered && chatAllEnabled && !await refreshAgentChatHeartbeat(tx, agentId, ctx.user.id)) {
         return { found: false, messages: [], readableContextIds: new Set<string>() };
       }
 
@@ -121,7 +120,14 @@ export async function GET(request: NextRequest) {
         ? await readableAgentChatContextIds(tx, { userId: agent.userId, agentId, teamScope: ctx.teamScope }, messages)
         : new Set<string>();
       return { found: true, messages, readableContextIds };
-    }, ctx.teamScope != null ? { isolationLevel: "Serializable" } : undefined);
+    }, { maxWait: 5000, ...(ctx.teamScope != null ? { isolationLevel: Prisma.TransactionIsolationLevel.Serializable } : {}) });
+    let result: Awaited<ReturnType<typeof loadPending>>;
+    try {
+      result = await loadPending();
+    } catch (error) {
+      if (transactionStarted || !(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2028") throw error;
+      result = await loadPending();
+    }
 
     if (!result.found) {
       return NextResponse.json(
