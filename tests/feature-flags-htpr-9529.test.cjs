@@ -27,3 +27,19 @@ test("the switch on reports the comp and off keeps today's Free Plan rows", () =
   assert.equal(legacyBillingDisplay(compedBilling).billingCycle, "Free Plan");
   assert.equal(legacyBillingDisplay(compedBilling).comped, false);
 });
+
+test("a comped team keeps its comp before the billing snapshot loads", () => {
+  const comped = settingsBillingDisplay(compedTeam, null);
+  assert.equal(comped.plan, "Pro");
+  assert.equal(comped.comped, true);
+  assert.equal(comped.billingCycle, "Comped");
+
+  const paying = settingsBillingDisplay({
+    id: "team_paid",
+    activeSubscriptionPlanId: "sub_paid",
+    subscriptionPlan: [{ subscriptionId: "sub_paid", subscriptionStatus: "active", priceId: "price_1QjJeDIhmcH60VcciHzZ3mTJ" }],
+  }, null);
+  assert.equal(paying.plan, "Pro");
+  assert.equal(paying.comped, false);
+  assert.equal(paying.billingCycle, "month");
+});
