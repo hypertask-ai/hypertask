@@ -147,3 +147,29 @@ test("the head source is read from the pull request's own commit", async () => {
   assert.ok(asked.every((url) => url.includes(sha)));
   assert.deepEqual(headGrounding({ repo: "", sha, files, call: () => { throw new Error("no call"); } }), { corpus: "", routes: [] });
 });
+
+test("a selector literal is not displayed text, so a click cannot ground on it", async () => {
+  const { review } = await import("../scripts/lib/pstack-ground.cjs");
+  const corpus = '<button aria-label="Start dictation" data-testid="mic" />\n<button data-testid={loud ? "shout" : "whisper"}>Send</button>';
+  const checked = review({
+    journeys: [
+      { journey: "change:primary", actions: [{ op: "click", text: "mic" }], expect: [{ text: "mic" }] },
+      { journey: "change:named", actions: [{ op: "click", text: "Start dictation" }, { op: "click", testid: "mic" }], expect: [{ text: "Send" }] },
+    ],
+    corpus,
+  });
+  assert.deepEqual(checked.problems, ['change:primary step 1 click: "mic" is not in the head source', 'change:primary expect 1: "mic" is not in the head source']);
+  assert.deepEqual(checked.dropped, []);
+});
+
+test("review validates every test id in the source, while the prompt shows the first sixty", async () => {
+  const { review, controls, controlsBlock, CONTROL_LIMIT } = await import("../scripts/lib/pstack-ground.cjs");
+  const corpus = Array.from({ length: CONTROL_LIMIT + 10 }, (_, index) => `<button data-testid="control-${String(index).padStart(2, "0")}" />`).join("\n");
+  assert.equal(controls(corpus).testids.length, CONTROL_LIMIT + 10);
+  assert.equal(controlsBlock(corpus).split(", ").length, CONTROL_LIMIT);
+  const last = `control-${String(CONTROL_LIMIT + 9).padStart(2, "0")}`;
+  const checked = review({ journeys: [{ journey: "change:primary", actions: [{ op: "click", testid: last }], expect: [] }], corpus });
+  assert.deepEqual(checked.problems, []);
+  assert.deepEqual(checked.dropped, []);
+  assert.deepEqual(review({ journeys: [{ journey: "change:primary", actions: [{ op: "click", testid: "control-99" }], expect: [] }], corpus }).problems, ['change:primary step 1 click: testid "control-99" is not in the head source']);
+});
