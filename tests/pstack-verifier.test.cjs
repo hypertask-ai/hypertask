@@ -995,7 +995,8 @@ test("run 45516805008 keeps the GLM judge on its configured model with and witho
   const picked = pickVerifier(replay.authorFamily, replay.verifierModel);
   assert.equal(picked.model, replay.verifierModel);
   assert.equal(modelAcceptsImages(picked.model), true);
-  assert.equal(modelAcceptsImages("zai/glm-5"), false);
+  assert.equal(modelAcceptsImages("zai/glm-5"), true);
+  assert.equal(modelAcceptsImages("deepseek/deepseek-chat"), false);
   for (const images of [[], ["abc"]]) {
     await withLadderLanes(replay.lanes, async ({ fs, spawn }) => {
       let routed;

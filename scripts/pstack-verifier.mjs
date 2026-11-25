@@ -1044,8 +1044,7 @@ export function modelAcceptsImages(model, lane = {}) {
   if (!id || /deepseek-v4-pro|deepseek-chat|deepseek-reasoner/.test(full)) return false;
   if (deepseekApiLane(lane)) return DEEPSEEK_API_VISION.has(id);
   if (/deepseek-v4\.1-flash|deepseek-flash|deepseek-v4-flash|vision/.test(full)) return true;
-  if (/^(?:zai\/)?glm-5\.3-flash$/.test(full)) return true;
-  if (/gpt-4o|gpt-4\.1|gpt-5|claude|sonnet|opus|haiku|gemini|grok/.test(full)) return true;
+  if (/gpt-4o|gpt-4\.1|gpt-5|claude|sonnet|opus|haiku|gemini|grok|glm/.test(full)) return true;
   return false;
 }
 function laneModel(lane, chosen) {
