@@ -135,7 +135,7 @@ const BillingSection = () => {
   const invoiceTotal = display.comped ? "—" : subscriptionRows.total;
   const fullPrice = display.comped ? "—" : subscriptionRows.fullPrice;
   const discountAmount = upcomingInvoice?.discountTotal ?? 0;
-  const hasDiscount = discountAmount > 0;
+  const hasDiscount = !display.comped && discountAmount > 0;
   const perSeatAmount =
     upcomingInvoice && usedSeats > 0
       ? upcomingInvoice.subtotal / usedSeats
@@ -511,7 +511,7 @@ const BillingSection = () => {
               <span className="min-w-0 truncate text-right text-dense font-medium text-text-light-gray">
                 {invoiceTotal}
               </span>
-              {upcomingInvoice && (
+              {!display.comped && upcomingInvoice && (
                 <button
                   className={actionButtonClass}
                   onClick={() => setShowCostBreakdown((previous) => !previous)}
@@ -524,11 +524,14 @@ const BillingSection = () => {
           }
           label={hasDiscount ? "Amount due" : "Invoice total"}
         />
-        {showCostBreakdown && upcomingInvoice && perSeatAmount !== null && (
-          <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
-            {formatMoney(perSeatAmount, upcomingInvoice.currency)} × {usedSeats} seats
-          </p>
-        )}
+        {showCostBreakdown &&
+          !display.comped &&
+          upcomingInvoice &&
+          perSeatAmount !== null && (
+            <p className="px-2 py-2 text-dense font-medium text-text-light-gray">
+              {formatMoney(perSeatAmount, upcomingInvoice.currency)} × {usedSeats} seats
+            </p>
+          )}
       </SettingsCard>
 
       <SettingsCard title="Invoices">

@@ -181,6 +181,22 @@ test("a Pro comp outranks a paid BYOK team and owns the rows", async () => {
   assert.doesNotMatch(document.body.textContent, /Free Plan/);
 });
 
+test("a comped team hides every invoice detail, including a discount and cost breakdown", async () => {
+  team = subscribed(PAID_BYOK_PRICE);
+  team.stripe_customer_id = "cus_selected";
+  team.compedPlan = "Pro";
+  team.compedUntil = compedUntil;
+  billingData.upcomingInvoice.discountTotal = 500;
+
+  await render();
+
+  assert.equal(rowValue("Plan"), "Pro");
+  assert.equal(actionRowValue("Invoice total"), "—");
+  assert.doesNotMatch(document.body.textContent, /Discount/);
+  assert.doesNotMatch(document.body.textContent, /Cost breakdown/);
+  assert.doesNotMatch(document.body.textContent, /\$\d/);
+});
+
 test("an expired comp falls back to the plan the team really has", async () => {
   team.compedPlan = "Pro";
   team.compedUntil = expiredComp;

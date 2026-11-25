@@ -13,10 +13,10 @@ const compedTeam = {
 };
 const compedBilling = { teamId: "team_comped", stripePriceId: null, storePlanId: "Pro", billingInterval: null, byokProviderFlags: [] };
 
-test("the switch is a reversible display bugfix at Owner and QA", () => {
+test("the switch is a reversible display bugfix that ships to everyone", () => {
   assert.equal(flag.key, "htpr-9529-comped-billing-rows");
   assert.equal(flag.kind, "bugfix");
-  assert.equal(flag.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
   assert.ok(flag.releaseRisk.reason);
   assert.equal(flag.releaseRisk.highRisk, undefined);
