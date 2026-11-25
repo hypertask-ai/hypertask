@@ -17,7 +17,7 @@ import type { SidebarChatAgent, SidebarChatTarget } from "@/app/agents/chat/agen
 import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import { getNativeSidebarChat, setNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { AI_Chat_API } from "@/utils/api/ai_chat/aiChatHelpers";
-import { currentProjectAtom, currentUserAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, aiChatSidebarWidthPxAtom } from "@/store";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -31,7 +31,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { ChatHeader } from "./ChatHeader";
 import { AI_Tiptap_Container } from "./AI_Tiptap_Container";
 import { AiChatSidebarResizeHandle } from "./AiChatSidebarResizeHandle";
-import { aiChatSidebarWidthPxAtom } from "@/store";
 import { AI_CHAT_SIDEBAR_MIN_PX } from "@/lib/configs/style.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
