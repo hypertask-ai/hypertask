@@ -71,7 +71,7 @@ export async function collectMobileMetrics(page: Page): Promise<MobileScreenMetr
     const isMic = (b: Element) => { const svg = b.querySelector('svg'); return [b.getAttribute('aria-label'), b.getAttribute('title'), b.getAttribute('data-testid'), b.getAttribute('class'), (b as HTMLElement).innerText?.slice(0, 80), svg?.getAttribute('class'), svg?.getAttribute('data-icon')].some((v) => Boolean(v && MIC_RE.test(v))) }
     const textFields: MeasuredTextField[] = [], purple: MeasuredPurple[] = []
     for (const k of kept) {
-      if (k.dropped || !k.rec.textField) continue; let mic: Element | null = null; const fr = k.el.getBoundingClientRect(), fcy = fr.top + fr.height / 2, const sameRow = (b: Element) => { const br = b.getBoundingClientRect(); return Math.abs(br.top + br.height / 2 - fcy) <= Math.max(fr.height, br.height) / 2 + 4 && br.left + br.width / 2 >= fr.left + fr.width / 2 }
+      if (k.dropped || !k.rec.textField) continue; let mic: Element | null = null; const fr = k.el.getBoundingClientRect(), fcy = fr.top + fr.height / 2, sameRow = (b: Element) => { const br = b.getBoundingClientRect(); return Math.abs(br.top + br.height / 2 - fcy) <= Math.max(fr.height, br.height) / 2 + 4 && br.left + br.width / 2 >= fr.left + fr.width / 2 }
       for (let anc = k.el.parentElement, d = 0; anc && anc !== body && d < 8; d++, anc = anc.parentElement) {
         const others = Array.from(anc.querySelectorAll(SEL)).filter((f) => f !== k.el && tfOf(f).is && isShown(f) && isVis(f, f.getBoundingClientRect(), getComputedStyle(f), false)); if (others.length) break
         mic = Array.from(anc.querySelectorAll('button,[role="button"]')).find((b) => isShown(b) && isMic(b) && sameRow(b)) || null; if (mic) break
