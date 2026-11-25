@@ -114,6 +114,9 @@ stubSourceModule("src/store/index.ts", {
 stubSourceModule("src/hooks/MultiPages/useGetAllTeamsMinimal.ts", {
   useGetAllTeamsMinimal: () => ({ data: [] }),
 });
+stubSourceModule("src/hooks/useFlag.tsx", {
+  useFlag: (key) => key === "htpr-9670-phone-chat-field-mic",
+});
 stubSourceModule("src/utils/aiChat/sortBoardsByRecent.ts", {
   sortBoardsByRecent: (teams) => teams,
 });
@@ -356,7 +359,15 @@ test("mobile composer follows live recording state without remounting recorder",
     assert.ok(overflow);
     assert.equal(recorderBefore.dataset.hasText, "false");
     assert.equal(recorderBefore.dataset.globalRecording, "false");
-    assert.match(recorderBefore.className, /order-4 ml-auto/);
+    assert.match(recorderBefore.className, /shrink-0/);
+    const fieldRow = container.querySelector("[data-ai-chat-field-row]");
+    assert.ok(fieldRow, "the phone Message field owns a row that holds its mic");
+    assert.strictEqual(recorderBefore.parentElement, fieldRow);
+    assert.strictEqual(
+      recorderBefore.previousElementSibling,
+      container.querySelector("#ai-chat-tiptap-editor"),
+      "the mic sits after the Message field it dictates into",
+    );
     assert.equal(
       container.querySelector("[data-ai-chat-leading-controls]"),
       null,
@@ -419,10 +430,17 @@ test("mobile composer follows live recording state without remounting recorder",
       mobileModelControl,
       "the model gauge belongs immediately after Plus",
     );
-    assert.strictEqual(
+    assert.equal(
       mobileModelControl.nextElementSibling,
-      recorderBefore,
-      "the mounted recorder follows the model gauge",
+      container.querySelector("[data-ai-chat-stream-control]"),
+      "the action row skips the mic once it lives in the field row",
+    );
+    assert.equal(
+      container
+        .querySelector("[data-ai-chat-recorder-row]")
+        .querySelector('[data-control="recorder"]'),
+      null,
+      "the mic must not be mounted twice",
     );
     const overflowActions = overflow
       .querySelector('[role="group"]')
@@ -489,7 +507,7 @@ test("mobile composer follows live recording state without remounting recorder",
     );
     assert.equal(recorderWithText.dataset.hasText, "true");
     assert.equal(recorderWithText.dataset.globalRecording, "false");
-    assert.match(recorderWithText.className, /order-3 ml-auto/);
+    assert.match(recorderWithText.className, /shrink-0/);
     const primarySend = container.querySelector(
       "[data-ai-chat-primary-send] button",
     );
@@ -523,9 +541,15 @@ test("mobile composer follows live recording state without remounting recorder",
       true,
     );
     assert.equal(container.querySelector("[data-ai-chat-primary-send]"), null);
+    assert.strictEqual(
+      recorderAfter.parentElement,
+      container.querySelector("[data-ai-chat-field-row]"),
+      "recording keeps the mic in the field row",
+    );
     assert.match(
-      container.querySelector("[data-ai-chat-recorder-row]").className,
-      /min-w-0 flex-1/,
+      container.querySelector("#ai-chat-tiptap-editor").className,
+      /hidden/,
+      "the recording row takes the field row while dictating",
     );
     assert.match(recorderAfter.className, /min-w-0 flex-1/);
     assert.match(recorderAfter.className, /!mb-0 min-w-0 w-full/);
@@ -572,6 +596,63 @@ test("mobile composer follows live recording state without remounting recorder",
       delete global.IS_REACT_ACT_ENVIRONMENT;
     } else {
       global.IS_REACT_ACT_ENVIRONMENT = previousActEnvironment;
+    }
+  }
+});
+
+test("the phone Message field carries the reused dictation mic and desktop keeps its action row", async () => {
+  const dom = new JSDOM("<!doctype html><div id='root'></div>", {
+    url: "https://app.hypertask.ai/chat",
+  });
+  const keys = ["window", "document", "React", "IS_REACT_ACT_ENVIRONMENT"];
+  const previous = new Map(
+    keys.map((key) => [key, { exists: Object.hasOwn(global, key), value: global[key] }]),
+  );
+  Object.assign(global, {
+    window: dom.window,
+    document: dom.window.document,
+    React,
+    IS_REACT_ACT_ENVIRONMENT: true,
+  });
+  const container = document.getElementById("root");
+  const reactRoot = createRoot(container);
+
+  try {
+    pathname = "/chat";
+    await act(async () => reactRoot.render(renderComposer(false, true)));
+    const messageField = container.querySelector("#ai-chat-tiptap-editor");
+    const fieldRow = container.querySelector("[data-ai-chat-field-row]");
+    const fieldMic = fieldRow?.querySelector('[data-control="recorder"]');
+    assert.ok(fieldRow, "the phone Message field renders a field row");
+    assert.ok(fieldMic, "the phone Message field row holds the dictation mic");
+    assert.strictEqual(fieldMic.previousElementSibling, messageField);
+    assert.strictEqual(
+      fieldRow.lastElementChild,
+      fieldMic,
+      "the mic is the right-bound control of the field row",
+    );
+
+    await act(async () =>
+      reactRoot.render(renderComposer(false, true, {}, false)),
+    );
+    assert.equal(
+      container.querySelector("[data-ai-chat-field-row]"),
+      null,
+      "desktop keeps its own composer layout",
+    );
+    assert.ok(
+      container
+        .querySelector("[data-ai-chat-recorder-row]")
+        .querySelector('[data-control="recorder"]'),
+      "desktop keeps the mic in the action row",
+    );
+  } finally {
+    pathname = "/project";
+    await act(async () => reactRoot.unmount());
+    dom.window.close();
+    for (const [key, saved] of previous) {
+      if (saved.exists) global[key] = saved.value;
+      else delete global[key];
     }
   }
 });

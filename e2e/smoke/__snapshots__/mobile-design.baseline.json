@@ -577,9 +577,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       },
       "graphite": {
         "tap-target": [
@@ -595,9 +593,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       },
       "amoled": {
         "tap-target": [
@@ -613,9 +609,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       },
       "dia": {
         "tap-target": [
@@ -631,9 +625,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       }
     },
     "ai-chat-full": {
@@ -656,9 +648,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       },
       "graphite": {
         "tap-target": [
@@ -679,9 +669,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       },
       "amoled": {
         "tap-target": [
@@ -702,9 +690,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       },
       "dia": {
         "tap-target": [
@@ -726,9 +712,7 @@
         ],
         "overflow-x": [],
         "purple-non-ai": [],
-        "mic-action": [
-          "div[aria=Message]"
-        ]
+        "mic-action": []
       }
     },
     "commands-search": {
