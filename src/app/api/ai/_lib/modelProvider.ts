@@ -1,6 +1,7 @@
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { createHmac, randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
+import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { logAiUsage, type AiUsageRecord } from "./aiUsage";
 import { identifyPrompt } from "@/lib/ai/prompts/registry";
 import { recordAiChatTurn } from "@/lib/telemetry/aiChatObservability";
@@ -261,15 +262,14 @@ function createGatewayFailureReportingMiddleware(
 }
 
 async function wrapAnthropicStreamWithFallback<
-  TChunk extends { type: string; error?: unknown },
-  TResult extends { stream: ReadableStream<TChunk> },
+  TResult extends { stream: ReadableStream<LanguageModelV4StreamPart> },
 >(
   startDirectStream: () => PromiseLike<TResult>,
   startFallbackStream: (error: unknown) => PromiseLike<TResult>,
   reportDirectError: (error: unknown) => void,
   canFallback: () => boolean,
   isAborted: () => boolean,
-  recordReplacedUsage: (chunk: TChunk) => Promise<void>,
+  recordReplacedUsage: (chunk: LanguageModelV4StreamPart) => Promise<void>,
 ): Promise<TResult> {
   let result: TResult;
   try {
@@ -280,7 +280,7 @@ async function wrapAnthropicStreamWithFallback<
     return startFallbackStream(error);
   }
   const reader = result.stream.getReader();
-  const buffered: TChunk[] = [];
+  const buffered: LanguageModelV4StreamPart[] = [];
   while (true) {
     let item: Awaited<ReturnType<typeof reader.read>>;
     try {
@@ -294,7 +294,7 @@ async function wrapAnthropicStreamWithFallback<
     if (item.done) {
       return {
         ...result,
-        stream: new ReadableStream<TChunk>({
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
           start(controller) {
             for (const chunk of buffered) controller.enqueue(chunk);
             controller.close();
@@ -312,7 +312,7 @@ async function wrapAnthropicStreamWithFallback<
       }
       return {
         ...result,
-        stream: new ReadableStream<TChunk>({
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
           start(controller) {
             for (const chunk of buffered) controller.enqueue(chunk);
             controller.enqueue(item.value);
@@ -327,7 +327,7 @@ async function wrapAnthropicStreamWithFallback<
   let bufferedIndex = 0;
   return {
     ...result,
-    stream: new ReadableStream<TChunk>({
+    stream: new ReadableStream<LanguageModelV4StreamPart>({
       async pull(controller) {
         if (bufferedIndex < buffered.length) {
           controller.enqueue(buffered[bufferedIndex]);
