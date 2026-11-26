@@ -671,6 +671,40 @@ test("direct Anthropic stream error after initial metadata chunk falls back seam
   }
 });
 
+test("a failed finish chunk before any content falls back to the gateway and reports urgently", async () => {
+  const h = createHarness({
+    plan: "Pro",
+    byokRows: { managed_gateway: MANAGED_KEY },
+    anthropicSpentUsd: 4,
+    anthropicStreamChunks: [
+      { type: "stream-start", warnings: [] },
+      { type: "finish", finishReason: { unified: "error" } },
+    ],
+  });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+      trustedTeamId: "team-1",
+      userId: 985,
+    });
+    const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+    const result = await model.doStream({ prompt: [] });
+    const chunks = [];
+    for await (const chunk of result.stream) chunks.push(chunk);
+    await h.flush();
+
+    assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
+    assert.ok(chunks.some((chunk) => chunk.type === "text-delta" && chunk.delta.startsWith("ok:gateway:")));
+    assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 4);
+    const reports = h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error");
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].urgent, true);
+    assert.equal(reports[0].extra.fundingSource, "managed");
+  } finally {
+    h.restore();
+  }
+});
+
 for (const route of ["platform-credential", "managed-gateway"]) {
   for (const failure of ["error-chunk", "read-rejection"]) {
     test(`${route} ${failure} after text-start but before text falls back and never charges Anthropic credit`, async () => {

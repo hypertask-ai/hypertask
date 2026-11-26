@@ -159,7 +159,18 @@ const USER_VISIBLE_STREAM_CHUNK_TYPES = new Set([
   "finish",
 ]);
 
-function isUserVisibleStreamChunk(chunk: { type?: string; delta?: string }): boolean {
+function isFailedFinishChunk(chunk: { type?: string; finishReason?: { unified?: string } }): boolean {
+  return chunk.type === "finish" && chunk.finishReason?.unified === "error";
+}
+
+function streamFailureReason(chunk: { type?: string; error?: unknown; finishReason?: { unified?: string } }): unknown {
+  if (chunk.type === "error") return chunk.error;
+  if (isFailedFinishChunk(chunk)) return new Error("AI stream finished with an error");
+  return undefined;
+}
+
+function isUserVisibleStreamChunk(chunk: { type?: string; delta?: string; finishReason?: { unified?: string } }): boolean {
+  if (isFailedFinishChunk(chunk)) return false;
   return typeof chunk.type === "string" && USER_VISIBLE_STREAM_CHUNK_TYPES.has(chunk.type) &&
     (!("delta" in chunk) || Boolean(chunk.delta));
 }
@@ -204,8 +215,9 @@ function createGatewayFailureReportingMiddleware(
                   controller.close();
                   return;
                 }
-                if (item.value.type === "error") {
-                  notify(item.value.error, params.abortSignal?.aborted);
+                const failure = streamFailureReason(item.value);
+                if (failure !== undefined) {
+                  notify(failure, params.abortSignal?.aborted);
                 }
                 controller.enqueue(item.value);
               } catch (error) {
@@ -267,10 +279,11 @@ async function wrapAnthropicStreamWithFallback<
         }),
       };
     }
-    if (item.value.type === "error") {
-      reportDirectError(item.value.error);
+    const failure = streamFailureReason(item.value);
+    if (failure !== undefined) {
+      reportDirectError(failure);
       await reader.cancel().catch(() => undefined);
-      if (!isAborted() && canFallback()) return startFallbackStream(item.value.error);
+      if (!isAborted() && canFallback()) return startFallbackStream(failure);
       return {
         ...result,
         stream: new ReadableStream<TChunk>({
@@ -301,7 +314,8 @@ async function wrapAnthropicStreamWithFallback<
             controller.close();
             return;
           }
-          if (item.value.type === "error") reportDirectError(item.value.error);
+          const failure = streamFailureReason(item.value);
+          if (failure !== undefined) reportDirectError(failure);
           controller.enqueue(item.value);
         } catch (error) {
           reportDirectError(error);
@@ -899,13 +913,7 @@ export function createUsageTracingMiddleware(
         totalTokens: inputTokens + outputTokens,
         latencyMs: Math.min(2147483647, Math.max(0, Math.round(performance.now() - startedAt))),
       };
-      const failure = error && typeof error === "object"
-        ? error as { name?: unknown; statusCode?: unknown }
-        : undefined;
-      const errorName = typeof failure?.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(failure.name)
-        ? failure.name : "ModelError";
-      const statusCode = typeof failure?.statusCode === "number" && Number.isInteger(failure.statusCode) && failure.statusCode >= 100 && failure.statusCode <= 599
-        ? failure.statusCode : null;
+      const errorClass = outcome === "failed" && error ? classifySafeProviderError(error) : "none";
       const observation = (async () => {
         row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
         let allowanceSnapshot: Awaited<ReturnType<typeof teamAllowanceSnapshot>> = null;
@@ -938,8 +946,8 @@ export function createUsageTracingMiddleware(
           ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) && !(authError instanceof Error && authError.name === "AiProviderAuthenticationError") ? [reportError({
             message: "AI model generation failed",
             source: "server",
-            fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorName}:${statusCode}`,
-            extra: { route: "modelProvider", stage: "inference", model: modelId, promptId: row.promptId!, errorName, statusCode },
+            fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorClass}`,
+            extra: { route: "modelProvider", stage: "inference", model: modelId, promptId: row.promptId!, errorClass },
           })] : []),
         ]);
       })().catch(() => undefined);
