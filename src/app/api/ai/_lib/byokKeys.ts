@@ -36,6 +36,7 @@ import {
 } from "@/lib/aiModelOptions";
 import {
   BASETEN_MODEL_SLUGS,
+  BYOK_PROVIDER_KEYS,
   getAiProviderInfo,
   isByokProviderKey,
   isByokProviderRestrictedInGdprSafeMode,
@@ -50,6 +51,7 @@ import {
 import { autoModelEnabled } from "@/app/api/ai/_lib/autoModel";
 import {
   getAnthropicMonthlyCreditState,
+  isCustomerPaidCredential,
   isPlatformAnthropicCredential,
   platformAnthropicApiKey,
   resolveAiFundingTableDecision,
@@ -610,6 +612,24 @@ export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
     throw new ForcedTeamKeyError(forced.provider);
   }
   return (await getTeamGatewayFunding(lookup))?.apiKey;
+}
+
+export async function resolveAutoFundingContext(
+  lookup: ByokLookupContext,
+  plan: AiDefaultModelContext["plan"],
+  flags?: ByokProviderFlag[] | null,
+): Promise<{ payer: "customer" | "hypertask"; byokProviderFlags: ByokProviderFlag[] }> {
+  if (plan === "Free") return { payer: "hypertask", byokProviderFlags: [] };
+  const resolvedFlags = await Promise.all(BYOK_PROVIDER_KEYS.filter((provider) => provider !== "custom").map(async (provider) => {
+    const credential = await getByokApiKeyForProvider(provider, flags, lookup, { resolveWithoutFlag: true });
+    return { provider, enabled: isCustomerPaidCredential(credential, process.env.AI_GATEWAY_API_KEY?.trim(), isOurGatewayKey) };
+  }));
+  const gateway = await getTeamGatewayFunding(lookup);
+  if (gateway?.source === "customer") resolvedFlags.push({ provider: "gateway", enabled: true });
+  return {
+    payer: resolvedFlags.some((flag) => flag.enabled) ? "customer" : "hypertask",
+    byokProviderFlags: resolvedFlags,
+  };
 }
 
 export async function resolveAiFundingForRequest(args: {

@@ -163,8 +163,8 @@ function isFailedFinishChunk(chunk: { type?: string; finishReason?: { unified?: 
   return chunk.type === "finish" && chunk.finishReason?.unified === "error";
 }
 
-function recordReplacedDirectUsage(modelId: string, usage: { inputTokens?: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens?: { total?: number } } | undefined) {
-  void generationCostUsd(
+async function recordReplacedDirectUsage(modelId: string, usage: { inputTokens?: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens?: { total?: number } } | undefined) {
+  await generationCostUsd(
     modelId,
     PLATFORM_ANTHROPIC_USAGE_PROVIDER,
     usage?.inputTokens?.total ?? 0,
@@ -269,6 +269,7 @@ async function wrapAnthropicStreamWithFallback<
   reportDirectError: (error: unknown) => void,
   canFallback: () => boolean,
   isAborted: () => boolean,
+  recordReplacedUsage: (chunk: TChunk) => Promise<void>,
 ): Promise<TResult> {
   let result: TResult;
   try {
@@ -305,7 +306,10 @@ async function wrapAnthropicStreamWithFallback<
     if (failure !== undefined) {
       reportDirectError(failure);
       await reader.cancel().catch(() => undefined);
-      if (!isAborted() && canFallback()) return startFallbackStream(failure);
+      if (!isAborted() && canFallback()) {
+        if (isFailedFinishChunk(item.value)) await recordReplacedUsage(item.value);
+        return startFallbackStream(failure);
+      }
       return {
         ...result,
         stream: new ReadableStream<TChunk>({
@@ -382,7 +386,7 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
         if (!failure) return result;
         reportDirectError(failure);
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) return result;
-        recordReplacedDirectUsage(modelId, result.usage);
+        await recordReplacedDirectUsage(modelId, result.usage);
         return fallbackModel().doGenerate(params);
       } catch (error) {
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
@@ -398,6 +402,7 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
         reportDirectError,
         () => Boolean(credential.fallbackGatewayApiKey),
         () => Boolean(params.abortSignal?.aborted),
+        (chunk) => recordReplacedDirectUsage(modelId, chunk.type === "finish" ? chunk.usage : undefined),
       );
     },
   };
@@ -450,7 +455,7 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
         if (!failure) return result;
         reportDirectError(failure);
         if (params.abortSignal?.aborted) return result;
-        recordReplacedDirectUsage(directModelId, result.usage);
+        await recordReplacedDirectUsage(directModelId, result.usage);
         runtimeProvider.provider = "gateway";
         return doGenerate();
       } catch (error) {
@@ -476,6 +481,7 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
         reportDirectError,
         () => true,
         () => Boolean(params.abortSignal?.aborted),
+        (chunk) => recordReplacedDirectUsage(directModelId, chunk.type === "finish" ? chunk.usage : undefined),
       );
     },
   };

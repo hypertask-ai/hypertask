@@ -74,6 +74,8 @@ function createHarness({
   anthropicSpentUsd = 0,
   anthropicLimitUsd = 200,
   byokRows = {},
+  agentRows = {},
+  beforePrice = async () => {},
   forcedRow = null,
   anthropicError = null,
   anthropicStreamChunks = null,
@@ -114,6 +116,12 @@ function createHarness({
         return typeof row === "string"
           ? { id: `row-${provider}`, updatedAt: new Date("2026-11-01T00:00:00Z"), enabled: true, ciphertext: row }
           : row;
+      },
+    },
+    agentByokApiKey: {
+      findUnique: async ({ where }) => {
+        const ciphertext = agentRows[where.agentId_provider.provider];
+        return ciphertext ? { enabled: true, ciphertext } : null;
       },
     },
     aiUsage: {
@@ -242,7 +250,10 @@ function createHarness({
         };
       },
       gatewayCatalogModelSlug: (slug) => slug,
-      modelPricing: async () => ({ inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000005 }),
+      modelPricing: async () => {
+        await beforePrice();
+        return { inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000005 };
+      },
       modelCostUsd: (p, i, o) => i * p.inputUsdPerToken + o * p.outputUsdPerToken,
       sharedAiAllowanceErrorMessage: () => null,
       teamAllowanceSnapshot: async () => null,
@@ -831,6 +842,72 @@ for (const aborted of [false, true]) {
       assert.equal(h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error").length, 1);
     } finally {
       h.restore();
+    }
+  });
+}
+
+for (const route of ["platform-credential", "managed-gateway"]) {
+  for (const mode of ["generate", "stream"]) {
+    test(`${route} ${mode} records replaced direct usage before starting the gateway`, async () => {
+      let releasePricing, pricingStarted;
+      const pricingGate = new Promise((resolve) => { releasePricing = resolve; });
+      const started = new Promise((resolve) => { pricingStarted = resolve; });
+      const h = createHarness({
+        anthropicSpentUsd: 6,
+        anthropicFinish: "error",
+        anthropicStreamChunks: [{
+          type: "finish", finishReason: { unified: "error" },
+          usage: { inputTokens: { total: 1000 }, outputTokens: { total: 200 } },
+        }],
+        beforePrice: async () => { pricingStarted(); await pricingGate; },
+      });
+      try {
+        h.modelProvider.registerManagedGatewayKey(MANAGED_KEY);
+        const credential = route === "managed-gateway" ? MANAGED_KEY : {
+          kind: "platform-anthropic", apiKey: PLATFORM_ANTHROPIC_KEY,
+          fallbackGatewayApiKey: MANAGED_KEY,
+        };
+        const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", credential);
+        const operation = mode === "generate" ? model.doGenerate({ prompt: [] }) : model.doStream({ prompt: [] });
+        await started;
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic"]);
+        releasePricing();
+        const result = await operation;
+        if (mode === "stream") for await (const _chunk of result.stream) {}
+        assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 6.002);
+        assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
+        await h.flush();
+        assert.ok(h.usageRows.every((row) => row.provider === "gateway"));
+      } finally {
+        releasePricing();
+        h.restore();
+      }
+    });
+  }
+}
+
+for (const plan of ["Pro", "AI", "BYOK"]) {
+  test(`${plan} Auto resolves agent and team credentials instead of trusting enabled flags`, async () => {
+    for (const owner of ["agent", "team", "none"]) {
+      const h = createHarness({
+        plan,
+        agentRows: owner === "agent" ? { openai: CUSTOMER_OPENAI_KEY } : {},
+        byokRows: owner === "team" ? { openai: CUSTOMER_OPENAI_KEY } : {},
+      });
+      try {
+        const lookup = { trustedTeamId: "team-1", userId: 985, agentId: "agent-1" };
+        const flags = [{ provider: "openai", enabled: true }, { provider: "invented", enabled: true }];
+        const funding = await h.byokKeys.resolveAutoFundingContext(lookup, plan, flags);
+        assert.equal(funding.payer, owner === "none" ? "hypertask" : "customer");
+        const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan, ...funding });
+        assert.equal(catalog.getAiModelDefinition(pick.modelKey).provider, owner === "none" ? "anthropic" : "openai");
+        const credential = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, flags, lookup);
+        if (owner === "none") assert.equal(h.aiFunding.isPlatformAnthropicCredential(credential), true);
+        else assert.equal(credential, CUSTOMER_OPENAI_KEY);
+      } finally {
+        h.restore();
+      }
     }
   });
 }

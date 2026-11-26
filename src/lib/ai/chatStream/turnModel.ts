@@ -15,7 +15,7 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getAiProviderInfo, resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAutoFundingContext, resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import { autoForcedProvider, autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
@@ -209,7 +209,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         feature: body.aiFeature,
         settings: teamProviderSettings,
         plan: storePlanId,
-        byokProviderFlags: body.byokProviderFlags,
+        ...await resolveAutoFundingContext(selectionLookupContext, storePlanId, body.byokProviderFlags),
         grokGemini4Enabled,
         planDefault: requestDefaultModelOption,
         forcedProvider: await autoForcedProvider(selectionLookupContext),

@@ -16,7 +16,7 @@ import {
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getTeamGatewayFunding, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAutoFundingContext, resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getTeamGatewayFunding, isOurGatewayKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -729,7 +729,7 @@ export async function selectTaskWriterModel(args: {
         feature: args.aiFeature,
         settings: teamContext.settings,
         plan: storePlanId,
-        byokProviderFlags: args.byokProviderFlags,
+        ...await resolveAutoFundingContext(keyLookup, storePlanId, args.byokProviderFlags),
         grokGemini4Enabled,
         planDefault: requestDefaultModelOption,
         forcedProvider: await autoForcedProvider(keyLookup),

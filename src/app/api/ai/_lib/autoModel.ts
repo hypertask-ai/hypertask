@@ -56,7 +56,7 @@ export function autoModelPool(context: AutoModelContext): TAiModelOption[] {
     if (!isAiModelOptionVisible(option, true, false, Boolean(context.grokGemini4Enabled))) continue;
     if (!resolveTeamProviderEnabled(context.settings, definition.provider)) continue;
     if (context.forcedProvider && !modelOptionMatchesForcedKey(option, context.forcedProvider)) continue;
-    if (context.plan === "BYOK" && !byokAllows(context.byokProviderFlags, option)) continue;
+    if ((context.payer === "customer" || (context.plan === "BYOK" && context.payer !== "hypertask")) && !byokAllows(context.byokProviderFlags, option)) continue;
     if (freePlan && isPremiumAiModelDefinition(definition, true)) continue;
     const rank = EFFORT_RANK[option.effort ?? "standard"];
     const held = byModelKey.get(option.modelKey);
