@@ -22,6 +22,7 @@ import { toEditableHtml } from "@/app/api/mcp/ai/improve/plainText";
 import prisma from "@/lib/prisma";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -112,13 +113,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const allowanceMessage = warnIfAllowanceRefused(error, "mcp/ai/improve");
     if (allowanceMessage) return NextResponse.json({ success: false, error: allowanceMessage }, { status: 429 });
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/improve",
-      source: "handled",
-      extra: { stage: "request" },
-    });
+      stage: "request",
+      error,
+      });
     console.error("[mcp/ai/improve] error", errorMessage(error));
     return NextResponse.json(
       { success: false, error: "An internal error occurred. Please try again later." },

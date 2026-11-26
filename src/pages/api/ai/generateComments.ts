@@ -9,6 +9,7 @@ import { ITaskArchiveActivity, ITaskAssignedActivity, ITaskEstimateActivity, ITa
 import { extractTipTapContent } from '@/utils/helperFunctions/multiPages';
 import { getReactionMetadata } from '@/utils/controllers/ai/task/generateCommentsController';
 import { buildTaskPayloadForAI } from '@/utils/controllers/ai/task/buildTaskPayloadForAI';
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 
 
@@ -39,13 +40,11 @@ async function handler(
     const { task, response } = result;
     return res.status(200).json({ task, comments: response })
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/ai/generateComments",
-      source: "handled",
-      extra: { stage: "request" },
-    });
+      stage: "request",
+      error,
+      });
     console.log(error)
     return res.status(500).json(error)
   }

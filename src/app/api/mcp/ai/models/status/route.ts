@@ -11,6 +11,7 @@ import { wrapMcpRoute, validateMcpRouteAuth, checkMcpRouteRateLimit } from "@/li
 import prisma from "@/lib/prisma";
 import { providerRows } from "@/utils/controllers/teams/aiProviderSettingsView";
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,13 +41,11 @@ async function readJev(userId: number) {
   try {
     return { ...JEV, enabled: await isFeatureEnabled(JEV.flag, userId) };
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI settings read failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/models/status",
-      source: "handled",
-      extra: { stage: "jev" },
-    });
+      stage: "jev",
+      error,
+      });
     return { ...JEV, enabled: null };
   }
 }
@@ -88,13 +87,11 @@ async function readSettings(ctx: AuthContext, request: NextRequest) {
       jev,
     };
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI settings read failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/models/status",
-      source: "handled",
-      extra: { stage: "team" },
-    });
+      stage: "team",
+      error,
+      });
     return { teamId: null, gateway: null, providers: [], jev, unreadable: true };
   }
 }
@@ -116,13 +113,11 @@ export const GET = wrapMcpRoute(async (request: NextRequest) => {
     }
     return NextResponse.json({ success: true, ...status, settings: await readSettings(ctx, request) }, { headers });
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/models/status",
-      source: "handled",
-      extra: { stage: "request" },
-    });
+      stage: "request",
+      error,
+      });
     return NextResponse.json({ success: false, error: "Model status is unavailable" }, { status: 503, headers });
   }
 });
