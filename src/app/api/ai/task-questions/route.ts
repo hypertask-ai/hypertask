@@ -4,10 +4,9 @@ import { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG } from "@/lib/flags/definitions/htpr
 import { taskWriterSkillsSchema, MAX_SKILL_INPUT_LENGTH } from "@/lib/ai/taskWriterSkills";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
-import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiModel as resolveLegacyAiModel , configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { getAiDefaultModelContext, resolveAutomaticAiModel , getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { HTPR_7534_WRITING_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7979_ACTION_CHIPS_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -15,7 +14,6 @@ import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import {
   providerOptionsForAiModel,
