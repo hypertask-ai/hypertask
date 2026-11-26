@@ -163,6 +163,12 @@ function isFailedFinishChunk(chunk: { type?: string; finishReason?: { unified?: 
   return chunk.type === "finish" && chunk.finishReason?.unified === "error";
 }
 
+function failedFinishReason(result: { finishReason?: { unified?: string } }): Error | undefined {
+  return result.finishReason?.unified === "error"
+    ? new Error("AI generation finished with an error")
+    : undefined;
+}
+
 function streamFailureReason(chunk: { type?: string; error?: unknown; finishReason?: { unified?: string } }): unknown {
   if (chunk.type === "error") return chunk.error;
   if (isFailedFinishChunk(chunk)) return new Error("AI stream finished with an error");
@@ -195,7 +201,10 @@ function createGatewayFailureReportingMiddleware(
     specificationVersion: "v4",
     wrapGenerate: async ({ doGenerate, params }) => {
       try {
-        return await doGenerate();
+        const result = await doGenerate();
+        const failure = failedFinishReason(result);
+        if (failure) notify(failure, params.abortSignal?.aborted);
+        return result;
       } catch (error) {
         notify(error, params.abortSignal?.aborted);
         throw error;
@@ -355,7 +364,12 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
     wrapGenerate: async ({ doGenerate, params }) => {
       runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
       try {
-        return await doGenerate();
+        const result = await doGenerate();
+        const failure = failedFinishReason(result);
+        if (!failure) return result;
+        reportDirectError(failure);
+        if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) return result;
+        return fallbackModel().doGenerate(params);
       } catch (error) {
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
         reportDirectError(error);
@@ -417,7 +431,13 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
       }
       runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
       try {
-        return await direct.doGenerate(params);
+        const result = await direct.doGenerate(params);
+        const failure = failedFinishReason(result);
+        if (!failure) return result;
+        reportDirectError(failure);
+        if (params.abortSignal?.aborted) return result;
+        runtimeProvider.provider = "gateway";
+        return doGenerate();
       } catch (error) {
         if (params.abortSignal?.aborted) throw error;
         runtimeProvider.provider = "gateway";

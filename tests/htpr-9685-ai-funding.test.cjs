@@ -77,6 +77,7 @@ function createHarness({
   forcedRow = null,
   anthropicError = null,
   anthropicStreamChunks = null,
+  anthropicFinish = "stop",
   gatewayError = null,
   redis = createFakeRedis(),
 } = {}) {
@@ -137,7 +138,7 @@ function createHarness({
       return {
         content: [{ type: "text", text: `ok:${providerName}:${modelId}` }],
         usage: { inputTokens: { total: 1000 }, outputTokens: { total: 200 } },
-        finishReason: { unified: "stop" },
+        finishReason: { unified: providerName === "anthropic" ? anthropicFinish : "stop" },
       };
     },
     doStream: async (params) => {
@@ -700,6 +701,35 @@ test("a failed finish chunk before any content falls back to the gateway and rep
     assert.equal(reports.length, 1);
     assert.equal(reports[0].urgent, true);
     assert.equal(reports[0].extra.fundingSource, "managed");
+  } finally {
+    h.restore();
+  }
+});
+
+test("a non-streaming generation that finishes with an error falls back to the gateway and reports", async () => {
+  const h = createHarness({
+    plan: "Pro",
+    byokRows: { managed_gateway: MANAGED_KEY },
+    anthropicSpentUsd: 6,
+    anthropicFinish: "error",
+  });
+  try {
+    const pick = auto.pickAutoModelOption({ feature: "taskWriter", settings: {}, plan: "Pro" });
+    const cred = await h.byokKeys.getByokOrTeamGatewayApiKeyForModelOption(pick, [], {
+      trustedTeamId: "team-1",
+      userId: 985,
+    });
+    const model = h.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
+    const result = await model.doGenerate({ prompt: [] });
+    await h.flush();
+
+    assert.match(result.content[0].text, /^ok:gateway:/);
+    assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
+    assert.ok(h.usageRows.every((row) => row.provider === "gateway"));
+    assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 6);
+    const reports = h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error");
+    assert.equal(reports.length, 1);
+    assert.equal(reports[0].urgent, true);
   } finally {
     h.restore();
   }
