@@ -208,13 +208,13 @@ export async function POST(request: NextRequest) {
     const allowanceMessage = warnIfAllowanceRefused(error, "ai/suggest-reply");
     if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/suggest-reply",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/suggest-reply:request",
       extra: { stage: "request" },
     });
-    console.error("[ai/suggest-reply] request failed", error);
+    console.error("[ai/suggest-reply] request failed");
     return NextResponse.json(
       { error: `Failed to generate suggestion: ${errorMessage(error)}` },
       { status: 500 }

@@ -324,13 +324,13 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
       return NextResponse.json({ questions: [] });
     }
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/task-questions",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/task-questions:empty-questions-fallback",
       extra: { stage: "empty-questions-fallback" },
     });
-    console.error("[ai/task-questions] failed:", error);
+    console.error("[ai/task-questions] failed:");
     return NextResponse.json({ questions: [] });
   }
 }

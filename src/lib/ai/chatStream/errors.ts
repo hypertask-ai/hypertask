@@ -20,7 +20,7 @@ export function createSseErrorResponse(message: string, status?: number) {
 
 export function errorMessage(error: unknown, quiet = false) {
   if (error instanceof Error && error.name.startsWith("Prisma")) {
-    if (!quiet) console.error("[ai/chat/stream] internal error", error);
+    if (!quiet) console.error("[ai/chat/stream] internal error", classifySafeProviderError(error));
     return "Sorry, an error occurred while processing your request.";
   }
   return toErrorMessage(
@@ -159,7 +159,7 @@ export function userFacingErrorMessage(
     if (!quiet) console.warn(`[ai/chat/stream] ${stage} refused: DeepSeek AI key rejected`);
     return error.message;
   }
-  if (!quiet) console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
+  if (!quiet) console.error(`[ai/chat/stream] ${stage} user-facing error`, classifySafeProviderError(error));
   return "Sorry, something went wrong while generating a response. Please try again.";
 }
 
@@ -181,7 +181,7 @@ export function requestErrorMessage(
   } else if (stage === "validation" && error instanceof z.ZodError) {
     console.info("[ai/chat/stream] request-validation refused: invalid request");
   } else {
-    console.error(`[ai/chat/stream] request-${stage} user-facing error`, error);
+    console.error(`[ai/chat/stream] request-${stage} user-facing error`, classifySafeProviderError(error));
   }
   if (stage === "body") {
     return "Invalid request: the request body could not be read.";

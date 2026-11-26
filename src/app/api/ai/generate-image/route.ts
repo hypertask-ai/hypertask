@@ -165,13 +165,13 @@ export async function POST(request: NextRequest) {
         );
       }
       await reportError({
-        message: error instanceof Error ? error.message : "AI request failed",
-        stack: error instanceof Error ? error.stack : undefined,
+        message: "AI request failed",
         url: "/api/ai/generate-image",
         source: "handled",
+        fingerprintKey: "ai-request:/api/ai/generate-image:image-fallback",
         extra: { stage: "image-fallback" },
       });
-      console.error("[ai/generate-image] unavailable:", error);
+      console.error("[ai/generate-image] unavailable:");
     }
 
     const requesterName = cookieUser.displayName || "User";
@@ -220,13 +220,13 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/generate-image",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/generate-image:request",
       extra: { stage: "request" },
     });
-    console.error("[ai/generate-image] error:", error);
+    console.error("[ai/generate-image] error:");
     return NextResponse.json(
       { error: errorMessage(error) },
       { status: 500 }

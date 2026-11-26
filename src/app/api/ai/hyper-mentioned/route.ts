@@ -275,10 +275,10 @@ async function hyperMention(request: NextRequest) {
     } catch (error) {
       if (!requestedMentionLabel) throw error;
       await reportError({
-        message: error instanceof Error ? error.message : "AI request failed",
-        stack: error instanceof Error ? error.stack : undefined,
+        message: "AI request failed",
         url: "/api/ai/hyper-mentioned",
         source: "handled",
+        fingerprintKey: "ai-request:/api/ai/hyper-mentioned:model-fallback",
         extra: { stage: "model-fallback" },
       });
       mentionModelUnavailable = true;
@@ -446,13 +446,13 @@ async function hyperMention(request: NextRequest) {
     const allowanceMessage = warnIfAllowanceRefused(error, "ai/hyper-mentioned");
     if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/hyper-mentioned",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/hyper-mentioned:request",
       extra: { stage: "request" },
     });
-    console.error("[ai/hyper-mentioned] error:", error);
+    console.error("[ai/hyper-mentioned] error:");
     return NextResponse.json(
       { error: errorMessage(error) },
       { status: 500 }

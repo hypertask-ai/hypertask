@@ -88,7 +88,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
         stage: "owned-team-lookup",
         error,
         });
-      console.error('[MCP AI Usage] Owned-team lookup unavailable:', error)
+      console.error('[MCP AI Usage] Owned-team lookup unavailable:')
       return NextResponse.json(
         { success: false, error: 'Could not load AI usage' },
         { status: 502 },
@@ -163,7 +163,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
       stage: "usage-snapshot",
       error,
       });
-    console.error('[MCP AI Usage] Team usage snapshot unavailable:', error)
+    console.error('[MCP AI Usage] Team usage snapshot unavailable:')
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
       { status: 502 },
@@ -233,7 +233,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
       stage: "spend",
       error,
       });
-    console.error('[MCP AI Usage] Failed to load AI spend:', error)
+    console.error('[MCP AI Usage] Failed to load AI spend:')
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
       { status: 502 },
@@ -348,7 +348,7 @@ export async function GET(request: NextRequest) {
       stage: "request",
       error,
       });
-    console.error('[MCP AI Usage] Error:', error)
+    console.error('[MCP AI Usage] Error:')
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

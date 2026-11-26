@@ -366,13 +366,13 @@ export async function POST(request: NextRequest) {
     } catch (error) {
       if (isPlanLimitReachedError(error) || request.signal.aborted) throw error;
       await reportError({
-        message: error instanceof Error ? error.message : "AI request failed",
-        stack: error instanceof Error ? error.stack : undefined,
+        message: "AI request failed",
         url: "/api/ai/generate-board",
         source: "handled",
+        fingerprintKey: "ai-request:/api/ai/generate-board:sample-board-fallback",
         extra: { stage: "sample-board-fallback" },
       });
-      console.error("[ai/generate-board] falling back to sample board", error);
+      console.error("[ai/generate-board] falling back to sample board");
       const project = await createSampleBoard({ user, team });
       return {
         projectId: project.id,
@@ -408,10 +408,10 @@ export async function POST(request: NextRequest) {
       );
     }
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/generate-board",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/generate-board:request",
       extra: { stage: "request" },
     });
     throw error;

@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       stage: "request",
       error,
       });
-    console.error("[mcp/ai/improve] error", errorMessage(error));
+    console.error("[mcp/ai/improve] error");
     return NextResponse.json(
       { success: false, error: "An internal error occurred. Please try again later." },
       { status: 500 }

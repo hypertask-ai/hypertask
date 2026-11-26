@@ -205,10 +205,10 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/demo/chat/stream",
       source: "handled",
+      fingerprintKey: "ai-request:/api/demo/chat/stream:allowance",
       extra: { stage: "allowance" },
     });
     return sseErrorResponse("Demo chat is unavailable. Please try again later.", 503);
@@ -304,13 +304,13 @@ export async function POST(request: NextRequest) {
         finish("complete");
       } catch (error) {
         await reportError({
-          message: error instanceof Error ? error.message : "AI request failed",
-          stack: error instanceof Error ? error.stack : undefined,
+          message: "AI request failed",
           url: "/api/demo/chat/stream",
           source: "handled",
+          fingerprintKey: "ai-request:/api/demo/chat/stream:stream",
           extra: { stage: "stream" },
         });
-        console.error("demo chat generation failed", error);
+        console.error("demo chat generation failed");
         fail(error);
       }
     },

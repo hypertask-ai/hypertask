@@ -38,8 +38,9 @@ function loadErrorFormatters(logs = []) {
     "console",
     "z",
     "toErrorMessage",
+    "classifySafeProviderError",
     `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage, ownKeyRejectedMessage, isOwnKeyAuthFailure };`
-  )(logger, z, loadToErrorMessage());
+  )(logger, z, loadToErrorMessage(), require("./helpers/ai-funding-stub.cjs").createAiFundingStub().classifySafeProviderError);
 }
 
 function loadSettingsScopeSchema() {
@@ -113,7 +114,7 @@ test("included allowance exhaustion keeps its safe recovery message", () => {
   assert.equal(userFacingErrorMessage(wrapped, "model-stream"), inner.message);
 });
 
-test("user-facing formatting logs the full error with its stage", () => {
+test("user-facing formatting logs only the failure category and stage", () => {
   const logs = [];
   const { userFacingErrorMessage } = loadErrorFormatters(logs);
   const error = new Error("Provider response with debugging detail");
@@ -122,7 +123,8 @@ test("user-facing formatting logs the full error with its stage", () => {
 
   assert.equal(logs.length, 1);
   assert.match(logs[0][0], /model-stream/);
-  assert.equal(logs[0][1], error);
+  assert.equal(logs[0][1], "provider_error");
+  assert.equal(JSON.stringify(logs).includes(error.message), false);
 });
 
 test("model-facing errorMessage still returns non-Prisma errors verbatim", () => {

@@ -1008,7 +1008,7 @@ export function resolveAutomaticAiModel(
             try {
               return await doGenerate();
             } catch (retryError) {
-              console.error(`[ai-model-fallback] ${modelId} failed again; not switching to another model`, retryError);
+              console.error(`[ai-model-fallback] ${modelId} failed again; not switching to another model`);
               throw retryError;
             }
           }

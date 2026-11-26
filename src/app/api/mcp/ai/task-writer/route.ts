@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
       stage: "request",
       error,
       });
-    console.error("[mcp/ai/task-writer] error", error);
+    console.error("[mcp/ai/task-writer] error");
     return NextResponse.json(
       { success: false, error: errorMessage(error) },
       { status: 500 }

@@ -238,12 +238,18 @@ test("new report payloads use only error diagnostics and literal route/stage met
           assert.ok(ts.isPropertyAssignment(property), "No payload spreads or shorthand error objects");
           return [property.name.getText(), property.initializer.getText()];
         }));
-        assert.deepEqual(Object.keys(properties).sort(), ["extra", "message", "source", "stack", "url"]);
         assert.equal(properties.source, '"handled"');
         assert.match(properties.url, /^"\/api\/[a-zA-Z/\[\]-]+"$/);
         assert.match(properties.extra, /^\{ stage: "[a-z-]+" \}$/);
-        assert.match(properties.message, /^error instanceof Error \? error\.message : "[^"]+"$/);
-        assert.equal(properties.stack, "error instanceof Error ? error.stack : undefined");
+        if (properties.fingerprintKey) {
+          assert.deepEqual(Object.keys(properties).sort(), ["extra", "fingerprintKey", "message", "source", "url"]);
+          assert.equal(properties.message, '"AI request failed"');
+          assert.match(properties.fingerprintKey, /^"ai-request:\/api\/[a-z/\[\]-]+:[a-z-]+"$/);
+        } else {
+          assert.deepEqual(Object.keys(properties).sort(), ["extra", "message", "source", "stack", "url"]);
+          assert.match(properties.message, /^error instanceof Error \? error\.message : "[^"]+"$/);
+          assert.equal(properties.stack, "error instanceof Error ? error.stack : undefined");
+        }
         reports += 1;
       }
       ts.forEachChild(node, visit);
@@ -326,9 +332,11 @@ function routeStubs(error, reports) {
 function assertSafeReport(report, error, url) {
   assert.equal(report.source, "handled");
   assert.equal(report.url, url);
-  assert.equal(report.message, error instanceof Error ? error.message : "AI request failed");
-  assert.equal(report.stack, error instanceof Error ? error.stack : undefined);
+  assert.equal(report.message, "AI request failed");
+  assert.equal(report.stack, undefined);
+  assert.equal(report.fingerprintKey, `ai-request:${url}:${report.extra.stage}`);
   assert.deepEqual(Object.keys(report.extra), ["stage"]);
+  if (error instanceof Error) assert.equal(JSON.stringify(report).includes(error.message), false);
   assert.doesNotMatch(JSON.stringify(report), /private prompt|private reply|requestBodyValues|responseBody/);
 }
 
