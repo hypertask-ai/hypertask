@@ -3,6 +3,7 @@ import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "./route";
 import { permanentlyDeleteTask } from "@/utils/controllers/tasks/invokeTaskDelete";
 import prisma from "@/lib/prisma";
+import { anyStatus } from "@/lib/db/softDeleteReads";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -15,6 +16,7 @@ const route = taskWriteRoute({
       where: {
         id: parsedTaskId,
         project: taskWriteAccessWhere(session.userId),
+        ...anyStatus,
       },
       select: { projectId: true, status: true },
     });

@@ -8,6 +8,7 @@ import { trackPrismaQuery } from '@/lib/queryCountTracker'
 import { createMcpTimingPool, mcpDbTimings } from '@/lib/mcp/dbTiming'
 import { normalizeDbConnectionString } from '@/lib/dbConnectionString'
 import { TASK_SAVE_LIMIT_MS } from '@/lib/tasks/saveLimit'
+import { guardSoftDeleteRead } from '@/lib/db/softDeleteReads'
 
 const RELATION_OPS = new Set([
   "findMany",
@@ -44,20 +45,23 @@ const prismaClientSingleton = () => {
         ) {
           ;(args as any).relationLoadStrategy = "query"
         }
-        const store = mcpDbTimings.getStore()
-        if (!store) return query(args)
-        const started = performance.now()
-        store.queries++
-        try {
-          return await query(args)
-        } finally {
-          const ms = performance.now() - started
-          store.queryMs += ms
-          if (!store.maxOperation || ms > store.maxMs) {
-            store.maxMs = ms
-            store.maxOperation = `${model ?? 'Prisma'}.${operation}`
+        const timed = async (nextArgs?: unknown) => {
+          const store = mcpDbTimings.getStore()
+          if (!store) return query(nextArgs as any)
+          const started = performance.now()
+          store.queries++
+          try {
+            return await query(nextArgs as any)
+          } finally {
+            const ms = performance.now() - started
+            store.queryMs += ms
+            if (!store.maxOperation || ms > store.maxMs) {
+              store.maxMs = ms
+              store.maxOperation = `${model ?? 'Prisma'}.${operation}`
+            }
           }
         }
+        return guardSoftDeleteRead({ model, operation, args, query: timed }) as any
       },
     },
   })

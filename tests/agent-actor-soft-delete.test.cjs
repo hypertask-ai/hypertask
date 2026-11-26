@@ -120,6 +120,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
   };
 
   const stubs = {
+    "@/lib/db/softDeleteReads": { anyStatus: { status: { in: ["Normal", "Archive", "Deleted"] } } },
     "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, assertProjectTicketRoom: async () => {} },
     "@/lib/tasks/sameBoardRelations": loadTs("src/lib/tasks/sameBoardRelations.ts"),
     "date-fns": { subMinutes: (date) => date },

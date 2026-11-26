@@ -1,5 +1,6 @@
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
+import { VISIBLE_ROW_STATUS } from "@/lib/db/softDeleteReads";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (
@@ -20,7 +21,7 @@ const handler: NextApiHandler = async (
         },
       },
       include: {
-        projects: true,
+        projects: { where: { status: VISIBLE_ROW_STATUS } },
         members: true,
         googleAccount: true,
         team_activity: true,

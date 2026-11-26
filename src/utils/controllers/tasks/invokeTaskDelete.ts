@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { anyStatus } from "@/lib/db/softDeleteReads";
 import {
   assertAgentAssignmentChangeAllowed,
   cancelAgentMutationLeaseForHumanOverride,
@@ -577,7 +578,7 @@ const deleteSubTasks = async (taskId: number, claim: HardDeleteClaim) => {
   console.log("------------ deleting Subtasks ==");
   try {
     const task = await prisma.task.findUnique({
-      where: { id: taskId },
+      where: { id: taskId, ...anyStatus },
       select: {
         subTasks: {
           orderBy: {

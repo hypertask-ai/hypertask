@@ -7,6 +7,7 @@ export async function turbopufferGetSuggestions(
   const taskRows = await searchTasks({
     searchQuery,
     projectIds,
+    excludeStatuses: ["Deleted"],
     topK: 10,
   });
 

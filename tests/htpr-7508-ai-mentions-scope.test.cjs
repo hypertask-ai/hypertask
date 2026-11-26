@@ -216,7 +216,7 @@ for (const enforce of [true, false]) {
     const h = harness({ enforce, grant: "accepted" });
     const res = await allowed(h, variants[1]);
     const projectIds = [h.project.id];
-    assert.deepEqual(h.searches, [{ searchQuery: "Board", projectIds, topK: 25, keywordOnly: true }]);
+    assert.deepEqual(h.searches, [{ searchQuery: "Board", projectIds, excludeStatuses: ["Deleted"], topK: 25, keywordOnly: true }]);
     assert.deepEqual(res.body.filter(item => item.type === "task").map(item => item.project_id).toSorted(), projectIds.toSorted());
   });
 }

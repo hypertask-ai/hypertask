@@ -37,6 +37,7 @@ export async function turbopufferFetchMentionTasks(
     const rows = await searchTasks({
       searchQuery,
       projectIds,
+      excludeStatuses: ["Deleted"],
       topK: 25,
       keywordOnly: true,
     });

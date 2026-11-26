@@ -67,6 +67,7 @@ async function provision() {
 
   let schemaSql;
   let prisma;
+  let anyStatus;
   try {
     let ready = false;
     for (let i = 0; i < 60; i += 1) {
@@ -116,13 +117,14 @@ async function provision() {
       alias: { "@": path.join(root, "src") },
     });
     prisma = jiti(path.join(root, "src", "lib", "prisma.ts")).default;
+    anyStatus = jiti(path.join(root, "src", "lib", "db", "softDeleteReads.ts")).anyStatus;
     const { permanentlyDeleteTask } = jiti(
       path.join(root, "src", "utils", "controllers", "tasks", "invokeTaskDelete.ts"),
     );
     const { updateTaskAndSubtasks } = jiti(
       path.join(root, "src", "pages", "api", "queues", "tasks", "taskDeleteReminder.ts"),
     );
-    return { prisma, permanentlyDeleteTask, updateTaskAndSubtasks, cleanup };
+    return { prisma, anyStatus, permanentlyDeleteTask, updateTaskAndSubtasks, cleanup };
   } catch (error) {
     if (prisma) await prisma.$disconnect();
     await cleanup();
@@ -211,14 +213,14 @@ test("permanent deletion removes same-board descendants but preserves and unlink
 
 test("soft deletion trashes only same-board descendants and leaves legacy cross-board subtasks Normal", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
-  const { prisma, updateTaskAndSubtasks } = state;
+  const { prisma, anyStatus, updateTaskAndSubtasks } = state;
   const { owner, P, C1, G1, X, Y } = await createTree("soft");
   const deletedAt = new Date();
   const permanentlyDeleteAt = new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
 
   await updateTaskAndSubtasks(P, "Deleted", deletedAt, permanentlyDeleteAt, owner.id);
   for (const task of [P, C1, G1]) {
-    const trashed = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
+    const trashed = await prisma.task.findUniqueOrThrow({ where: { id: task.id, ...anyStatus } });
     assert.equal(trashed.status, "Deleted", `${task.title} must be trashed`);
     assert.equal(trashed.deletedAt.getTime(), deletedAt.getTime());
     assert.equal(trashed.permanentlyDeleteAt.getTime(), permanentlyDeleteAt.getTime());

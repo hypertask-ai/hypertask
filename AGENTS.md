@@ -3,10 +3,10 @@
 Start with `/ship` and [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
 House rules live in the shared source.
 Load each skill when its step starts.
-Read the relevant reference section before acting.
-Reference command paths are repo-relative.
+Read the reference section before acting.
+Command paths are repo-relative.
 
-[HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) have separate role references. Shared house rules remain authoritative.
+Shared house rules stay authoritative; [HT Product Lead](.claude/agents/product-lead.md) and [Poteto Advisor](.claude/agents/poteto-advisor.md) keep their own references.
 
 ## Always
 
@@ -17,18 +17,19 @@ Reference command paths are repo-relative.
 - Add only your agent. Preserve human assignees.
 - Branch from `origin/production`; target `production`.
 - One ticket, one PR. Leave auto-merge off.
-- Name the pull request author family: a bare `Author-Model:` line, or a matching commit trailer.
+- Name the PR author family: a bare `Author-Model:` line or a matching commit trailer.
 - Never stash or discard another session's changes.
 - Never use the archived `hypertask-ai/hypertasks` repository.
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Trashed rows never show in a read; only trash and restore reads spread `anyStatus`.
 - Wireframes use only live app tokens.
 - Wireframes need eight fresh theme captures.
 - Sign-off needs a `/wireframes/` link.
 - Hypertask board: 15 (https://app.hypertask.ai/project?id=15).
 
-Each rule names the check that enforces it in [rule checks](.claude/reference/rule-checks.md).
+Each rule's enforcing check is in [rule checks](.claude/reference/rule-checks.md).
 
 ## Read X when Y
 
@@ -55,7 +56,7 @@ Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first
 Runners never switch a flag Off; Off is Valentin's own safety switch.
 `src/` enforces comment rules through `local/no-comments`.
 
-Implementation lives in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, and `src/lib/realtime/`.
+Implementation lives in `src/app/`, `src/pages/api/` (queues too), `src/utils/controllers/`, `src/lib/auth/`, and `src/lib/realtime/`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

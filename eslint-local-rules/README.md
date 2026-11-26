@@ -39,6 +39,15 @@ catches a mistake before it waits on the type check, which can run out of time.
 The TypeScript rule replaces the core one for `.ts`/`.tsx` files because only it
 accepts overload declarations.
 
+## Soft-delete read baseline
+
+`soft-delete-reads-baseline.json` freezes the only place that selects Deleted rows
+inline, `src/utils/controllers/trash/getByProjectId.ts`, which lists the trash. The
+default Prisma client hides Deleted `Task` and `Project` rows (HTPR-9718), so a trash
+or restore read spreads `anyStatus` from `@/lib/db/softDeleteReads`. The allowance may
+only shrink: a new inline Deleted read, a search call without `excludeStatuses`, or a
+webhook delivery `update` fails lint with the fix in the message.
+
 ## Added-line token check
 
 `npm run lint:styles -- <base-sha> <head-sha>` checks added lines independently

@@ -8,7 +8,7 @@ const access = jiti(path.join(root, 'src/utils/controllers/projects/getAllInclud
 function matches(row, where = {}) {
   if (row == null) return where === null || where?.equals === require('@prisma/client').Prisma.DbNull;
   return Object.entries(where).every(([key, value]) => {
-    if (value === undefined || key === 'mode') return true;
+    if (value === undefined || key === 'mode' || key === 'anyStatus') return true;
     if (key === 'AND') return (Array.isArray(value) ? value : [value]).every(branch => matches(row, branch));
     if (key === 'OR') return value.some(branch => matches(row, branch));
     if (key === 'NOT') return !(Array.isArray(value) ? value : [value]).some(branch => matches(row, branch));
