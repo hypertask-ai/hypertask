@@ -174,6 +174,7 @@ function harness(options = {}) {
     "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler, validateMcpRouteAuth: async () => ({ user: context.user, agentId: context.actingAgentId }), checkMcpRouteRateLimit: async () => null },
     "@/lib/mcp/auth": { createUnauthorizedResponse: () => Response.json({}, { status: 401 }) },
     "@/lib/errors/reportError": { reportError: async (record) => reports.push(record) },
+    "@/app/api/ai/_lib/aiErrorReport": { reportAiRequestError: async (record) => reports.push(record) },
     "next/server": { NextResponse: { json: Response.json } },
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/taskWriterRun": run,
