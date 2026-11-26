@@ -38,6 +38,7 @@ function harness({ enabled = true, flagError = false, failure = authError(), ret
   const reports = [], checks = [], events = [], outcomes = [];
   const flag = load("src/lib/flags/definitions/htpr-7754-deepseek-auth-refusal.ts", {});
   const errors = load("src/lib/ai/chatStream/errors.ts", {
+    "@/app/api/ai/_lib/aiFunding": require("./helpers/ai-funding-stub.cjs").createAiFundingStub(),
     "@/lib/api/errorMessage": { toErrorMessage: (error) => error.message },
     zod: { z: {} },
     "@/lib/errors/reportError": { reportError: async (report) => reports.push(report) },

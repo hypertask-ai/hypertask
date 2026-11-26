@@ -47,7 +47,7 @@ test("HyperAI mention retrieval spans only boards the mentioning user can access
 
   assert.match(
     source,
-    /import \{ getProjectWhere \} from "@\/utils\/controllers\/projects\/getAllIncludes"/
+    /import \{[^}]*\bgetProjectWhere\b[^}]*\} from "@\/utils\/controllers\/projects\/getAllIncludes"/
   );
   assert.match(
     source,
