@@ -1,16 +1,16 @@
 import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
-import { getDefaultAiModelOptionForPlan } from "@/lib/aiModelOptions";
+import { getDefaultAiModelOptionForPlan ,
+    defaultAiModelOption,
+    getAiModelOptionById,
+} from "@/lib/aiModelOptions";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { validateIntegerParam } from '@/utils/helperFunctions/multiPages';
-import {
-    defaultAiModelOption,
-    getAiModelOptionById,
-} from '@/lib/aiModelOptions';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 export default async function handler(
     req: NextApiRequest,
@@ -46,13 +46,11 @@ export default async function handler(
                 ...customInstructions, model_selected: selected.id, source_selected: selected.source,
             } : customInstructions);
         } catch (error) {
-            await reportError({
-              message: error instanceof Error ? error.message : "AI request failed",
-              stack: error instanceof Error ? error.stack : undefined,
+            await reportAiRequestError({
               url: "/api/ai/project/customInstruction",
-              source: "handled",
-              extra: { stage: "load" },
-            });
+              stage: "load",
+              error,
+              });
             console.log(error);
             return res.status(500).json(error);
         }
@@ -170,13 +168,11 @@ export default async function handler(
 
             return res.status(200).json(customInstructions)
         } catch (error) {
-            await reportError({
-              message: error instanceof Error ? error.message : "AI request failed",
-              stack: error instanceof Error ? error.stack : undefined,
+            await reportAiRequestError({
               url: "/api/ai/project/customInstruction",
-              source: "handled",
-              extra: { stage: "update" },
-            });
+              stage: "update",
+              error,
+              });
             console.log(error)
             return res.status(500).json(error)
         }

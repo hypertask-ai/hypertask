@@ -14,6 +14,7 @@ require.cache[require.resolve("ai")].exports = {
 let jitiEntryId = 0;
 
 const stubbedModulePaths = [
+  "src/app/api/ai/_lib/aiFunding.ts",
   "src/app/api/ai/_lib/aiUsage.ts",
   "src/app/api/ai/_lib/byokKeys.ts",
   "src/app/api/ai/_lib/customInstructions.ts",

@@ -41,6 +41,7 @@ function moduleWithStubs(file, stubs) {
     console: { log() {}, info() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
+      if (id === "@/app/api/ai/_lib/aiErrorReport") return moduleWithStubs("src/app/api/ai/_lib/aiErrorReport.ts", stubs);
       if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
       if (id === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false };
       if (id === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };

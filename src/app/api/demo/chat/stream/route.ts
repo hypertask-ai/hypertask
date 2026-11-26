@@ -4,7 +4,8 @@ import { cappedDemoModel, demoCapsEnabled } from "@/lib/demo/demoAllowance";
 import { consumeDemoWindow } from "@/lib/demo/slidingWindow";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
-import { createGateway, streamText, type ModelMessage } from "ai";
+import { streamText, type ModelMessage } from "ai";
+import { createFundingGatewayLanguageModel } from "@/app/api/ai/_lib/aiFunding";
 import { NextRequest } from "next/server";
 import { z } from "zod";
 
@@ -204,10 +205,10 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/demo/chat/stream",
       source: "handled",
+      fingerprintKey: "ai-request:/api/demo/chat/stream:allowance",
       extra: { stage: "allowance" },
     });
     return sseErrorResponse("Demo chat is unavailable. Please try again later.", 503);
@@ -222,8 +223,8 @@ export async function POST(request: NextRequest) {
   }
 
   const encoder = new TextEncoder();
-  const rawModel = createGateway({ apiKey })(gatewayModel);
-  const model = capsEnabled ? cappedDemoModel(rawModel, gatewayModel, apiKey, guest!.teamId!) : rawModel;
+  const rawModel = createFundingGatewayLanguageModel(gatewayModel, apiKey);
+  const model = capsEnabled ? cappedDemoModel(rawModel as Parameters<typeof cappedDemoModel>[0], gatewayModel, apiKey, guest!.teamId!) : rawModel;
   const firstTurn = history.length === 0;
 
   const stream = new ReadableStream<Uint8Array>({
@@ -303,13 +304,13 @@ export async function POST(request: NextRequest) {
         finish("complete");
       } catch (error) {
         await reportError({
-          message: error instanceof Error ? error.message : "AI request failed",
-          stack: error instanceof Error ? error.stack : undefined,
+          message: "AI request failed",
           url: "/api/demo/chat/stream",
           source: "handled",
+          fingerprintKey: "ai-request:/api/demo/chat/stream:stream",
           extra: { stage: "stream" },
         });
-        console.error("demo chat generation failed", error);
+        console.error("demo chat generation failed");
         fail(error);
       }
     },

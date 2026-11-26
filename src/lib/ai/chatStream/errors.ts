@@ -1,3 +1,4 @@
+import { classifySafeProviderError } from "@/app/api/ai/_lib/aiFunding";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { z } from "zod";
 import { reportError } from "@/lib/errors/reportError";
@@ -19,7 +20,7 @@ export function createSseErrorResponse(message: string, status?: number) {
 
 export function errorMessage(error: unknown, quiet = false) {
   if (error instanceof Error && error.name.startsWith("Prisma")) {
-    if (!quiet) console.error("[ai/chat/stream] internal error", error);
+    if (!quiet) console.error("[ai/chat/stream] internal error", classifySafeProviderError(error));
     return "Sorry, an error occurred while processing your request.";
   }
   return toErrorMessage(
@@ -28,18 +29,7 @@ export function errorMessage(error: unknown, quiet = false) {
   );
 }
 
-export function handledErrorExtra(error: unknown) {
-  if (!error || typeof error !== "object") return {};
-  const record = error as Record<string, unknown>;
-  const extra: Record<string, string | number | boolean | null> = {};
-  for (const key of ["statusCode", "status"] as const) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      extra[key] = value;
-    }
-  }
-  return extra;
-}
+
 
 export function includedAllowanceError(error: unknown) {
   let current: unknown = error;
@@ -169,7 +159,7 @@ export function userFacingErrorMessage(
     if (!quiet) console.warn(`[ai/chat/stream] ${stage} refused: DeepSeek AI key rejected`);
     return error.message;
   }
-  if (!quiet) console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
+  if (!quiet) console.error(`[ai/chat/stream] ${stage} user-facing error`, classifySafeProviderError(error));
   return "Sorry, something went wrong while generating a response. Please try again.";
 }
 
@@ -191,7 +181,7 @@ export function requestErrorMessage(
   } else if (stage === "validation" && error instanceof z.ZodError) {
     console.info("[ai/chat/stream] request-validation refused: invalid request");
   } else {
-    console.error(`[ai/chat/stream] request-${stage} user-facing error`, error);
+    console.error(`[ai/chat/stream] request-${stage} user-facing error`, classifySafeProviderError(error));
   }
   if (stage === "body") {
     return "Invalid request: the request body could not be read.";
@@ -245,16 +235,13 @@ export async function reportHandledChatError(
   ) {
     return;
   }
-  const normalized = new Error("AI chat request failed");
-  const errorName = error instanceof Error && /^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(error.name)
-    ? error.name : "ChatError";
+  const errorClass = classifySafeProviderError(error);
   await reportError({
-    message: normalized.message,
-    stack: normalized.stack,
+    message: `AI chat request failed (${errorClass})`,
     url: "/api/ai/chat/stream",
     source: "handled",
-    fingerprintKey: `ai-chat:${stage}:${errorName}`,
-    extra: { stage, errorName, ...handledErrorExtra(error), ...extra },
+    fingerprintKey: `ai-chat:${stage}:${errorClass}`,
+    extra: { stage, errorClass, ...extra },
   });
 }
 
@@ -266,10 +253,8 @@ export async function reportEmptyCompletion(retryFailed: boolean, error: unknown
     return;
   }
 
-  const normalized = new Error("AI chat returned an empty completion");
   await reportError({
-    message: normalized.message,
-    stack: normalized.stack,
+    message: "AI chat returned an empty completion",
     url: "/api/ai/chat/stream",
     source: "handled",
     extra: { stage: "empty-completion" },

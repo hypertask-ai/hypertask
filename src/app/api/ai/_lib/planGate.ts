@@ -139,12 +139,10 @@ export async function assertModelAllowedForPlan(
   const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;
-  if (
-    (typeof resolvedCredential === "string" &&
-      resolvedCredential.length > 0 &&
-      resolvedCredential !== sharedKey) ||
-    (resolvedCredential !== null && typeof resolvedCredential === "object")
-  ) {
+  const { isCustomerPaidCredential } = await import(
+    "@/app/api/ai/_lib/aiFunding"
+  );
+  if (isCustomerPaidCredential(resolvedCredential, sharedKey)) {
     return;
   }
   if (!resolvedCredential) {

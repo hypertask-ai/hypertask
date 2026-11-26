@@ -18,6 +18,8 @@ import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskVie
 import { isBugsColumn, readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 
+const AUTO_MODEL_OPTION_ID = "auto";
+
 export function composeTaskBoardId(
   url: string,
   previousBoard: string | undefined,
@@ -120,6 +122,8 @@ export async function createComposedTask({
   let writerMs: number | null = null;
   try {
     onProgress?.("Reading past tickets");
+    const savedModelId = writerModel?.id ?? project.ai_custom_instructions?.[0]?.model_selected ?? undefined;
+    const savedSource = writerModel?.source ?? project.ai_custom_instructions?.[0]?.source_selected ?? undefined;
     const response = await fetch(taskWriterRoute, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,8 +132,8 @@ export async function createComposedTask({
         PROMPT: `Write a task title and description from this note in the board's style.\n\n${media.html}`,
         userRetrievalTexts: [text],
         customInstructions: project.ai_custom_instructions?.[0]?.customInstruction ?? "",
-        sourceSelected: writerModel?.source ?? project.ai_custom_instructions?.[0]?.source_selected ?? "openai",
-        modelSelected: writerModel?.id ?? project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
+        ...(savedSource ? { sourceSelected: savedSource } : {}),
+        ...(savedModelId ? { modelSelected: savedModelId } : { modelOptionId: AUTO_MODEL_OPTION_ID }),
         aiMode: "AiTaskWriter",
         requestKind: "compose-task",
         ...(invokeSkills ? { invokeSkills } : {}),

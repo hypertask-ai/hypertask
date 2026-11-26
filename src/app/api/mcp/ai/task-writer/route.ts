@@ -12,6 +12,7 @@ import {
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
 import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 async function isAllowanceLimitMessage(message: string) {
   if (!message.includes("AI allowance")) return false;
@@ -109,14 +110,12 @@ export async function POST(request: NextRequest) {
       console.warn("[mcp/ai/task-writer] refused: included AI allowance used up");
       return NextResponse.json({ success: false, error: message }, { status: 429 });
     }
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/task-writer",
-      source: "handled",
-      extra: { stage: "request" },
-    });
-    console.error("[mcp/ai/task-writer] error", error);
+      stage: "request",
+      error,
+      });
+    console.error("[mcp/ai/task-writer] error");
     return NextResponse.json(
       { success: false, error: errorMessage(error) },
       { status: 500 }

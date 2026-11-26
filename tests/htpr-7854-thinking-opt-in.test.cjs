@@ -199,6 +199,7 @@ function loadProvider({ flagOn, reasoningModule }) {
     "@/lib/aiUsageClassification": { INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: "included", isSystemAiFeature: () => false },
     "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false, normalizeCustomEndpointConfig: (value) => value },
   }, extra);
+  extra["@/app/api/ai/_lib/aiFunding"] = require("./helpers/ai-funding-stub.cjs").createAiFundingStub(stubs);
   extra["@/app/api/ai/_lib/reasoningEffort"] = reasoningModule ?? loadTs("src/app/api/ai/_lib/reasoningEffort.ts", stubs);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },

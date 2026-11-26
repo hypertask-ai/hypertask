@@ -45,7 +45,7 @@ async function logTaskWriterFailure(label: string, error: unknown) {
     console.warn(`[ai/task-writer] refused: included AI allowance used up (${label})`);
     return true;
   }
-  console.error(`[ai/task-writer] ${label}`, error);
+  console.error(`[ai/task-writer] ${label}`);
   return false;
 }
 
@@ -61,8 +61,8 @@ export async function POST(request: NextRequest) {
     return respond(createSseErrorResponse("Unauthorized", 401));
   }
   const userId = requestUser.id;
-  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
-    if (await isAllowanceLimitMessage(payload.message)) {
+  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0], error: unknown) => {
+    if (await isAllowanceLimitMessage(errorMessage(error))) {
       const { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, isFeatureEnabled } = await import("@/lib/flags");
       if (await isFeatureEnabled(HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, userId)) return;
     }
@@ -215,12 +215,12 @@ export async function POST(request: NextRequest) {
           if (!producedText && streamError !== undefined && await isRealErrorEnabled(userId)) {
             const error = streamError;
             await reportError({
-              message: error instanceof Error ? error.message : "AI request failed",
-              stack: error instanceof Error ? error.stack : undefined,
+              message: "AI request failed",
               url: "/api/ai/task-writer",
               source: "handled",
+              fingerprintKey: "ai-request:/api/ai/task-writer:stream-empty",
               extra: { stage: "stream-empty" },
-            });
+            }, error);
             await logTaskWriterFailure("stream ended empty after error", error);
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
@@ -248,12 +248,12 @@ export async function POST(request: NextRequest) {
           streamCompleted = true;
         } catch (error) {
           await reportError({
-            message: error instanceof Error ? error.message : "AI request failed",
-            stack: error instanceof Error ? error.stack : undefined,
+            message: "AI request failed",
             url: "/api/ai/task-writer",
             source: "handled",
+            fingerprintKey: "ai-request:/api/ai/task-writer:stream",
             extra: { stage: "stream" },
-          });
+          }, error);
           await logTaskWriterFailure("stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
@@ -282,12 +282,12 @@ export async function POST(request: NextRequest) {
       return respond(createSseErrorResponse(error.message, 403));
     }
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/task-writer",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/task-writer:request",
       extra: { stage: "request" },
-    });
+    }, error);
     const allowanceUsedUp = await logTaskWriterFailure("fatal error", error);
     return respond(NextResponse.json({ error: errorMessage(error) }, { status: allowanceUsedUp ? 429 : 500 }));
   }

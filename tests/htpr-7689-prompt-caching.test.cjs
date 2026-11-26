@@ -7,6 +7,7 @@ const { createHmac, createHash } = require("node:crypto");
 const { createJiti } = require("jiti");
 const ai = require("ai");
 
+const { createAiFundingStub } = require("./helpers/ai-funding-stub.cjs");
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { fsCache: false });
 const flagPath = "src/lib/flags/definitions/htpr-7689-prompt-caching.ts";
@@ -14,6 +15,9 @@ const flag = jiti(path.join(root, flagPath));
 const fixtureSecret = "offline-fixture-signing-secret";
 
 function load(file, stubs = {}, globals = {}) {
+  if (!stubs["@/app/api/ai/_lib/aiFunding"]) {
+    stubs = { ...stubs, "@/app/api/ai/_lib/aiFunding": createAiFundingStub(stubs) };
+  }
   const filename = path.join(root, file);
   const code = jiti.transform({ source: fs.readFileSync(filename, "utf8"), filename, ts: true });
   const mod = { exports: {} };

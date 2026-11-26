@@ -21,6 +21,7 @@ import {
 import { HTPR_7988_ALLOWANCE_ERROR_REPORT_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 export type ErrorReport = {
+  title?: string;
   message: string;
   stack?: string;
   url?: string;
@@ -28,6 +29,8 @@ export type ErrorReport = {
   extra?: Record<string, string | number | boolean | null>;
   minimumOccurrences?: number;
   fingerprintKey?: string;
+  urgent?: boolean;
+  dedupeSeconds?: number;
 };
 
 const DEDUPE_SECONDS = 7 * 24 * 60 * 60;
@@ -49,6 +52,9 @@ function escapeHtml(value: string) {
 }
 
 function ticketTitle(report: ErrorReport) {
+  if (typeof report.title === "string" && report.title.trim()) {
+    return report.title.replace(/\s+/g, " ").trim().slice(0, 99);
+  }
   return plainTitle({
     url: report.url,
     source: report.source,
@@ -167,11 +173,17 @@ async function reportErrorTicket(report: ErrorReport) {
       }
     } else {
       const dedupeKey = `errors:dedupe:${fingerprint}`;
+      const dedupeTtlSeconds =
+        typeof report.dedupeSeconds === "number" &&
+        Number.isInteger(report.dedupeSeconds) &&
+        report.dedupeSeconds > 0
+          ? report.dedupeSeconds
+          : DEDUPE_SECONDS;
       const firstOccurrence = await redis.set(
         dedupeKey,
         "1",
         "EX",
-        DEDUPE_SECONDS,
+        dedupeTtlSeconds,
         "NX",
       );
 
@@ -179,7 +191,7 @@ async function reportErrorTicket(report: ErrorReport) {
         const duplicateKey = `errors:duplicates:${fingerprint}`;
         const duplicateCount = await redis.incr(duplicateKey);
         if (duplicateCount === 1) {
-          await redis.expire(duplicateKey, DEDUPE_SECONDS);
+          await redis.expire(duplicateKey, dedupeTtlSeconds);
         }
         trace("duplicate", { fingerprint: fingerprint.slice(0, 12) });
         return;
@@ -213,7 +225,7 @@ async function reportErrorTicket(report: ErrorReport) {
       title: ticketTitle(report),
       description: ticketDescription(report, firstSeen),
       userId,
-      priorityIndex: 0,
+      priorityIndex: report.urgent ? 1 : 0,
       estimateIndex: 0,
       labels: labelIds,
     });
@@ -239,11 +251,12 @@ export async function reportError(unredactedReport: ErrorReport) {
 
   const report: ErrorReport = {
     ...unredactedReport,
+    title: unredactedReport.title === undefined ? undefined : redactSecrets(unredactedReport.title),
     message: redactSecrets(unredactedReport.message),
     stack: unredactedReport.stack === undefined ? undefined : redactSecrets(unredactedReport.stack),
   };
   const captured = await capturePostHogException(report);
-  if (captured) {
+  if (captured && !report.urgent) {
     trace("posthog-captured");
     return;
   }

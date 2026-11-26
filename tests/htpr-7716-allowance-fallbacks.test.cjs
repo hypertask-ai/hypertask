@@ -89,7 +89,8 @@ for (const surface of ["task-questions", "commentSummaries"]) {
     const actual = await invoke(surface, { error, enabled: false });
     assert.deepEqual(actual.result, surface === "task-questions" ? { questions: [] } : null);
     assert.equal(errors.length, 1);
-    assert.equal(errors[0][1], error);
+    if (surface === "task-questions") assert.deepEqual(errors[0], ["[ai/task-questions] failed:"]);
+    else assert.equal(errors[0][1], error);
     assert.equal(actual.reports.length, surface === "task-questions" ? 1 : 0);
     assert.deepEqual(warnings, []);
   });
@@ -100,10 +101,13 @@ for (const surface of ["task-questions", "commentSummaries"]) {
     const actual = await invoke(surface, { error });
     assert.deepEqual(actual.result, surface === "task-questions" ? { questions: [] } : null);
     assert.equal(errors.length, 1);
-    assert.equal(errors[0][1], error);
+    if (surface === "task-questions") assert.deepEqual(errors[0], ["[ai/task-questions] failed:"]);
+    else assert.equal(errors[0][1], error);
     assert.equal(actual.reports.length, surface === "task-questions" ? 1 : 0);
     if (surface === "task-questions") {
-      assert.equal(actual.reports[0].message, "Provider unavailable");
+      assert.equal(actual.reports[0].message, "AI request failed");
+      assert.equal(actual.reports[0].stack, undefined);
+      assert.deepEqual(actual.reports[0].extra, { stage: "empty-questions-fallback" });
       assert.equal(actual.reports[0].source, "handled");
       assert.equal(actual.reports[0].url, "/api/ai/task-questions");
     }

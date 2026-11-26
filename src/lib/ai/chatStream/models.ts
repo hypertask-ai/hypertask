@@ -1,7 +1,7 @@
 import { type TAiModelOption, defaultAiModelOption, getAiModelOptionById, resolveAiModelOption } from "@/lib/aiModelOptions";
 import { type UserFacingModelFeature, resolveUserFacingModelOption } from "@/lib/systemModelLadder";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
-import { type AiModelCredential, type AiGatewayTags, type AiProviderOptions, aiUsageProviderForCredential, isVercelAiGatewayKey, resolveAiModel, providerOptionsForAiModel, isCustomEndpointConfig } from "@/app/api/ai/_lib/modelProvider";
+import { type AiModelCredential, type AiGatewayTags, type AiProviderOptions, aiUsageProviderForCredential, isPlatformAnthropicCredential, isVercelAiGatewayKey, resolveAiModel, providerOptionsForAiModel, isCustomEndpointConfig } from "@/app/api/ai/_lib/modelProvider";
 import { type LanguageModel } from "ai";
 import { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES } from "@/lib/ai/chatStream/prompt";
 import { ProviderId } from "@/lib/ai/chatStream/types";
@@ -126,11 +126,11 @@ export function selectModel(
         requestedModel && CLAUDE_MODELS.has(requestedModel)
           ? requestedModel
           : DEFAULT_CLAUDE_MODEL;
-      const directModel = typeof byokCredential === "string" &&
-        !isVercelAiGatewayKey(byokCredential)
+      const directModel = (typeof isPlatformAnthropicCredential === "function" && isPlatformAnthropicCredential(byokCredential)) ||
+        (typeof byokCredential === "string" && !isVercelAiGatewayKey(byokCredential))
         ? modelOption?.directModel ?? model
         : model;
-      const aiModel = resolveAiModel(provider, directModel, byokCredential);
+      const aiModel = resolveAiModel(provider, directModel, byokCredential, modelOption);
       return {
         model: aiModel,
         resolvedModelId: model,

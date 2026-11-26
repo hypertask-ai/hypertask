@@ -755,7 +755,11 @@ test("flag-off retains BYOK shared-key fallback and the legacy $1/$40 and 10x po
   assert.equal(allowance.SYSTEM_AI_ALLOWANCE_MULTIPLIER, 10);
 });
 
+const { createAiFundingStub } = require("./helpers/ai-funding-stub.cjs");
 function moduleWithStubs(file, stubs) {
+  if (!stubs["@/app/api/ai/_lib/aiFunding"]) {
+    stubs = { ...stubs, "@/app/api/ai/_lib/aiFunding": createAiFundingStub(stubs) };
+  }
   const ts = require("typescript");
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;

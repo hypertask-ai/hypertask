@@ -5,6 +5,7 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
 import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
+import { aiFundingProviderClientsLintConfig } from "./eslint-local-rules/ai-funding-provider-clients.mjs";
 import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
 import { callerRefusalsLintConfig } from "./eslint-local-rules/caller-refusals.mjs";
 import { flagStubsLintConfig } from "./eslint-local-rules/flag-stubs.mjs";
@@ -50,6 +51,7 @@ export default defineConfig([
   styleGuideLintConfig,
   uiPatternsLintConfig,
   noCommentsLintConfig,
+  aiFundingProviderClientsLintConfig,
   testHarnessLintConfig,
   callerRefusalsLintConfig,
   flagStubsLintConfig,

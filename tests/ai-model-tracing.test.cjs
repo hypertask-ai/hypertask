@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { wrapLanguageModel } = require('ai');
+const { createAiFundingStub } = require('./helpers/ai-funding-stub.cjs');
 const root = path.resolve(__dirname, '..');
 const load = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false });
 const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
@@ -51,6 +52,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     '@/lib/aiUsageClassification': { isSystemAiFeature: (feature) => feature === 'summary', INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: 'system' },
     '@/lib/ai/customEndpoint': customEndpoint,
   };
+  stubs['@/app/api/ai/_lib/aiFunding'] = createAiFundingStub(stubs);
   const filename = path.join(root, 'src/app/api/ai/_lib/modelProvider.ts');
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loadedModule = { exports: {} };

@@ -81,6 +81,7 @@ function tracingHarness() {
     "@/lib/aiUsageClassification": { isSystemAiFeature: () => false, INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: "system" },
     "@/lib/ai/customEndpoint": { isCustomEndpointConfig: () => false, normalizeCustomEndpointConfig: (value) => value },
   };
+  stubs["@/app/api/ai/_lib/aiFunding"] = require("./helpers/ai-funding-stub.cjs").createAiFundingStub(stubs);
   const filename = path.join(root, "src/app/api/ai/_lib/modelProvider.ts");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loaded = { exports: {} };

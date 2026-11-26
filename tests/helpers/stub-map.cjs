@@ -82,6 +82,8 @@ const straightBoardRouteStubs = {
   "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
 };
 
+const { createAiFundingStub } = require("./ai-funding-stub.cjs");
+
 function withStubs(base = {}, extra = {}) {
   const guard = base['@/lib/agents/writing']
   if (guard && !base['@/lib/agents/writingEnforcement']) {
@@ -96,6 +98,9 @@ function withStubs(base = {}, extra = {}) {
   }
   if (!("@/lib/savedViews/boardDefaultSubtasks" in base) && !("@/lib/savedViews/boardDefaultSubtasks" in extra)) {
     defaults["@/lib/savedViews/boardDefaultSubtasks"] = { boardDefaultShowsSubtasks: async () => false }
+  }
+  if (!("@/app/api/ai/_lib/aiFunding" in base) && !("@/app/api/ai/_lib/aiFunding" in extra)) {
+    defaults["@/app/api/ai/_lib/aiFunding"] = createAiFundingStub({ ...base, ...extra })
   }
   return new Proxy(Object.create(null), {
     has: (_target, request) => request === TASK_SAVE_LIMIT || request in extra || request in base || request in defaults || request in sharedTicketWritingStubs || request in agentPulseDotStubs || request in emailStraightBoardStubs || request in plainLanguageTicketStubs || request in waitingActivityStubs,

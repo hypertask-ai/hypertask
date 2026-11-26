@@ -7,6 +7,7 @@ import prisma from "@/lib/prisma";
 
 import { type LanguageModel } from "ai";
 import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isCustomEndpointConfig, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
+import { isCustomerPaidCredential } from "@/app/api/ai/_lib/aiFunding";
 import { type TAiModelOption, type AiDefaultModelContext, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan, getAiModelOptionById, getAiModelDefinition, isOpenAiOnlyPaidTeam, isGrokGemini4ModelKey } from "@/lib/aiModelOptions";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
@@ -14,7 +15,7 @@ import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getAiProviderInfo, resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAutoFundingContext, resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 import { autoForcedProvider, autoModelEnabled, chatStepUp, isAutoRequest, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
@@ -142,11 +143,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         keyLookupContext,
       );
       const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
-      hasEligibleByokCredential =
-        (typeof credential === "string" &&
-          credential.trim().length > 0 &&
-          credential.trim() !== sharedKey) ||
-        (credential !== null && typeof credential === "object");
+      hasEligibleByokCredential = isCustomerPaidCredential(credential, sharedKey);
     }
     const deepseekFlashFastEnabled = await import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, dbUser.id))
@@ -178,7 +175,12 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       : null;
     const usesTeamOpenAiDefault = Boolean(teamOpenAiOnlyContext && isOpenAiOnlyPaidTeam(teamOpenAiOnlyContext));
     const selectionLookupContext = usesTeamOpenAiDefault ? teamKeyLookupContext : keyLookupContext;
-    const autoRequested = isAutoRequest(body.modelOptionId);
+    const isAuto = (id: string | null | undefined) =>
+      typeof isAutoRequest === "function" && isAutoRequest(id);
+    const personalAuto = isAuto(personalModelOptionId);
+    const effectivePersonalModelOptionId = personalAuto ? null : personalModelOptionId;
+    const autoRequested = isAuto(body.modelOptionId) ||
+      (!body.modelOptionId && !body.model && personalAuto);
     const requestedModel = autoRequested || isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
       ? { modelOptionId: null, model: null, provider: null }
       : body;
@@ -193,7 +195,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       modelOptionIdForTurn,
       teamProviderSettings,
       body.aiFeature,
-      personalModelOptionId,
+      effectivePersonalModelOptionId,
       requestDefaultModelOption,
       haiku55Enabled,
       deepseekFlashFastEnabled,
@@ -201,13 +203,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     if (usesTeamOpenAiDefault) {
       selection = selectionFromModelOption(getAiModelOptionById("gpt-6-luna", true)!);
     }
-    if (autoRequested && !usesTeamOpenAiDefault && !actingAgent?.modelOptionId && await autoModelEnabled(dbUser.id)) {
+    if (autoRequested && !usesTeamOpenAiDefault && !actingAgent?.modelOptionId && (personalAuto || await autoModelEnabled(dbUser.id))) {
       const stepUp = chatStepUp({ message: body.message, history: body.chat_history });
       const autoPick = pickAutoModelOption({
         feature: body.aiFeature,
         settings: teamProviderSettings,
         plan: storePlanId,
-        byokProviderFlags: body.byokProviderFlags,
+        ...await resolveAutoFundingContext(selectionLookupContext, storePlanId, body.byokProviderFlags),
         grokGemini4Enabled,
         planDefault: requestDefaultModelOption,
         forcedProvider: await autoForcedProvider(selectionLookupContext),
@@ -351,7 +353,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       byokApiKey,
     );
 
-    titleByokApiKey =
+    const titleKeyCandidate =
       selection.provider === "openai" && typeof byokApiKey === "string"
         ? byokApiKey
         : await getByokOrTeamGatewayApiKeyForProvider(
@@ -360,6 +362,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           keyLookupContext,
           { resolveOpenRouterWithoutFlag: false }
         );
+    titleByokApiKey = typeof titleKeyCandidate === "string" ? titleKeyCandidate : undefined;
     streamCredential = byokApiKey;
     streamModelOption = selection.modelOption;
     const resolvedModel = selectModel(

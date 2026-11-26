@@ -180,10 +180,10 @@ export async function POST(request: NextRequest) {
           controller.enqueue(encoder.encode(`data: ${normalized}\n\n`));
         } catch (error) {
           await reportError({
-            message: error instanceof Error ? error.message : "AI request failed",
-            stack: error instanceof Error ? error.stack : undefined,
+            message: "AI request failed",
             url: "/api/ai/audio-transcript",
             source: "handled",
+            fingerprintKey: "ai-request:/api/ai/audio-transcript:stream",
             extra: { stage: "stream" },
           });
           controller.enqueue(
@@ -205,13 +205,13 @@ export async function POST(request: NextRequest) {
     const allowanceMessage = warnIfAllowanceRefused(error, "ai/audio-transcript");
     if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/audio-transcript",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/audio-transcript:request",
       extra: { stage: "request" },
     });
-    console.error("[ai/audio-transcript] error", error);
+    console.error("[ai/audio-transcript] error");
     if (body.improve) {
       return NextResponse.json({ error: String(errorMessage(error)) }, { status: 500 });
     }

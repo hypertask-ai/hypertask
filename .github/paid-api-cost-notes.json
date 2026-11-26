@@ -217,5 +217,15 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-9080 saves one boolean per person through Hypertask's own same-origin preferences API. No paid provider call, no retries, no token budget.",
     "source": "https://app.hypertask.ai/detail/project-15/9080"
+  },
+  "src/lib/ai/composeTask.ts:3beb5589bcd090e7c738319d85541484d52fef8d3046aa0e0d5a1fa47a6cd6aa": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-9685 updates the existing task writer call in composeTask to send Auto instead of defaulting to openai when no saved model exists, reducing cost by burning free monthly Anthropic credit first on Haiku.",
+    "source": "https://app.hypertask.ai/detail/project-15/9685"
+  },
+  "src/lib/ai/newTaskWrite.ts:cb7135a416dd46bcacf8f645db60171a104c3207e9bcf49d03eacc85d4ee550b": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-9685 updates the existing new-task Write call to send Auto instead of defaulting to openai when no saved model exists, reducing cost by burning free monthly Anthropic credit first on Haiku.",
+    "source": "https://app.hypertask.ai/detail/project-15/9685"
   }
 }

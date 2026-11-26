@@ -1,15 +1,15 @@
 import {
-  createGateway,
   experimental_cancelBatch as cancelBatch,
   experimental_getBatchResults as getBatchResults,
   experimental_getBatchStatus as getBatchStatus,
   experimental_startBatch as startBatch,
 } from "ai";
+import { createFundingGatewayClient } from "@/app/api/ai/_lib/aiFunding";
 
 import { outcomesForItems, type BatchItemOutcome, type BatchTextRequest } from "@/lib/ai/batch/batchJobs";
 
 function provider(gatewayKey: string) {
-  return createGateway({ apiKey: gatewayKey });
+  return createFundingGatewayClient({ apiKey: gatewayKey });
 }
 
 function referenceFor(gatewayKey: string, id: string) {

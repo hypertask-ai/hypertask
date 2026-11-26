@@ -4,6 +4,7 @@ import { modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { tierForFeature, type AutoTier } from "@/app/api/ai/_lib/reasoningEffort";
+import { isHypertaskPaidAutoContext, type AiPayer } from "@/app/api/ai/_lib/aiFunding";
 
 export const AUTO_LONG_THREAD_MESSAGES = 20;
 
@@ -16,6 +17,7 @@ export type AutoModelContext = {
   planDefault?: TAiModelOption;
   stepUp?: number;
   forcedProvider?: TByokProviderKey | null;
+  payer?: AiPayer | null;
 };
 
 function byokAllows(flags: AutoModelContext["byokProviderFlags"], option: TAiModelOption): boolean {
@@ -54,7 +56,7 @@ export function autoModelPool(context: AutoModelContext): TAiModelOption[] {
     if (!isAiModelOptionVisible(option, true, false, Boolean(context.grokGemini4Enabled))) continue;
     if (!resolveTeamProviderEnabled(context.settings, definition.provider)) continue;
     if (context.forcedProvider && !modelOptionMatchesForcedKey(option, context.forcedProvider)) continue;
-    if (context.plan === "BYOK" && !byokAllows(context.byokProviderFlags, option)) continue;
+    if ((context.payer === "customer" || (context.plan === "BYOK" && context.payer !== "hypertask")) && !byokAllows(context.byokProviderFlags, option)) continue;
     if (freePlan && isPremiumAiModelDefinition(definition, true)) continue;
     const rank = EFFORT_RANK[option.effort ?? "standard"];
     const held = byModelKey.get(option.modelKey);
@@ -64,10 +66,19 @@ export function autoModelPool(context: AutoModelContext): TAiModelOption[] {
 }
 
 export function pickAutoModelOption(context: AutoModelContext): TAiModelOption | null {
-  const pool = autoModelPool(context);
+  const fullPool = autoModelPool(context);
+  if (fullPool.length === 0) return null;
+  const claudeOnlyPool = isHypertaskPaidAutoContext(context)
+    ? fullPool.filter((option) => getAiModelDefinition(option.modelKey)?.provider === "anthropic")
+    : [];
+  const pool = claudeOnlyPool.length > 0 ? claudeOnlyPool : fullPool;
   const tierOf = (option: TAiModelOption) => getAiModelDefinition(option.modelKey)?.priceTier ?? 3;
   const target = Math.min(3, tierForFeature(context.feature) + (context.stepUp ?? 0)) as AutoTier;
-  const preferredProvider = context.planDefault ? getAiModelDefinition(context.planDefault.modelKey)?.provider : undefined;
+  const preferredProvider = claudeOnlyPool.length > 0
+    ? "anthropic"
+    : context.planDefault
+      ? getAiModelDefinition(context.planDefault.modelKey)?.provider
+      : undefined;
   const atOrBelow = pool.filter((option) => tierOf(option) <= target);
   const wantedTier = atOrBelow.length > 0 ? Math.max(...atOrBelow.map(tierOf)) : Math.min(...pool.map(tierOf));
   const sameTier = pool.filter((option) => tierOf(option) === wantedTier);

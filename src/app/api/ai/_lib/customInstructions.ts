@@ -1,18 +1,16 @@
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import type { Prisma } from "@prisma/client";
-import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
+import { resolveAiModel as resolveLegacyAiModel , configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel , getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
 import { parse } from "node-html-parser";
 
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import {
   buildCustomInstructionFileRows,
   deleteCustomInstructionFileInTurbopuffer,
@@ -105,7 +103,7 @@ export async function uploadCustomInstructionFiles(args: {
   };
   const uniqueUrls = Array.from(new Set(args.urls.filter(Boolean)));
   const processed: ProcessUrlResult[] = [];
-  const gatewayApiKey = await getByokOrTeamGatewayApiKeyForProvider(
+  const resolvedGatewayKey = await getByokOrTeamGatewayApiKeyForProvider(
     "openai",
     undefined,
     {
@@ -113,6 +111,7 @@ export async function uploadCustomInstructionFiles(args: {
       userId: args.userId,
     }
   );
+  const gatewayApiKey = typeof resolvedGatewayKey === "string" ? resolvedGatewayKey : undefined;
 
   for (const url of uniqueUrls) {
     try {

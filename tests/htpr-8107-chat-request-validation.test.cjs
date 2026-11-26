@@ -34,6 +34,7 @@ function harness() {
   const logger = Object.fromEntries(Object.keys(logs).map((level) => [level, (...args) => logs[level].push(args)]));
   const errors = load("src/lib/ai/chatStream/errors.ts", {
     zod: require("zod"),
+    "@/app/api/ai/_lib/aiFunding": require("./helpers/ai-funding-stub.cjs").createAiFundingStub(),
     "@/lib/api/errorMessage": { toErrorMessage },
     "@/lib/ai/tools/constants": { SSE_HEADERS },
   }, logger);
@@ -87,7 +88,7 @@ test("a real model failure is still logged as an error", () => {
   assert.equal(errors.userFacingErrorMessage(failure, "model-stream"),
     "Sorry, something went wrong while generating a response. Please try again.");
   assert.equal(logs.error.length, 1);
-  assert.equal(logs.error[0][1], failure);
+  assert.equal(logs.error[0][1], "provider_error");
   assert.equal(logs.info.length, 0);
 });
 
@@ -96,7 +97,7 @@ test("unexpected validation failures remain visible as server errors", () => {
   const failure = new Error("unexpected validator failure");
   assert.equal(errors.requestErrorMessage(failure, "validation"), "Invalid request.");
   assert.equal(logs.error.length, 1);
-  assert.equal(logs.error[0][1], failure);
+  assert.equal(logs.error[0][1], "provider_error");
   assert.equal(logs.info.length, 0);
 });
 
@@ -125,6 +126,6 @@ test("unexpected body read failures remain visible as server errors", async () =
   assert.match(await response.text(), /Invalid request: the request body could not be read\./);
   assert.equal(sidebarCalls(), 0);
   assert.equal(logs.error.length, 1);
-  assert.equal(logs.error[0][1], failure);
+  assert.equal(logs.error[0][1], "provider_error");
   assert.deepEqual(logs.info, []);
 });

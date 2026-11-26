@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "../..");
 const requireRoot = createRequire(path.join(root, "package.json"));
 const plainLanguageTicketStubs = require("./plain-language-ticket-stubs.cjs");
 const blockingStubs = require("./mcp-task-list-blocking-stubs.cjs");
+const { createAiFundingStub } = require("./ai-funding-stub.cjs");
 
 function loadModule(file, stubs = {}) {
   const cache = new Map();
@@ -45,6 +46,9 @@ function loadModule(file, stubs = {}) {
         if (specifier === "@/utils/controllers/tasks/userCommentCounts") return { userCommentCountsByTaskId: async () => new Map() };
         if (specifier === "@/lib/savedViews/boardDefaultSubtasks" && !(specifier in stubs)) {
           return { boardDefaultShowsSubtasks: async () => false };
+        }
+        if (specifier === "@/app/api/ai/_lib/aiFunding" && !(specifier in stubs) && !filename.endsWith("aiFunding.ts")) {
+          return createAiFundingStub(stubs);
         }
         if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return localRequire(specifier);
         const base = specifier.startsWith("@/") ? path.join(root, "src", specifier.slice(2)) : path.resolve(path.dirname(filename), specifier);

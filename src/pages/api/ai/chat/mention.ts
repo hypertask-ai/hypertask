@@ -9,6 +9,7 @@ import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "@/utils/controllers/search/document";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { selectMentionAgents } from "@/utils/helperFunctions/mentionSearch";
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -230,13 +231,11 @@ const handler: NextApiHandler = async (
         ]);
       }
     } catch (error) {
-      await reportError({
-        message: error instanceof Error ? error.message : "AI request failed",
-        stack: error instanceof Error ? error.stack : undefined,
+      await reportAiRequestError({
         url: "/api/ai/chat/mention",
-        source: "handled",
-        extra: { stage: "mention-search" },
-      });
+        stage: "mention-search",
+        error,
+        });
       console.log("🤔 ~ TaskSearchByParams ERROR:", error);
       return res
         .status(500)
@@ -268,13 +267,11 @@ const fetchidlist = async (userId: number, actingAgentId?: string) => {
     }
     return [];
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/ai/chat/mention",
-      source: "handled",
-      extra: { stage: "project-lookup" },
-    });
+      stage: "project-lookup",
+      error,
+      });
     console.log("r🤔 ~ fetchidlist ~ error:", error);
     return [];
   }

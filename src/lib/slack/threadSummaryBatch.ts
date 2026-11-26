@@ -1,3 +1,4 @@
+import { fundedBatchAllowed } from "@/app/api/ai/_lib/aiFunding";
 import { remainingSpendPathEnabled, teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { gatewayFundingSourceForApiKey } from "@/app/api/ai/_lib/modelProvider";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
@@ -45,7 +46,14 @@ export async function prepareSlackSummaryForBatch(
   const { systemModel, gatewayApiKey, haikuByok } = inputs;
   const model = gatewayCatalogModelSlug(systemModel.model);
   const holdsOn = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(context.teamId).catch(() => false);
-  if (haikuByok || !gatewayApiKey || !batchEligibleModel(model) || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayApiKey), await teamPlanAllowanceEnabled(context.teamId), holdsOn)) {
+  if (haikuByok || !gatewayApiKey || !batchEligibleModel(model)) {
+    return { type: "instant", source };
+  }
+  const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
+  if (!batchEligibleFunding(fundingSource, await teamPlanAllowanceEnabled(context.teamId), holdsOn)) {
+    return { type: "instant", source };
+  }
+  if (!(await fundedBatchAllowed({ gatewayApiKey, fundingSource, teamId: context.teamId, userId: context.installedByUserId }))) {
     return { type: "instant", source };
   }
 

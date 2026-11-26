@@ -14,6 +14,7 @@ import {
 } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { reportAiRequestError } from "@/app/api/ai/_lib/aiErrorReport";
 
 const GROUPS = ['model', 'feature', 'user', 'provider', 'task', 'agent'] as const
 type GroupBy = (typeof GROUPS)[number]
@@ -82,14 +83,12 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
         take: 2,
       })
     } catch (error) {
-      await reportError({
-        message: error instanceof Error ? error.message : "AI request failed",
-        stack: error instanceof Error ? error.stack : undefined,
+      await reportAiRequestError({
         url: "/api/mcp/ai/usage",
-        source: "handled",
-        extra: { stage: "owned-team-lookup" },
-      });
-      console.error('[MCP AI Usage] Owned-team lookup unavailable:', error)
+        stage: "owned-team-lookup",
+        error,
+        });
+      console.error('[MCP AI Usage] Owned-team lookup unavailable:')
       return NextResponse.json(
         { success: false, error: 'Could not load AI usage' },
         { status: 502 },
@@ -159,14 +158,12 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
       totalTokens: snapshot.totals._sum.totalTokens ?? 0,
     }
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/usage",
-      source: "handled",
-      extra: { stage: "usage-snapshot" },
-    });
-    console.error('[MCP AI Usage] Team usage snapshot unavailable:', error)
+      stage: "usage-snapshot",
+      error,
+      });
+    console.error('[MCP AI Usage] Team usage snapshot unavailable:')
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
       { status: 502 },
@@ -231,14 +228,12 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
 
     return response
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/usage",
-      source: "handled",
-      extra: { stage: "spend" },
-    });
-    console.error('[MCP AI Usage] Failed to load AI spend:', error)
+      stage: "spend",
+      error,
+      });
+    console.error('[MCP AI Usage] Failed to load AI spend:')
     return NextResponse.json(
       { success: false, error: 'Could not load AI usage' },
       { status: 502 },
@@ -348,14 +343,12 @@ export async function GET(request: NextRequest) {
       groups,
     })
   } catch (error) {
-    await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+    await reportAiRequestError({
       url: "/api/mcp/ai/usage",
-      source: "handled",
-      extra: { stage: "request" },
-    });
-    console.error('[MCP AI Usage] Error:', error)
+      stage: "request",
+      error,
+      });
+    console.error('[MCP AI Usage] Error:')
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

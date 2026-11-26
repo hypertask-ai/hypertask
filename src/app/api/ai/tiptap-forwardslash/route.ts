@@ -123,13 +123,13 @@ async function tiptapForwardslash(request: NextRequest) {
     const allowanceMessage = warnIfAllowanceRefused(error, "ai/tiptap-forwardslash");
     if (allowanceMessage) return NextResponse.json({ error: allowanceMessage }, { status: 429 });
     await reportError({
-      message: error instanceof Error ? error.message : "AI request failed",
-      stack: error instanceof Error ? error.stack : undefined,
+      message: "AI request failed",
       url: "/api/ai/tiptap-forwardslash",
       source: "handled",
+      fingerprintKey: "ai-request:/api/ai/tiptap-forwardslash:request",
       extra: { stage: "request" },
     });
-    console.error("[ai/tiptap-forwardslash] error", errorMessage(error));
+    console.error("[ai/tiptap-forwardslash] error");
     return NextResponse.json(
       { error: "An internal error occurred. Please try again later." },
       { status: 500 }

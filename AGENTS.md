@@ -23,6 +23,7 @@ Shared house rules stay authoritative; [HT Product Lead](.claude/agents/product-
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Create AI provider clients only in `src/app/api/ai/_lib/aiFunding.ts`.
 - Trashed rows never show in a read; only trash and restore reads spread `anyStatus`.
 - Wireframes use only live app tokens.
 - Wireframes need eight fresh theme captures.
@@ -39,24 +40,23 @@ Read linked sections on demand.
 |---|---|
 | Checking what enforces an agent rule | [Rule checks](.claude/reference/rule-checks.md) |
 | Starting, claiming, delegating, shipping | [Session rules](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claim rules](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
-| Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [ticket template](docs/ticket-template.md) |
+| Reading or writing tickets | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [template](docs/ticket-template.md) |
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
 | Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup) |
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
 | Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
 | UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
 | Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
-| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
+| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md) |
 | App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
 | pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
-| Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |
+| AI models, keys, plans, Auto routing or AI outages | [Model rules](.claude/reference/architecture.md#ai-models), [AI funding](.claude/reference/architecture.md#ai-funding) |
 | Access or security changes | [Still-allowed tests](.claude/reference/workflow.md#repo-workflow-detail) |
 
-Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first.
-Runners never switch a flag Off; Off is Valentin's own safety switch.
+Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first. Runners never switch a flag Off; Off is Valentin's own switch.
 `src/` enforces comment rules through `local/no-comments`.
 
-Implementation lives in `src/app/`, `src/pages/api/` (queues too), `src/utils/controllers/`, `src/lib/auth/`, and `src/lib/realtime/`.
+Code: `src/app/`, `src/pages/api/` (queues), `src/utils/controllers/`, `src/lib/auth/`, `src/lib/realtime/`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

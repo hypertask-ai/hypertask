@@ -1,21 +1,41 @@
 import { fetchWithoutBrotli } from "@/lib/net/fetchWithoutBrotli";
 import { createHmac, randomUUID } from "node:crypto";
 import { waitUntil } from "@vercel/functions";
+import type { LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { logAiUsage, type AiUsageRecord } from "./aiUsage";
 import { identifyPrompt } from "@/lib/ai/prompts/registry";
 import { recordAiChatTurn } from "@/lib/telemetry/aiChatObservability";
 import { reportError } from "@/lib/errors/reportError";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
-  createGateway,
   wrapImageModel,
   wrapLanguageModel,
   type ImageModel,
   type LanguageModel,
   type LanguageModelMiddleware,
 } from "ai";
+import {
+  classifyGatewayFailureCause,
+  classifySafeProviderError,
+  createFundingAnthropicLanguageModel,
+  createFundingGatewayImageModel,
+  createFundingGatewayLanguageModel,
+  createFundingOpenAiLanguageModel,
+  createFundingOpenRouterLanguageModel,
+  isAnthropicModelId,
+  isBasetenCredential,
+  isPlatformAnthropicCredential,
+  isVercelAiGatewayKey,
+  PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+  recordAnthropicMonthlySpend,
+  reportAiFundingIncident,
+  resolveHypertaskAnthropicCredential,
+  toDirectAnthropicModelId,
+  toGatewayAnthropicModelSlug,
+  type AiModelCredential,
+  type BasetenCredential,
+  type GatewayFundingSource,
+  type PlatformAnthropicCredential,
+} from "@/app/api/ai/_lib/aiFunding";
 import {
   createImageAllowanceMiddleware,
   createSharedAllowanceMiddleware,
@@ -56,20 +76,18 @@ export class AiGatewayKeyRequiredError extends Error {
   }
 }
 
-export { isCustomEndpointConfig };
+export {
+  isCustomEndpointConfig,
+  isPlatformAnthropicCredential,
+  isVercelAiGatewayKey,
+  type AiModelCredential,
+  type BasetenCredential,
+  type GatewayFundingSource,
+  type PlatformAnthropicCredential,
+};
 
 export type ModelProviderId =
   "claude" | "openai" | "openrouter" | "gateway" | "custom";
-export type BasetenCredential = {
-  kind: "baseten";
-  apiKey: string;
-  modelKey: keyof typeof BASETEN_MODEL_SLUGS;
-};
-export type AiModelCredential = string | CustomEndpointConfig | BasetenCredential;
-
-function isBasetenCredential(credential: AiModelCredential | undefined): credential is BasetenCredential {
-  return credential !== null && typeof credential === "object" && "kind" in credential && credential.kind === "baseten";
-}
 export type AiGatewayFeature =
   | "chat"
   | "summary"
@@ -112,8 +130,6 @@ function defaultGatewayApiKey() {
   return process.env.AI_GATEWAY_API_KEY?.trim() || undefined;
 }
 
-export type GatewayFundingSource = "customer" | "managed" | "shared";
-
 const managedGatewayKeys = new Set<string>();
 
 export function registerManagedGatewayKey(apiKey: string) {
@@ -131,57 +147,462 @@ export function gatewayFundingSourceForApiKey(
 }
 
 const allowanceFundedModels = new WeakMap<object, number>();
+type RuntimeProvider = { provider?: string; usageContext?: ModelUsageContext };
+const runtimeProviderOverrides = new WeakMap<object, RuntimeProvider>();
+const platformAnthropicFundedModels = new WeakSet<object>();
 
-function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey })(
-    gatewayCatalogModelSlug(modelSlug),
+const USER_VISIBLE_STREAM_CHUNK_TYPES = new Set([
+  "text-delta",
+  "reasoning-delta",
+  "tool-input-delta",
+  "tool-call",
+  "file",
+  "source",
+  "finish",
+]);
+
+function isFailedFinishChunk(chunk: { type?: string; finishReason?: { unified?: string } }): boolean {
+  return chunk.type === "finish" && chunk.finishReason?.unified === "error";
+}
+
+async function recordReplacedDirectUsage(modelId: string, usage: { inputTokens?: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens?: { total?: number } } | undefined, context?: ModelUsageContext) {
+  const inputTokens = usage?.inputTokens?.total ?? 0;
+  const outputTokens = usage?.outputTokens?.total ?? 0;
+  if (!inputTokens && !outputTokens) return;
+  const cachedInputTokens = usage?.inputTokens?.cacheRead ?? 0;
+  const cacheWriteInputTokens = usage?.inputTokens?.cacheWrite ?? 0;
+  const costUsd = await generationCostUsd(
+    modelId, PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+    inputTokens, outputTokens, cachedInputTokens, cacheWriteInputTokens,
   );
+  await Promise.allSettled([
+    recordAnthropicMonthlySpend(costUsd),
+    logAiUsage({
+      userId: context?.userId ?? null,
+      teamId: context?.teamId,
+      projectId: context?.projectId,
+      taskId: context?.taskId,
+      agentId: context?.agentId,
+      feature: context?.feature ?? "unattributed",
+      promptId: context?.promptId,
+      promptVersion: context?.promptVersion,
+      provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+      model: modelId,
+      outcome: "failed",
+      traceId: randomUUID(),
+      inputTokens, outputTokens, cachedInputTokens, cacheWriteInputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUsd,
+    }),
+  ]);
+}
+
+function failedFinishReason(result: { finishReason?: { unified?: string } }): Error | undefined {
+  return result.finishReason?.unified === "error"
+    ? new Error("AI generation finished with an error")
+    : undefined;
+}
+
+function streamFailureReason(chunk: { type?: string; error?: unknown; finishReason?: { unified?: string } }): unknown {
+  if (chunk.type === "error") return chunk.error;
+  if (isFailedFinishChunk(chunk)) return new Error("AI stream finished with an error");
+  return undefined;
+}
+
+function isUserVisibleStreamChunk(chunk: { type?: string; delta?: string; finishReason?: { unified?: string } }): boolean {
+  if (isFailedFinishChunk(chunk)) return false;
+  return typeof chunk.type === "string" && USER_VISIBLE_STREAM_CHUNK_TYPES.has(chunk.type) &&
+    (!("delta" in chunk) || Boolean(chunk.delta));
+}
+
+function createGatewayFailureReportingMiddleware(
+  fundingSource: "managed" | "shared",
+): LanguageModelMiddleware {
+  const notify = (error: unknown, aborted?: boolean) => {
+    if (aborted || sharedAiAllowanceErrorMessage(error)) return;
+    const cause = classifyGatewayFailureCause(error);
+    void reportAiFundingIncident({
+      cause,
+      provider: "gateway",
+      fundingSource,
+      errorClass: classifySafeProviderError(error),
+    });
+  };
+  return {
+    specificationVersion: "v4",
+    wrapGenerate: async ({ doGenerate, params }) => {
+      try {
+        const result = await doGenerate();
+        const failure = failedFinishReason(result);
+        if (failure) notify(failure, params.abortSignal?.aborted);
+        return result;
+      } catch (error) {
+        notify(error, params.abortSignal?.aborted);
+        throw error;
+      }
+    },
+    wrapStream: async ({ doStream, params }) => {
+      try {
+        const result = await doStream();
+        const reader = result.stream.getReader();
+        return {
+          ...result,
+          stream: new ReadableStream({
+            async pull(controller) {
+              try {
+                const item = await reader.read();
+                if (item.done) {
+                  controller.close();
+                  return;
+                }
+                const failure = streamFailureReason(item.value);
+                if (failure !== undefined) {
+                  notify(failure, params.abortSignal?.aborted);
+                }
+                controller.enqueue(item.value);
+              } catch (error) {
+                notify(error, params.abortSignal?.aborted);
+                controller.error(error);
+              }
+            },
+            async cancel(reason) {
+              await reader.cancel(reason);
+            },
+          }),
+        };
+      } catch (error) {
+        notify(error, params.abortSignal?.aborted);
+        throw error;
+      }
+    },
+  };
+}
+
+async function wrapAnthropicStreamWithFallback<
+  TResult extends { stream: ReadableStream<LanguageModelV4StreamPart> },
+>(
+  startDirectStream: () => PromiseLike<TResult>,
+  startFallbackStream: (error: unknown) => PromiseLike<TResult>,
+  reportDirectError: (error: unknown) => void,
+  canFallback: () => boolean,
+  isAborted: () => boolean,
+  recordReplacedUsage: (chunk: LanguageModelV4StreamPart) => Promise<void>,
+): Promise<TResult> {
+  let result: TResult;
+  try {
+    result = await startDirectStream();
+  } catch (error) {
+    reportDirectError(error);
+    if (isAborted() || !canFallback()) throw error;
+    return startFallbackStream(error);
+  }
+  const reader = result.stream.getReader();
+  const buffered: LanguageModelV4StreamPart[] = [];
+  while (true) {
+    let item: Awaited<ReturnType<typeof reader.read>>;
+    try {
+      item = await reader.read();
+    } catch (error) {
+      reportDirectError(error);
+      await reader.cancel().catch(() => undefined);
+      if (isAborted() || !canFallback()) throw error;
+      return startFallbackStream(error);
+    }
+    if (item.done) {
+      return {
+        ...result,
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          start(controller) {
+            for (const chunk of buffered) controller.enqueue(chunk);
+            controller.close();
+          },
+        }),
+      };
+    }
+    const failure = streamFailureReason(item.value);
+    if (failure !== undefined) {
+      reportDirectError(failure);
+      await reader.cancel().catch(() => undefined);
+      if (!isAborted() && canFallback()) {
+        if (isFailedFinishChunk(item.value)) await recordReplacedUsage(item.value);
+        return startFallbackStream(failure);
+      }
+      return {
+        ...result,
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          start(controller) {
+            for (const chunk of buffered) controller.enqueue(chunk);
+            controller.enqueue(item.value);
+            controller.close();
+          },
+        }),
+      };
+    }
+    buffered.push(item.value);
+    if (isUserVisibleStreamChunk(item.value)) break;
+  }
+  let bufferedIndex = 0;
+  return {
+    ...result,
+    stream: new ReadableStream<LanguageModelV4StreamPart>({
+      async pull(controller) {
+        if (bufferedIndex < buffered.length) {
+          controller.enqueue(buffered[bufferedIndex]);
+          bufferedIndex += 1;
+          return;
+        }
+        try {
+          const item = await reader.read();
+          if (item.done) {
+            controller.close();
+            return;
+          }
+          const failure = streamFailureReason(item.value);
+          if (failure !== undefined) reportDirectError(failure);
+          controller.enqueue(item.value);
+        } catch (error) {
+          reportDirectError(error);
+          controller.error(error);
+        }
+      },
+      async cancel(reason) {
+        await reader.cancel(reason);
+      },
+    }),
+  };
+}
+
+function createDirectAnthropicWithGatewayFallbackMiddleware(
+  modelId: string,
+  credential: PlatformAnthropicCredential,
+  runtimeProvider: RuntimeProvider,
+  modelOption?: TAiModelOption,
+): LanguageModelMiddleware {
+  const gatewaySlug = toGatewayAnthropicModelSlug(modelId, modelOption);
+  const reportDirectError = (error: unknown) => {
+    void reportAiFundingIncident({
+      cause: "anthropic_error",
+      provider: "anthropic",
+      fundingSource: credential.gatewayFundingSource ?? "platform",
+      errorClass: classifySafeProviderError(error),
+    });
+  };
+  const fallbackModel = () => {
+    runtimeProvider.provider = "gateway";
+    return gatewayLanguageModel(gatewaySlug, credential.fallbackGatewayApiKey!, false, false) as ReturnType<typeof wrapLanguageModel>;
+  };
+  return {
+    specificationVersion: "v4",
+    wrapGenerate: async ({ doGenerate, params }) => {
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
+      try {
+        const result = await doGenerate();
+        const failure = failedFinishReason(result);
+        if (!failure) return result;
+        reportDirectError(failure);
+        if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) return result;
+        await recordReplacedDirectUsage(modelId, result.usage, runtimeProvider.usageContext);
+        return fallbackModel().doGenerate(params);
+      } catch (error) {
+        if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
+        reportDirectError(error);
+        return fallbackModel().doGenerate(params);
+      }
+    },
+    wrapStream: async ({ doStream, params }) => {
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
+      return wrapAnthropicStreamWithFallback(
+        doStream,
+        () => fallbackModel().doStream(params),
+        reportDirectError,
+        () => Boolean(credential.fallbackGatewayApiKey),
+        () => Boolean(params.abortSignal?.aborted),
+        (chunk) => recordReplacedDirectUsage(modelId, chunk.type === "finish" ? chunk.usage : undefined, runtimeProvider.usageContext),
+      );
+    },
+  };
+}
+
+function createHypertaskGatewayAnthropicFirstMiddleware(
+  modelSlug: string,
+  gatewayApiKey: string,
+  fundingSource: "managed" | "shared",
+  runtimeProvider: RuntimeProvider,
+): LanguageModelMiddleware {
+  const directModelId = toDirectAnthropicModelId(modelSlug);
+  const reportDirectError = (error: unknown) => {
+    void reportAiFundingIncident({
+      cause: "anthropic_error",
+      provider: "anthropic",
+      fundingSource,
+      errorClass: classifySafeProviderError(error),
+    });
+  };
+  const tryDirect = async () => {
+    const resolved = await resolveHypertaskAnthropicCredential({
+      fallbackGatewayApiKey: gatewayApiKey,
+      gatewayFundingSource: fundingSource,
+    });
+    if (resolved.route !== "hypertask-anthropic" || !isPlatformAnthropicCredential(resolved.credential)) {
+      return null;
+    }
+    const directModel = createFundingAnthropicLanguageModel(
+      directModelId,
+      resolved.credential.apiKey,
+    );
+    return directModel as ReturnType<typeof wrapLanguageModel>;
+  };
+  return {
+    specificationVersion: "v4",
+    wrapGenerate: async ({ doGenerate, params }) => {
+      const direct = await tryDirect();
+      if (!direct) {
+        runtimeProvider.provider = "gateway";
+        return doGenerate();
+      }
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
+      try {
+        const result = await direct.doGenerate(params);
+        const failure = failedFinishReason(result);
+        if (!failure) return result;
+        reportDirectError(failure);
+        if (params.abortSignal?.aborted) return result;
+        await recordReplacedDirectUsage(directModelId, result.usage, runtimeProvider.usageContext);
+        runtimeProvider.provider = "gateway";
+        return doGenerate();
+      } catch (error) {
+        if (params.abortSignal?.aborted) throw error;
+        runtimeProvider.provider = "gateway";
+        reportDirectError(error);
+        return doGenerate();
+      }
+    },
+    wrapStream: async ({ doStream, params }) => {
+      const direct = await tryDirect();
+      if (!direct) {
+        runtimeProvider.provider = "gateway";
+        return doStream();
+      }
+      runtimeProvider.provider = PLATFORM_ANTHROPIC_USAGE_PROVIDER;
+      return wrapAnthropicStreamWithFallback(
+        () => direct.doStream(params),
+        () => {
+          runtimeProvider.provider = "gateway";
+          return doStream();
+        },
+        reportDirectError,
+        () => true,
+        () => Boolean(params.abortSignal?.aborted),
+        (chunk) => recordReplacedDirectUsage(directModelId, chunk.type === "finish" ? chunk.usage : undefined, runtimeProvider.usageContext),
+      );
+    },
+  };
+}
+
+function fundedAllowanceUsd(fundingSource: "managed" | "shared") {
+  return fundingSource === "shared"
+    ? FREE_TEAM_AI_ALLOWANCE_USD
+    : PAID_TEAM_AI_ALLOWANCE_USD;
+}
+
+function fundedAllowanceMiddleware(
+  fundingSource: "managed" | "shared",
+  gatewayApiKey: string,
+  modelSlug: string,
+): LanguageModelMiddleware {
+  return createSharedAllowanceMiddleware({
+    allowanceUsd: fundedAllowanceUsd(fundingSource),
+    fundingSource,
+    resolvePolicy: async (teamId) => {
+      const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+      return resolveTeamAllowancePolicy(teamId, fundingSource);
+    },
+    gatewayApiKey,
+    modelSlug,
+  });
+}
+
+function gatewayLanguageModel(
+  modelSlug: string,
+  gatewayApiKey: string,
+  preferDirectAnthropic = true,
+  enforceAllowance = true,
+) {
+  const catalogSlug = gatewayCatalogModelSlug(modelSlug);
+  const model = createFundingGatewayLanguageModel(catalogSlug, gatewayApiKey);
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   if (fundingSource === "customer") return model;
-  const allowanceUsd =
-    fundingSource === "shared"
-      ? FREE_TEAM_AI_ALLOWANCE_USD
-      : PAID_TEAM_AI_ALLOWANCE_USD;
+  const runtimeProvider: RuntimeProvider = {};
+  const middlewares: LanguageModelMiddleware[] = [];
+  if (enforceAllowance) {
+    middlewares.push(
+      fundedAllowanceMiddleware(fundingSource, gatewayApiKey, modelSlug),
+    );
+  }
+  if (preferDirectAnthropic && isAnthropicModelId(catalogSlug)) {
+    middlewares.push(
+      createHypertaskGatewayAnthropicFirstMiddleware(
+        catalogSlug,
+        gatewayApiKey,
+        fundingSource,
+        runtimeProvider,
+      ),
+    );
+  }
+  middlewares.push(
+    createGatewayFailureReportingMiddleware(fundingSource),
+  );
   const funded = wrapLanguageModel({
-    model,
+    model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
     providerId: "gateway",
-    middleware: createSharedAllowanceMiddleware({
-      allowanceUsd,
-      fundingSource,
-      resolvePolicy: async (teamId) => {
-        const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
-        return resolveTeamAllowancePolicy(teamId, fundingSource);
-      },
-      gatewayApiKey,
-      modelSlug,
-    }),
+    middleware: middlewares,
   });
-  allowanceFundedModels.set(funded, allowanceUsd);
+  allowanceFundedModels.set(funded, fundedAllowanceUsd(fundingSource));
+  runtimeProviderOverrides.set(funded, runtimeProvider);
   return funded;
 }
 
 function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
-  const model = createGateway({ apiKey: gatewayApiKey }).imageModel(
-    gatewayCatalogModelSlug(modelSlug),
-  );
+  const catalogSlug = gatewayCatalogModelSlug(modelSlug);
+  const model = createFundingGatewayImageModel(catalogSlug, gatewayApiKey);
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   return fundingSource !== "customer"
     ? wrapImageModel({
-        model,
+        model: model as Parameters<typeof wrapImageModel>[0]["model"],
         providerId: "gateway",
-        middleware: createImageAllowanceMiddleware({
-          fundingSource,
-          resolvePolicy: async (teamId) => {
-            const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
-            return resolveTeamAllowancePolicy(teamId, fundingSource);
+        middleware: [
+          createImageAllowanceMiddleware({
+            fundingSource,
+            resolvePolicy: async (teamId) => {
+              const { resolveTeamAllowancePolicy } = await import("./planAllowancePolicy");
+              return resolveTeamAllowancePolicy(teamId, fundingSource);
+            },
+            allowanceUsd:
+              fundingSource === "shared"
+                ? FREE_TEAM_AI_ALLOWANCE_USD
+                : PAID_TEAM_AI_ALLOWANCE_USD,
+            gatewayApiKey,
+            modelSlug,
+          }),
+          {
+            specificationVersion: "v4",
+            wrapGenerate: async ({ doGenerate, params }) => {
+              try {
+                return await doGenerate();
+              } catch (error) {
+                if (!params.abortSignal?.aborted && !sharedAiAllowanceErrorMessage(error)) {
+                  void reportAiFundingIncident({
+                    cause: classifyGatewayFailureCause(error),
+                    provider: "gateway",
+                    fundingSource,
+                    errorClass: classifySafeProviderError(error),
+                  });
+                }
+                throw error;
+              }
+            },
           },
-          allowanceUsd:
-            fundingSource === "shared"
-              ? FREE_TEAM_AI_ALLOWANCE_USD
-              : PAID_TEAM_AI_ALLOWANCE_USD,
-          gatewayApiKey,
-          modelSlug,
-        }),
+        ],
       })
     : model;
 }
@@ -193,10 +614,6 @@ export function isAiGatewayEnabled() {
     return true;
   }
   return Boolean(defaultGatewayApiKey());
-}
-
-export function isVercelAiGatewayKey(apiKey: unknown): apiKey is string {
-  return typeof apiKey === "string" && apiKey.trim().startsWith("vck_");
 }
 
 function gatewayProviderSlug(provider: ModelProviderId) {
@@ -232,15 +649,56 @@ function resolveUntracedAiModel(
     if (stub) return stub;
   }
 
+  if (isPlatformAnthropicCredential(byokCredential)) {
+    const directModelId = toDirectAnthropicModelId(model, modelOption);
+    const directModel = createFundingAnthropicLanguageModel(
+      directModelId,
+      byokCredential.apiKey,
+    );
+    const runtimeProvider: RuntimeProvider = {
+      provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+    };
+    const fallbackGatewayKey = byokCredential.fallbackGatewayApiKey;
+    const fundingSource = byokCredential.gatewayFundingSource;
+    const middlewares: LanguageModelMiddleware[] = [];
+    if (fallbackGatewayKey && fundingSource) {
+      middlewares.push(
+        fundedAllowanceMiddleware(
+          fundingSource,
+          fallbackGatewayKey,
+          toGatewayAnthropicModelSlug(directModelId, modelOption),
+        ),
+      );
+    }
+    middlewares.push(
+      createDirectAnthropicWithGatewayFallbackMiddleware(
+        directModelId,
+        byokCredential,
+        runtimeProvider,
+        modelOption,
+      ),
+    );
+    const wrapped = wrapLanguageModel({
+      model: directModel as Parameters<typeof wrapLanguageModel>[0]["model"],
+      middleware: middlewares,
+    });
+    runtimeProviderOverrides.set(wrapped, runtimeProvider);
+    if (fallbackGatewayKey && fundingSource) {
+      allowanceFundedModels.set(wrapped, fundedAllowanceUsd(fundingSource));
+    }
+    return wrapped;
+  }
+
   if (isBasetenCredential(byokCredential)) {
     const slug = BASETEN_MODEL_SLUGS[byokCredential.modelKey];
     if (!slug || modelOption?.modelKey !== byokCredential.modelKey || modelOption.model !== model) {
       throw new Error("Baseten credential does not match the selected model");
     }
-    return createOpenAI({
+    return createFundingOpenAiLanguageModel(slug, {
       apiKey: byokCredential.apiKey,
       baseURL: BASETEN_BYOK_PROVIDER.openAiCompatibleBaseUrl,
-    }).chat(slug);
+      useChat: true,
+    });
   }
 
   const byokApiKey =
@@ -270,10 +728,11 @@ function resolveUntracedAiModel(
       const directModel =
         modelOption?.directModel ??
         (providerSeparator >= 0 ? model.slice(providerSeparator + 1) : model);
-      return createOpenAI({
+      return createFundingOpenAiLanguageModel(directModel, {
         apiKey: directApiKey,
         baseURL: providerInfo.openAiCompatibleBaseUrl,
-      }).chat(directModel);
+        useChat: true,
+      });
     }
     return resolveUntracedGatewayModel(model, byokApiKey);
   }
@@ -294,21 +753,24 @@ function resolveUntracedAiModel(
 
   switch (provider) {
     case "claude":
-      return createAnthropic({ apiKey: directApiKey })(model);
+      return createFundingAnthropicLanguageModel(model, directApiKey ?? "");
     case "openai":
-      return createOpenAI({ apiKey: directApiKey })(model);
+      return createFundingOpenAiLanguageModel(model, {
+        apiKey: directApiKey ?? "",
+      });
     case "openrouter":
-      return createOpenRouter({ apiKey: directApiKey })(model);
+      return createFundingOpenRouterLanguageModel(model, directApiKey ?? "");
     case "custom": {
       if (!isCustomEndpointConfig(byokCredential)) {
         throw new Error("A complete custom endpoint is required");
       }
       const customEndpoint = normalizeCustomEndpointConfig(byokCredential);
-      return createOpenAI({
+      return createFundingOpenAiLanguageModel(customEndpoint.modelId, {
         apiKey: customEndpoint.apiKey,
         baseURL: customEndpoint.baseUrl,
         fetch: fetchWithoutBrotli,
-      }).chat(customEndpoint.modelId);
+        useChat: true,
+      });
     }
   }
 }
@@ -422,6 +884,20 @@ function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsage
   };
 }
 
+const FALLBACK_ANTHROPIC_RATES: Record<string, { inputUsdPerToken: number; outputUsdPerToken: number }> = {
+  "claude-haiku": { inputUsdPerToken: 0.10 / 1_000_000, outputUsdPerToken: 0.50 / 1_000_000 },
+  "claude-sonnet": { inputUsdPerToken: 3 / 1_000_000, outputUsdPerToken: 15 / 1_000_000 },
+  "claude-opus": { inputUsdPerToken: 15 / 1_000_000, outputUsdPerToken: 75 / 1_000_000 },
+};
+
+function fallbackAnthropicPricing(modelId: string) {
+  const normalized = modelId.toLowerCase();
+  for (const [prefix, rates] of Object.entries(FALLBACK_ANTHROPIC_RATES)) {
+    if (normalized.includes(prefix)) return rates;
+  }
+  return null;
+}
+
 async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number, cacheReadTokens = 0, cacheWriteTokens = 0) {
   if (!inputTokens && !outputTokens) return 0;
   if (provider === "byok:custom" || provider === "byok:baseten") return null;
@@ -432,15 +908,29 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
       modelPricing(slug),
       new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
     ]);
-    return pricing ? modelCostUsd(pricing, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens) : null;
+    if (pricing) {
+      return modelCostUsd(pricing, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens);
+    }
   } catch {
-    return null;
   } finally {
     if (timer) clearTimeout(timer);
   }
+  if (provider === PLATFORM_ANTHROPIC_USAGE_PROVIDER) {
+    const fallback = fallbackAnthropicPricing(modelId);
+    if (fallback) {
+      return modelCostUsd(fallback, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens);
+    }
+  }
+  return null;
 }
 
-export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string, allowanceUsd?: number): LanguageModelMiddleware {
+export function createUsageTracingMiddleware(
+  context: ModelUsageContext,
+  modelId: string,
+  allowanceUsd?: number,
+  runtimeProvider?: RuntimeProvider,
+): LanguageModelMiddleware {
+  if (runtimeProvider) runtimeProvider.usageContext = context;
   const start = (prompt: unknown) => {
     const startedAt = performance.now();
     const attribution = { ...context };
@@ -454,6 +944,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
       const outputTokens = usage?.outputTokens.total ?? 0;
       const cachedInputTokens = usage?.inputTokens.cacheRead ?? null;
       const cacheWriteInputTokens = usage?.inputTokens.cacheWrite ?? null;
+      const effectiveProvider = runtimeProvider?.provider ?? attribution.provider ?? "unknown";
       const row: AiUsageRecord = {
         userId: attribution.userId ?? null,
         teamId: attribution.teamId,
@@ -461,7 +952,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         taskId: attribution.taskId,
         agentId: attribution.agentId,
         feature: attribution.feature ?? "unattributed",
-        provider: attribution.provider ?? "unknown",
+        provider: effectiveProvider,
         model: modelId,
         promptId: attribution.promptId ?? identity.promptId,
         promptVersion: attribution.promptVersion ?? identity.promptVersion,
@@ -474,13 +965,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         totalTokens: inputTokens + outputTokens,
         latencyMs: Math.min(2147483647, Math.max(0, Math.round(performance.now() - startedAt))),
       };
-      const failure = error && typeof error === "object"
-        ? error as { name?: unknown; statusCode?: unknown }
-        : undefined;
-      const errorName = typeof failure?.name === "string" && /^[A-Za-z][A-Za-z0-9_]{0,80}$/.test(failure.name)
-        ? failure.name : "ModelError";
-      const statusCode = typeof failure?.statusCode === "number" && Number.isInteger(failure.statusCode) && failure.statusCode >= 100 && failure.statusCode <= 599
-        ? failure.statusCode : null;
+      const errorClass = outcome === "failed" && error ? classifySafeProviderError(error) : "none";
       const observation = (async () => {
         row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
         let allowanceSnapshot: Awaited<ReturnType<typeof teamAllowanceSnapshot>> = null;
@@ -500,6 +985,9 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
           : error;
         await Promise.allSettled([
           logAiUsage(row),
+          ...(row.provider === PLATFORM_ANTHROPIC_USAGE_PROVIDER
+            ? [recordAnthropicMonthlySpend(row.costUsd)]
+            : []),
           recordAiChatTurn({
             ...row, traceId, latencyMs: row.latencyMs!, outcome,
             teamId: row.teamId,
@@ -510,8 +998,8 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
           ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) && !(authError instanceof Error && authError.name === "AiProviderAuthenticationError") ? [reportError({
             message: "AI model generation failed",
             source: "server",
-            fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorName}:${statusCode}`,
-            extra: { route: "modelProvider", stage: "inference", model: modelId, promptId: row.promptId!, errorName, statusCode },
+            fingerprintKey: `ai-generation:${errorClass}`,
+            extra: { route: "modelProvider", stage: "inference", errorClass },
           })] : []),
         ]);
       })().catch(() => undefined);
@@ -619,7 +1107,12 @@ function traceLanguageModel(
   let traced = wrapLanguageModel({
     model,
     middleware: [
-      createUsageTracingMiddleware(context, model.modelId, allowanceFundedModels.get(model)),
+      createUsageTracingMiddleware(
+        context,
+        model.modelId,
+        allowanceFundedModels.get(model),
+        runtimeProviderOverrides.get(model),
+      ),
       createPromptCachingMiddleware(model, context, () => aiPromptCachingEnabled(traced)),
     ],
   });
@@ -647,6 +1140,9 @@ function traceLanguageModel(
         },
       },
     });
+  }
+  if (provider === PLATFORM_ANTHROPIC_USAGE_PROVIDER) {
+    platformAnthropicFundedModels.add(traced);
   }
   modelUsageContexts.set(traced, context);
   return traced;
@@ -695,6 +1191,7 @@ export function aiUsageProviderForCredential(
   modelOption?: TAiModelOption,
   directProvider?: TAiProviderKey,
 ) {
+  if (isPlatformAnthropicCredential(credential)) return PLATFORM_ANTHROPIC_USAGE_PROVIDER;
   if (isBasetenCredential(credential)) return "byok:baseten";
   if (isCustomEndpointConfig(credential)) return "byok:custom";
   if (typeof credential !== "string" || isVercelAiGatewayKey(credential)) {
@@ -758,10 +1255,11 @@ export function gatewayProviderOptionsForModel(
   tags?: AiGatewayTags,
 ): GatewayTaggedProviderOptions | undefined {
   configureAiModelUsage(model as LanguageModel, { feature, ...tags });
-  if (
+  const gatewayRouted =
     typeof model !== "string" &&
-    (model as { provider?: unknown }).provider !== "gateway"
-  ) {
+    ((model as { provider?: unknown }).provider === "gateway" ||
+      platformAnthropicFundedModels.has(model as object));
+  if (!gatewayRouted) {
     return undefined;
   }
 

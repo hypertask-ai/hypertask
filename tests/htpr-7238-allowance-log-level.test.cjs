@@ -57,5 +57,6 @@ test("a real model failure is still logged as an error", () => {
   );
   assert.equal(calls.error.length, 1);
   assert.equal(calls.error[0][0], "[ai/chat/stream] model-stream user-facing error");
-  assert.equal(calls.error[0][1], failure);
+  assert.equal(calls.error[0][1], "overloaded");
+  assert.doesNotMatch(JSON.stringify(calls.error), /Anthropic overloaded_error/);
 });

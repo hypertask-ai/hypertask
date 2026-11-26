@@ -31,6 +31,7 @@ function fixture({ error, failAt = "generate", enabled = true, flagError = false
     $transaction: async (work) => work({ $queryRaw: async () => [{ id: 91 }], taskLabel }),
   };
   const stubs = {
+    "@/app/api/ai/_lib/aiFunding": require("./helpers/ai-funding-stub.cjs").createAiFundingStub(),
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/net/downloadWithoutBrotli": {},
     "@/app/api/ai/_lib/planAllowancePolicy": {},

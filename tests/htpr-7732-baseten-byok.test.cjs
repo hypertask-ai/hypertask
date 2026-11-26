@@ -24,6 +24,9 @@ const expectedMap = {
 };
 
 function loadModule(relativePath, stubs) {
+  if (!stubs["@/app/api/ai/_lib/aiFunding"]) {
+    stubs = { ...stubs, "@/app/api/ai/_lib/aiFunding": require("./helpers/ai-funding-stub.cjs").createAiFundingStub(stubs) };
+  }
   const filename = path.join(root, relativePath);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
