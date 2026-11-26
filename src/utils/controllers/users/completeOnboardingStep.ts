@@ -1,3 +1,4 @@
+import { userIdSchema } from "@/lib/identity";
 import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
@@ -251,7 +252,7 @@ export const createOnboardingSampleBoardProject = async (
   const project = await prisma.project.findUniqueOrThrow({ where: { id: result.board.id } });
   try {
     const hyperAi = await prisma.user.findUnique({ where: { id: generalConfig.hyperAiId } });
-    if (hyperAi) await assigneesAssign(hyperAi as unknown as IUser, exist_user.id, pointer.id, undefined, undefined, { intent: "assign" });
+    if (hyperAi) await assigneesAssign(hyperAi as unknown as IUser, userIdSchema.parse(exist_user.id), pointer.id, undefined, undefined, { intent: "assign" });
   } catch (error) {
     console.error("Error assigning onboarding task:", error);
   }
@@ -364,7 +365,7 @@ export const createProvisionedOnboardingSampleBoardProject = async ({
       if (hyperAi) {
         await assigneesAssign(
           hyperAi as unknown as IUser,
-          exist_user.id,
+          userIdSchema.parse(exist_user.id),
           task.id,
           undefined,
           undefined,

@@ -35,6 +35,7 @@ function loadRoute(tasks = []) {
     },
   };
   const stubs = {
+    "@/lib/identity": require("./task-route-loader.cjs").load("src/lib/identity.ts", {}),
     "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),

@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import assigneesAssign, {
   type AssigneeIntent,
@@ -54,7 +55,7 @@ const handler: NextApiHandler = async (
 
     if (mode && mode === "multiple" && userIds.length > 0) {
       const assignTasks = userIds.map((userId_: number) =>
-        assigneesAssign(currentUser, userId_, taskId, agentId)
+        assigneesAssign(currentUser, userIdSchema.parse(userId_), taskId, agentId == null ? undefined : agentIdSchema.parse(agentId))
       );
       await Promise.all(assignTasks);
       void broadcastBoardChange(task?.projectId, { originUserId: currentUser.id });
@@ -67,9 +68,9 @@ const handler: NextApiHandler = async (
     } else {
       const response = await assigneesAssign(
         currentUser,
-        userId,
+        userIdSchema.nullish().parse(userId),
         taskId,
-        agentId,
+        agentId == null ? undefined : agentIdSchema.parse(agentId),
         undefined,
         intent ? { intent: intent as AssigneeIntent } : undefined
       );

@@ -204,6 +204,7 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
 test("assignees/assign broadcasts task:changed to open detail views", async () => {
   const broadcasts = [];
   const stubs = {
+    "@/lib/identity": require("./task-route-loader.cjs").load("src/lib/identity.ts", {}),
     "@/utils/controllers/assignees/assign": {
       __esModule: true,
       default: async () => ({ status: 200, json: { message: "Success" } }),

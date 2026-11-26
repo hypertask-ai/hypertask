@@ -1,3 +1,4 @@
+import { userIdSchema } from "@/lib/identity";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { IUser } from "@/models/model";
@@ -281,7 +282,7 @@ export async function POST(request: NextRequest) {
       recipientIds.map(async (recipientId) => {
         const result = await assigneesAssign(
           user as IUser,
-          recipientId,
+          userIdSchema.parse(recipientId),
           task.id,
           undefined,
           undefined,

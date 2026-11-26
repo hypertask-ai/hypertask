@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema, type UserId } from "@/lib/identity";
 import { requireAgentWriteRole } from '@/lib/mcp/agents/readRoleGuard';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
@@ -23,9 +24,9 @@ import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 import { isAgentOnBoard } from "@/utils/controllers/agents/boardMembers";
 
 
-export interface McpAssigneeResponseItem extends McpTaskAssignee {
-  userId: number;
-}
+export type McpAssigneeResponseItem = McpTaskAssignee & {
+  userId: UserId;
+};
 
 interface AssignBody {
   task_id?: number;
@@ -291,10 +292,10 @@ export async function POST(request: NextRequest) {
         () =>
           assigneesAssign(
             currentUser,
-            currentUser.id,
+            userIdSchema.parse(currentUser.id),
             task.id,
-            ctx.agentId ?? undefined,
-            ctx.agentId ?? undefined,
+            ctx.agentId == null ? undefined : agentIdSchema.parse(ctx.agentId),
+            ctx.agentId == null ? undefined : agentIdSchema.parse(ctx.agentId),
             { intent: assignIntent, teamScope: ctx.teamScope }
           )
       );
@@ -309,7 +310,7 @@ export async function POST(request: NextRequest) {
       }
       recordAssignmentResult(response.json as AssignmentResult);
     } else if (hasAgentId) {
-      const targetAgentId = (agent_id as string).trim();
+      const targetAgentId = agentIdSchema.parse(agent_id);
       const isRemoval = assignIntent === "unassign";
       const [visibleAgent, onBoard] = await Promise.all([
         prisma.agent.findFirst({
@@ -340,10 +341,10 @@ export async function POST(request: NextRequest) {
         () =>
           assigneesAssign(
             currentUser,
-            currentUser.id,
+            userIdSchema.parse(currentUser.id),
             task.id,
             targetAgentId,
-            ctx.agentId ?? undefined,
+            ctx.agentId == null ? undefined : agentIdSchema.parse(ctx.agentId),
             { intent: assignIntent, teamScope: ctx.teamScope }
           )
       );
@@ -404,7 +405,7 @@ export async function POST(request: NextRequest) {
           prisma,
           { agentId: ctx.agentId, userId: currentUser.id },
           () =>
-            assigneesAssign(currentUser, uid, task.id, undefined, ctx.agentId ?? undefined, {
+            assigneesAssign(currentUser, userIdSchema.parse(uid), task.id, undefined, ctx.agentId == null ? undefined : agentIdSchema.parse(ctx.agentId), {
               intent: assignIntent,
               teamScope: ctx.teamScope,
             })
@@ -444,8 +445,8 @@ export async function POST(request: NextRequest) {
     });
 
     const assignees: McpAssigneeResponseItem[] = assigneeRows.flatMap((row) => {
-      const mapped = mapTaskAssignee(row, ctx.user.id, task.projectId);
-      return mapped ? [{ ...mapped, userId: row.userId }] : [];
+      const mapped = mapTaskAssignee(row, userIdSchema.parse(ctx.user.id), task.projectId);
+      return mapped ? [{ ...mapped, userId: userIdSchema.parse(row.userId) }] : [];
     });
 
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);

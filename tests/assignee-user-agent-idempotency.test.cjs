@@ -1,3 +1,4 @@
+const identity = require("./helpers/loadModule.cjs").loadModule("src/lib/identity.ts");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -21,7 +22,7 @@ const load = (javascript, stubs) => {
   new Function("module", "exports", "require", javascript)(
     mod,
     mod.exports,
-    (request) => stubs[request] ?? require(request),
+    (request) => stubs[request] ?? (request === "@/lib/identity" ? identity : require(request)),
   );
   return mod.exports;
 };

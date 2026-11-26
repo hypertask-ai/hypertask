@@ -1,3 +1,4 @@
+import { agentIdSchema } from "@/lib/identity";
 import prisma from "@/lib/prisma";
 import { clearHumanAssignees } from "@/utils/controllers/assignees/assign";
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
@@ -16,7 +17,7 @@ export async function updateTaskAssignees(context: TaskUpdateFieldContext, task:
                 const clearResult = await clearHumanAssignees(
                     userObj,
                     task.id,
-                    ctx.agentId ?? undefined,
+                    ctx.agentId == null ? undefined : agentIdSchema.parse(ctx.agentId),
                     ctx.teamScope
                 );
                 if (clearResult.status !== 200) {

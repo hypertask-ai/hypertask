@@ -16,6 +16,7 @@ const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
   aliases = withStubs({
+    '@/lib/identity': require("./task-route-loader.cjs").load("src/lib/identity.ts", {}),
     '@/lib/planLimits': { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
     '@/lib/mcp/boards/createBoardFromManifest': {},
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },

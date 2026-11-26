@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity"
 import {
   isVisibilityOnlyBody,
   setOwnedAgentVisibility,
@@ -30,6 +31,7 @@ import {
   type AgentLifecycleDatabase,
   type AgentLifecycleDeps,
   type AgentLifecycleRow,
+  type AgentLifecycleRecord,
 } from './lifecycle'
 
 type AgentPatchBody = {
@@ -107,9 +109,9 @@ export async function handleArchiveAgentRequest(
 
   try {
     const archived = await archiveOwnedAgent(
-      prisma as unknown as AgentLifecycleDatabase,
-      ctx.user.id,
-      agentId,
+      prisma,
+      userIdSchema.parse(ctx.user.id),
+      agentIdSchema.parse(agentId),
       true,
       agentScope
     )
@@ -380,7 +382,7 @@ export async function handlePatchAgentRequest(
     }
   }
 
-  const database = prisma as unknown as AgentLifecycleDatabase
+  const database: AgentLifecycleDatabase = prisma
   let currentAgent: AgentLifecycleRow | undefined
   let alreadyRunning = false
   let token: string | null = null
@@ -388,8 +390,8 @@ export async function handlePatchAgentRequest(
   if (wantsArchive) {
     const archived = await archiveOwnedAgent(
       database,
-      ctx.user.id,
-      agentId,
+      userIdSchema.parse(ctx.user.id),
+      agentIdSchema.parse(agentId),
       body.archived as boolean,
       agentScope
     )
@@ -401,8 +403,8 @@ export async function handlePatchAgentRequest(
     const result = await launchOwnedAgent(
       database,
       agentLifecycleDeps,
-      ctx.user.id,
-      agentId,
+      userIdSchema.parse(ctx.user.id),
+      agentIdSchema.parse(agentId),
       agentScope,
       managementAgentTokenScope(ctx.management)
     )
@@ -430,8 +432,8 @@ export async function handlePatchAgentRequest(
   if (wantsRename) {
     const renamed = await renameOwnedAgent(
       database,
-      ctx.user.id,
-      agentId,
+      userIdSchema.parse(ctx.user.id),
+      agentIdSchema.parse(agentId),
       displayName!,
       agentScope
     )
@@ -449,7 +451,7 @@ export async function handlePatchAgentRequest(
   })
 }
 
-function describe(agent: AgentLifecycleRow) {
+function describe(agent: AgentLifecycleRecord) {
   return {
     id: agent.id,
     display_name: agent.displayName,

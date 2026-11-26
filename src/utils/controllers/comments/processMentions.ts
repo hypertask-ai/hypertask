@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { shouldSkipMentionRecipient } from "./mentionRecipients";
 import { extractTipTapContent, stripBlockquoteContent } from "@/utils/helperFunctions/multiPages/multipages.functions";
@@ -25,7 +26,7 @@ export async function resolveTextMentions(
     );
     if (!members?.length) return text;
     const resolvable: ResolvableMember[] = members.map((m) => ({
-      id: m.id,
+      id: typeof m.id === "number" ? userIdSchema.parse(m.id) : agentIdSchema.parse(m.id),
       displayName: m.displayName,
     }));
     const normalized = normalizeMentionSpans(text, resolvable);

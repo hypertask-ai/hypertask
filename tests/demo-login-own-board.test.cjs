@@ -14,6 +14,7 @@ const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
   aliases = withStubs({
+    "@/lib/identity": require("./task-route-loader.cjs").load("src/lib/identity.ts", {}),
     "@/lib/auth/agentCookieBridgeRoutes": require("./task-route-loader.cjs").load("src/lib/auth/agentCookieBridgeRoutes.ts", {}),
     "@/lib/telemetry/signupAnalytics": { recordServerCapture: () => {} },
     "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,

@@ -1,3 +1,4 @@
+import { userIdSchema } from "@/lib/identity";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -850,7 +851,7 @@ export async function GET(request: NextRequest) {
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const assignees = task.assignees
-        .map((assignee) => mapTaskAssignee(assignee, user.id, task.projectId))
+        .map((assignee) => mapTaskAssignee(assignee, userIdSchema.parse(user.id), task.projectId))
         .filter((assignee): assignee is McpTaskAssignee => Boolean(assignee))
       return {
         id: task.id,

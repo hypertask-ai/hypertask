@@ -1,15 +1,16 @@
+import type { AgentId, UserId } from "@/lib/identity";
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import type { TaskStaleness } from '@/lib/staleness';
 
-export interface McpTaskAssignee {
-    id: number;
+export type McpTaskAssignee = {
+    id: UserId;
     email: string;
     displayName?: string;
-    type: 'person' | 'agent';
-    agentId?: string;
-    agent?: McpAgentSummary;
     agentAssigner?: McpAgentSummary;
-}
+} & (
+    | { type: 'person'; agentId?: never; agent?: never }
+    | { type: 'agent'; agentId: AgentId; agent: McpAgentSummary }
+);
 
 export interface TaskDetail {
     id: number;

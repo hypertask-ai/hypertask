@@ -1,65 +1,69 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import assert from "node:assert";
 // @ts-expect-error Node strip-types checks require .ts imports without allowImportingTsExtensions.
 import { injectMentionSpans, normalizeMentionSpans } from "./resolveMentions.ts";
 
+const injectNormalizedMentions = (text: string, members: Parameters<typeof normalizeMentionSpans>[1]) =>
+  injectMentionSpans(normalizeMentionSpans(text, members), members);
+
 const members = [
-  { id: 193, displayName: "Abdul Wahhab" },
-  { id: 6, displayName: "Valentin" },
-  { id: "abc123", displayName: "HT Bot" },
+  { id: userIdSchema.parse(193), displayName: "Abdul Wahhab" },
+  { id: userIdSchema.parse(6), displayName: "Valentin" },
+  { id: agentIdSchema.parse("abc123"), displayName: "HT Bot" },
 ];
 
 assert.ok(
-  injectMentionSpans("hey @Abdul Wahhab look", members).includes('data-label="name-193"'),
+  injectNormalizedMentions("hey @Abdul Wahhab look", members).includes('data-label="name-193"'),
   "@Display Name resolves to name-<id> span",
 );
 
 assert.ok(
-  injectMentionSpans("ping @193 please", members).includes('data-label="name-193"'),
+  injectNormalizedMentions("ping @193 please", members).includes('data-label="name-193"'),
   "@<id> resolves to name-<id> span",
 );
 
-const agentOut = injectMentionSpans("@HT Bot run it", members);
+const agentOut = injectNormalizedMentions("@HT Bot run it", members);
 assert.ok(
   agentOut.includes('data-label="agent-abc123"') && !agentOut.includes("name-"),
   "agent display name resolves to agent-<id> span",
 );
 
 assert.strictEqual(
-  injectMentionSpans("mail me at val@valentin.io", members),
+  injectNormalizedMentions("mail me at val@valentin.io", members),
   "mail me at val@valentin.io",
   "email left untouched",
 );
 
-const withShort = [...members, { id: 999, displayName: "Abdul" }];
-const longest = injectMentionSpans("@Abdul Wahhab", withShort);
+const withShort = [...members, { id: userIdSchema.parse(999), displayName: "Abdul" }];
+const longest = injectNormalizedMentions("@Abdul Wahhab", withShort);
 assert.ok(
   longest.includes("name-193") && !longest.includes("name-999"),
   "longest display name wins over a shorter prefix",
 );
 
 assert.ok(
-  injectMentionSpans("ping @Abdul about it", members).includes('data-label="name-193"'),
+  injectNormalizedMentions("ping @Abdul about it", members).includes('data-label="name-193"'),
   "unique first-name prefix resolves",
 );
 
 const ambig = [
-  { id: 1, displayName: "Sara Lee" },
-  { id: 2, displayName: "Sara Kim" },
+  { id: userIdSchema.parse(1), displayName: "Sara Lee" },
+  { id: userIdSchema.parse(2), displayName: "Sara Kim" },
 ];
 assert.strictEqual(
-  injectMentionSpans("hi @Sara", ambig),
+  injectNormalizedMentions("hi @Sara", ambig),
   "hi @Sara",
   "ambiguous prefix is left untouched",
 );
 
 assert.ok(
-  injectMentionSpans("hi @Sara Lee", ambig).includes("name-1"),
+  injectNormalizedMentions("hi @Sara Lee", ambig).includes("name-1"),
   "exact full name resolves despite ambiguous shorter prefix",
 );
 
 const quoteBreakoutName = 'Bob" onmouseover="alert';
-const quoteBreakout = injectMentionSpans(`hi @${quoteBreakoutName}`, [
-  { id: 7, displayName: quoteBreakoutName },
+const quoteBreakout = injectNormalizedMentions(`hi @${quoteBreakoutName}`, [
+  { id: userIdSchema.parse(7), displayName: quoteBreakoutName },
 ]);
 assert.ok(
   quoteBreakout.includes('Bob&quot; onmouseover=&quot;alert') &&
@@ -68,7 +72,7 @@ assert.ok(
 );
 
 assert.strictEqual(
-  injectMentionSpans("just a note about Abdul Wahhab", members),
+  injectNormalizedMentions("just a note about Abdul Wahhab", members),
   "just a note about Abdul Wahhab",
   "name without @ is unchanged",
 );
@@ -81,7 +85,7 @@ assert.ok(
   "a guessed person label is rewritten from the display name",
 );
 
-const nestedSafe = injectMentionSpans(
+const nestedSafe = injectNormalizedMentions(
   normalizeMentionSpans(
     '<span data-type="mention" data-id="Valentin" data-label="valentin-6">@Valentin</span> and @Abdul Wahhab',
     members,

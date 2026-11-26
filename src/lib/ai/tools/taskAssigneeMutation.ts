@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import { type ToolTaskIdentifierInput, resolveUserIds } from "@/app/api/ai/chat/stream/bulkTools";
 import { getProjectMembers } from "@/utils/controllers/projects/getProjectMembers";
 
@@ -75,10 +76,10 @@ export function createSingleTaskAssigneeMutation(context: TaskAssigneeContext, i
       try {
         response = await assigneesAssign(
           activityUser,
-          userId,
+          userIdSchema.parse(userId),
           task.id,
           undefined,
-          actingAgentId ?? undefined,
+          actingAgentId == null ? undefined : agentIdSchema.parse(actingAgentId),
           { intent }
         );
       } catch (error) {
@@ -154,10 +155,10 @@ export function createSingleTaskAssigneeMutation(context: TaskAssigneeContext, i
         const assignee = { agent_id: agentId };
         response = await assigneesAssign(
           activityUser,
-          user.id,
+          userIdSchema.parse(user.id),
           task.id,
-          assignee.agent_id,
-          actingAgentId ?? undefined,
+          agentIdSchema.parse(assignee.agent_id),
+          actingAgentId == null ? undefined : agentIdSchema.parse(actingAgentId),
           { intent }
         );
       } catch (error) {
