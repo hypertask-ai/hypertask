@@ -329,7 +329,12 @@ fi
 
 assign_output=$("$VCC" task assign "$T" --self 2>&1) || {
   if grep -qi 'not a member' <<< "$assign_output"; then
-    me=${SHIP_SESSION_NAME:-$("$(dirname "$(readlink -f "$0")")/ship-identity" | cut -f1)}
+    me=${SHIP_SESSION_NAME:-}
+    if [ -z "$me" ]; then
+      me=$("$(dirname "$(readlink -f "$0")")/ship-identity") \
+        || { echo "ship-claim: cannot read this chat's board login; refusing to name a member for $T." >&2; exit 2; }
+      me=${me%%$'\t'*}
+    fi
     echo "ship-claim: REFUSED. board $TICKET_BOARD ($(ticket_board_name "$TICKET_BOARD")) does not list member \"$me\" for $T." >&2
     echo "ship-claim: the board decides who may join it; ask $(ticket_board_owner "$TICKET_BOARD") to add \"$me\". Do NOT start work." >&2
     exit 4

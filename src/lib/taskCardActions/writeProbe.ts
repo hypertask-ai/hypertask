@@ -4,6 +4,7 @@ import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIn
 import { randomUUID } from 'crypto'
 import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { anyStatus } from '@/lib/db/softDeleteReads'
 import { withTaskStarWriteLock } from './writeLocks'
 
 
@@ -103,7 +104,7 @@ export async function ensureTaskWriteProbeFixture(userId: number): Promise<{ id:
 
     const existing = await tx.task.findFirst({
       select: { id: true, status: true },
-      where: { userId, title: PROBE_TASK_TITLE, projectId: project.id },
+      where: { userId, title: PROBE_TASK_TITLE, projectId: project.id, ...anyStatus },
       orderBy: { id: 'asc' },
     })
     if (existing) {

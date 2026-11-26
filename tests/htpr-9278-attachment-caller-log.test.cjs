@@ -126,6 +126,24 @@ test("a URL that returns a web page is logged as a caller warning, never a produ
   assert.deepEqual(state.broadcasts, []);
 });
 
+test("a caller input refusal keeps the per-file detail without an error log (HTPR-9612)", async () => {
+  setup.failure = new AttachmentInputRefusalError(
+    "Unsupported Content-Type from URL: text/html",
+    [{ index: 0, filename: "page.png", error: "Unsupported Content-Type from URL: text/html" }]
+  );
+  const { state, response, warnings, errors } = await call();
+  assert.equal(response.status, 400);
+  assert.equal(response.body.success, false);
+  assert.equal(response.body.error, "Unsupported Content-Type from URL: text/html");
+  assert.deepEqual(response.body.failed_files, [
+    { index: 0, filename: "page.png", error: "Unsupported Content-Type from URL: text/html" },
+  ]);
+  assert.deepEqual(errors, []);
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0][1].status, 400);
+  assert.deepEqual(state.crashes, []);
+});
+
 test("every caller mistake stays out of the error stream", async () => {
   for (const status of [400, 404, 409]) {
     setup.failure = new AttachmentBatchError("Task not found or access denied", status, true);

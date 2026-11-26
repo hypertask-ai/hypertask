@@ -56,8 +56,9 @@ test('a refusal naming a field the caller can change no longer files a ticket (H
   }
 })
 
-test('a refusal naming nothing, or a server fault, still files (HTPR-8267)', () => {
-  assert.equal(fixable.callerCanFixRefusal({ code: 'not_found' }, 400), false)
+test('a refusal reason is caller-fixable without a field, while an unnamed non-refusal or a server fault still files (HTPR-8267)', () => {
+  assert.equal(fixable.callerCanFixRefusal({ code: 'not_found' }, 400), true)
+  assert.equal(fixable.callerCanFixRefusal({ code: 'invalid_format' }, 400), false)
   assert.equal(fixable.callerCanFixRefusal({ code: 'tool-exception' }, 400), false)
   assert.equal(fixable.callerCanFixRefusal({ code: 'invalid_date', field: 'labels' }, 500), false)
 })

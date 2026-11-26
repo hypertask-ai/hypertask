@@ -1,0 +1,5 @@
+{
+  "src/utils/controllers/trash/getByProjectId.ts": {
+    "no-inline-deleted-read": 1
+  }
+}

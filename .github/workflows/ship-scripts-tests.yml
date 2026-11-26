@@ -86,6 +86,7 @@ jobs:
           bash .claude/skills/vcc/bin/vcc.test.sh
           bash .claude/skills/ship/scripts/ship-identity.test.sh
           bash .claude/skills/setup-runner/scripts/setup-runner.test.sh
+          bash .claude/skills/fix-bug/scripts/open-pr.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
           python3 .claude/skills/ship/scripts/ship-check-finish.test.py
           python3 .claude/skills/ship/scripts/gh-merge-guard.test.py -v

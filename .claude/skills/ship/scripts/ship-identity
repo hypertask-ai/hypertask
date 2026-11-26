@@ -7,13 +7,13 @@
 #   2. The name carries a runner slot ("ht-or-runner-5", "cursor-grok-runner-5 (Cursor Grok RUNNER 5)") and that slot
 #      has its own token: write as "RUNNER 5" (HYCI-408). A runner that put its tmux name in SHIP_SESSION_NAME was
 #      refused every board write, looped 165 runs on HTPR-7766, and nobody saw why. A literal token still wins.
-#   3. Otherwise: Valentins Claude Code.
+#   3. Otherwise: refuse, naming the token file this chat needs (HTPR-9710). A chat with no login of its own
+#      writes as nobody: never as another chat, and never as Valentins Claude Code.
 # Prints "<name>\t<token file>". The name survives /clear, so the identity does too.
 set -uo pipefail
 CREDS=${VCC_CREDENTIALS_DIR:-$HOME/.config/hypertask-agents/credentials}
 SESSION_CREDS=${VCC_SESSION_CREDENTIALS_DIR:-$CREDS/sessions}
-FALLBACK_NAME="Valentins Claude Code"
-FALLBACK_TOKEN=$CREDS/valentins-claude-code-agent-token
+SHARED_NAME="Valentins Claude Code"
 
 # Walk up the process tree to the Claude Code process that owns a session file.
 session_name() {
@@ -52,4 +52,11 @@ if [ -n "$slot" ] && [ -s "$SESSION_CREDS/runner-$slot-agent-token" ]; then
   printf '%s\t%s\n' "RUNNER $slot" "$SESSION_CREDS/runner-$slot-agent-token"
   exit 0
 fi
-printf '%s\t%s\n' "$FALLBACK_NAME" "$FALLBACK_TOKEN"
+needed=$SESSION_CREDS/${slug:-<chat-name>}-agent-token
+[ -z "$slot" ] || needed=$SESSION_CREDS/runner-$slot-agent-token
+if [ -n "$slug" ]; then
+  printf 'ship-identity: %s has no board login of its own; refusing to write as %s. Add %s for this chat.\n' "$name" "$SHARED_NAME" "$needed" >&2
+else
+  printf 'ship-identity: this chat has no name and no board login of its own; refusing to write as %s. Name the chat and add %s for it.\n' "$SHARED_NAME" "$needed" >&2
+fi
+exit 3

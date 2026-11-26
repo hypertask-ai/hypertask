@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# vcc: Hypertask CLI as "Valentins Claude Code" (Valentin's hand-run sessions).
+# vcc: Hypertask CLI as this chat's own board login (ship-identity resolves it, no shared fallback).
 set -euo pipefail
 for runner_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
   [ -d "$runner_command_dir" ] || continue
@@ -363,13 +363,13 @@ completion_move() {
 
 SHARED_IDENTITY="Valentins Claude Code"
 SHIP_IDENTITY="$HOME/.agents/skills/ship/scripts/ship-identity"
-TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-IDENTITY="$SHARED_IDENTITY"
 [ -x "$SHIP_IDENTITY" ] || { printf 'vcc: %s is missing; refusing to write as %s\n' "$SHIP_IDENTITY" "$SHARED_IDENTITY" >&2; exit 2; }
-IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$SHIP_IDENTITY")
+resolved=$("$SHIP_IDENTITY") || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_IDENTITY" "$SHARED_IDENTITY" >&2; exit 2; }
+IFS=$'\t' read -r IDENTITY TOKEN_FILE <<< "$resolved"
+[ -n "$IDENTITY" ] && [ -n "$TOKEN_FILE" ] || { printf 'vcc: %s named no identity; refusing to write as %s\n' "$SHIP_IDENTITY" "$SHARED_IDENTITY" >&2; exit 2; }
 SESSION_NAME=${SHIP_SESSION_NAME:-}
 if [ -z "$SESSION_NAME" ]; then
-  SESSION_NAME=$("$SHIP_IDENTITY" --name)
+  SESSION_NAME=$("$SHIP_IDENTITY" --name) || { printf 'vcc: %s did not report the session name; refusing to write as %s\n' "$SHIP_IDENTITY" "$IDENTITY" >&2; exit 2; }
   case "$SESSION_NAME" in
     *$'\t'*)
       printf 'vcc: %s did not report the session name; refusing to write as %s\n' "$SHIP_IDENTITY" "$IDENTITY" >&2

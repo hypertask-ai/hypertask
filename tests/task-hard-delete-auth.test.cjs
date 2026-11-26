@@ -130,6 +130,8 @@ test("hard deletion rejects a task outside the caller's writable projects", asyn
       where: {
         id: 101,
         project: taskWriteAccessWhere(23),
+        status: { in: ["Normal", "Archive", "Deleted"] },
+        anyStatus: true,
       },
       select: { projectId: true, status: true },
     },

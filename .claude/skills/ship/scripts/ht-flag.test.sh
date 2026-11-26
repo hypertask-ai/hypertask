@@ -90,6 +90,11 @@ reject review "$key" everyone --ai-review https://github.com/other/repo/pull/123
 reject review "$key" everyone --ai-review "$ai_review" --independent ' ' --live-qa "$live_qa"
 reject review "$key" everyone --ai-review "$ai_review" --independent "$independent" --live-qa http://qa.test/pass
 reject review "$key" everyone --ai-review "$ai_review" --independent "$independent"
+if "$script" set "$key" off --reason "$reason" > "$tmp/output" 2>&1; then
+  printf 'a chat with no board login must not switch a flag\n' >&2
+  exit 1
+fi
+grep -q 'board login of its own' "$tmp/output" || { printf 'unclear identity refusal: %s\n' "$(cat "$tmp/output")" >&2; exit 1; }
 mkdir -p "$tmp/bin"
 printf 'offline-test-credential\n' > "$tmp/credential"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'SH'

@@ -187,6 +187,7 @@ function fixture(options = {}) {
     } finally { transactionActive = false; }
   };
   const stubs = {
+    "@/lib/db/softDeleteReads": { anyStatus: { status: { in: ["Normal", "Archive", "Deleted"] } } },
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       calls.push(["flag", key, userId]);

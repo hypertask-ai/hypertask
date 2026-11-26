@@ -188,7 +188,9 @@ else:
     wrong = home / 'wrong-identity-creds'
     wrong.mkdir()
     r = run(dict(env, VCC_SESSION_CREDENTIALS_DIR=str(wrong)))
-    assert r.returncode != 0 and 'ship-identity does not match' in r.stderr
+    assert r.returncode != 0 and 'identity verification failed' in r.stderr
+    # The refusal must reach the operator: ship-identity says why and names the token file.
+    assert 'no board login of its own' in r.stderr and str(wrong / 'runner-1-agent-token') in r.stderr
     print('ok session credentials and mismatched ship identities fail closed')
 
     home, creds, sessions, env = fixture('parallel')

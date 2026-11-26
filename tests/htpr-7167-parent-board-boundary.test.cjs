@@ -62,6 +62,7 @@ function updateHarness(initial = {}, parents = []) {
     $transaction: async (callback) => { calls.transactions++; return callback(tx); },
   };
   let stubs = {
+    "@/lib/db/softDeleteReads": { anyStatus: { status: { in: ["Normal", "Archive", "Deleted"] } } },
     "@/lib/tasks/sameBoardRelations": relations,
     "@/utils/controllers/tasks/parentTaskAccess": parentAccess,
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -174,6 +175,7 @@ function createHarness(parents) {
   };
   const prisma = { user: { findUnique: async () => ({ id: 7 }) }, project: { findFirst: async () => ({ id: 10 }) } };
   const stubs = {
+    "@/lib/db/softDeleteReads": { anyStatus: { status: { in: ["Normal", "Archive", "Deleted"] } } },
     "@/utils/controllers/tasks/parentTaskAccess": parentAccess,
     "@/lib/ai/taskWriterDueDate": {}, "@/lib/flags/keys": {}, "@/utils/generateRank": {},
     "next/server": { NextResponse: { json: (json, options) => ({ json, status: options.status }) } },
@@ -290,6 +292,7 @@ function readerStubs(prisma) {
     "@/lib/agents/publicAgent": { projectPublicAgent: () => null, redactAgentIdentitiesForPublicShare: (value) => value },
     "@/lib/tasks/waitingOnActivitySql": { visibleWaitingOnActivity: () => ({}) },
     "@/lib/mcp/agents": { mapVisibleMcpAgent: () => null, mcpVisibleAgentSelect: () => ({}) },
+    "@/lib/db/softDeleteReads": { anyStatus: { status: { in: ["Normal", "Archive", "Deleted"] } } },
   };
 }
 for (const foreignParent of [false, true]) {
