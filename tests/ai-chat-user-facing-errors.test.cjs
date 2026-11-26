@@ -289,7 +289,7 @@ test("expected plan-access guidance is not reported as a product bug", async () 
   }
   await reportHandledChatError(Object.assign(new Error("unexpected"), { statusCode: 500 }), "model-stream");
   assert.equal(reports.length, 1);
-  assert.equal(reports[0].extra.statusCode, 500);
+  assert.equal(reports[0].extra.errorClass, "upstream_server_error");
 });
 
 test("own-key auth failures are not filed as product bugs", async () => {

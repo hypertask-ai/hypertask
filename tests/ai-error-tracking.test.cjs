@@ -63,6 +63,7 @@ test('tracker failures do not change beacon status or leak usage payloads', asyn
 test('chat API tracking does not persist provider-echoed prompt or reply bodies', async () => {
   const reports = [];
   const { reportHandledChatError } = isolatedModule('src/lib/ai/chatStream/errors.ts', {
+    '@/app/api/ai/_lib/aiFunding': require('./helpers/ai-funding-stub.cjs').createAiFundingStub(),
     '@/lib/api/errorMessage': { toErrorMessage: () => 'private echoed prompt' },
     '@/lib/errors/reportError': { reportError: async (report) => reports.push(report) },
     '@/lib/ai/tools/constants': { SSE_HEADERS: {} },
@@ -70,7 +71,7 @@ test('chat API tracking does not persist provider-echoed prompt or reply bodies'
   });
   await reportHandledChatError(Object.assign(new Error('private echoed reply'), { statusCode: 500 }), 'model-stream', { model: 'claude-sonnet-5.5' });
   assert.equal(reports.length, 1);
-  assert.equal(reports[0].message, 'AI chat request failed');
-  assert.equal(reports[0].extra.statusCode, 500);
+  assert.equal(reports[0].message, 'AI chat request failed (upstream_server_error)');
+  assert.equal(reports[0].extra.errorClass, 'upstream_server_error');
   assert.ok(!JSON.stringify(reports).includes('private echoed'));
 });

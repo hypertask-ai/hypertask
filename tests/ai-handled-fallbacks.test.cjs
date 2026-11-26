@@ -92,7 +92,7 @@ function reportsHandledError(block) {
       ? statement.expression.expression
       : statement.expression;
     if (!ts.isCallExpression(call)) return false;
-    if (call.expression.getText() === "reportHandledChatError") return true;
+    if (["reportHandledChatError", "reportAiRequestError"].includes(call.expression.getText())) return true;
     return call.expression.getText() === "reportError" &&
       (call.arguments.length === 1 || (call.getSourceFile().fileName.endsWith("/task-writer/route.ts") && call.arguments.length === 2 && call.arguments[1].getText() === "error")) &&
       ts.isObjectLiteralExpression(call.arguments[0]) &&
@@ -162,7 +162,7 @@ test("AI route catches never report the same error twice", () => {
     function visit(node) {
       if (ts.isCatchClause(node)) {
         const calls = nodesWithin(node.block, ts.isCallExpression).filter((call) =>
-          ["reportError", "reportHandledChatError"].includes(call.expression.getText()),
+          ["reportError", "reportHandledChatError", "reportAiRequestError"].includes(call.expression.getText()),
         );
         if (calls.length > 1) lines.push(source.getLineAndCharacterOfPosition(node.getStart()).line + 1);
       }
@@ -212,6 +212,7 @@ test("coverage permits expected client responses and rethrows but rejects wrong 
     'throw error;',
     'await reportError({ source: "handled" }); return [];',
     'await reportHandledChatError(error, "load-user"); return createSseErrorResponse(errorMessage(error));',
+    'await reportAiRequestError({ error, url: "/api/ai/test", stage: "generate" }); return [];',
   ]) {
     assert.deepEqual(missingReports(parse("fixture.ts", `try {} catch (error) { ${body} }`)), []);
   }

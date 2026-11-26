@@ -117,6 +117,16 @@ function createAiFundingStub(stubs = {}, options = {}) {
           ? "anthropic_credit_exhausted"
           : null,
     }),
+    classifySafeProviderError: (error) => require("./loadModule.cjs").loadModule(
+      "src/app/api/ai/_lib/aiFunding.ts",
+      {
+        "@/lib/prisma": {},
+        "@/lib/redis": {},
+        "@/lib/errors/reportError": {},
+        "@/lib/flags": {},
+      },
+    ).classifySafeProviderError(error),
+    fundedBatchAllowed: async () => true,
     classifyGatewayFailureCause: () => "gateway_error",
     reportAiFundingIncident: async () => false,
     resolveHypertaskAnthropicCredential: async ({ fallbackGatewayApiKey } = {}) => ({
