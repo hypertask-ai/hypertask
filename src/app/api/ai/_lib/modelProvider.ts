@@ -14,6 +14,7 @@ import {
 } from "ai";
 import {
   classifyGatewayFailureCause,
+  classifySafeProviderError,
   createFundingAnthropicLanguageModel,
   createFundingGatewayImageModel,
   createFundingGatewayLanguageModel,
@@ -173,8 +174,10 @@ function createGatewayFailureReportingMiddleware(
     void reportAiFundingIncident({
       cause,
       reason: `Hypertask-paid Vercel Gateway (${fundingSource}) failed for ${modelSlug}`,
+      provider: "gateway",
+      fundingSource,
+      errorClass: classifySafeProviderError(error),
       modelId: modelSlug,
-      error,
     });
   };
   return {
@@ -323,8 +326,10 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
     void reportAiFundingIncident({
       cause: "anthropic_error",
       reason: `Direct Anthropic call failed for ${modelId}; falling back to Vercel Gateway`,
+      provider: "anthropic",
+      fundingSource: credential.gatewayFundingSource ?? "platform",
+      errorClass: classifySafeProviderError(error),
       modelId,
-      error,
     });
   };
   const fallbackModel = () => {
@@ -367,8 +372,10 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
     void reportAiFundingIncident({
       cause: "anthropic_error",
       reason: `Direct Anthropic call failed for ${modelSlug}; falling back to Vercel Gateway`,
+      provider: "anthropic",
+      fundingSource,
+      errorClass: classifySafeProviderError(error),
       modelId: modelSlug,
-      error,
     });
   };
   const tryDirect = async () => {
@@ -520,8 +527,10 @@ function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
                   void reportAiFundingIncident({
                     cause: classifyGatewayFailureCause(error),
                     reason: `Hypertask-paid Vercel Gateway (${fundingSource}) image generation failed for ${catalogSlug}`,
+                    provider: "gateway",
+                    fundingSource,
+                    errorClass: classifySafeProviderError(error),
                     modelId: catalogSlug,
-                    error,
                   });
                 }
                 throw error;

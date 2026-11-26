@@ -1,4 +1,4 @@
-import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG , HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
@@ -35,7 +35,6 @@ import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
 import prisma from "@/lib/prisma";
-import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/keys";
 
 async function nativeSearchForSelection(provider: string, apiKey: unknown, teamId?: unknown) {
   if (isPlatformAnthropicCredential(apiKey)) {

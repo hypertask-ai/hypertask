@@ -548,7 +548,8 @@ test("direct Anthropic runtime error falls back automatically to Vercel Gateway,
     assert.equal(fundingReports[0].urgent, true);
     assert.equal(fundingReports[0].extra.anthropicSpentUsd, 12.5);
     assert.match(fundingReports[0].message, /overloaded/);
-    assert.equal(fundingReports[0].extra.statusCode, 529);
+    assert.equal(fundingReports[0].extra.errorClass, "overloaded");
+    assert.equal(fundingReports[0].extra.statusCode, undefined);
   } finally {
     h.restore();
   }
@@ -772,14 +773,20 @@ test("provider credentials never enter funding messages, fingerprints, or signed
       await h.aiFunding.reportAiFundingIncident({
         cause,
         reason: "AI provider failed",
-        error: Object.assign(new Error(secret), { name: secret, statusCode: 529, apiKey: secret, fallbackGatewayApiKey: secret }),
+        provider: cause === "anthropic_error" ? "anthropic" : "gateway",
+        fundingSource: "managed",
+        errorClass: h.aiFunding.classifySafeProviderError(
+          Object.assign(new Error(secret), { name: secret, statusCode: 529, apiKey: secret, fallbackGatewayApiKey: secret }),
+        ),
       });
       const report = h.reportedErrors.at(-1);
-      assert.equal(report.message.includes(secret), false);
-      assert.equal(report.fingerprintKey.includes(secret), false);
+      const serialized = JSON.stringify(report);
+      assert.equal(serialized.includes(secret), false);
       assert.match(report.message, /\(overloaded\)/);
       assert.doesNotMatch(report.message, /529/);
-      assert.equal(report.extra.statusCode, 529);
+      assert.equal(report.extra.statusCode, undefined);
+      assert.equal(report.extra.errorClass, "overloaded");
+      assert.equal(report.fingerprintKey, `ai-funding:managed:${cause === "anthropic_error" ? "anthropic" : "gateway"}:${cause}:${new Date().toISOString().slice(0, 10)}`);
     }
   } finally {
     h.restore();
@@ -874,7 +881,7 @@ test("reportError marks urgent tickets with priorityIndex 1 (Urgent) and dedupes
       source: "server",
       urgent: true,
       dedupeSeconds: 86400,
-      fingerprintKey: "ai-funding:anthropic_credit_exhausted:2026-11-25",
+      fingerprintKey: "ai-funding:hypertask:anthropic:anthropic_credit_exhausted:2026-11-25",
     };
     await mod.reportError(payload);
     await mod.reportError(payload);

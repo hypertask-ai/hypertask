@@ -5,7 +5,11 @@ import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
-import { htmlToText } from "@/app/api/ai/_lib/currentTaskContext";
+import { htmlToText ,
+  loadCurrentTaskContext,
+  loadCurrentTaskImages,
+  resolveAiUsageTaskId,
+} from "@/app/api/ai/_lib/currentTaskContext";
 import { generateText, stepCountIs } from "ai";
 import { z } from "zod";
 
@@ -22,11 +26,6 @@ import {
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRefs";
 import { markAiDetailAnchors } from "@/utils/controllers/comments/ticketRefLinker";
-import {
-  loadCurrentTaskContext,
-  loadCurrentTaskImages,
-  resolveAiUsageTaskId,
-} from "@/app/api/ai/_lib/currentTaskContext";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import {
@@ -36,8 +35,7 @@ import {
 } from "@/lib/aiModelOptions";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { getProjectWhere , taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { verifyCookieIdentity } from "@/lib/auth/cookieIdentity";
 import { SESSION_COOKIE } from "@/lib/auth/session";

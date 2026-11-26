@@ -658,28 +658,19 @@ export function classifyGatewayFailureCause(error: unknown): GatewayFailureReaso
   return "gateway_error";
 }
 
-export function classifySafeProviderError(error: unknown): {
-  statusCode: number | null;
-  category:
-    | "overloaded"
-    | "rate_limited"
-    | "credit_exhausted"
-    | "auth_or_refusal"
-    | "upstream_server_error"
-    | "timeout_or_network"
-    | "provider_error";
-  summary: string;
-} {
+export type AiProviderErrorClass =
+  | "overloaded"
+  | "rate_limited"
+  | "credit_exhausted"
+  | "auth_or_refusal"
+  | "upstream_server_error"
+  | "timeout_or_network"
+  | "provider_error";
+
+export function classifySafeProviderError(error: unknown): AiProviderErrorClass {
   const statusCode = extractHttpStatusCode(error);
   const text = errorTextForClassification(error);
-  let category:
-    | "overloaded"
-    | "rate_limited"
-    | "credit_exhausted"
-    | "auth_or_refusal"
-    | "upstream_server_error"
-    | "timeout_or_network"
-    | "provider_error" = "provider_error";
+  let category: AiProviderErrorClass = "provider_error";
   if (statusCode === 529 || /overload/.test(text)) {
     category = "overloaded";
   } else if (statusCode === 429 || /rate.?limit|too many requests/.test(text)) {
@@ -700,8 +691,7 @@ export function classifySafeProviderError(error: unknown): {
   } else if (/timeout|timed out|econn|enotfound|fetch failed|network/.test(text)) {
     category = "timeout_or_network";
   }
-  const summary = category;
-  return { statusCode, category, summary };
+  return category;
 }
 
 async function claimDailyIncidentSlot(
@@ -731,11 +721,13 @@ async function claimDailyIncidentSlot(
 export async function reportAiFundingIncident(args: {
   cause: AiFundingIncidentCause;
   reason: string;
+  provider?: "anthropic" | "gateway";
+  fundingSource?: GatewayFundingSource | "platform";
+  errorClass?: AiProviderErrorClass;
   modelId?: string;
   teamId?: string | null;
   feature?: string | null;
   anthropicCredit?: AnthropicMonthlyCreditState;
-  error?: unknown;
   now?: Date;
 }): Promise<boolean> {
   const now = args.now ?? new Date();
@@ -744,9 +736,8 @@ export async function reportAiFundingIncident(args: {
   if (!claimed) return false;
 
   const credit = args.anthropicCredit ?? (await getAnthropicMonthlyCreditState(now));
-  const detail = args.error ? classifySafeProviderError(args.error) : null;
-  const reasonText = detail
-    ? `${args.reason} (${detail.summary})`
+  const reasonText = args.errorClass
+    ? `${args.reason} (${args.errorClass})`
     : args.reason;
   const message =
     `${incidentTitle(args.cause)} — ${reasonText}. ` +
@@ -760,10 +751,11 @@ export async function reportAiFundingIncident(args: {
     url: "/api/ai",
     urgent: true,
     dedupeSeconds: DAY_SECONDS,
-    fingerprintKey: `ai-funding:${args.cause}:${day}`,
+    fingerprintKey: `ai-funding:${args.fundingSource ?? "hypertask"}:${args.provider ?? "anthropic"}:${args.cause}:${day}`,
     extra: {
       cause: args.cause,
-      errorCategory: detail?.category ?? null,
+      errorClass: args.errorClass ?? null,
+      fundingSource: args.fundingSource ?? null,
       reason: reasonText.slice(0, 300),
       month: credit.month,
       anthropicSpentUsd: Number(credit.spentUsd.toFixed(6)),
@@ -773,7 +765,6 @@ export async function reportAiFundingIncident(args: {
       modelId: args.modelId ?? null,
       teamId: args.teamId ?? null,
       feature: args.feature ?? null,
-      statusCode: detail?.statusCode ?? null,
     },
   }).catch(() => undefined);
   return true;
@@ -831,6 +822,8 @@ export async function resolveHypertaskAnthropicCredential(args: {
     await reportAiFundingIncident({
       cause: anthropicCredit.fallbackReason,
       reason,
+      provider: "anthropic",
+      fundingSource: args.gatewayFundingSource ?? "platform",
       modelId: args.modelId,
       teamId: args.teamId,
       feature: args.feature,
