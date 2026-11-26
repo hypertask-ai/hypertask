@@ -1,7 +1,8 @@
+import { APICallError, type LanguageModelV4StreamPart } from "@ai-sdk/provider";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { createGateway, type ImageModel, type LanguageModel } from "ai";
+import { createGateway, wrapLanguageModel, type ImageModel, type LanguageModel, type LanguageModelMiddleware } from "ai";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { reportError } from "@/lib/errors/reportError";
@@ -384,11 +385,76 @@ export function createFundingGatewayClient(options: { apiKey: string }) {
   return createGateway({ apiKey: options.apiKey });
 }
 
+function safeProviderError(error: unknown): Error {
+  const message = classifySafeProviderError(error);
+  const statusCode = extractHttpStatusCode(error);
+  const normalized = APICallError.isInstance(error)
+    ? new APICallError({
+      message,
+      url: "https://ai-provider.invalid",
+      requestBodyValues: {},
+      statusCode: statusCode ?? undefined,
+      isRetryable: error.isRetryable === true,
+    })
+    : new Error(message);
+  if (statusCode !== null) Object.assign(normalized, { statusCode });
+  if (error instanceof Error && error.name === "AbortError") normalized.name = "AbortError";
+  return normalized;
+}
+
+const providerErrorBoundary: LanguageModelMiddleware = {
+  specificationVersion: "v4",
+  wrapGenerate: async ({ doGenerate }) => {
+    try {
+      return await doGenerate();
+    } catch (error) {
+      throw safeProviderError(error);
+    }
+  },
+  wrapStream: async ({ doStream }) => {
+    try {
+      const result = await doStream();
+      const reader = result.stream.getReader();
+      return {
+        ...result,
+        stream: new ReadableStream<LanguageModelV4StreamPart>({
+          async pull(controller) {
+            try {
+              const item = await reader.read();
+              if (item.done) {
+                controller.close();
+                return;
+              }
+              controller.enqueue(item.value.type === "error"
+                ? { type: "error", error: safeProviderError(item.value.error) }
+                : item.value);
+            } catch (error) {
+              controller.error(safeProviderError(error));
+            }
+          },
+          async cancel() {
+            try {
+              await reader.cancel();
+            } catch (error) {
+              throw safeProviderError(error);
+            }
+          },
+        }),
+      };
+    } catch (error) {
+      throw safeProviderError(error);
+    }
+  },
+};
+
 export function createFundingGatewayLanguageModel(
   modelSlug: string,
   gatewayApiKey: string,
 ): LanguageModel {
-  return createGateway({ apiKey: gatewayApiKey })(modelSlug);
+  return wrapLanguageModel({
+    model: createGateway({ apiKey: gatewayApiKey })(modelSlug),
+    middleware: providerErrorBoundary,
+  });
 }
 
 export function createFundingGatewayImageModel(
@@ -402,7 +468,10 @@ export function createFundingAnthropicLanguageModel(
   modelId: string,
   apiKey: string,
 ): LanguageModel {
-  return createAnthropic({ apiKey })(modelId);
+  return wrapLanguageModel({
+    model: createAnthropic({ apiKey })(modelId),
+    middleware: providerErrorBoundary,
+  });
 }
 
 export function createFundingOpenAiLanguageModel(
@@ -667,6 +736,7 @@ export type AiProviderErrorClass =
   | "auth_or_refusal"
   | "upstream_server_error"
   | "timeout_or_network"
+  | "model_unavailable"
   | "provider_error";
 
 export function classifySafeProviderError(error: unknown): AiProviderErrorClass {
@@ -693,6 +763,8 @@ export function classifySafeProviderError(error: unknown): AiProviderErrorClass 
     category = "upstream_server_error";
   } else if (/timeout|timed out|econn|enotfound|fetch failed|network/.test(text)) {
     category = "timeout_or_network";
+  } else if (statusCode === 404 || /model.{0,50}(not found|not available|unavailable|does not exist|unknown)/.test(text)) {
+    category = "model_unavailable";
   }
   return category;
 }
@@ -723,11 +795,9 @@ async function claimDailyIncidentSlot(
 
 export async function reportAiFundingIncident(args: {
   cause: AiFundingIncidentCause;
-  reason: string;
   provider?: "anthropic" | "gateway";
   fundingSource?: GatewayFundingSource | "platform";
   errorClass?: AiProviderErrorClass;
-  modelId?: string;
   teamId?: string | null;
   feature?: string | null;
   anthropicCredit?: AnthropicMonthlyCreditState;
@@ -735,15 +805,17 @@ export async function reportAiFundingIncident(args: {
 }): Promise<boolean> {
   const now = args.now ?? new Date();
   const day = utcDayKey(now);
+  const fundingSource = args.fundingSource === "managed" ? "managed"
+    : args.fundingSource === "shared" ? "shared"
+    : args.fundingSource === "customer" ? "customer"
+    : "platform";
+  const provider = args.provider === "gateway" ? "gateway" : "anthropic";
   const claimed = await claimDailyIncidentSlot(args.cause, day);
   if (!claimed) return false;
 
   const credit = args.anthropicCredit ?? (await getAnthropicMonthlyCreditState(now));
-  const reasonText = args.errorClass
-    ? `${args.reason} (${args.errorClass})`
-    : args.reason;
   const message =
-    `${incidentTitle(args.cause)} — ${reasonText}. ` +
+    `${incidentTitle(args.cause)}${args.errorClass ? ` (${args.errorClass})` : ""}. ` +
     `Month ${credit.month} Anthropic spend: ${formatUsd(credit.spentUsd)} / ${formatUsd(credit.limitUsd)} ` +
     `(remaining ${formatUsd(credit.remainingUsd)}).`;
 
@@ -754,18 +826,16 @@ export async function reportAiFundingIncident(args: {
     url: "/api/ai",
     urgent: true,
     dedupeSeconds: DAY_SECONDS,
-    fingerprintKey: `ai-funding:${args.fundingSource ?? "hypertask"}:${args.provider ?? "anthropic"}:${args.cause}:${day}`,
+    fingerprintKey: `ai-funding:${fundingSource}:${provider}:${args.cause}:${day}`,
     extra: {
       cause: args.cause,
       errorClass: args.errorClass ?? null,
-      fundingSource: args.fundingSource ?? null,
-      reason: reasonText.slice(0, 300),
+      fundingSource,
       month: credit.month,
       anthropicSpentUsd: Number(credit.spentUsd.toFixed(6)),
       anthropicLimitUsd: credit.limitUsd,
       anthropicRemainingUsd: Number(credit.remainingUsd.toFixed(6)),
       anthropicConfigured: credit.configured,
-      modelId: args.modelId ?? null,
       teamId: args.teamId ?? null,
       feature: args.feature ?? null,
     },
@@ -836,16 +906,10 @@ export async function resolveHypertaskAnthropicCredential(args: {
   }
 
   if (args.fallbackGatewayApiKey && anthropicCredit.fallbackReason) {
-    const reason =
-      anthropicCredit.fallbackReason === "anthropic_credit_exhausted"
-        ? `Monthly Anthropic credit reached ${formatUsd(anthropicCredit.spentUsd)} of ${formatUsd(anthropicCredit.limitUsd)}`
-        : `${PLATFORM_ANTHROPIC_ENV_VAR} is unset in server environment`;
     await reportAiFundingIncident({
       cause: anthropicCredit.fallbackReason,
-      reason,
       provider: "anthropic",
       fundingSource: args.gatewayFundingSource ?? "platform",
-      modelId: args.modelId,
       teamId: args.teamId,
       feature: args.feature,
       anthropicCredit,

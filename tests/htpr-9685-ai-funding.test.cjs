@@ -80,7 +80,9 @@ function createHarness({
   anthropicError = null,
   anthropicStreamChunks = null,
   anthropicFinish = "stop",
+  gatewayFinish = "stop",
   gatewayError = null,
+  gatewayStreamChunks = null,
   redis = createFakeRedis(),
 } = {}) {
   const restoreEnv = saveEnv();
@@ -94,6 +96,7 @@ function createHarness({
   const providerCalls = [];
   const reportedErrors = [];
   const usageRows = [];
+  const turns = [];
   const pending = [];
   const fundingOrder = [];
   const allowanceCalls = [];
@@ -146,17 +149,18 @@ function createHarness({
       return {
         content: [{ type: "text", text: `ok:${providerName}:${modelId}` }],
         usage: { inputTokens: { total: 1000 }, outputTokens: { total: 200 } },
-        finishReason: { unified: providerName === "anthropic" ? anthropicFinish : "stop" },
+        finishReason: { unified: providerName === "anthropic" ? anthropicFinish : gatewayFinish },
       };
     },
     doStream: async (params) => {
       fundingOrder.push(providerName);
       providerCalls.push({ provider: providerName, apiKey, modelId, mode: "stream", params });
-      if (providerName === "anthropic" && anthropicStreamChunks) {
+      const streamChunks = providerName === "anthropic" ? anthropicStreamChunks : gatewayStreamChunks;
+      if (streamChunks) {
         return {
           stream: new ReadableStream({
             pull(controller) {
-              const chunk = anthropicStreamChunks.shift();
+              const chunk = streamChunks.shift();
               if (chunk instanceof Error) controller.error(chunk);
               else if (chunk) controller.enqueue(chunk);
               else controller.close();
@@ -173,7 +177,7 @@ function createHarness({
             controller.enqueue({
               type: "finish",
               usage: { inputTokens: { total: 1000 }, outputTokens: { total: 200 } },
-              finishReason: { unified: "stop" },
+              finishReason: { unified: providerName === "gateway" ? gatewayFinish : "stop" },
             });
             controller.close();
           },
@@ -229,7 +233,7 @@ function createHarness({
     "@vercel/functions": { waitUntil: (promise) => pending.push(promise) },
     "./aiUsage": { logAiUsage: async (row) => usageRows.push(row) },
     "@/lib/ai/prompts/registry": { identifyPrompt: () => ({ promptId: "fixture", promptVersion: "1" }) },
-    "@/lib/telemetry/aiChatObservability": { recordAiChatTurn: async () => {} },
+    "@/lib/telemetry/aiChatObservability": { recordAiChatTurn: async (turn) => turns.push(turn) },
     "@/lib/errors/reportError": { reportError: async (report) => reportedErrors.push(report) },
     ai,
     "@/app/api/ai/_lib/aiFunding": aiFunding,
@@ -293,6 +297,7 @@ function createHarness({
     providerCalls,
     reportedErrors,
     usageRows,
+    turns,
     fundingOrder,
     allowanceCalls,
     redis,
@@ -736,7 +741,7 @@ test("a non-streaming generation that finishes with an error falls back to the g
 
     assert.match(result.content[0].text, /^ok:gateway:/);
     assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
-    assert.ok(h.usageRows.every((row) => row.provider === "gateway"));
+    assert.deepEqual(h.usageRows.map((row) => [row.provider, row.outcome]), [["platform:anthropic", "failed"], ["gateway", "ok"]]);
     assert.ok(
       (await h.aiFunding.getAnthropicMonthlySpendUsd()) > 6,
       "the replaced direct attempt's own tokens are still recorded",
@@ -808,9 +813,9 @@ for (const failure of ["error-chunk", "read-rejection"]) {
       const result = await model.doStream({ prompt: [] });
       const reader = result.stream.getReader();
       assert.equal((await reader.read()).value.delta, "already visible");
-      if (failure === "read-rejection") await assert.rejects(reader.read(), error);
+      if (failure === "read-rejection") await assert.rejects(reader.read(), { message: "overloaded" });
       else {
-        assert.equal((await reader.read()).value.error, error);
+        assert.equal((await reader.read()).value.error.message, "overloaded");
         assert.equal((await reader.read()).done, true);
       }
       await h.flush();
@@ -837,7 +842,7 @@ for (const aborted of [false, true]) {
       const chunks = [];
       for await (const chunk of result.stream) chunks.push(chunk);
       await h.flush();
-      assert.equal(chunks[0].error, error);
+      assert.equal(chunks[0].error.message, "provider_error");
       assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic"]);
       assert.equal(h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error").length, 1);
     } finally {
@@ -868,6 +873,7 @@ for (const route of ["platform-credential", "managed-gateway"]) {
           fallbackGatewayApiKey: MANAGED_KEY,
         };
         const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", credential);
+        h.modelProvider.configureAiModelUsage(model, { userId: 985, teamId: "team-1", feature: "chat" });
         const operation = mode === "generate" ? model.doGenerate({ prompt: [] }) : model.doStream({ prompt: [] });
         await started;
         await new Promise((resolve) => setImmediate(resolve));
@@ -878,13 +884,71 @@ for (const route of ["platform-credential", "managed-gateway"]) {
         assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 6.002);
         assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
         await h.flush();
-        assert.ok(h.usageRows.every((row) => row.provider === "gateway"));
+        assert.deepEqual(h.usageRows.map((row) => [row.provider, row.outcome]), [["platform:anthropic", "failed"], ["gateway", "ok"]]);
+        const directUsage = h.usageRows[0];
+        assert.equal(directUsage.teamId, "team-1");
+        assert.equal(directUsage.userId, 985);
+        assert.equal(directUsage.feature, "chat");
+        assert.equal(directUsage.inputTokens, 1000);
+        assert.equal(directUsage.outputTokens, 200);
+        assert.equal(directUsage.costUsd, 0.002);
       } finally {
         releasePricing();
         h.restore();
       }
     });
   }
+}
+
+for (const route of ["platform-credential", "managed-gateway"]) {
+  test(`${route} a failed finish after visible text records billed Anthropic usage without restarting`, async () => {
+    const h = createHarness({
+      anthropicSpentUsd: 6,
+      anthropicStreamChunks: [
+        { type: "text-delta", id: "1", delta: "already visible" },
+        { type: "finish", finishReason: { unified: "error" }, usage: { inputTokens: { total: 1000 }, outputTokens: { total: 200 } } },
+      ],
+    });
+    try {
+      h.modelProvider.registerManagedGatewayKey(MANAGED_KEY);
+      const resolved = await h.aiFunding.resolveHypertaskAnthropicCredential({ fallbackGatewayApiKey: MANAGED_KEY });
+      const credential = route === "managed-gateway" ? MANAGED_KEY : resolved.credential;
+      const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", credential);
+      const result = await model.doStream({ prompt: [] });
+      const chunks = [];
+      for await (const chunk of result.stream) chunks.push(chunk);
+      await h.flush();
+      assert.equal(chunks[0].delta, "already visible");
+      assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic"]);
+      assert.deepEqual(h.usageRows.map((row) => [row.provider, row.outcome]), [["platform:anthropic", "failed"]]);
+      assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 6.002);
+      assert.ok(h.reportedErrors.some((report) => report.urgent && report.extra?.cause === "anthropic_error"));
+    } finally {
+      h.restore();
+    }
+  });
+}
+
+for (const mode of ["generate", "stream"]) {
+  test(`a resolved gateway ${mode} error finish files an urgent incident without charging Anthropic`, async () => {
+    const h = createHarness({ anthropicSpentUsd: 200, gatewayFinish: "error" });
+    try {
+      h.modelProvider.registerManagedGatewayKey(MANAGED_KEY);
+      const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", MANAGED_KEY);
+      if (mode === "generate") await model.doGenerate({ prompt: [] });
+      else {
+        const result = await model.doStream({ prompt: [] });
+        for await (const _chunk of result.stream) {}
+      }
+      await h.flush();
+      assert.deepEqual(h.providerCalls.map((call) => call.provider), ["gateway"]);
+      assert.ok(h.reportedErrors.some((report) => report.urgent && report.extra?.cause === "gateway_error"));
+      assert.deepEqual(h.usageRows.map((row) => [row.provider, row.outcome]), [["gateway", "failed"]]);
+      assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 200);
+    } finally {
+      h.restore();
+    }
+  });
 }
 
 for (const plan of ["Pro", "AI", "BYOK"]) {
@@ -921,7 +985,8 @@ test("provider credentials never enter funding messages, fingerprints, or signed
     ]) {
       await h.aiFunding.reportAiFundingIncident({
         cause,
-        reason: "AI provider failed",
+        reason: secret,
+        modelId: secret,
         provider: cause === "anthropic_error" ? "anthropic" : "gateway",
         fundingSource: "managed",
         errorClass: h.aiFunding.classifySafeProviderError(
@@ -937,6 +1002,97 @@ test("provider credentials never enter funding messages, fingerprints, or signed
       assert.equal(report.extra.errorClass, "overloaded");
       assert.equal(report.fingerprintKey, `ai-funding:managed:${cause === "anthropic_error" ? "anthropic" : "gateway"}:${cause}:${new Date().toISOString().slice(0, 10)}`);
     }
+  } finally {
+    h.restore();
+  }
+});
+
+for (const provider of ["anthropic", "gateway"]) {
+  for (const mode of ["generate", "stream-start", "error-chunk", "read-rejection"]) {
+    test(`${provider} ${mode} exposes only a safe error category, never provider credentials`, async () => {
+      const secret = "short-private-credential";
+      const error = Object.assign(new Error(secret), {
+        name: secret, statusCode: 529, apiKey: secret,
+        fallbackGatewayApiKey: secret, cause: new Error(secret),
+      });
+      const chunks = [
+        { type: "text-delta", id: "1", delta: "already visible" },
+        mode === "error-chunk" ? { type: "error", error } : error,
+      ];
+      const h = createHarness({
+        anthropicSpentUsd: provider === "gateway" ? 200 : 0,
+        ...(provider === "anthropic"
+          ? mode === "generate" || mode === "stream-start" ? { anthropicError: error } : { anthropicStreamChunks: chunks }
+          : mode === "generate" || mode === "stream-start" ? { gatewayError: error } : { gatewayStreamChunks: chunks }),
+      });
+      try {
+        h.modelProvider.registerManagedGatewayKey(MANAGED_KEY);
+        const credential = provider === "gateway" ? MANAGED_KEY : {
+          kind: "platform-anthropic", apiKey: PLATFORM_ANTHROPIC_KEY,
+        };
+        const model = h.modelProvider.resolveAiModel("claude", "claude-sonnet-5-5", credential);
+        let caught;
+        try {
+          if (mode === "generate") await model.doGenerate({ prompt: [] });
+          else {
+            const result = await model.doStream({ prompt: [] });
+            for await (const chunk of result.stream) if (chunk.type === "error") caught = chunk.error;
+          }
+        } catch (failure) {
+          caught = failure;
+        }
+        await h.flush();
+        assert.ok(caught instanceof Error);
+        assert.equal(caught.message, "overloaded");
+        assert.equal(caught.statusCode, 529);
+        assert.equal(caught.cause, undefined);
+        assert.equal(caught.apiKey, undefined);
+        assert.equal(caught.fallbackGatewayApiKey, undefined);
+        const observed = JSON.stringify([caught.message, caught.stack, caught, h.reportedErrors, h.turns]);
+        for (const key of [secret, PLATFORM_ANTHROPIC_KEY, MANAGED_KEY]) assert.equal(observed.includes(key), false);
+        assert.equal(h.providerCalls.length, 1);
+        if (provider === "gateway") assert.ok(h.reportedErrors.some((report) => report.extra?.cause === "gateway_error"));
+      } finally {
+        h.restore();
+      }
+    });
+  }
+}
+
+for (const isRetryable of [false, true]) {
+  test(`provider error sanitization preserves SDK retries, retryable=${isRetryable}`, async () => {
+    const { APICallError } = require("@ai-sdk/provider");
+    const secret = "private-provider-detail";
+    const error = new APICallError({
+      message: secret, url: `https://upstream.invalid/${secret}`,
+      requestBodyValues: { apiKey: secret }, responseBody: secret,
+      responseHeaders: { authorization: secret }, statusCode: 503, isRetryable,
+    });
+    const h = createHarness({ anthropicError: error });
+    try {
+      const model = h.aiFunding.createFundingAnthropicLanguageModel("claude-sonnet-5-5", PLATFORM_ANTHROPIC_KEY);
+      await assert.rejects(ai.generateText({ model, prompt: "hello", maxRetries: 1 }), (failure) => {
+        assert.equal(JSON.stringify(failure).includes(secret), false);
+        assert.equal(failure.message.includes(secret), false);
+        return true;
+      });
+      assert.equal(h.providerCalls.length, isRetryable ? 2 : 1);
+    } finally {
+      h.restore();
+    }
+  });
+}
+
+test("sanitized provider errors retain the model-unavailable fallback", async () => {
+  const h = createHarness({ anthropicError: new Error("model is unavailable") });
+  try {
+    const model = h.aiFunding.createFundingAnthropicLanguageModel("claude-sonnet-5-5", PLATFORM_ANTHROPIC_KEY);
+    await assert.rejects(model.doGenerate({ prompt: [] }), (error) => {
+      assert.deepEqual(fallback.previousModelForFailedStream("claude-sonnet-5-5", error, false, false), {
+        model: "claude-sonnet-5", status: "model not available",
+      });
+      return true;
+    });
   } finally {
     h.restore();
   }
@@ -1079,7 +1235,7 @@ test("missing ANTHROPIC_API_KEY falls back to gateway, succeeds, and reports onc
         userId: 985,
       });
       const model = gatewayDown.modelProvider.resolveAiModel(pick.source, pick.model, cred, pick);
-      await assert.rejects(model.doGenerate({ prompt: [] }), /depleted/);
+      await assert.rejects(model.doGenerate({ prompt: [] }), /credit_exhausted/);
     }
     await gatewayDown.flush();
     const creditReports = gatewayDown.reportedErrors.filter((r) => r.extra?.cause === "gateway_credit_exhausted");

@@ -56,7 +56,7 @@ Read linked sections on demand.
 Flagged failures: authorized flag-owner agents hold the flag at Owner + QA first. Runners never switch a flag Off; Off is Valentin's own switch.
 `src/` enforces comment rules through `local/no-comments`.
 
-Implementation lives in `src/app/`, `src/pages/api/` (queues too), `src/utils/controllers/`, `src/lib/auth/`, and `src/lib/realtime/`.
+Code: `src/app/`, `src/pages/api/` (queues), `src/utils/controllers/`, `src/lib/auth/`, `src/lib/realtime/`.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

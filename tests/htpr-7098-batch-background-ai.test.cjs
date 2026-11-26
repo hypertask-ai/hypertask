@@ -145,8 +145,8 @@ test("only platform-managed keys batch; shared (capped) and customer keys keep t
   assert.equal(jobs.batchEligibleFunding("managed"), true);
   assert.equal(jobs.batchEligibleFunding("shared"), false);
   assert.equal(jobs.batchEligibleFunding("customer"), false);
-  assert.match(read("src/lib/slack/threadSummaryBatch.ts"), /batchEligibleFunding\(gatewayFundingSourceForApiKey/);
-  assert.match(read("src/lib/ai/labelClassifier.ts"), /batchEligibleFunding\(gatewayFundingSourceForApiKey/);
+  assert.match(read("src/lib/slack/threadSummaryBatch.ts"), /batchEligibleFunding\(fundingSource[,)]/);
+  assert.match(read("src/lib/ai/labelClassifier.ts"), /batchEligibleFunding\(gatewayFundingSource[,)]/);
 });
 
 test("only Anthropic models batch; other models stay on the instant path", () => {

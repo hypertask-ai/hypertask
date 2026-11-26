@@ -147,7 +147,8 @@ export function gatewayFundingSourceForApiKey(
 }
 
 const allowanceFundedModels = new WeakMap<object, number>();
-const runtimeProviderOverrides = new WeakMap<object, { provider?: string }>();
+type RuntimeProvider = { provider?: string; usageContext?: ModelUsageContext };
+const runtimeProviderOverrides = new WeakMap<object, RuntimeProvider>();
 const platformAnthropicFundedModels = new WeakSet<object>();
 
 const USER_VISIBLE_STREAM_CHUNK_TYPES = new Set([
@@ -164,17 +165,36 @@ function isFailedFinishChunk(chunk: { type?: string; finishReason?: { unified?: 
   return chunk.type === "finish" && chunk.finishReason?.unified === "error";
 }
 
-async function recordReplacedDirectUsage(modelId: string, usage: { inputTokens?: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens?: { total?: number } } | undefined) {
-  await generationCostUsd(
-    modelId,
-    PLATFORM_ANTHROPIC_USAGE_PROVIDER,
-    usage?.inputTokens?.total ?? 0,
-    usage?.outputTokens?.total ?? 0,
-    usage?.inputTokens?.cacheRead ?? 0,
-    usage?.inputTokens?.cacheWrite ?? 0,
-  )
-    .then((costUsd) => recordAnthropicMonthlySpend(costUsd))
-    .catch(() => undefined);
+async function recordReplacedDirectUsage(modelId: string, usage: { inputTokens?: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens?: { total?: number } } | undefined, context?: ModelUsageContext) {
+  const inputTokens = usage?.inputTokens?.total ?? 0;
+  const outputTokens = usage?.outputTokens?.total ?? 0;
+  if (!inputTokens && !outputTokens) return;
+  const cachedInputTokens = usage?.inputTokens?.cacheRead ?? 0;
+  const cacheWriteInputTokens = usage?.inputTokens?.cacheWrite ?? 0;
+  const costUsd = await generationCostUsd(
+    modelId, PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+    inputTokens, outputTokens, cachedInputTokens, cacheWriteInputTokens,
+  );
+  await Promise.allSettled([
+    recordAnthropicMonthlySpend(costUsd),
+    logAiUsage({
+      userId: context?.userId ?? null,
+      teamId: context?.teamId,
+      projectId: context?.projectId,
+      taskId: context?.taskId,
+      agentId: context?.agentId,
+      feature: context?.feature ?? "unattributed",
+      promptId: context?.promptId,
+      promptVersion: context?.promptVersion,
+      provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+      model: modelId,
+      outcome: "failed",
+      traceId: randomUUID(),
+      inputTokens, outputTokens, cachedInputTokens, cacheWriteInputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUsd,
+    }),
+  ]);
 }
 
 function failedFinishReason(result: { finishReason?: { unified?: string } }): Error | undefined {
@@ -196,7 +216,6 @@ function isUserVisibleStreamChunk(chunk: { type?: string; delta?: string; finish
 }
 
 function createGatewayFailureReportingMiddleware(
-  modelSlug: string,
   fundingSource: "managed" | "shared",
 ): LanguageModelMiddleware {
   const notify = (error: unknown, aborted?: boolean) => {
@@ -204,11 +223,9 @@ function createGatewayFailureReportingMiddleware(
     const cause = classifyGatewayFailureCause(error);
     void reportAiFundingIncident({
       cause,
-      reason: `Hypertask-paid Vercel Gateway (${fundingSource}) failed for ${modelSlug}`,
       provider: "gateway",
       fundingSource,
       errorClass: classifySafeProviderError(error),
-      modelId: modelSlug,
     });
   };
   return {
@@ -358,18 +375,16 @@ async function wrapAnthropicStreamWithFallback<
 function createDirectAnthropicWithGatewayFallbackMiddleware(
   modelId: string,
   credential: PlatformAnthropicCredential,
-  runtimeProvider: { provider?: string },
+  runtimeProvider: RuntimeProvider,
   modelOption?: TAiModelOption,
 ): LanguageModelMiddleware {
   const gatewaySlug = toGatewayAnthropicModelSlug(modelId, modelOption);
   const reportDirectError = (error: unknown) => {
     void reportAiFundingIncident({
       cause: "anthropic_error",
-      reason: `Direct Anthropic call failed for ${modelId}; falling back to Vercel Gateway`,
       provider: "anthropic",
       fundingSource: credential.gatewayFundingSource ?? "platform",
       errorClass: classifySafeProviderError(error),
-      modelId,
     });
   };
   const fallbackModel = () => {
@@ -386,7 +401,7 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
         if (!failure) return result;
         reportDirectError(failure);
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) return result;
-        await recordReplacedDirectUsage(modelId, result.usage);
+        await recordReplacedDirectUsage(modelId, result.usage, runtimeProvider.usageContext);
         return fallbackModel().doGenerate(params);
       } catch (error) {
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
@@ -402,7 +417,7 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
         reportDirectError,
         () => Boolean(credential.fallbackGatewayApiKey),
         () => Boolean(params.abortSignal?.aborted),
-        (chunk) => recordReplacedDirectUsage(modelId, chunk.type === "finish" ? chunk.usage : undefined),
+        (chunk) => recordReplacedDirectUsage(modelId, chunk.type === "finish" ? chunk.usage : undefined, runtimeProvider.usageContext),
       );
     },
   };
@@ -412,24 +427,21 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
   modelSlug: string,
   gatewayApiKey: string,
   fundingSource: "managed" | "shared",
-  runtimeProvider: { provider?: string },
+  runtimeProvider: RuntimeProvider,
 ): LanguageModelMiddleware {
   const directModelId = toDirectAnthropicModelId(modelSlug);
   const reportDirectError = (error: unknown) => {
     void reportAiFundingIncident({
       cause: "anthropic_error",
-      reason: `Direct Anthropic call failed for ${modelSlug}; falling back to Vercel Gateway`,
       provider: "anthropic",
       fundingSource,
       errorClass: classifySafeProviderError(error),
-      modelId: modelSlug,
     });
   };
   const tryDirect = async () => {
     const resolved = await resolveHypertaskAnthropicCredential({
       fallbackGatewayApiKey: gatewayApiKey,
       gatewayFundingSource: fundingSource,
-      modelId: modelSlug,
     });
     if (resolved.route !== "hypertask-anthropic" || !isPlatformAnthropicCredential(resolved.credential)) {
       return null;
@@ -455,7 +467,7 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
         if (!failure) return result;
         reportDirectError(failure);
         if (params.abortSignal?.aborted) return result;
-        await recordReplacedDirectUsage(directModelId, result.usage);
+        await recordReplacedDirectUsage(directModelId, result.usage, runtimeProvider.usageContext);
         runtimeProvider.provider = "gateway";
         return doGenerate();
       } catch (error) {
@@ -481,7 +493,7 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
         reportDirectError,
         () => true,
         () => Boolean(params.abortSignal?.aborted),
-        (chunk) => recordReplacedDirectUsage(directModelId, chunk.type === "finish" ? chunk.usage : undefined),
+        (chunk) => recordReplacedDirectUsage(directModelId, chunk.type === "finish" ? chunk.usage : undefined, runtimeProvider.usageContext),
       );
     },
   };
@@ -520,7 +532,7 @@ function gatewayLanguageModel(
   const model = createFundingGatewayLanguageModel(catalogSlug, gatewayApiKey);
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
   if (fundingSource === "customer") return model;
-  const runtimeProvider: { provider?: string } = {};
+  const runtimeProvider: RuntimeProvider = {};
   const middlewares: LanguageModelMiddleware[] = [];
   if (enforceAllowance) {
     middlewares.push(
@@ -538,7 +550,7 @@ function gatewayLanguageModel(
     );
   }
   middlewares.push(
-    createGatewayFailureReportingMiddleware(catalogSlug, fundingSource),
+    createGatewayFailureReportingMiddleware(fundingSource),
   );
   const funded = wrapLanguageModel({
     model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
@@ -581,11 +593,9 @@ function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
                 if (!params.abortSignal?.aborted && !sharedAiAllowanceErrorMessage(error)) {
                   void reportAiFundingIncident({
                     cause: classifyGatewayFailureCause(error),
-                    reason: `Hypertask-paid Vercel Gateway (${fundingSource}) image generation failed for ${catalogSlug}`,
                     provider: "gateway",
                     fundingSource,
                     errorClass: classifySafeProviderError(error),
-                    modelId: catalogSlug,
                   });
                 }
                 throw error;
@@ -645,7 +655,7 @@ function resolveUntracedAiModel(
       directModelId,
       byokCredential.apiKey,
     );
-    const runtimeProvider: { provider?: string } = {
+    const runtimeProvider: RuntimeProvider = {
       provider: PLATFORM_ANTHROPIC_USAGE_PROVIDER,
     };
     const fallbackGatewayKey = byokCredential.fallbackGatewayApiKey;
@@ -918,8 +928,9 @@ export function createUsageTracingMiddleware(
   context: ModelUsageContext,
   modelId: string,
   allowanceUsd?: number,
-  runtimeProvider?: { provider?: string },
+  runtimeProvider?: RuntimeProvider,
 ): LanguageModelMiddleware {
+  if (runtimeProvider) runtimeProvider.usageContext = context;
   const start = (prompt: unknown) => {
     const startedAt = performance.now();
     const attribution = { ...context };
@@ -974,7 +985,7 @@ export function createUsageTracingMiddleware(
           : error;
         await Promise.allSettled([
           logAiUsage(row),
-          ...(row.provider === PLATFORM_ANTHROPIC_USAGE_PROVIDER && outcome === "ok"
+          ...(row.provider === PLATFORM_ANTHROPIC_USAGE_PROVIDER
             ? [recordAnthropicMonthlySpend(row.costUsd)]
             : []),
           recordAiChatTurn({
