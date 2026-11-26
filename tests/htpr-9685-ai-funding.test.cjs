@@ -865,6 +865,47 @@ test("provider credentials never enter funding messages, fingerprints, or signed
   }
 });
 
+test("provider error classification handles repeated invalid prefixes without a wildcard regex", () => {
+  const h = createHarness();
+  try {
+    for (const [message, expected, gatewayExpected] of [
+      ["invalid".repeat(20_000), "provider_error", "gateway_error"],
+      [`${"invalid".repeat(20_000)} key`, "auth_or_refusal", "gateway_refusal"],
+      ["key invalid", "provider_error", "gateway_error"],
+    ]) {
+      assert.equal(h.aiFunding.classifySafeProviderError(new Error(message)), expected);
+      assert.equal(h.aiFunding.classifyGatewayFailureCause(new Error(message)), gatewayExpected);
+    }
+  } finally {
+    h.restore();
+  }
+});
+
+test("generation failure reports exclude credential-derived model metadata and provider text", async () => {
+  const h = createHarness();
+  try {
+    const middleware = h.modelProvider.createUsageTracingMiddleware(
+      { provider: PLATFORM_ANTHROPIC_KEY },
+      MANAGED_KEY,
+    );
+    const error = Object.assign(new Error(PLATFORM_ANTHROPIC_KEY), { statusCode: 529 });
+    await assert.rejects(middleware.wrapGenerate({
+      params: { prompt: [] },
+      doGenerate: async () => { throw error; },
+    }), (caught) => caught === error);
+    await h.flush();
+    assert.equal(h.reportedErrors.length, 1);
+    assert.deepEqual(h.reportedErrors[0], {
+      message: "AI model generation failed",
+      source: "server",
+      fingerprintKey: "ai-generation:overloaded",
+      extra: { route: "modelProvider", stage: "inference", errorClass: "overloaded" },
+    });
+  } finally {
+    h.restore();
+  }
+});
+
 test("funded batches stay off the gateway while the monthly Anthropic credit can serve them", async () => {
   const available = createHarness({ anthropicSpentUsd: 10 });
   const exhausted = createHarness({ anthropicSpentUsd: 200 });

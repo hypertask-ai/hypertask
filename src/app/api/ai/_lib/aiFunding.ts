@@ -650,7 +650,11 @@ export function classifyGatewayFailureCause(error: unknown): GatewayFailureReaso
   ) {
     return "gateway_credit_exhausted";
   }
-  if (status === 401 || status === 403 || /refus|forbidden|unauthorized|blocked|invalid.*key/.test(text)) {
+  if (
+    status === 401 || status === 403 ||
+    /refus|forbidden|unauthorized|blocked/.test(text) ||
+    (text.includes("invalid") && text.lastIndexOf("key") > text.indexOf("invalid"))
+  ) {
     return "gateway_refusal";
   }
   return "gateway_error";
@@ -681,7 +685,8 @@ export function classifySafeProviderError(error: unknown): AiProviderErrorClass 
   } else if (
     statusCode === 401 ||
     statusCode === 403 ||
-    /refus|forbidden|unauthorized|blocked|invalid.*key/.test(text)
+    /refus|forbidden|unauthorized|blocked/.test(text) ||
+    (text.includes("invalid") && text.lastIndexOf("key") > text.indexOf("invalid"))
   ) {
     category = "auth_or_refusal";
   } else if (statusCode !== null && statusCode >= 500) {

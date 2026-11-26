@@ -981,8 +981,8 @@ export function createUsageTracingMiddleware(
           ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) && !(authError instanceof Error && authError.name === "AiProviderAuthenticationError") ? [reportError({
             message: "AI model generation failed",
             source: "server",
-            fingerprintKey: `ai-generation:${row.provider}:${modelId}:${errorClass}`,
-            extra: { route: "modelProvider", stage: "inference", model: modelId, promptId: row.promptId!, errorClass },
+            fingerprintKey: `ai-generation:${errorClass}`,
+            extra: { route: "modelProvider", stage: "inference", errorClass },
           })] : []),
         ]);
       })().catch(() => undefined);
