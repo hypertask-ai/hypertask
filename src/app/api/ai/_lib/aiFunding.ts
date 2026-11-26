@@ -770,6 +770,24 @@ export async function reportAiFundingIncident(args: {
   return true;
 }
 
+export async function fundedBatchAllowed(args: {
+  gatewayApiKey?: string;
+  fundingSource?: GatewayFundingSource;
+  teamId?: string | null;
+  userId?: number | null;
+  now?: Date;
+}): Promise<boolean> {
+  if (!args.gatewayApiKey || args.fundingSource === "customer") return true;
+  const resolved = await resolveHypertaskAnthropicCredential({
+    fallbackGatewayApiKey: args.gatewayApiKey,
+    gatewayFundingSource: args.fundingSource,
+    teamId: args.teamId,
+    userId: args.userId,
+    now: args.now,
+  });
+  return resolved.route !== "hypertask-anthropic";
+}
+
 export async function resolveHypertaskAnthropicCredential(args: {
   fallbackGatewayApiKey?: string;
   gatewayFundingSource?: "managed" | "shared";

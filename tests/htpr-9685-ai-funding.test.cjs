@@ -2,7 +2,12 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const ai = require("ai");
 const { JSDOM } = require("jsdom");
+const fs = require("node:fs");
+const path = require("node:path");
 const { loadModule } = require("./helpers/loadModule.cjs");
+
+const root = path.resolve(__dirname, "..");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const catalog = loadModule("src/lib/aiModelOptions.ts");
 const providers = loadModule("src/lib/aiProviders.ts");
@@ -790,6 +795,46 @@ test("provider credentials never enter funding messages, fingerprints, or signed
     }
   } finally {
     h.restore();
+  }
+});
+
+test("funded batches stay off the gateway while the monthly Anthropic credit can serve them", async () => {
+  const available = createHarness({ anthropicSpentUsd: 10 });
+  const exhausted = createHarness({ anthropicSpentUsd: 200 });
+  const flaggedOff = createHarness({ creditFirstEnabled: false });
+  try {
+    assert.equal(
+      await available.aiFunding.fundedBatchAllowed({ gatewayApiKey: MANAGED_KEY, fundingSource: "managed", teamId: "team-1", userId: 985 }),
+      false,
+      "a funded batch must not spend gateway funds while the direct credit is available",
+    );
+    assert.equal(
+      await available.aiFunding.fundedBatchAllowed({ gatewayApiKey: MANAGED_KEY, fundingSource: "customer", teamId: "team-1", userId: 985 }),
+      true,
+      "a customer key batch is unchanged",
+    );
+    assert.equal(
+      await exhausted.aiFunding.fundedBatchAllowed({ gatewayApiKey: MANAGED_KEY, fundingSource: "managed", teamId: "team-1", userId: 985 }),
+      true,
+      "batching resumes on the gateway once the credit is spent",
+    );
+    assert.equal(
+      await flaggedOff.aiFunding.fundedBatchAllowed({ gatewayApiKey: MANAGED_KEY, fundingSource: "managed", teamId: "team-1", userId: 985 }),
+      true,
+      "flag off keeps the legacy gateway batch path",
+    );
+    assert.match(
+      read("src/lib/ai/labelClassifier.ts"),
+      /fundedBatchAllowed\(\{ gatewayApiKey: gatewayKey/,
+    );
+    assert.match(
+      read("src/lib/slack/threadSummaryBatch.ts"),
+      /fundedBatchAllowed\(\{ gatewayApiKey, fundingSource/,
+    );
+  } finally {
+    available.restore();
+    exhausted.restore();
+    flaggedOff.restore();
   }
 });
 

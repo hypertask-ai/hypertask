@@ -1,11 +1,15 @@
 import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
+import { fundedBatchAllowed } from "@/app/api/ai/_lib/aiFunding";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7850_LABEL_BACKFILL_SKIP_UNCHANGED_FLAG } from "@/lib/flags/definitions/htpr-7850-label-backfill-skip-unchanged";
 import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
 import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
 import { remainingSpendPathEnabled, teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { configureAiModelUsage ,
+  gatewayFundingSourceForApiKey,
+  gatewayProviderOptionsForModel,
+} from "@/app/api/ai/_lib/modelProvider";
 import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
@@ -14,10 +18,6 @@ import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import { batchEligibleFunding, batchEligibleModel, labelTaskContentHash } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
-import {
-  gatewayFundingSourceForApiKey,
-  gatewayProviderOptionsForModel,
-} from "@/app/api/ai/_lib/modelProvider";
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { generalConfig } from "@/lib/configs/general.config";
 import {
@@ -522,8 +522,11 @@ async function trySmartLabelBatch(
     const teamId = tasks[0]?.project.teamId;
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
+    if (!gatewayKey) return false;
     const holdsOn = typeof remainingSpendPathEnabled === "function" && await remainingSpendPathEnabled(teamId).catch(() => false);
-    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId), holdsOn)) return false;
+    const gatewayFundingSource = gatewayFundingSourceForApiKey(gatewayKey);
+    if (!batchEligibleFunding(gatewayFundingSource, await teamPlanAllowanceEnabled(teamId), holdsOn)) return false;
+    if (!(await fundedBatchAllowed({ gatewayApiKey: gatewayKey, fundingSource: gatewayFundingSource, teamId, userId }))) return false;
     const model = gatewayCatalogModelSlug("anthropic/claude-haiku-5.5");
     if (!batchEligibleModel(model)) return false;
     await submitSmartLabelBatch({
