@@ -357,12 +357,10 @@ export function isHypertaskPaidAutoContext(input: {
   if (input.payer === "customer") return false;
   if (input.payer === "hypertask") return true;
   if (input.forcedProvider) return false;
-  if (input.plan === "BYOK") {
-    const hasEnabledCustomerKey = Boolean(
-      input.byokProviderFlags?.some((flag) => flag.enabled && Boolean(flag.provider)),
-    );
-    return !hasEnabledCustomerKey;
-  }
+  const hasEnabledCustomerKey = Boolean(
+    input.byokProviderFlags?.some((flag) => flag.enabled && Boolean(flag.provider)),
+  );
+  if (input.plan !== "Free" && hasEnabledCustomerKey) return false;
   return input.plan === "Free" || input.plan === "Pro" || input.plan === "AI" || !input.plan;
 }
 

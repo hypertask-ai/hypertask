@@ -726,7 +726,10 @@ test("a non-streaming generation that finishes with an error falls back to the g
     assert.match(result.content[0].text, /^ok:gateway:/);
     assert.deepEqual(h.providerCalls.map((call) => call.provider), ["anthropic", "gateway"]);
     assert.ok(h.usageRows.every((row) => row.provider === "gateway"));
-    assert.equal(await h.aiFunding.getAnthropicMonthlySpendUsd(), 6);
+    assert.ok(
+      (await h.aiFunding.getAnthropicMonthlySpendUsd()) > 6,
+      "the replaced direct attempt's own tokens are still recorded",
+    );
     const reports = h.reportedErrors.filter((report) => report.extra?.cause === "anthropic_error");
     assert.equal(reports.length, 1);
     assert.equal(reports[0].urgent, true);
@@ -900,6 +903,21 @@ test("funded batches stay off the gateway while the monthly Anthropic credit can
     exhausted.restore();
     flaggedOff.restore();
   }
+});
+
+test("Auto keeps a paid team's own key route in play instead of forcing Claude", () => {
+  const h = createHarness();
+  const { isHypertaskPaidAutoContext } = h.aiFunding;
+  const customerKey = [{ provider: "openai", enabled: true }];
+  assert.equal(isHypertaskPaidAutoContext({ plan: "Pro", byokProviderFlags: customerKey }), false);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "AI", byokProviderFlags: customerKey }), false);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "BYOK", byokProviderFlags: customerKey }), false);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "Pro", byokProviderFlags: [{ provider: "openai", enabled: false }] }), true);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "Pro" }), true);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "Free", byokProviderFlags: customerKey }), true);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "Pro", byokProviderFlags: customerKey, payer: "hypertask" }), true);
+  assert.equal(isHypertaskPaidAutoContext({ plan: "Pro", byokProviderFlags: customerKey, forcedProvider: "openai" }), false);
+  h.restore();
 });
 
 test("missing ANTHROPIC_API_KEY falls back to gateway, succeeds, and reports once per day; gateway failure also reports urgently once per cause per day", async () => {

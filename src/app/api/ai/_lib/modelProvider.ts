@@ -163,6 +163,19 @@ function isFailedFinishChunk(chunk: { type?: string; finishReason?: { unified?: 
   return chunk.type === "finish" && chunk.finishReason?.unified === "error";
 }
 
+function recordReplacedDirectUsage(modelId: string, usage: { inputTokens?: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens?: { total?: number } } | undefined) {
+  void generationCostUsd(
+    modelId,
+    PLATFORM_ANTHROPIC_USAGE_PROVIDER,
+    usage?.inputTokens?.total ?? 0,
+    usage?.outputTokens?.total ?? 0,
+    usage?.inputTokens?.cacheRead ?? 0,
+    usage?.inputTokens?.cacheWrite ?? 0,
+  )
+    .then((costUsd) => recordAnthropicMonthlySpend(costUsd))
+    .catch(() => undefined);
+}
+
 function failedFinishReason(result: { finishReason?: { unified?: string } }): Error | undefined {
   return result.finishReason?.unified === "error"
     ? new Error("AI generation finished with an error")
@@ -369,6 +382,7 @@ function createDirectAnthropicWithGatewayFallbackMiddleware(
         if (!failure) return result;
         reportDirectError(failure);
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) return result;
+        recordReplacedDirectUsage(modelId, result.usage);
         return fallbackModel().doGenerate(params);
       } catch (error) {
         if (params.abortSignal?.aborted || !credential.fallbackGatewayApiKey) throw error;
@@ -436,6 +450,7 @@ function createHypertaskGatewayAnthropicFirstMiddleware(
         if (!failure) return result;
         reportDirectError(failure);
         if (params.abortSignal?.aborted) return result;
+        recordReplacedDirectUsage(directModelId, result.usage);
         runtimeProvider.provider = "gateway";
         return doGenerate();
       } catch (error) {
