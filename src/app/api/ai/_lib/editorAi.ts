@@ -23,6 +23,7 @@ import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7915_AUTO_MODEL_FLAG } from "@/lib/flags/definitions/htpr-7915-auto-model";
 import { HTPR_8995_PICKER_AUTO_FLAG } from "@/lib/flags/definitions/htpr-8995-picker-auto";
+import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { autoForcedProvider, pickAutoModelOption } from "@/app/api/ai/_lib/autoModel";
 import { getAiFeatureModelOverride, resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
@@ -703,7 +704,9 @@ export async function selectTaskWriterModel(args: {
     defaultContext.haikuDefaultEnabled,
     defaultContext,
   );
-  const personalModelOptionId = args.aiFeature && !taskWriterSonnet
+  const savedModelAutoEnabled = Boolean(args.aiFeature && typeof args.userId === "number" &&
+    await isFeatureEnabled(HTPR_9019_SAVED_MODEL_AUTO_FLAG, args.userId));
+  const personalModelOptionId = args.aiFeature && (!taskWriterSonnet || savedModelAutoEnabled)
     ? await getPersonalModelOptionId(
         args.userId,
         teamContext.teamId,
@@ -717,8 +720,11 @@ export async function selectTaskWriterModel(args: {
     }
   }
   const namedPickerOption = pickerSelection && pickerSelection !== "auto" ? pickerSelection : null;
-  const requestAuto = pickerSelection === "auto";
-  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !personalModelOptionId && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
+  const requestAuto = pickerSelection === "auto" || (args.modelOptionId === "auto" && savedModelAutoEnabled && args.aiFeature && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled));
+  const explicitOption = savedModelAutoEnabled && args.aiFeature && !namedPickerOption && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled)
+    ? getAiModelOptionById(args.modelOptionId, haiku55Enabled)
+    : undefined;
+  const autoPick = requestAuto || (args.aiFeature && args.userId && !namedPickerOption && !explicitOption && (!personalModelOptionId || (savedModelAutoEnabled && personalModelOptionId === "auto")) && await isFeatureEnabled(HTPR_7915_AUTO_MODEL_FLAG, args.userId) && !getAiFeatureModelOverride(args.aiFeature, teamContext.settings, haiku55Enabled))
     ? pickAutoModelOption({
         feature: args.aiFeature,
         settings: teamContext.settings,
@@ -733,7 +739,9 @@ export async function selectTaskWriterModel(args: {
     ? selectionFromModelOption(namedPickerOption)
     : autoPick
     ? selectionFromModelOption(autoPick)
-    : taskWriterSonnet
+    : explicitOption
+    ? selectionFromModelOption(explicitOption)
+    : taskWriterSonnet && !savedModelAutoEnabled
     ? selectionFromModelOption(getAiModelOptionById("claude-sonnet-5-5-thinking")!)
     : args.aiFeature
     ? defaultModelSelection(

@@ -15,6 +15,7 @@ import {
   type TAiThinkingEffort,
 } from "@/lib/aiThinkingPreference";
 import SettingsToggle from "@/components/Modals/Settings/SettingsToggle";
+import { HTPR_9019_SAVED_MODEL_AUTO_FLAG } from "@/lib/flags/definitions/htpr-9019-saved-model-auto";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
@@ -221,11 +222,11 @@ const AIModelDropDownList = ({
   const pickerAutoFlag = useFlag(HTPR_8995_PICKER_AUTO_FLAG);
   const thinkingFlag = useFlag(HTPR_9004_THINKING_EFFORT_FLAG);
   const { preference: thinkingPreference, setPreference: setThinkingPreference } = useAiThinkingPreference();
+  const savedModelAuto = useFlag(HTPR_9019_SAVED_MODEL_AUTO_FLAG);
   const autoOption = autoFlag || pickerAutoFlag
     ? currentOptions.find((option) => option.id === AUTO_MODEL_OPTION_ID) ??
       (aiSelected?.id === AUTO_MODEL_OPTION_ID ? aiSelected : undefined)
     : undefined;
-  const autoSelected = Boolean(autoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const defaultContext = useAiDefaultModelContext(settingsTeamId);
   const freePlan = scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
@@ -250,8 +251,10 @@ const AIModelDropDownList = ({
     fallbackOption ??
     (haiku55Enabled ? planDefaultOption : defaultAiModelOption);
   const selectedModel = getAiModelDefinition(selectedOption.modelKey);
+  const savedAutoOption = savedModelAuto && autoFlag ? toAutoModelOption(selectedOption) : undefined;
+  const autoSelected = Boolean(autoOption ?? savedAutoOption) && aiSelected?.id === AUTO_MODEL_OPTION_ID;
   const selectedModelLabel = autoSelected
-    ? autoOption?.title
+    ? "Auto"
     : selectedOption.source === "custom"
       ? (customEndpoint.modelId ?? selectedModel?.label)
       : selectedModel?.label;
@@ -873,7 +876,7 @@ const AIModelDropDownList = ({
                 !isProviderEnabled(fallbackOption.source))
             }
             onClick={() => {
-              const resetOption = autoOption ?? fallbackOption;
+              const resetOption = autoOption ?? savedAutoOption ?? fallbackOption;
               if (resetOption) optionCallback(resetOption);
               setSubmenu(null);
             }}

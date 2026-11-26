@@ -131,6 +131,7 @@ function loadReset(prisma, redis) {
     react: { cache: (fn) => fn },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/redis": { getRedis: async () => redis },
+    "@/lib/ai/htpr9019ModelChoiceAuto": { ensureHtpr9019ModelChoiceAuto: async () => "done" },
   };
   new Function("module", "exports", "require", javascript)(loadedModule, loadedModule.exports, (id) => {
     assert.ok(stubs[id], "reset has only mocked server dependencies");

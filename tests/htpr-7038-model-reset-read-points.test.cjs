@@ -12,7 +12,7 @@ function load(file, stubs) {
   }).outputText;
   const loadedModule = { exports: {} };
   vm.runInNewContext(javascript, {
-    module: loadedModule, exports: loadedModule.exports, require: (id) => id === "react" ? { cache: (fn) => fn } : stubs[id] ?? {},
+    module: loadedModule, exports: loadedModule.exports, require: (id) => id === "react" ? { cache: (fn) => fn } : id.endsWith("htpr9019ModelChoiceAuto") ? { ensureHtpr9019ModelChoiceAuto: async () => "done" } : stubs[id] ?? {},
     process: { env: {} }, console: { warn() {}, log() {} },
   }, { filename: file });
   return loadedModule.exports;
