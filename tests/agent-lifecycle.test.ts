@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "../src/lib/identity";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -26,7 +27,7 @@ function fakeCredentialFields(token: string | null) {
 
 function agentRow(overrides: Partial<AgentLifecycleRow> = {}): AgentLifecycleRow {
   return {
-    id: "agent-1",
+    id: agentIdSchema.parse("agent-1"),
     displayName: "Board Maintainer",
     photoURL: null,
     revokedAt: new Date("2026-08-01T00:00:00.000Z"),
@@ -97,7 +98,7 @@ test("launching a disabled external agent switches it on and reveals one token",
   };
   const { database, deps } = fakeSetup(state);
 
-  const result = await launchOwnedAgent(database, deps, 6, "agent-1");
+  const result = await launchOwnedAgent(database, deps, userIdSchema.parse(6), agentIdSchema.parse("agent-1"));
 
   assert.equal(result.status, "ok");
   if (result.status !== "ok") return;
@@ -122,7 +123,7 @@ test("launching a native agent switches it on without minting a credential", asy
   };
   const { database, deps } = fakeSetup(state);
 
-  const result = await launchOwnedAgent(database, deps, 6, "agent-1");
+  const result = await launchOwnedAgent(database, deps, userIdSchema.parse(6), agentIdSchema.parse("agent-1"));
 
   assert.equal(result.status, "ok");
   if (result.status !== "ok") return;
@@ -141,7 +142,7 @@ test("launching an already running agent changes nothing", async () => {
   };
   const { database, deps } = fakeSetup(state);
 
-  const result = await launchOwnedAgent(database, deps, 6, "agent-1");
+  const result = await launchOwnedAgent(database, deps, userIdSchema.parse(6), agentIdSchema.parse("agent-1"));
 
   assert.equal(result.status, "ok");
   if (result.status !== "ok") return;
@@ -166,7 +167,7 @@ test("losing the enable race reveals no token", async () => {
   };
   const { database, deps } = fakeSetup(state);
 
-  const result = await launchOwnedAgent(database, deps, 6, "agent-1");
+  const result = await launchOwnedAgent(database, deps, userIdSchema.parse(6), agentIdSchema.parse("agent-1"));
 
   assert.equal(result.status, "ok");
   if (result.status !== "ok") return;
@@ -184,7 +185,7 @@ test("launching an agent the caller does not own is not found", async () => {
   };
   const { database, deps } = fakeSetup(state);
 
-  const result = await launchOwnedAgent(database, deps, 6, "someone-elses");
+  const result = await launchOwnedAgent(database, deps, userIdSchema.parse(6), agentIdSchema.parse("someone-elses"));
 
   assert.equal(result.status, "not_found");
   assert.equal(state.mintCalls, 0);
@@ -207,7 +208,7 @@ test("a runtime snapshot failure leaves the agent off and mints nothing", async 
     credentialFields: fakeCredentialFields,
   };
 
-  const result = await launchOwnedAgent(database, deps, 6, "agent-1");
+  const result = await launchOwnedAgent(database, deps, userIdSchema.parse(6), agentIdSchema.parse("agent-1"));
 
   assert.equal(result.status, "runtime_invalidation_failed");
   assert.equal(state.mintCalls, 0);
@@ -225,7 +226,7 @@ test("archiving hides an agent without switching it off", async () => {
   };
   const { database } = fakeSetup(state);
 
-  const archived = await archiveOwnedAgent(database, 6, "agent-1", true);
+  const archived = await archiveOwnedAgent(database, userIdSchema.parse(6), agentIdSchema.parse("agent-1"), true);
   assert.equal(archived.status, "ok");
   if (archived.status !== "ok") return;
   assert.notEqual(archived.agent.archivedAt, null);
@@ -235,7 +236,7 @@ test("archiving hides an agent without switching it off", async () => {
     fakeCredentialFields("live-token").mcpTokenHash,
   );
 
-  const restored = await archiveOwnedAgent(database, 6, "agent-1", false);
+  const restored = await archiveOwnedAgent(database, userIdSchema.parse(6), agentIdSchema.parse("agent-1"), false);
   assert.equal(restored.status, "ok");
   if (restored.status !== "ok") return;
   assert.equal(restored.agent.archivedAt, null);
@@ -251,7 +252,7 @@ test("archiving an agent the caller does not own is not found", async () => {
   };
   const { database } = fakeSetup(state);
 
-  const result = await archiveOwnedAgent(database, 6, "someone-elses", true);
+  const result = await archiveOwnedAgent(database, userIdSchema.parse(6), agentIdSchema.parse("someone-elses"), true);
   assert.equal(result.status, "not_found");
 });
 
@@ -267,8 +268,8 @@ test("renaming an owned agent updates its display name", async () => {
 
   const result = await renameOwnedAgent(
     database,
-    6,
-    "agent-1",
+    userIdSchema.parse(6),
+    agentIdSchema.parse("agent-1"),
     "Release Helper"
   );
 
@@ -291,8 +292,8 @@ test("renaming an agent the caller does not own is not found", async () => {
 
   const result = await renameOwnedAgent(
     database,
-    6,
-    "someone-elses",
+    userIdSchema.parse(6),
+    agentIdSchema.parse("someone-elses"),
     "Release Helper"
   );
 

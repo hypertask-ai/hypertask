@@ -115,9 +115,9 @@ export async function assertAgentVisibilitySources() {
   );
   assert.match(
     assignRoute,
-    /mapTaskAssignee\(row, ctx\.user\.id, task\.projectId\)/,
+    /mapTaskAssignee\(row, userIdSchema\.parse\(ctx\.user\.id\), task\.projectId\)/,
   );
-  assert.match(assignRoute, /mapped \? \[\{ \.\.\.mapped, userId: row\.userId \}\] : \[\]/);
+  assert.match(assignRoute, /mapped \? \[\{ \.\.\.mapped, userId: userIdSchema\.parse\(row\.userId\) \}\] : \[\]/);
   assert.match(assignRoute, /isAgentOnBoard\(task\.projectId, targetAgentId\)/);
   assert.match(
     assignRoute,

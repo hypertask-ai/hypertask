@@ -18,7 +18,7 @@ const currentTask = {
 };
 
 function load(relativePath, stubs) {
-  stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
+  stubs = withStubs({ "@/lib/identity": require("./task-route-loader.cjs").load("src/lib/identity.ts", {}), "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} } }, stubs);
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: {

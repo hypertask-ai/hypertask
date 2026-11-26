@@ -1,3 +1,4 @@
+import { userIdSchema } from "@/lib/identity";
 import { isPlanLimitReachedError } from "@/lib/planLimits";
 import type { Prisma, Status } from "@prisma/client";
 
@@ -182,7 +183,7 @@ async function createTask(
         `Task ${result.task.ticketNumber} was created, but assignee "${assigneeRef}" was not found in the project.`,
       );
     }
-    await assigneesAssign(activityUser, assignee.id, result.task.id, undefined, undefined, {
+    await assigneesAssign(activityUser, userIdSchema.parse(assignee.id), result.task.id, undefined, undefined, {
       intent: "assign",
     });
   }
@@ -373,7 +374,7 @@ async function assignUser(
   if (!target) return errorBlock(`User "${userRef}" was not found in ${task.project.title}.`);
   const response = await assigneesAssign(
     toActivityUser(actor),
-    target.id,
+    userIdSchema.parse(target.id),
     task.id,
     undefined,
     undefined,

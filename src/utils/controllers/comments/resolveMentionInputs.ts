@@ -1,8 +1,10 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import { getProjectMembers } from "@/utils/controllers/projects/getProjectMembers";
 import {
   resolveMentionTargets,
   type MentionProblem,
   type ResolvableMember,
+  type ResolvedMentionTarget,
 } from "./resolveMentions";
 
 export interface MentionObjectInput {
@@ -13,11 +15,7 @@ export interface MentionObjectInput {
 
 export type RawMentionInput = string | MentionObjectInput;
 
-export interface ResolvedMentionInput {
-  user_id?: number;
-  agent_id?: string;
-  display_name: string;
-}
+export type ResolvedMentionInput = ResolvedMentionTarget;
 
 export interface MentionInputResolution {
   mentions: ResolvedMentionInput[];
@@ -62,7 +60,7 @@ export async function resolveMentionInputs(params: {
       continue;
     }
     mentions.push({
-      user_id: input.user_id as number,
+      user_id: userIdSchema.parse(input.user_id),
       display_name: (input.display_name as string).trim(),
     });
   }
@@ -87,7 +85,7 @@ export async function resolveMentionInputs(params: {
     const resolvable: ResolvableMember[] = members
       .filter((member) => allowAgents || typeof member.id === "number")
       .map((member) => ({
-        id: member.id,
+        id: typeof member.id === "number" ? userIdSchema.parse(member.id) : agentIdSchema.parse(member.id),
         displayName: member.displayName,
       }));
     const { resolved, problems: nameProblems } = resolveMentionTargets(

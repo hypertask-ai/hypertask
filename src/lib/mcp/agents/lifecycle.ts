@@ -1,9 +1,10 @@
+import { agentIdSchema, type AgentId, type UserId } from "@/lib/identity"
 import type { Prisma } from '@prisma/client'
 
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth'
 
 export type AgentLifecycleRow = {
-  id: string
+  id: AgentId
   displayName: string
   photoURL: string | null
   revokedAt: Date | null
@@ -30,33 +31,45 @@ const isRecordNotFoundError = (error: unknown) =>
   'code' in error &&
   error.code === 'P2025'
 
+type OwnedAgentWhere = Prisma.AgentWhereInput & { id: AgentId; userId: UserId }
+
+export type AgentLifecycleRecord = Omit<AgentLifecycleRow, "id"> & { id: string }
+
 export type AgentLifecycleDatabase = {
   agent: {
     findFirst(args: {
-      where: Prisma.AgentWhereInput
+      where: OwnedAgentWhere
       select: typeof LIFECYCLE_SELECT
-    }): Promise<AgentLifecycleRow | null>
+    }): Promise<AgentLifecycleRecord | null>
     updateMany(args: {
-      where: Prisma.AgentWhereInput
+      where: OwnedAgentWhere
       data: Prisma.AgentUpdateManyMutationInput
     }): Promise<{ count: number }>
   }
   user: {
     findUnique(args: {
-      where: { id: number }
+      where: { id: UserId }
       select: { email: true }
     }): Promise<{ email: string } | null>
   }
 }
 
+async function findLifecycleAgent(
+  database: AgentLifecycleDatabase,
+  where: OwnedAgentWhere
+): Promise<AgentLifecycleRow | null> {
+  const row = await database.agent.findFirst({ where, select: LIFECYCLE_SELECT })
+  return row ? { ...row, id: agentIdSchema.parse(row.id) } : null
+}
+
 export type AgentLifecycleDeps = {
   mintToken(
-    userId: number,
+    userId: UserId,
     email: string,
-    agentId: string,
+    agentId: AgentId,
     teamScope?: AgentTokenTeamScope
   ): string
-  clearRuntime(agentId: string): Promise<void>
+  clearRuntime(agentId: AgentId): Promise<void>
   credentialFields(token: string | null): {
     mcpTokenHash: string | null
     mcpTokenJti: string | null
@@ -77,15 +90,12 @@ export type LaunchOwnedAgentResult =
 export async function launchOwnedAgent(
   database: AgentLifecycleDatabase,
   deps: AgentLifecycleDeps,
-  userId: number,
-  agentId: string,
+  userId: UserId,
+  agentId: AgentId,
   scopeWhere: Prisma.AgentWhereInput = {},
   tokenTeamScope?: AgentTokenTeamScope
 ): Promise<LaunchOwnedAgentResult> {
-  const existing = await database.agent.findFirst({
-    where: { ...scopeWhere, id: agentId, userId },
-    select: LIFECYCLE_SELECT,
-  })
+  const existing = await findLifecycleAgent(database, { ...scopeWhere, id: agentId, userId })
   if (!existing) return { status: 'not_found' }
 
   if (existing.revokedAt === null) {
@@ -131,10 +141,7 @@ export async function launchOwnedAgent(
     },
   })
 
-  const current = await database.agent.findFirst({
-    where: { ...scopeWhere, id: existing.id, userId },
-    select: LIFECYCLE_SELECT,
-  })
+  const current = await findLifecycleAgent(database, { ...scopeWhere, id: existing.id, userId })
   if (!current) return { status: 'not_found' }
 
   if (transition.count === 0) {
@@ -157,15 +164,12 @@ export type ArchiveOwnedAgentResult =
 
 export async function archiveOwnedAgent(
   database: AgentLifecycleDatabase,
-  userId: number,
-  agentId: string,
+  userId: UserId,
+  agentId: AgentId,
   archived: boolean,
   scopeWhere: Prisma.AgentWhereInput = {}
 ): Promise<ArchiveOwnedAgentResult> {
-  const existing = await database.agent.findFirst({
-    where: { ...scopeWhere, id: agentId, userId },
-    select: LIFECYCLE_SELECT,
-  })
+  const existing = await findLifecycleAgent(database, { ...scopeWhere, id: agentId, userId })
   if (!existing) return { status: 'not_found' }
 
   const archivedAt = archived ? (existing.archivedAt ?? new Date()) : null
@@ -182,10 +186,7 @@ export async function archiveOwnedAgent(
   })
   if (transition.count !== 1) return { status: 'not_found' }
 
-  const agent = await database.agent.findFirst({
-    where: { ...scopeWhere, id: existing.id, userId },
-    select: LIFECYCLE_SELECT,
-  })
+  const agent = await findLifecycleAgent(database, { ...scopeWhere, id: existing.id, userId })
   if (!agent) return { status: 'not_found' }
   return { status: 'ok', agent }
 }
@@ -196,15 +197,12 @@ export type RenameOwnedAgentResult =
 
 export async function renameOwnedAgent(
   database: AgentLifecycleDatabase,
-  userId: number,
-  agentId: string,
+  userId: UserId,
+  agentId: AgentId,
   displayName: string,
   scopeWhere: Prisma.AgentWhereInput = {}
 ): Promise<RenameOwnedAgentResult> {
-  const existing = await database.agent.findFirst({
-    where: { ...scopeWhere, id: agentId, userId },
-    select: LIFECYCLE_SELECT,
-  })
+  const existing = await findLifecycleAgent(database, { ...scopeWhere, id: agentId, userId })
   if (!existing) return { status: 'not_found' }
 
   if (existing.displayName === displayName) {
@@ -217,10 +215,7 @@ export async function renameOwnedAgent(
   })
   if (transition.count !== 1) return { status: 'not_found' }
 
-  const agent = await database.agent.findFirst({
-    where: { ...scopeWhere, id: existing.id, userId },
-    select: LIFECYCLE_SELECT,
-  })
+  const agent = await findLifecycleAgent(database, { ...scopeWhere, id: existing.id, userId })
   if (!agent) return { status: 'not_found' }
   return { status: 'ok', agent }
 }

@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { NextRequest, NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
@@ -122,10 +123,10 @@ async function assignBatchTaskUsers(input: {
   for (const userId of input.userIds) {
     const response = await assigneesAssign(
       currentUser,
-      userId,
+      userIdSchema.parse(userId),
       input.taskId,
       undefined,
-      input.agentId ?? undefined,
+      input.agentId == null ? undefined : agentIdSchema.parse(input.agentId),
       { intent: input.intent }
     )
     if (response.status !== 200) {

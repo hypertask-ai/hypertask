@@ -1,3 +1,4 @@
+const identity = require("./helpers/loadModule.cjs").loadModule("src/lib/identity.ts");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
@@ -203,8 +204,8 @@ test("column auto-assign stores either a person or a board agent", () => {
     controller,
     /select: \{[\s\S]*projectId: true,[\s\S]*deleted: true,[\s\S]*autoAssignAgentId: true,[\s\S]*autoAssignUserId: true/,
   );
-  assert.match(controller, /autoAssignUserId \?\? null/);
-  assert.match(controller, /autoAssignAgentId \?\? undefined/);
+  assert.match(controller, /autoAssignUserId == null \? null : userIdSchema\.parse\(autoAssignUserId\)/);
+  assert.match(controller, /autoAssignAgentId == null \? undefined : agentIdSchema\.parse\(autoAssignAgentId\)/);
 });
 
 test("moving into an agent-configured section uses the agent-only assignment path", async () => {
@@ -220,7 +221,7 @@ test("moving into an agent-configured section uses the agent-only assignment pat
     new Function("module", "exports", "require", javascript)(
       mod,
       mod.exports,
-      (request) => stubs[request] ?? require(request),
+      (request) => stubs[request] ?? (request === "@/lib/identity" ? identity : require(request)),
     );
     return mod.exports;
   };
@@ -494,7 +495,7 @@ test("creating a task in an agent-configured column auto-assigns the agent", asy
     new Function("module", "exports", "require", javascript)(
       mod,
       mod.exports,
-      (request) => stubs[request] ?? require(request),
+      (request) => stubs[request] ?? (request === "@/lib/identity" ? identity : require(request)),
     );
     return mod.exports;
   };
@@ -609,7 +610,7 @@ test("a missing task does not trigger column auto-assignment", async () => {
     new Function("module", "exports", "require", javascript)(
       mod,
       mod.exports,
-      (request) => stubs[request] ?? require(request),
+      (request) => stubs[request] ?? (request === "@/lib/identity" ? identity : require(request)),
     );
     return mod.exports;
   };
@@ -657,7 +658,7 @@ test("an archived task does not trigger column auto-assignment", async () => {
     new Function("module", "exports", "require", javascript)(
       mod,
       mod.exports,
-      (request) => stubs[request] ?? require(request),
+      (request) => stubs[request] ?? (request === "@/lib/identity" ? identity : require(request)),
     );
     return mod.exports;
   };

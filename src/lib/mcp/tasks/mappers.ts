@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema, type UserId } from "@/lib/identity";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
@@ -29,26 +30,26 @@ export function mapTaskAssignee(a: {
     user: { id: number; email: string; displayName: string | null };
     agent?: Parameters<typeof mapVisibleMcpAgent>[0];
     agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
-}, userId: number, projectId: number): McpTaskAssignee | undefined {
+}, userId: UserId, projectId: number): McpTaskAssignee | undefined {
     const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
     if (a.agent && !agent) return undefined;
 
     const mapped: McpTaskAssignee = agent
         ? {
-              id: a.user.id,
+              id: userIdSchema.parse(a.user.id),
               email: '',
               displayName: agent.displayName,
               type: 'agent',
-              agentId: agent.id,
+              agentId: agentIdSchema.parse(agent.id),
+              agent,
           }
         : {
-              id: a.user.id,
+              id: userIdSchema.parse(a.user.id),
               email: a.user.email,
               displayName: a.user.displayName || undefined,
               type: 'person',
           };
     const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
-    if (agent) mapped.agent = agent;
     if (agentAssigner) mapped.agentAssigner = agentAssigner;
     return mapped;
 }
@@ -63,7 +64,7 @@ export function mapTaskAssignees(
     projectId: number,
 ): McpTaskAssignee[] {
     return (rows ?? []).flatMap((row) => {
-        const mapped = mapTaskAssignee(row, userId, projectId);
+        const mapped = mapTaskAssignee(row, userIdSchema.parse(userId), projectId);
         return mapped ? [mapped] : [];
     });
 }

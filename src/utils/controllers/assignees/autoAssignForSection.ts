@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import prisma from "@/lib/prisma";
 import { IUser } from "@/models/model";
 import assigneesAssign from "./assign";
@@ -92,10 +93,10 @@ async function runAutoAssignForSection({
 
     const response = await assigneesAssign(
       actor,
-      autoAssignUserId ?? null,
+      autoAssignUserId == null ? null : userIdSchema.parse(autoAssignUserId),
       taskId,
-      autoAssignAgentId ?? undefined,
-      agentAssignerId ?? undefined,
+      autoAssignAgentId == null ? undefined : agentIdSchema.parse(autoAssignAgentId),
+      agentAssignerId == null ? undefined : agentIdSchema.parse(agentAssignerId),
       {
         intent: "assign",
         expectedProjectId: task.projectId,

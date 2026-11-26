@@ -1,3 +1,4 @@
+import { agentIdSchema, userIdSchema } from "@/lib/identity";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
@@ -295,7 +296,7 @@ async function reconcileMergedPullRequestAssignees(
       actor,
       null,
       task.id,
-      qaAgentId,
+      agentIdSchema.parse(qaAgentId),
       undefined,
       { ...mutationOptions, intent: "assign" },
     );
@@ -320,9 +321,9 @@ async function reconcileMergedPullRequestAssignees(
       if (!assignment.agentId || assignment.agentId === qaAgentId) continue;
       const removal = await assigneesAssign(
         actor,
-        assignment.userId,
+        userIdSchema.parse(assignment.userId),
         task.id,
-        assignment.agentId,
+        agentIdSchema.parse(assignment.agentId),
         undefined,
         { ...mutationOptions, intent: "unassign" },
       );

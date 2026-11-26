@@ -23,6 +23,7 @@ Shared house rules stay authoritative; [HT Product Lead](.claude/agents/product-
 - Verify the successful production deployment and live behavior before Done.
 - Clean only your own finished worktree and branch.
 - No explanatory code comments. Express intent in code.
+- Assignment, mention, and lifecycle helpers keep agent and person ids distinct.
 - Trashed rows never show in a read; only trash and restore reads spread `anyStatus`.
 - Wireframes use only live app tokens.
 - Wireframes need eight fresh theme captures.
@@ -43,10 +44,9 @@ Read linked sections on demand.
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
 | Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup) |
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |
-| Preview creation, polling, or login | [.claude/reference/previews.md](.claude/reference/previews.md) |
+| Preview creation, polling, or login | [Previews](.claude/reference/previews.md) |
 | UI code, layout, choices, or selection | [Shared UI rules](.claude/reference/ui.md#reuse-existing-ui-enforced), [.claude/skills/reuse-existing-ui/SKILL.md](.claude/skills/reuse-existing-ui/SKILL.md) |
-| Behavior, flags, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
-| New components or changed visible UI | [Design and approval rules](.claude/reference/flags.md), [.claude/skills/verify-hypertask/SKILL.md](.claude/skills/verify-hypertask/SKILL.md) |
+| Behavior, flags, design, premerge checks, failed live QA | [Feature flag rules](.claude/reference/flags.md#feature-flags-for-new-user-facing-behavior), [design and approval rules](.claude/reference/flags.md), [verify-hypertask](.claude/skills/verify-hypertask/SKILL.md) |
 | App architecture or tracing a feature | [Stack orientation](.claude/reference/architecture.md#stack-orientation) |
 | pstack skills or model selection | [pstack rules](.claude/reference/architecture.md#pstack-in-hax-and-codex-sessions) |
 | Changing AI models or saved model choices | [Model rules](.claude/reference/architecture.md#ai-models) |

@@ -1,6 +1,11 @@
+import { z } from "zod";
+import type { AgentId, UserId } from "@/lib/identity";
+
+const normalizedMentionTextSchema = z.string().brand<"NormalizedMentionText">();
+type NormalizedMentionText = z.infer<typeof normalizedMentionTextSchema>;
 
 export interface ResolvableMember {
-  id: number | string;
+  id: UserId | AgentId;
   displayName: string;
 }
 
@@ -102,11 +107,11 @@ function mapOutsideMentionSpans(
 export function normalizeMentionSpans(
   html: string,
   members: ResolvableMember[],
-): string {
-  if (!html || !members?.length) return html;
-  if (!/data-type=["']mention["']/i.test(html)) return html;
+): NormalizedMentionText {
+  if (!html || !members?.length) return normalizedMentionTextSchema.parse(html);
+  if (!/data-type=["']mention["']/i.test(html)) return normalizedMentionTextSchema.parse(html);
 
-  return html.replace(MENTION_SPAN, (whole) => {
+  const normalized = html.replace(MENTION_SPAN, (whole) => {
     const openEnd = whole.indexOf(">") + 1;
     const tag = whole.slice(0, openEnd);
     const member = memberFor(
@@ -123,10 +128,11 @@ export function normalizeMentionSpans(
     );
     return `${normalizedTag}${escapeHtml(member.displayName)}${SPAN_CLOSE}`;
   });
+  return normalizedMentionTextSchema.parse(normalized);
 }
 
 export function injectMentionSpans(
-  text: string,
+  text: NormalizedMentionText,
   members: ResolvableMember[],
 ): string {
   if (!text || !members?.length) return text;
@@ -173,7 +179,7 @@ export interface MentionProblem {
 }
 
 export interface ResolvedMention {
-  userId: number;
+  userId: UserId;
   displayName: string;
 }
 
@@ -211,13 +217,13 @@ export function closeMentionMatches(
 }
 
 export type ResolvedMentionTarget =
-  | { user_id: number; display_name: string }
-  | { agent_id: string; display_name: string };
+  | { user_id: UserId; display_name: string }
+  | { agent_id: AgentId; display_name: string };
 
 function toMentionTarget(member: ResolvableMember): ResolvedMentionTarget {
   return typeof member.id === "number"
     ? { user_id: member.id, display_name: member.displayName }
-    : { agent_id: String(member.id), display_name: member.displayName };
+    : { agent_id: member.id, display_name: member.displayName };
 }
 
 function matchMentionName(
@@ -330,7 +336,7 @@ export function resolveMentionEntries(
 
   return {
     resolved: resolved.filter(
-      (mention): mention is { user_id: number; display_name: string } => "user_id" in mention,
+      (mention): mention is { user_id: UserId; display_name: string } => "user_id" in mention,
     ).map((mention) => ({ userId: mention.user_id, displayName: mention.display_name })),
     problems,
   };

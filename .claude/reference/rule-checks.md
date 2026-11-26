@@ -20,6 +20,7 @@ or when a row names a check file that is not in the repository.
 | Verify the successful production deployment and live behavior before Done. | `.github/workflows/prod-health.yml` |
 | Clean only your own finished worktree and branch. | nothing yet |
 | No explanatory code comments. Express intent in code. | `eslint-local-rules/no-comments.mjs` |
+| Assignment, mention, and lifecycle helpers keep agent and person ids distinct. | `src/lib/identity.ts`, `tests/identity-brands.check.ts` under the typescript lane of `.github/workflows/ci-tests.yml` |
 | Trashed rows never show in a read; only trash and restore reads spread `anyStatus`. | `eslint-local-rules/soft-delete-reads.mjs`, `tests/htpr-9718-deleted-reads.test.cjs` |
 | Wireframes use only live app tokens. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |
 | Wireframes need eight fresh theme captures. | `.claude/skills/wireframe/scripts/wireframe.test.sh`, `.github/workflows/ship-scripts-tests.yml` |

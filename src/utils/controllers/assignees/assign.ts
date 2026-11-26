@@ -1,3 +1,4 @@
+import { userIdSchema, type AgentId, type UserId, type AssigneeIdentity } from "@/lib/identity";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { sendDataNewCommentFCM } from "../FCM";
 import { IAssignees, IFCMReqBody, ITask, IUser } from "@/models/model";
@@ -46,10 +47,10 @@ export function isAssigneeUniqueIndexError(error: unknown): boolean {
 
 const assigneesAssign = async (
   currentUser: IUser,
-  userId: number | null,
+  userId: UserId | null | undefined,
   taskId: number,
-  agentId?: string,
-  agentAssignerId?: string,
+  agentId?: AgentId,
+  agentAssignerId?: AgentId,
   options?: {
     intent?: AssigneeIntent;
     teamScope?: AgentTokenTeamScope | null;
@@ -104,7 +105,7 @@ const assigneesAssign = async (
         };
       }
 
-      assigneeUserId = agent.userId;
+      assigneeUserId = userIdSchema.parse(agent.userId);
     }
 
     if (assigneeUserId == null) {
@@ -137,11 +138,10 @@ const assigneesAssign = async (
     } as const;
 
     let assigneeWhere:
-      | { taskId: number; agentId: string }
-      | { taskId: number; userId: number; agentId: null }
+      | ({ taskId: number } & AssigneeIdentity)
       | {
           taskId: number;
-          userId: number;
+          userId: UserId;
           OR: Array<{ agentId: null } | { agent: { userId: number } }>;
         };
     if (agentId) {
@@ -358,7 +358,7 @@ interface ICreateAssigneeProps {
   afterAppDomain: string;
   devices: any;
   taskId: number;
-  userId: number;
+  userId: UserId;
   task: {
     id: number;
     projectId: number;
@@ -366,8 +366,8 @@ interface ICreateAssigneeProps {
     ticketNumber: string | null;
   };
   currentUser: IUser;
-  agentId?: string;
-  agentAssignerId?: string;
+  agentId?: AgentId;
+  agentAssignerId?: AgentId;
   assigneeIntent: "Assigned" | "Unassigned";
   expectedProjectId?: number;
   expectedSectionId?: number | null;
@@ -390,7 +390,7 @@ const createAssignee = async ({
   allowHumanOverride,
   teamScope,
 }: ICreateAssigneeProps) => {
-  const assigneeIdentity = agentId
+  const assigneeIdentity: AssigneeIdentity = agentId
     ? { agentId }
     : { userId, agentId: null };
   let result;
@@ -404,7 +404,7 @@ const createAssignee = async ({
       { allowHumanOverride, teamScope }
     );
 
-    const existingIdentity = agentId
+    const existingIdentity: AssigneeIdentity = agentId
       ? { agentId }
       : { userId, agentId: null };
 
@@ -1072,7 +1072,7 @@ export const clearHumanAssignees = async (
     photoURL?: string | null;
   },
   taskId: number,
-  agentAssignerId?: string,
+  agentAssignerId?: AgentId,
   teamScope?: AgentTokenTeamScope | null,
 ) => {
   try {
@@ -1210,7 +1210,7 @@ export const clearHumanAssignees = async (
           afterAppDomain,
           devices,
           taskId,
-          userId: assign.userId,
+          userId: userIdSchema.parse(assign.userId),
           task,
           currentUser: actor,
           agentAssignerId,
