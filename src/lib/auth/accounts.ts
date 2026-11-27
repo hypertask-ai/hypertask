@@ -34,8 +34,8 @@ export const listAccountsWithStatus = async (): Promise<AccountListResult> => {
     const { data } = await authClient.multiSession.listDeviceSessions();
     if (!Array.isArray(data)) return { accounts: [], ok: false };
     const accounts = data
-      .filter((d: any) => d?.session?.token && d?.user?.id != null)
-      .map((d: any) => ({
+      .filter((d) => d?.session?.token && d?.user?.id != null)
+      .map((d) => ({
         sessionToken: d.session.token,
         id: Number(d.user.id),
         email: d.user.email ?? null,

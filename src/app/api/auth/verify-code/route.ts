@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
 import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
 import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
@@ -25,6 +26,8 @@ import {
 } from '@/lib/auth/emailCodeRateLimit'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
+
+type AuthUser = Prisma.UserGetPayload<{ include: { UserSetting: true } }>
 
 export async function POST(request: NextRequest) {
   try {
@@ -135,7 +138,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let userData = userUpdateResult.res.user
+    let userData: AuthUser | null | undefined = userUpdateResult.res.user
     if (!userData) {
       console.error('❌ User data not found in response')
       return NextResponse.json(
@@ -176,18 +179,18 @@ export async function POST(request: NextRequest) {
         include: { UserSetting: true, userPicture: true },
       })
       if (updatedUser) {
-        userData = updatedUser as any
+        userData = updatedUser
       }
     }
 
-    await logPersonal(userData!.id, '✅ User updated successfully:', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus, trialStatus: (userData as any).UserSetting?.trialStatus, displayName: userData!.displayName, })
+    await logPersonal(userData!.id, '✅ User updated successfully:', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTourStatus: userData.UserSetting?.onboardingTourStatus, trialStatus: userData.UserSetting?.trialStatus, displayName: userData!.displayName, })
 
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
         console.log('🚀 Completing onboarding step 1 for new email-code user')
         const onboardingResult = await provisionFirstWorkspace(
-          userData as any,
+          userData,
           request.cookies.get(SESSION_COOKIE)?.value,
           'MyTeam',
           'MyBoard',
@@ -299,8 +302,8 @@ async function getProjects(
 }
 
 function getRedirectUrl(
-  user: any,
-  prevBoard: any,
+  user: Pick<AuthUser, 'UserSetting'> | null | undefined,
+  prevBoard: Awaited<ReturnType<typeof resolveLoginBoard>>,
   isMobile: boolean,
   abTestVariant?: string,
   view?: string,
