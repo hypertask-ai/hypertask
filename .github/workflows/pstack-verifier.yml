@@ -43,6 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { ref: "${{ github.sha }}", fetch-depth: 1, persist-credentials: false }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { repository: "${{ github.repository }}", ref: "${{ needs.resolve.outputs.sha }}", path: candidate, fetch-depth: 1, persist-credentials: false }
       - uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e
         with: { name: "pstack-request-${{ github.run_id }}-${{ github.run_attempt }}", path: "${{ runner.temp }}/pstack-verifier/request" }
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262

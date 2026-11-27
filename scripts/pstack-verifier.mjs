@@ -459,10 +459,10 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
   if (evidence?.preview === "down") return { verdict: "FAIL", notes: "preview did not start" };
   if (parsed.unevaluated) return { verdict: "UNEVALUATED", notes: String(parsed.unevaluated).slice(0, 500) };
   if (parsed.fail) return { verdict: "FAIL", notes: String(parsed.fail).slice(0, 500) };
+  if (listWasTruncated(parsed, parsed.files ?? [])) return { verdict: "FAIL", notes: "file list truncated" };
   if (!parsed.actions.length) {
     const reason = String(parsed.reason ?? "").replace(/\s+/g, " ").trim();
     const files = Array.isArray(parsed.files) ? parsed.files : [];
-    if (listWasTruncated(parsed, files)) return { verdict: "FAIL", notes: "file list truncated" };
     const noAppPath = files.length > 0 && (!hasAppPath(files) || harnessOnlyBugfix(parsed.claim?.title, files));
     if (noAppPath && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
     if (files.length && docsShortcut(files, parsed.filesTruncated) && confirmsNoUserPath(reason) && checksPassed) return { verdict: "PASS+NOTES", notes: `no app path: ${reason}`.slice(0, 500) };
@@ -1797,9 +1797,19 @@ export function uncoveredPassGate(plan) {
   return journeyLib.uncoveredPassGate("PASS", { unmapped: plan?.unmapped });
 }
 export const askNeeded = (plan) => !plan.fail && !plan.unevaluated && (plan.journeys ?? []).some((item) => Array.isArray(item.actions) && item.actions.length > 0);
+export function candidateSources(sha, spawn = spawnSync) {
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("invalid candidate sha");
+  const git = (args) => {
+    const result = spawn("git", ["-C", "candidate", ...args], { encoding: "utf8", timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+    if (result.status !== 0) throw new Error("candidate source unread");
+    return result.stdout;
+  };
+  const sources = git(["ls-tree", "-rz", "--name-only", sha, "--", "src"]).split("\0").filter((file) => /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(file));
+  return { sources, readSource: (file) => sources.includes(file) ? git(["show", `${sha}:${file}`]) : "" };
+}
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));
-  const plan = await planFromRequest(request);
+  const plan = await planFromRequest(request, candidateSources(request.sha));
   console.log(`plan reason: ${plan.reason || "(none)"}`);
   console.log(`journeys: ${(plan.journeys ?? []).map((item) => item.journey).join(", ") || "(none)"}`);
   const dir = path.join(workDir(), "plan");
