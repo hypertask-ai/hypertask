@@ -1799,12 +1799,14 @@ export function uncoveredPassGate(plan) {
 export const askNeeded = (plan) => !plan.fail && !plan.unevaluated && (plan.journeys ?? []).some((item) => Array.isArray(item.actions) && item.actions.length > 0);
 export function candidateSources(sha, spawn = spawnSync) {
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("invalid candidate sha");
+  const options = { encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024 };
   const git = (args) => {
-    const result = spawn("git", ["-C", "candidate", ...args], { encoding: "utf8", timeout: 10000, maxBuffer: 8 * 1024 * 1024 });
+    const result = spawn("git", args, options);
     if (result.status !== 0) throw new Error("candidate source unread");
     return result.stdout;
   };
-  const sources = git(["ls-tree", "-rz", "--name-only", sha, "--", "src"]).split("\0").filter((file) => /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(file));
+  if (spawn("git", ["cat-file", "-e", `${sha}^{commit}`], options).status !== 0) git(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", "fetch", "--no-tags", "--depth=1", "origin", sha]);
+  const sources = git(["ls-tree", "-rz", "--name-only", sha, "--", "src/"]).split("\0").filter((file) => file.startsWith("src/") && !file.includes("..") && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(file));
   return { sources, readSource: (file) => sources.includes(file) ? git(["show", `${sha}:${file}`]) : "" };
 }
 async function planCommand() {

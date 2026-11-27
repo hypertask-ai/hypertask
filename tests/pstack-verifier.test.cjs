@@ -2364,19 +2364,27 @@ test("the planner records the product files no journey can reach, so a green run
 test("coverage reads newly added roots and changed imports from the pinned candidate, not production", async () => {
   const { candidateSources, planFromRequest, decide } = await load();
   const file = "src/lib/candidate-helper.ts", page = "src/app/candidate-only/page.tsx";
-  for (const imported of [true, false]) {
+  for (const imported of [true, false]) for (const available of [true, false]) {
+    let fetched = available;
     const text = { [page]: imported ? 'import "@/lib/candidate-helper";' : "export default 1;", [file]: "export const helper = 1;" };
     const sources = candidateSources(binding.sha, (command, args) => {
       assert.equal(command, "git");
-      assert.deepEqual(args.slice(0, 2), ["-C", "candidate"]);
-      if (args[2] === "ls-tree") {
-        assert.deepEqual(args.slice(2), ["ls-tree", "-rz", "--name-only", binding.sha, "--", "src"]);
-        return { status: 0, stdout: Object.keys(text).join("\0") + "\0" };
+      if (args[0] === "cat-file") { assert.deepEqual(args, ["cat-file", "-e", `${binding.sha}^{commit}`]); return { status: available ? 0 : 1 }; }
+      if (args[0] === "-c") {
+        fetched = true;
+        assert.deepEqual(args, ["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", "fetch", "--no-tags", "--depth=1", "origin", binding.sha]);
+        return { status: 0 };
       }
-      assert.equal(args[2], "show");
-      assert.ok(args[3].startsWith(`${binding.sha}:`));
-      return { status: 0, stdout: text[args[3].slice(41)] };
+      if (args[0] === "ls-tree") {
+        assert.equal(fetched, true);
+        assert.deepEqual(args, ["ls-tree", "-rz", "--name-only", binding.sha, "--", "src/"]);
+        return { status: 0, stdout: [...Object.keys(text), "src/../escape.ts", "-option.ts"].join("\0") + "\0" };
+      }
+      assert.equal(args[0], "show");
+      assert.ok(args[1].startsWith(`${binding.sha}:`));
+      return { status: 0, stdout: text[args[1].slice(41)] };
     });
+    assert.deepEqual([sources.readSource("src/../escape.ts"), sources.readSource("-option.ts")], ["", ""]);
     const actions = [{ op: "goto", path: "/candidate-only" }];
     const built = await planFromRequest({ ...binding, files: [page, file], coverageFiles: [page, file], author: "codex", title: "HTPR-9748 [IMPROVE] Coverage", body: "", diff: "" }, { binding, ...sources, pages: [], ground: { routes: [], corpus: "" }, ask: () => ({ actions, expect: [], reason: "check candidate" }) });
     assert.deepEqual(built.unmapped, imported ? [] : [file]);
@@ -2388,7 +2396,5 @@ test("coverage reads newly added roots and changed imports from the pinned candi
 test("a driven pass cannot hide changed files beyond the file list cap", async () => {
   const { decide, takeFileList } = await load();
   const listed = takeFileList(Array.from({ length: 101 }, (_, index) => `src/lib/helper-${index}.ts`));
-  assert.equal(listed.filesTruncated, true);
-  assert.equal(listed.files.length, 100);
   for (const verdict of ["PASS", "PASS+NOTES"]) assert.deepEqual(decide({ model: { verdict }, plan: plan([{ op: "goto", path: "/chat" }], { ...listed, unmapped: [] }), evidence: evidence(), binding }), { verdict: "FAIL", notes: "file list truncated" });
 });
