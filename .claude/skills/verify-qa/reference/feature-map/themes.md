@@ -6,7 +6,7 @@
 - `settings-screen` `/settings` is the Settings screen. With no section it opens General. Appearance is the Profile item on this screen.
 - `rounded-theme` With `htpr-7328-rounded-theme` on, desktop Appearance and Ctrl+K include Material (follows device). It follows the device light or dark setting. The phone list hides it even when the flag is on. Off removes the choice, and a saved Material preference resolves to the system theme.
 - `appearance-heading-once` With `htpr-7870-appearance-heading-once` on, desktop Appearance shows the word Appearance once, at the top of the page, and not again on the card above the theme list. Phone still shows it on the card. Off restores the card label.
-- `amoled-toggle` With `htpr-9027-amoled-toggle` on, a settings switch that is on uses the AMOLED primary, hsl(222 9% 46%), instead of green. The off position and every other theme stay unchanged. Off restores the green on-state in AMOLED.
+- `amoled-toggle` With `htpr-9027-amoled-toggle` on, a settings switch that is on uses the AMOLED primary, hsl(222 9% 46%), instead of green. The off position and every other theme stay unchanged. Off restores the green on-state in AMOLED. `htpr-9049-amoled-custom-fields-toggle` (Owner + QA) gives the Rail and Table switches in Manage custom fields that same grey on-state in AMOLED.
 
 ## How to get to it (user POV)
 

@@ -21,6 +21,8 @@ import {
 import { ModalBody, ModalFooter } from "reactstrap";
 import ConfirmModal from "../Common Modals/ConfirmActionModal";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_9049_AMOLED_CUSTOM_FIELDS_TOGGLE_FLAG } from "@/lib/flags/definitions/htpr-9049-amoled-custom-fields-toggle";
 
 const CUSTOM_FIELDS_PER_PROJECT_MAX = 50;
 
@@ -41,6 +43,7 @@ type Props = {
 const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
   const currentProject = useRecoilValue(currentProjectAtom);
   const boardName = currentProject?.title ?? currentProject?.name;
+  const amoledNeutralToggle = useFlag(HTPR_9049_AMOLED_CUSTOM_FIELDS_TOGGLE_FLAG);
   const queryClient = useQueryClient();
   const queryKey = ["customFields", projectId];
 
@@ -219,11 +222,13 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
                           </span>
 
                           <InlineToggle
+                            amoledNeutral={amoledNeutralToggle}
                             checked={field.showInRail !== false}
                             label="Rail"
                             onToggle={() => toggleVisibility(field, "showInRail")}
                           />
                           <InlineToggle
+                            amoledNeutral={amoledNeutralToggle}
                             checked={field.showInTable !== false}
                             label="Table"
                             onToggle={() => toggleVisibility(field, "showInTable")}
@@ -274,11 +279,13 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
 };
 
 function InlineToggle({
+  amoledNeutral,
   checked,
   label,
   onToggle,
   disabled,
 }: {
+  amoledNeutral?: boolean;
   checked: boolean;
   label: string;
   onToggle: () => void;
@@ -300,7 +307,8 @@ function InlineToggle({
       <span
         className={cn(
           "relative h-[14px] w-[26px] shrink-0 rounded-full transition-colors",
-          checked ? "bg-hypertasks-green" : "bg-hover-active"
+          checked ? "bg-hypertasks-green" : "bg-hover-active",
+          amoledNeutral && checked && "[.amoled_&]:bg-shadcn-primary"
         )}
       >
         <span
