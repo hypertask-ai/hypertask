@@ -11,7 +11,21 @@
       "config": "verification/formal/seat-billing/SeatBilling.cfg",
       "properties": [
         {"name": "JoinNeverDecreases", "expect": "holds"},
-        {"name": "ReconcileMatchesSeats", "expect": "violated", "witness": ["TimedOut", "Landed"]},
+        {"name": "ReconcileMatchesSeats", "expect": "holds"},
+        {"name": "LeaseExcludesOverlap", "expect": "holds"}
+      ]
+    },
+    "seat-billing-9465": {
+      "spec": "verification/formal/seat-billing/SeatBilling.tla",
+      "config": "verification/formal/seat-billing/BugLateWrite.cfg",
+      "properties": [
+        {"name": "ReconcileMatchesSeats", "expect": "violated", "witness": ["Write", "TimedOut", "Landed"]}
+      ]
+    },
+    "seat-billing-9465-overlap": {
+      "spec": "verification/formal/seat-billing/SeatBilling.tla",
+      "config": "verification/formal/seat-billing/BugLeaseOverlap.cfg",
+      "properties": [
         {"name": "LeaseExcludesOverlap", "expect": "violated", "witness": ["LeaseLost", "Acquire"]}
       ]
     },
