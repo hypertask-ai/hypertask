@@ -99,6 +99,8 @@ for (const flagOn of [true, false]) {
     const mod = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
       "@/hooks/useFlag": { useFlag: (key) => (key === KEY ? flagOn : false) },
       "@/lib/flags/keys": flags,
+      "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top": { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG: "htpr-8998-ticket-jump-to-top" },
+      "@/lib/taskDetailJumpToTop": { scrollTicketToTop: () => {} },
       "@/lib/taskDetailReads": { refreshTaskDetailReadAfterWrite: () => {} },
       "@/lib/api/typedClient": {},
       "react-hot-toast": { __esModule: true, default: () => {} },

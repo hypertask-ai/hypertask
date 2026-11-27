@@ -1,6 +1,8 @@
 import type { MoveTaskComment, LabelResponse } from "@/lib/api/contracts/taskWrites";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
+import { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG } from "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top";
+import { scrollTicketToTop } from "@/lib/taskDetailJumpToTop";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import { moveTask, readMoveTaskResponse } from "@/lib/api/typedClient";
 import { IComment, ISection } from "@/models/model";
@@ -11,7 +13,8 @@ import globalConstants from "@/lib/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailNavigationActions(getContext: () => TaskDetailContext) {
   const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
-  const { updateCommentsActivityQuery, comments, currentTask, setComments, sectionsForProjectTQ, movingItem, setCurrentTask, setMovingItem, removeFromListWithStatus, moveItem, getProjectIdxAndAllData, setTasksPlayList, currentUser, navigate, setEditMode, focusOn, lastGPress, defaultCommentFocus, scrollVirtualize, editModeCheck, markAsDone, copyTaskURL, undoAction, queryClient, navigateToPreviousTask, showCreateLabelModal, setShowCreateLabelModal, _parsedTask, updateTaskInCache, currentProject, lastM_APress, setShowMoveTaskToBoard, currentId } = getContext();
+  const ticketJumpToTop = useFlag(HTPR_8998_TICKET_JUMP_TO_TOP_FLAG);
+  const { updateCommentsActivityQuery, comments, currentTask, setComments, sectionsForProjectTQ, movingItem, setCurrentTask, setMovingItem, removeFromListWithStatus, moveItem, getProjectIdxAndAllData, setTasksPlayList, currentUser, navigate, setEditMode, focusOn, lastGPress, defaultCommentFocus, scrollVirtualize, editModeCheck, markAsDone, copyTaskURL, undoAction, queryClient, navigateToPreviousTask, showCreateLabelModal, setShowCreateLabelModal, _parsedTask, updateTaskInCache, currentProject, lastM_APress, setShowMoveTaskToBoard, currentId, scrollElementRef } = getContext();
 
   const taskUpdateCommentsInCache = (newComment: MoveTaskComment) => {
     updateCommentsActivityQuery(
@@ -112,6 +115,8 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
       lastGPress.current = null;
       if (shift) {
         defaultCommentFocus();
+      } else if (ticketJumpToTop) {
+        scrollTicketToTop(scrollElementRef?.current ?? window);
       } else {
         focusOn(descriptionContainerId, false);
         scrollVirtualize("description");

@@ -6,6 +6,8 @@ import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/Descriptio
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8994_CLEAR_WAITING_AGENT_FLAG } from "@/lib/flags/definitions/htpr-8994-clear-waiting-agent";
 import { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-8804-visible-links-first";
+import { HTPR_8998_TICKET_JUMP_TO_TOP_FLAG } from "@/lib/flags/definitions/htpr-8998-ticket-jump-to-top";
+import JumpToTopButton from "@/components/PageComponents/TaskDetail/JumpToTopButton";
 import { applyWaitingOnWrite } from "@/lib/waitingOn";
 import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
@@ -78,6 +80,7 @@ import type { TaskDetailContext } from "./TaskDetailContext";
 export function TaskDetailPanels(context: TaskDetailContext) {
   const { embedded, _slugs, currentTask, setCurrentTask, showCommands, callback, commandContextOptions, showShortucts, scrollElementRef, _mbl, currentItemInTasksPlaylist, navigateToNextTask, searchParams, navigateToPreviousTask, dynamicElementRef, toggleDueDate, showAssignModal, toggleModal, _parsedTask, estimate_, priority_, labelsFromTQ, removeRelationHandler, toggleEstimateModal, toggleLabelModal, toggleMoveModal, toggleMoveToBoardModal, togglePriorityModal, dynamicTopValue, sectionsForProjectTQ, moveTaskToNextColumn, followers, onGoback, appShellRailOn, showTaskDeleteModal, deleteTask, carousalItems, setCarousalItems, showLinksModal, idToDelete, currentId, linksModalToggle, showMoveModal, moveTaskModalCallback, taskUpdateCommentsInCache, showCommentDeleteModal, setShowCommentDeleteModal, comments, setComments, showPriorityModal, showEstimateModal, showMoveTaskToBoard, setShowMoveTaskToBoard, showCreateLabelModal, setShowCreateLabelModal, setShowCommands, showDueDateModal, setDueDateCallback, showSubtaskLinkingModal, toggleSubtaskLinkingModal, callBackHandlerSubtaskLinking, showRemoveSubtaskModal, toggleRemoveSubtaskModal, callBackHandlerRemoveSubtask, showRemindMeModal, toggleRemindMeModal, currentUser } = context;
   const visibleLinksFirst = useFlag(HTPR_8804_VISIBLE_LINKS_FIRST_FLAG);
+  const ticketJumpToTop = useFlag(HTPR_8998_TICKET_JUMP_TO_TOP_FLAG);
   const clearWaitingAgent = useFlag(HTPR_8994_CLEAR_WAITING_AGENT_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
@@ -237,6 +240,9 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               />
             )
           }
+          {ticketJumpToTop && !_mbl && !embedded && (
+            <JumpToTopButton scrollElementRef={scrollElementRef} />
+          )}
         </DescriptionAndCommentsProvider>
       </>
 
