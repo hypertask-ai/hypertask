@@ -1,31 +1,28 @@
-import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getCurrentUserFromCookies } from '@/utils/getCurrentUser';
+import { NextResponse, type NextRequest } from "next/server";
+import { logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
 import prisma from '@/lib/prisma';
-import { ProductToursData } from '@/lib/tours';
+import type { ProductToursData } from '@/lib/tours';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
-  logDesktopCliResponse(session, req, res);
+export async function POST(request: NextRequest) {
+  const session = await getSessionUser(request.headers);
   if (!session) {
-    return res.status(401).json({ error: 'Unauthorized', code: 'SESSION_REQUIRED' });
+    return NextResponse.json({ error: 'Unauthorized', code: 'SESSION_REQUIRED' }, { status: 401 });
   }
 
   const userId = session.userId;
+  let status = 500;
 
   try {
-    const { tourId, completed, skipped } = req.body;
+    const { tourId, completed, skipped } = await request.json() as {
+      tourId?: string;
+      completed?: boolean;
+      skipped?: boolean;
+    };
 
     if (!tourId) {
-      return res.status(400).json({ message: 'tourId is required' });
+      status = 400;
+      return NextResponse.json({ message: 'tourId is required' }, { status });
     }
 
     const userSetting = await prisma.userSetting.findUnique({
@@ -36,9 +33,9 @@ export default async function handler(
     const currentTours = (userSetting?.productTours || {}) as ProductToursData;
 
     const existingTourData = currentTours[tourId];
-    const existingCompletedAt = 
-      existingTourData && typeof existingTourData !== 'boolean' 
-        ? existingTourData.completedAt 
+    const existingCompletedAt =
+      existingTourData && typeof existingTourData !== 'boolean'
+        ? existingTourData.completedAt
         : undefined;
 
     const updatedTours: ProductToursData = {
@@ -59,12 +56,18 @@ export default async function handler(
 
     console.log(`✅ Tour status updated: ${tourId}`, { completed, skipped });
 
-    return res.status(200).json({ success: true, tours: updatedTours });
+    status = 200;
+    return NextResponse.json({ success: true, tours: updatedTours });
   } catch (error) {
     console.error('Error updating tour status:', error);
-    return res.status(500).json({ 
+    return NextResponse.json({
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  } finally {
+    logDesktopCliAuthorization(session, "shared-session", status, {
+      url: new URL(request.url).pathname,
+      method: request.method,
     });
   }
 }
