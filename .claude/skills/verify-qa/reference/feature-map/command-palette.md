@@ -11,8 +11,8 @@
 - `new-task-dictation-shortcut` New Task dictation shortcut.
 - `new-task-board-shortcut-tooltip` New Task board shortcut tooltip.
 - `ctrlj-board-from-text` With `htpr-7305-board-from-text` on, New Task moves the board chip when the note names exactly one board after for, on, in, into, or to. A board you already picked stays put.
-- `ctrlj-footer-one-line` With `htpr-7306-ctrlj-footer-one-line` on, the desktop New Task footer hides the Esc Close hint so the other hints stay on one line. Escape still closes the window. Phones still show Close.
-- `ctrlj-footer-clickable` With `htpr-7307-ctrlj-footer-clickable` on, the footer hints are buttons. Send creates the ticket, Attach files opens the file picker, Search switches to the Search tab, Board opens the board picker, and Close closes the window.
+- `ctrlj-footer-one-line` The desktop New Task footer permanently hides the Esc Close hint so the other hints stay on one line. Escape still closes the window. The phone layout is unchanged.
+- `ctrlj-footer-clickable` With `htpr-7307-ctrlj-footer-clickable` on, the footer hints are buttons. Send creates the ticket, Attach files opens the file picker, Search switches to the Search tab, Board opens the board picker, and Escape closes the window.
 - `ctrlj-skills` With `htpr-7312-ctrlj-skills` on, a known `/slug` in the note is sent as a writing template and removed from the text the task writer saves. An unknown token stays in the note.
 - `ctrlj-always-board-chip` With `htpr-7313-ctrlj-always-board-chip` on, the board chip is visible as soon as New Task opens, including on a board or ticket whose destination already matches that page.
 - `ctrlj-ticket-questions` With `htpr-7317-ctrlj-ticket-questions` on, a created ticket's AI sidebar shows clickable lines under "Questions and ideas for this ticket". The default prompt asks for 2 to 4.
@@ -128,11 +128,11 @@ Turn `htpr-7305-board-from-text` on. Open New Task and type a note that says "fo
 
 ### Footer on one line
 
-Turn `htpr-7306-ctrlj-footer-one-line` on. Open New Task on desktop. The footer must not show Close. Press Escape. The window must close. Open New Task on a phone. Close must still be in the footer. Turn the flag off on desktop. Close must return.
+Open New Task on desktop. The footer must not show Close. Press Escape. The window must close. Open New Task on a phone. The sheet must still hide the footer.
 
 ### Clickable footer
 
-Turn `htpr-7307-ctrlj-footer-clickable` on. Open New Task and click Send with an empty note. Nothing is created. Type two words and click Send. One ticket opens. Reopen New Task and click Attach files, Search, Board, and Close. You get the file picker, the Search tab, the board picker, and a closed window. Turn the flag off. The same hints are text, and a click does nothing.
+Turn `htpr-7307-ctrlj-footer-clickable` on. Open New Task and click Send with an empty note. Nothing is created. Type two words and click Send. One ticket opens. Reopen New Task and click Attach files, Search, and Board, then press Escape. You get the file picker, the Search tab, the board picker, and a closed window. Turn the flag off. The same hints are text, and a click does nothing.
 
 ### Skills in the note
 

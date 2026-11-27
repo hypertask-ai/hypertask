@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_4857_ADD_TO_SLACK_FLAG, HTPR_6921_SLACK_MARKETPLACE_FLAG } from "@/lib/flags/keys";
+import { HTPR_4857_ADD_TO_SLACK_FLAG } from "@/lib/flags/keys";
 import { SLACK_BOT_SCOPES, buildSlackAuthorizeUrl } from "@/lib/slack/authorize";
 
 export const dynamic = "force-dynamic";
@@ -33,10 +33,6 @@ export default async function AddToSlackPage() {
     notFound();
   }
 
-  const marketplaceEnabled = await isFeatureEnabled(
-    HTPR_6921_SLACK_MARKETPLACE_FLAG,
-    user?.id ?? -1,
-  );
   const headerList = await headers();
   const authorizeUrl = buildSlackAuthorizeUrl(
     getRequestBaseUrl(
@@ -90,15 +86,13 @@ export default async function AddToSlackPage() {
             Slack installation is not configured yet. Please try again later.
           </p>
         )}
-        {marketplaceEnabled && (
-          <p className="text-dense text-text-light-gray">
-            <a href="https://hypertask.ai/privacy/" className="underline">Privacy policy</a>
-            {" · "}
-            <a href="https://hypertask.ai/terms/" className="underline">Terms</a>
-            {" · "}
-            <Link href="/slack/support" className="underline">Slack app support</Link>
-          </p>
-        )}
+        <p className="text-dense text-text-light-gray">
+          <a href="https://hypertask.ai/privacy/" className="underline">Privacy policy</a>
+          {" · "}
+          <a href="https://hypertask.ai/terms/" className="underline">Terms</a>
+          {" · "}
+          <Link href="/slack/support" className="underline">Slack app support</Link>
+        </p>
       </section>
     </main>
   );

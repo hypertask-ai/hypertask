@@ -10,7 +10,7 @@
 ## How to get to it (user POV)
 
 - Open `/add-to-slack` to read the install overview and requested scopes. The `htpr-4857-add-to-slack` flag gates this page; a disabled flag returns 404.
-- Open `/slack/support`, or click Slack app support on the install page. The `htpr-6921-slack-marketplace` flag gates the support page and the install page's Privacy policy, Terms, and Slack app support links. The support flag defaults to Everyone. Switching it Off returns 404, including signed-out visitors.
+- Open `/slack/support`, or click Slack app support on the install page. Support is permanently public, and the install page always includes Privacy policy, Terms, and Slack app support links.
 - Sign in and open Settings > Slack (`/settings/slack`), select an accessible Hypertask team, and choose Connect Slack. This uses `/api/slack/install?teamId=<team-id>` to redirect to Slack OAuth. The install overview also offers an Add to Slack authorization link.
 - Open `/integrations` while signed in. Read the Slack card. Leave Discord and Microsoft Teams disabled. Do not press Connect Slack on a read-only run.
 - Open `/settings/slack/link` while signed in and without a link token. The page says the link is invalid and tells you to run `/ht connect` in Slack. Do not submit Connect account. A `status=linked` visit is the success screen and can be closed.
@@ -21,7 +21,7 @@
 2. Open `/add-to-slack`. Check the scopes describe `/ht`, not `/hypertask`, and the marketplace links appear for user 985. Click Privacy policy and Terms, checking final `hypertask.ai` destinations and HTTP 200. Click Slack app support and check `/slack/support` renders.
 3. On support, check app capabilities, personal linking and disconnect, team disconnect versus uninstall, data retained and its expiry, uninstall behavior, and `help@hypertask.ai`. Reload to verify the server still serves the same content. Follow the Add to Slack return link without completing OAuth.
 4. Set the `theme` cookie on `app.hypertask.ai` to `porcelain`, `graphite`, `amoled`, and `dia` before each load. Capture support and the changed install page at desktop 1440x900 and phone 390x844; scroll to check lower content and horizontal overflow.
-5. Repeat both page routes with plain user 2343 (`storageState-qa-normal.json`) and a fresh signed-out context. Both should see the support page and marketplace links. Switching the support flag Off returns 404. Do not infer a working login from a 404 alone; confirm the plain account independently.
+5. Repeat both page routes with plain user 2343 (`storageState-qa-normal.json`) and a fresh signed-out context. Both should see the support page and marketplace links. Do not infer a working login from a 404 alone; confirm the plain account independently.
 6. Check `/api/slack/install` with redirects disabled. Signed out redirects to `/login?returnTo=%2Fsettings%2Fslack` (the returnTo is URL-encoded). Signed in without an unambiguous accessible team redirects to Slack settings with `?slack_error=missing_team`; an inaccessible `teamId` yields `slack_error=team_access_denied`; an unconfigured install yields `slack_error=not_configured`. Record status and destination host/path only; never expose OAuth state, client identifiers, tokens, or cookies. Do not follow Slack redirects in a read-only run.
 7. Inspect `origin/production:docs/slack-app-manifest.json` for `app_uninstalled` and `tokens_revoked`. This proves the declared event subscriptions, not delivery or cleanup in a real workspace.
 8. Record a short WebM of `/add-to-slack`, clicking Slack app support, then scrolling the support page. Keep it under 3 MB.
@@ -29,8 +29,8 @@
 10. Open `/settings/slack/link` signed in, with no token. Confirm the invalid-link copy and that the address stays on this page. Signed out lands on `/login`. Do not post the form.
 11. `htpr-6817-slack-app` is proved in a real Slack workspace, which this run already records as UNREACHABLE. Do not install, disconnect, or send a Slack message to manufacture it.
 
-Worked on production, 2026-11-20, QA 985. Live modes: `htpr-4857-add-to-slack`,
-`htpr-6921-slack-marketplace` and `htpr-6817-slack-app` all read EVERYONE.
+Worked on production, 2026-11-20, QA 985. Install, public support, and Slack app
+rollouts were enabled for everyone; public support is now permanent.
 
 ```text
 /add-to-slack        200  title "Add Hypertask to Slack"

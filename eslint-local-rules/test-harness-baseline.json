@@ -562,7 +562,6 @@
   "tests/signup-page-viewed.test.ts": 1,
   "tests/skill-import.test.cjs": 1,
   "tests/slack-app-fixtures.cjs": 1,
-  "tests/slack-marketplace.test.cjs": 1,
   "tests/slack-settings-default-project-style.test.cjs": 3,
   "tests/smart-split-generic-route-protection.test.cjs": 4,
   "tests/smart-split-route.test.cjs": 2,

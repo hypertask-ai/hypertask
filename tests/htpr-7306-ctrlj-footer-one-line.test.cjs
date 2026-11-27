@@ -1,47 +1,13 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
 const test = require("node:test");
-const { createJiti } = require("jiti");
-
-const root = path.resolve(__dirname, "..");
-const flag = "htpr-7306-ctrlj-footer-one-line";
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 const writer = () => document.querySelector("[data-compose-task-writer]");
 
 for (const apple of [false, true]) {
-  test(`desktop ${apple ? "Mac" : "PC"}: flag on removes only Esc Close; flag off restores the exact footer`, async (t) => {
-    await withPalette(t, { apple, tab: "compose", url: "/inbox" }, async ({ flags, rerender }) => {
-      const original = writer().innerHTML;
-      const expected = writer().cloneNode(true);
-      const hint = [...expected.querySelectorAll("span")].find((span) => span.textContent === "Esc Close");
-      assert.ok(hint, "flag off must retain the existing Esc Close hint");
-      hint.remove();
-      flags[flag] = true;
-      await rerender();
+  test(`desktop ${apple ? "Mac" : "PC"}: New Task permanently hides Esc Close and Escape still closes`, async (t) => {
+    await withPalette(t, { apple, tab: "compose", url: "/inbox" }, async ({ press, values, input }) => {
       assert.doesNotMatch(writer().textContent, /Esc Close/);
-      assert.equal(writer().innerHTML, expected.innerHTML, "all other footer markup must stay identical");
-      flags[flag] = false;
-      await rerender();
-      assert.equal(writer().innerHTML, original);
-    });
-  });
-}
-
-test("phone New Task sheet hides the footer and the one-line flag does not change it", async (t) => {
-  await withPalette(t, { mobile: true, tab: "compose" }, async ({ flags, rerender }) => {
-    const original = document.getElementById("root").innerHTML;
-    assert.equal(writer().textContent.includes("Esc Close"), false);
-    flags[flag] = true;
-    await rerender();
-    assert.equal(document.getElementById("root").innerHTML, original);
-  });
-});
-
-for (const enabled of [false, true]) {
-  test(`Escape still closes New Task with the footer flag ${enabled ? "on" : "off"}`, async (t) => {
-    await withPalette(t, { tab: "compose" }, async ({ flags, rerender, press, values, input }) => {
-      flags[flag] = enabled;
-      await rerender();
+      for (const hint of ["Send", "Attach files", "Search", "Board"]) assert.ok(writer().textContent.includes(hint), hint);
       assert.equal(document.activeElement, input());
       assert.equal(values.get("showCommandsAtom").show, true);
       const event = await press("Escape", { code: "Escape" });
@@ -52,13 +18,9 @@ for (const enabled of [false, true]) {
   });
 }
 
-test("feature flag ships for Everyone with a small release risk", () => {
-  const jiti = createJiti(__filename, { fsCache: false });
-  const definition = jiti(path.join(root, `src/lib/flags/definitions/${flag}.ts`));
-  assert.equal(definition.HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, flag);
-  assert.equal(definition.default.key, flag);
-  assert.equal(definition.default.kind, "feature");
-  assert.equal(definition.default.defaultMode, "EVERYONE");
-  assert.equal(definition.default.releaseRisk.risk, "small");
-  assert.ok(definition.default.releaseRisk.reason);
+test("phone New Task sheet still hides the footer", async (t) => {
+  await withPalette(t, { mobile: true, tab: "compose" }, async () => {
+    assert.equal(writer().textContent.includes("Esc Close"), false);
+    assert.equal([...writer().children].some(node => node.classList.contains("border-t")), false);
+  });
 });

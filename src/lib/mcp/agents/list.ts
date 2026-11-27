@@ -12,8 +12,6 @@ import {
 } from './ownedAgents'
 import { AGENT_LISTING_REFUSAL, isAgentTokenCaller } from './agentListingRefusal'
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7179_AGENT_TEAM_BOUND_FLAG } from '@/lib/flags/definitions/htpr-7179-agent-team-bound'
 
 export async function handleListAgentsRequest(
   request: NextRequest,
@@ -63,7 +61,7 @@ export async function handleListAgentsRequest(
     prisma as unknown as AgentManagementDatabase,
     ctx.user.id,
     ctx.management?.teamId,
-    { teamBound: await isFeatureEnabled(HTPR_7179_AGENT_TEAM_BOUND_FLAG, ctx.user.id) }
+    { teamBound: true }
   )
 
   const parsedListQuery = readListQuery(

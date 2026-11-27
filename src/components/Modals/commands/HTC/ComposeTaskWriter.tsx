@@ -18,7 +18,7 @@ import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
 import Tooltip from "@/components/Common/Tooltip";
-import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG , HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG , HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG , HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG, HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG , HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
+import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG , HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG , HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG , HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG, HTPR_9028_INLINE_CREATION_SCREENSHOTS_FLAG , HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { HTPR_8095_TASK_CREATE_AI_STEP_TIMING_FLAG } from "@/lib/flags/definitions/htpr-8095-task-create-ai-step-timing";
 import { HTPR_9300_COMPOSE_CACHED_OPEN_FLAG } from "@/lib/flags/definitions/htpr-9300-compose-cached-open";
 import { HintKey } from "@/components/Common/CommonModalComponents";
@@ -69,7 +69,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   if (!aiChatOpenSwitchesEnabled) chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && chatAutoOpenReady && !keepAiChatClosed;
   const boardShortcutTooltip = useFlag(HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG);
   const dictationShortcutEnabled = useFlag(HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG);
-  const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   let skillFollowupEnabled = false;
   if (skillFollowupFlag) skillFollowupEnabled = true;
@@ -771,7 +770,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         {clickableFooter ? <button type="button" aria-label={newTaskWindow ? "Attach files" : "Add images"} className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating} onClick={handleAttachmentClick}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>}
         {clickableFooter ? <button type="button" aria-label="Search" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} onClick={onSearch}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>}
         {(clickableFooter ? <button type="button" aria-label="Board" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || dictating} onClick={openBoardPicker}><HintKey>{boardShortcut}</HintKey> Board</button> : <span><HintKey>{boardShortcut}</HintKey> Board</span>)}
-        {(!ctrljFooterOneLine || !newTaskWindow || mobile) && (clickableFooter ? <button type="button" aria-label="Close" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing} onClick={onClose}><HintKey>Esc</HintKey> Close</button> : <span><HintKey>Esc</HintKey> Close</span>)}
+        {(!newTaskWindow || mobile) && (clickableFooter ? <button type="button" aria-label="Close" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing} onClick={onClose}><HintKey>Esc</HintKey> Close</button> : <span><HintKey>Esc</HintKey> Close</span>)}
       </div>)}
       {active && boardPickerOpen && <MoveTaskGlobal
         boards={loadingBoards && !boards.length ? undefined : boards}

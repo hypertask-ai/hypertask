@@ -38,8 +38,8 @@ for (const apple of [false, true]) {
       assert.ok([...footer().children].every((node) => node.tagName === 'SPAN'));
       await enable(ui);
       assert.deepEqual([...footer().children].map((node) => node.textContent), labels);
-      assert.equal(footer().querySelectorAll('button[type="button"]').length, 5);
-      for (const name of ['Send', 'Attach files', 'Search', 'Board', 'Close']) {
+      assert.equal(footer().querySelectorAll('button[type="button"]').length, 4);
+      for (const name of ['Send', 'Attach files', 'Search', 'Board']) {
         assert.ok(button(name), `${name} has an accessible name`);
         assert.match(button(name).className, /hover:bg-hover-active/);
         assert.match(button(name).className, /hover:text-white-black/);
@@ -70,9 +70,9 @@ test('Send click and Enter call the same existing send, preserving empty-input a
     assert.equal(ui.requests.length, 1);
     const clicked = ui.requests[0].body;
     assert.equal(clicked.viewProject, ui.values.get('currentProjectAtom'));
-    for (const name of ['Send', 'Attach files', 'Board', 'Close']) assert.equal(button(name).disabled, true);
+    for (const name of ['Send', 'Attach files', 'Board']) assert.equal(button(name).disabled, true);
     assert.equal(button('Search').disabled, false, 'Search stays available while writing, like Ctrl+K');
-    await click(button('Close'));
+    await ui.press('Escape', { code: 'Escape' }, document.body);
     assert.equal(ui.values.get('showCommandsAtom').show, true);
     assert.equal(ui.values.get('showCommandsAtom').paletteTab, 'compose');
     await ui.fail();
@@ -88,7 +88,7 @@ test('pressing a footer button with the mouse keeps the caret in the textbox', a
   await withPalette(t, config, async (ui) => {
     await enable(ui);
     await ui.type('Keep typing');
-    for (const name of ['Send', 'Attach files', 'Search', 'Board', 'Close']) {
+    for (const name of ['Send', 'Attach files', 'Search', 'Board']) {
       const press = new ui.dom.window.MouseEvent('mousedown', { bubbles: true, cancelable: true });
       button(name).dispatchEvent(press);
       assert.equal(press.defaultPrevented, true, `${name} does not take focus from the textbox`);
@@ -167,12 +167,12 @@ for (const apple of [false, true]) {
   });
 }
 
-test('Close click and Escape use the existing close action', async (t) => {
-  for (const mouse of [false, true]) {
+test('Escape closes without a desktop Close button whether footer hints are clickable or not', async (t) => {
+  for (const clickable of [false, true]) {
     await withPalette(t, config, async (ui) => {
-      await enable(ui);
-      if (mouse) await click(button('Close'));
-      else await ui.press('Escape', { code: 'Escape' }, ui.input());
+      if (clickable) await enable(ui);
+      assert.equal(button('Close'), null);
+      await ui.press('Escape', { code: 'Escape' }, ui.input());
       assert.equal(ui.values.get('showCommandsAtom').show, false);
       assert.equal(writer(), null);
       assert.equal(ui.requests.length, 0);

@@ -24,13 +24,10 @@ this code change. Do not retire the Worker before live parity is verified.
    `team.id`; enterprise-only installs are not supported yet.
 4. Fill the directory form: name, short and long description, icon, and
    screenshots of Settings, Slack, and the bot in action.
-5. After Owner + QA verification, the owner must set both
-   `htpr-4857-add-to-slack` and `htpr-6921-slack-marketplace` to **Everyone** at
-   https://app.hypertask.ai/admin/flags before submission. The new flag defaults
-   to **Owner + QA**, not Everyone. While restricted, the install and support
-   pages return 404 for anonymous visitors under their respective flags;
-   the new legal/support links on Add to Slack also stay hidden. The no-state
-   Marketplace callback requires the install flag to resume via login.
+5. Confirm `htpr-4857-add-to-slack` is **Everyone** at
+   https://app.hypertask.ai/admin/flags before submission. The support page and
+   legal/support links are permanent. The no-state Marketplace callback still
+   requires the install flag to resume via login.
 6. Verify parity in a real workspace, submit, and answer reviewer questions.
    Neither this document nor the local tests prove a live install or review.
 
