@@ -377,6 +377,21 @@ test("a cold automated browser on loopback keeps realtime off with no opt-in", (
     assert.equal(cold.values.get("hypertask:realtime-disabled"), "1");
   }));
 
+test("an opted-in tab does not hand its opt-in to a second tab", () =>
+  withCloudBuild(() => {
+    const {
+      REALTIME_LOCAL_OPT_IN_STORAGE_KEY,
+      realtimeDisabledForBrowser,
+    } = loadTs("src/lib/realtime/client.ts");
+    const first = fakeBrowser("?realtime=on", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(first.browser), false);
+    assert.equal(first.values.has(REALTIME_LOCAL_OPT_IN_STORAGE_KEY), true);
+
+    const second = fakeBrowser("?id=15&surface=board", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(second.browser), true);
+    assert.equal(second.values.has(REALTIME_LOCAL_OPT_IN_STORAGE_KEY), false);
+  }));
+
 test("headless agent-browser contexts disable realtime without webdriver", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
