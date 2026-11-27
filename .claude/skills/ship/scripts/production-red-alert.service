@@ -1,0 +1,10 @@
+[Unit]
+Description=One assigned fixer for production-red tests
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h
+Environment="PATH=/home/valentin/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart="/usr/bin/python3" "-c" "import sys,os,json,time\nsys.path.insert(0,'/home/valentin/.local/lib/github-ops')\nimport github_ops as g\nc=json.load(open('/home/valentin/.config/github-ops/config.json'))\nn='production-red-alert'\nlogin=c['jobs'][n]\nif c['logins'][login].get('observer_only') is not False:\n    raise RuntimeError('Personal login refused for automated service')\ne=g.token_env(c,login,g.DEFAULT_STATE/'jobs'/n)\ne['GH_JOB']=n\ne['GH_CALLER']=n\ne['HT_GH_CACHE_DIR']=str(g.DEFAULT_STATE/'jobs'/n/'cache')\ng.append(g.DEFAULT_STATE/'calls.jsonl',{'at':int(time.time()),'job':n,'login':login,'command':'service-start'})\nos.execvpe(sys.argv[1],sys.argv[1:],e)\n" "/usr/bin/nice" "-n" "19" "%h/projects/hypertask-ops/.claude/skills/ship/scripts/production-red-alert"
+TimeoutStartSec=240
+UMask=0077
