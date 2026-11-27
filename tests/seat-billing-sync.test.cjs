@@ -217,3 +217,46 @@ test("no team id is a no-op", async () => {
   assert.equal(await sync(undefined), "SKIPPED");
   assert.deepEqual(updates, []);
 });
+
+async function pendingWrite(pending, failure) {
+  const writes = jiti(path.join(root, "src/lib/seatBillingLock.ts")).createMemorySeatBillingWrites();
+  if (pending) await writes.begin("team_1", { itemId: "si_test", subscriptionId: "sub_test", idempotencyKey: "old", quantity: 9, prorationBehavior: "always_invoice", ...pending });
+  const calls = [];
+  const result = await syncSeatBillingOnJoin("team_1", {
+    writes,
+    findTeam: async () => paidTeam({ members: 6 }),
+    resolveQuantity: async () => 6,
+    retrieveSubscriptionItem: async () => ({ id: "si_test", quantity: 4, priceId: "price_test" }),
+    updateSubscriptionItem: async (id, update, options) => {
+      calls.push({ id, ...update, ...options });
+      if (failure) throw Object.assign(new Error("Stripe failure"), failure);
+    },
+    reportFailure: async () => {},
+  }, passthrough);
+  return { result, calls, left: await writes.load("team_1") };
+}
+
+test("pending writes target only the active subscription and item", async () => {
+  const replayed = await pendingWrite({});
+  assert.equal(replayed.result, "SEATED");
+  assert.deepEqual(replayed.calls.map((call) => [call.quantity, call.idempotencyKey === "old"]), [[9, true], [6, false]]);
+  for (const stale of [{ itemId: "si_replaced" }, { subscriptionId: "sub_replaced" }, { subscriptionId: undefined }]) {
+    const replaced = await pendingWrite(stale);
+    assert.equal(replaced.result, "SEATED");
+    assert.deepEqual(replaced.calls.map((call) => [call.id, call.quantity]), [["si_test", 6]]);
+    assert.equal(replaced.left, null);
+  }
+});
+
+for (const failure of [{ code: "resource_missing" }, { type: "StripeInvalidRequestError" }, { rawType: "invalid_request_error" }, { statusCode: 402 }, { statusCode: 403 }, { statusCode: 404 }, { statusCode: 500 }, { statusCode: 409 }, { statusCode: 429 }, { code: "idempotency_key_in_use", statusCode: 400 }, { code: "ETIMEDOUT" }, {}]) {
+  test(`Stripe failure ${JSON.stringify(failure)} retires only definitive rejections`, async () => {
+    const ambiguous = !failure.type && !failure.rawType && failure.code !== "resource_missing" && ![402, 403, 404].includes(failure.statusCode);
+    for (const pending of [null, {}]) {
+      const failed = await pendingWrite(pending, failure);
+      assert.equal(failed.result, "Error");
+      assert.equal(failed.calls.length, pending && !ambiguous ? 2 : 1);
+      assert.equal(failed.left !== null, ambiguous);
+      if (ambiguous) assert.equal(failed.left.idempotencyKey, failed.calls[0].idempotencyKey);
+    }
+  });
+}
