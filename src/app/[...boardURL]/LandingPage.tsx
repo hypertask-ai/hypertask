@@ -28,7 +28,7 @@ import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
 import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -42,7 +42,6 @@ import { useGetNotificationCount } from "@/hooks/Inbox/useGetNotifications";
 import { useQueryClient } from "@tanstack/react-query";
 
 import HomePage from "@/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage";
-import { AgentConnectCard } from "@/components/PageComponents/Onboarding/AgentConnectCard";
 import { KanbanModalsProvider } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext";
 
 import { addLastActivityAt } from "@/utils/api/helperFunctions";
@@ -1256,21 +1255,17 @@ return (
 export default LandingPage
 
 const SectionComp = (props: SectionCompProps & { connectOverlayEnabled: boolean }) => {
-  const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
   const context = useLandingSection(props, useLandingSectionReadiness);
-  return renderLandingSection(context, connectBlockRemoved, props.connectOverlayEnabled);
+  return renderLandingSection(context);
 };
 
-function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean, connectOverlayEnabled: boolean) {
+function renderLandingSection(context: ReturnType<typeof useLandingSection>) {
   const {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
   sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
   kanbanContainerRef, handleSideBar, handleBoardChange, debouncedHandleBoardChange, _notifications,
   _currentUser, _activeSortingMode,
   } = context;
-  const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser?.id ? (
-    <AgentConnectCard projectId={_currentProject.id} userId={_currentUser.id} />
-  ) : null;
 
 return (
   <>
@@ -1347,7 +1342,6 @@ return (
               ? 'bg-pageBackground homepage-container-tag ml-[var(--app-shell-rail-w,48px)] !w-[calc(100%-var(--app-shell-rail-w,48px))] flex-col gap-4 flex items-center'
               : 'bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center'}
             >
-            {(!connectOverlayEnabled || boardLayout === "table") && inlineConnectCard}
             {boardLayout === "table" ? (
               <BoardDocumentBoundary
                 fallback={(
@@ -1368,7 +1362,6 @@ return (
               </BoardDocumentBoundary>
             ) : (
             <HomePage
-              inlineConnectCard={connectOverlayEnabled ? inlineConnectCard : null}
               filteredSections={filteredSectionsForActiveView}
               handleBoardChange={debouncedHandleBoardChange}
               _sections={sections}

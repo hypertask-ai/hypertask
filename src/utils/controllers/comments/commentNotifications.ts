@@ -1,7 +1,6 @@
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
-import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from '@/lib/flags/definitions/htpr-8090-assignee-inbox';
 
 export async function resolveCommentRecipientUserIds(
@@ -125,9 +124,8 @@ export async function createNotificationForComment(
   ]);
 
   if (agentAssignees.length + agentFollowers.length === 0) return;
-  const fanoutFixOn = await isAgentCommentFanoutFixOn(creatorId);
   const isOwnComment = (agentId: string | null) =>
-    fanoutFixOn && Boolean(fromAgentId) && agentId === fromAgentId;
+    Boolean(fromAgentId) && agentId === fromAgentId;
   const notifiedAgentIds = new Set(agentAssignees.map((a) => a.agentId));
   const assigneeAgents = agentAssignees.flatMap((a) =>
     a.agentId && a.agent && !isOwnComment(a.agentId)
@@ -174,7 +172,7 @@ export async function createNotificationForComment(
       ...(fromAgentId ? { fromAgentId } : {}),
     })),
   });
-  for (const a of fanoutFixOn ? newAgents : newAssigneeAgents) {
+  for (const a of newAgents) {
     void broadcastInboxChange(a.userId, { originUserId: creatorId });
   }
 }
