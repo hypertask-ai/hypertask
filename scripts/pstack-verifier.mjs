@@ -1697,9 +1697,9 @@ export async function settleGrounding({ plan, request, pages, reach, ask, picked
 }
 export function coverageRoots({ journeys = [], ...options } = {}) {
   const actions = journeys.flatMap((item) => item.actions ?? []);
-  return journeyLib.journeyRoots(options).filter((entry) => actions.some((action) => action.op === "api"
-    ? groundLib.routeIn([entry.file], action.path)
-    : action.op === "goto" && entry.route && routeKey(action.path) === routeKey(entry.route)));
+  return journeyLib.journeyRoots(options).filter((entry) => entry.route
+    ? actions.some((action) => action.op === "goto" && routeKey(action.path) === routeKey(entry.route))
+    : entry.methods?.length && entry.methods.every((method) => actions.some((action) => action.op === "api" && (action.method || "GET").toUpperCase() === method && groundLib.routeIn([entry.file], action.path))));
 }
 export async function planFromRequest(request, deps = {}) {
   const ask = deps.ask ?? askVerifier;
@@ -1758,7 +1758,7 @@ export async function planFromRequest(request, deps = {}) {
       }
     }
     if (!plan.unevaluated) await settleGrounding({ plan, request, pages, reach, ask, picked, deps, bugfix, ground });
-    plan.unmapped = journeyLib.uncoveredFiles({ files: request.coverageFiles ?? listed.files, surfaces: coverageRoots({ journeys: plan.journeys, sources: deps.sources, boardPath: request.boardPath, taskPath: request.taskPath }), readSource: deps.readSource });
+    plan.unmapped = journeyLib.uncoveredFiles({ files: request.coverageFiles ?? listed.files, surfaces: coverageRoots({ journeys: plan.journeys, sources: deps.sources, readSource: deps.readSource, boardPath: request.boardPath, taskPath: request.taskPath }), readSource: deps.readSource });
   }
   if (driveNeeded(plan)) plan.viewports = [...VIEWPORT_NAMES];
   return plan;
@@ -1793,21 +1793,31 @@ export async function planJourneys({ request, pages, ask, key, model, models, bu
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "", unevaluated: "" };
 }
 export const driveNeeded = (plan) => !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
-export function uncoveredPassGate(plan) {
-  return journeyLib.uncoveredPassGate("PASS", { unmapped: plan?.unmapped });
-}
+export function uncoveredPassGate(plan) { return journeyLib.uncoveredPassGate("PASS", { unmapped: plan?.unmapped }); }
 export const askNeeded = (plan) => !plan.fail && !plan.unevaluated && (plan.journeys ?? []).some((item) => Array.isArray(item.actions) && item.actions.length > 0);
 export function candidateSources(sha, spawn = spawnSync) {
   if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error("invalid candidate sha");
-  const options = { encoding: "utf8", timeout: 30000, maxBuffer: 8 * 1024 * 1024 };
-  const git = (args) => {
-    const result = spawn("git", args, options);
+  const options = { encoding: "utf8", timeout: 30000, maxBuffer: 128 * 1024 * 1024 };
+  const git = (args, extra = {}) => {
+    const result = spawn("git", args, { ...options, ...extra });
     if (result.status !== 0) throw new Error("candidate source unread");
     return result.stdout;
   };
   if (spawn("git", ["cat-file", "-e", `${sha}^{commit}`], options).status !== 0) git(["-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential", "fetch", "--no-tags", "--depth=1", "origin", sha]);
   const sources = git(["ls-tree", "-rz", "--name-only", sha, "--", "src/"]).split("\0").filter((file) => file.startsWith("src/") && !file.includes("..") && /\.(?:ts|tsx|js|jsx|mjs|cjs)$/.test(file));
-  return { sources, readSource: (file) => sources.includes(file) ? git(["show", `${sha}:${file}`]) : "" };
+  const batch = git(["cat-file", "--batch"], { input: sources.map((file) => `${sha}:${file}\n`).join(""), encoding: null });
+  const texts = new Map();
+  let at = 0;
+  for (const file of sources) {
+    const start = batch.indexOf(10, at) + 1;
+    const header = /^([0-9a-f]{40,64}) blob (\d+)$/.exec(batch.toString("utf8", at, start - 1));
+    const end = start + Number(header?.[2]);
+    if (!header || !Number.isSafeInteger(end) || end >= batch.length || batch[end] !== 10) throw new Error("candidate source unread");
+    texts.set(file, batch.toString("utf8", start, end));
+    at = end + 1;
+  }
+  if (at !== batch.length) throw new Error("candidate source unread");
+  return { sources, readSource: (file) => texts.get(file) ?? "" };
 }
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));

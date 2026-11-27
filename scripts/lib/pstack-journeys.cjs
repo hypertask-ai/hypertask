@@ -319,13 +319,9 @@ function journeyIds({ pages, bugfix = false } = {}) {
   return [...areas.filter((id) => id !== "area:undefined"), `change:${bugfix ? "repro" : "primary"}`];
 }
 
-function repoPath(file) {
-  return String(file ?? "").trim().replace(/^\.\//, "");
-}
+function repoPath(file) { return String(file ?? "").trim().replace(/^\.\//, ""); }
 
-function currentFiles(files) {
-  return (Array.isArray(files) ? files : []).filter((file) => file?.status !== "removed").map((file) => repoPath(typeof file === "string" ? file : file?.filename)).filter(Boolean);
-}
+function currentFiles(files) { return (Array.isArray(files) ? files : []).filter((file) => file?.status !== "removed").map((file) => repoPath(typeof file === "string" ? file : file?.filename)).filter(Boolean); }
 
 function productChanged(files) {
   return uniqueSorted(currentFiles(files))
@@ -333,14 +329,9 @@ function productChanged(files) {
     .filter((file) => !TEST_PATH.test(file) && !/\.(?:test|spec)\.[^/]+$/.test(file));
 }
 
-function notProduct(file) {
-  const name = repoPath(file);
-  return NON_PRODUCT.some((pattern) => pattern.test(name));
-}
+function notProduct(file) { return NON_PRODUCT.some((pattern) => pattern.test(repoPath(file))); }
 
-function recordedUncovered(unmapped) {
-  return uniqueSorted((Array.isArray(unmapped) ? unmapped : []).map(repoPath).filter(Boolean).filter((file) => !notProduct(file)));
-}
+function recordedUncovered(unmapped) { return uniqueSorted((Array.isArray(unmapped) ? unmapped : []).map(repoPath).filter(Boolean).filter((file) => !notProduct(file))); }
 
 const RESOLVE_EXT = [...SOURCE_EXT, ...SOURCE_EXT.map((ext) => `/index${ext}`)];
 
@@ -379,10 +370,17 @@ function uncoveredFiles({ files = [], unmapped = [], surfaces = [], routes = [],
   return uniqueSorted([...recordedUncovered(unmapped).filter((file) => !obsolete.has(file)), ...walked]);
 }
 
-function journeyRoots({ sources = defaultSources(), boardPath = "", taskPath = "" } = {}) {
+function apiMethods(file, text) {
+  const methods = /^src\/app\/api\/.*\/route\.[cm]?[jt]sx?$/.test(file)
+    ? [...String(text).matchAll(/\bexport\s+(?:(?:async\s+)?function\s+([A-Z]+)\b|(?:const|let|var)\s+([A-Z]+)\b|\{([^}]+)\})/g)].flatMap((match) => match[1] || match[2] || match[3].split(",").map((item) => item.trim().split(/\s+as\s+/).pop()))
+    : /^src\/pages\/api\//.test(file) ? [...String(text).matchAll(/\bmethod\s*[!=]==?\s*["']([A-Z]+)["']|\bcase\s*["']([A-Z]+)["']\s*:/g)].map((match) => match[1] || match[2]) : [];
+  return uniqueSorted(methods.filter((method) => /^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(method)));
+}
+
+function journeyRoots({ sources = defaultSources(), readSource = defaultReadSource, boardPath = "", taskPath = "" } = {}) {
   const pageDirs = pageRouteDirs(sources);
   const listed = new Set(sources);
-  const entries = sources.filter((file) => PAGE_FILE.test(path.posix.basename(file)) || /^src\/(?:app|pages)\/api\//.test(file)).map((file) => ({ file, route: appRoute(file, { boardPath, taskPath, pageDirs }) }));
+  const entries = sources.filter((file) => PAGE_FILE.test(path.posix.basename(file)) || /^src\/(?:app|pages)\/api\//.test(file)).map((file) => ({ file, route: appRoute(file, { boardPath, taskPath, pageDirs }), methods: apiMethods(file, readSource(file)) }));
   return entries.flatMap((entry) => {
     const roots = [entry];
     if (!entry.route) return roots;
