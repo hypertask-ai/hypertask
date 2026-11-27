@@ -2269,6 +2269,29 @@ test("extensionless imports resolve every source and index extension transitivel
   assert.deepEqual(journeyLib.uncoveredFiles({ files: ["src/lib/value.ts"], surfaces: ["src/app/page.tsx"], readSource: (file) => sources[file] ?? "" }), ["src/lib/value.ts"]);
 });
 
+test("changed mjs and cjs modules require a selected journey that reaches them", async () => {
+  const { coverageRoots } = await load();
+  for (const ext of [".mjs", ".cjs"]) {
+    const file = `src/lib/runtime${ext}`;
+    const sources = { "src/app/chat/page.tsx": `import "@/lib/runtime${ext}";`, "src/app/other/page.tsx": "export default function Page() {}", [file]: ext === ".cjs" ? "module.exports = { value: 1 };" : "export const value = 1;" };
+    const readSource = (file) => sources[file] ?? "";
+    const check = (path) => journeyLib.uncoveredFiles({ files: [file], surfaces: coverageRoots({ journeys: [{ actions: [{ op: "goto", path }] }], sources: Object.keys(sources) }), readSource });
+    const uncovered = check("/other");
+    assert.deepEqual(uncovered, [file], ext);
+    assert.equal(journeyLib.uncoveredPassGate("PASS", { unmapped: uncovered }).verdict, "FAIL", ext);
+    assert.deepEqual(check("/chat"), [], ext);
+    assert.equal(journeyLib.uncoveredPassGate("PASS", { unmapped: check("/chat") }).verdict, "PASS", ext);
+  }
+});
+
+test("declaration files are excluded from runtime coverage without excluding runtime TypeScript", () => {
+  const declarations = ["src/lib/flags/removalWindow.d.ts", "src/lib/flags/removalWindow.d.mts", "src/lib/flags/removalWindow.d.cts"];
+  assert.deepEqual(journeyLib.productChanged(declarations), []);
+  assert.deepEqual(walk(declarations), []);
+  assert.equal(journeyLib.uncoveredPassGate("PASS", { unmapped: walk(declarations) }).verdict, "PASS");
+  assert.deepEqual(walk([...declarations, "src/lib/flags/removalWindow.ts"]), ["src/lib/flags/removalWindow.ts"]);
+});
+
 test("type-only imports and exports do not claim runtime coverage", () => {
   const typed = ['import type { Shape } from "@/lib/value";', 'export type { Shape } from "@/lib/value";', 'export type * from "@/lib/value";', 'import { type Shape, type Other as Alias } from "@/lib/value";', 'export { type Shape } from "@/lib/value";', 'type Shape = import("@/lib/value").Shape;', 'type Shape = typeof import("@/lib/value");', 'let shape: Promise<import("@/lib/value").Shape>;', 'import type Shape = require("@/lib/value");'];
   const runtime = ['import { type Shape, value } from "@/lib/value";', 'export { type Shape, value } from "@/lib/value";', 'import type from "@/lib/value";', 'import { type as value } from "@/lib/value";', 'import "@/lib/value";', 'export * from "@/lib/value";', 'const value = require("@/lib/value");', 'const value = import("@/lib/value");', 'import("@/lib/value").then(use);'];

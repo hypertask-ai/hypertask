@@ -38,7 +38,6 @@ const GENERIC_BASENAMES = new Set([
 const DISTINCTIVE_BASENAME = /^[a-z0-9]+(?:-[a-z0-9]+){1,}\.(?:tsx|ts|jsx|js|scss|md)$/;
 const TEST_PATH = /^tests?\//;
 const SOURCE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
-const PRODUCT_EXT = new Set([".ts", ".tsx", ".js", ".jsx"]);
 const NON_PRODUCT = [
   /^(?:docs?|documentation)\//,
   /\.(?:md|mdx|txt|rst|adoc|json|yml|yaml|css|scss|snap|png|jpg|jpeg|svg|gif|webp|ico)$/,
@@ -330,7 +329,7 @@ function currentFiles(files) {
 
 function productChanged(files) {
   return uniqueSorted(currentFiles(files))
-    .filter((file) => file.startsWith("src/") && PRODUCT_EXT.has(path.extname(file)))
+    .filter((file) => file.startsWith("src/") && !/\.d\.[cm]?ts$/.test(file) && SOURCE_EXT.includes(path.extname(file)))
     .filter((file) => !TEST_PATH.test(file) && !/\.(?:test|spec)\.[^/]+$/.test(file));
 }
 
