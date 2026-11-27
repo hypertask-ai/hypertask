@@ -17,7 +17,7 @@ import type { SidebarChatAgent, SidebarChatTarget } from "@/app/agents/chat/agen
 import { readDraft, writeDraft } from "@/lib/agents/chatDrafts";
 import { getNativeSidebarChat, setNativeSidebarChat } from "@/lib/agents/chatViewerState";
 import { AI_Chat_API } from "@/utils/api/ai_chat/aiChatHelpers";
-import { currentProjectAtom, currentUserAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, aiChatSidebarWidthPxAtom } from "@/store";
 import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import toast from "react-hot-toast";
@@ -31,7 +31,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { ChatHeader } from "./ChatHeader";
 import { AI_Tiptap_Container } from "./AI_Tiptap_Container";
 import { AiChatSidebarResizeHandle } from "./AiChatSidebarResizeHandle";
-import { aiChatSidebarWidthPxAtom } from "@/store";
 import { AI_CHAT_SIDEBAR_MIN_PX } from "@/lib/configs/style.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
@@ -75,6 +74,7 @@ export const AI_Chat_Sidebar = ({
   const generalChatPending = enabled && !!projectId && target.kind === "ai" && !!chat.currentSession?.agentId;
   const drafts = useRef(new Map<string, { html: string; files: typeof chat.fileItems }>());
   const sidebarEnabled = enabled && !!projectId && !!currentUser;
+  const deepLink = searchParams?.get("sidebarAgent");
 
   const loadRoster = useCallback(async () => {
     if (!enabled || !projectId) return;
@@ -291,13 +291,17 @@ export const AI_Chat_Sidebar = ({
   useEffect(() => {
     ++intentRef.current;
     setNativeSidebarChat(null);
-    setTarget({ kind: "ai" });
-    setVisited([]);
     setRoutedDraft(null);
     lastAgentSessions.current.clear();
-    setAgents([]);
     aiSessionRef.current = null;
     drafts.current.clear();
+    const linked = targetRef.current;
+    const deepLinkHoldsSelection = !!deepLink && linked.kind !== "ai" && linked.agent.id === deepLink;
+    if (!deepLinkHoldsSelection) {
+      setTarget({ kind: "ai" });
+      setVisited([]);
+      setAgents([]);
+    }
     return () => {
       ++intentRef.current;
       if (getNativeSidebarChat()) {
@@ -317,7 +321,6 @@ export const AI_Chat_Sidebar = ({
     if (target.kind !== "ai" && !agents.some((agent) => agent.id === target.agent.id)) void selectTargetRef.current({ kind: "ai" });
   }, [agents]);
 
-  const deepLink = searchParams?.get("sidebarAgent");
   const handledDeepLink = useRef<string | null>(null);
   useEffect(() => { handledDeepLink.current = null; }, [projectId, currentUser?.id, sidebarEnabled]);
   useEffect(() => {
