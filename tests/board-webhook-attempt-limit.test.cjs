@@ -92,3 +92,15 @@ test("a delivery at the attempt limit cannot be claimed", async () => {
     "the claim itself must refuse an exhausted row",
   );
 });
+
+test("a stale processing row is never re-claimed by a worker", async () => {
+  const { updates, module } = load();
+  await module.deliverBoardWebhook("d1");
+
+  const claim = updates.find((u) => u.data.status === "processing");
+  assert.deepEqual(
+    claim.where.status,
+    { in: ["pending", "retrying"] },
+    "only the sweep spends an attempt and returns a stale row to retrying",
+  );
+});

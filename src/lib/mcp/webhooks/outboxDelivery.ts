@@ -1,7 +1,9 @@
 import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
+import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { postSignedWebhook } from './delivery'
+import type { SignedWebhookResult } from './delivery'
 import {
   BOARD_WEBHOOK_MAX_ATTEMPTS,
   BOARD_WEBHOOK_RETRY_DELAYS_SECONDS,
@@ -28,6 +30,61 @@ export type BoardWebhookAttemptResult =
       error: string | null
     }
 
+type DeliveryClaim = {
+  id: string
+  subscriptionId: string
+  attemptCount: number
+  processingAt: Date
+}
+
+async function recordDelivered(
+  tx: Prisma.TransactionClient,
+  claim: DeliveryClaim,
+  result: SignedWebhookResult
+): Promise<void> {
+  const deliveredAt = new Date()
+  const attemptCount = claim.attemptCount + 1
+  const owned = await tx.boardWebhookDelivery.updateMany({
+    where: { id: claim.id, processingAt: claim.processingAt },
+    data: {
+      status: 'delivered',
+      attemptCount,
+      processingAt: null,
+      lastAttemptAt: deliveredAt,
+      statusCode: result.statusCode,
+      error: null,
+      deliveredAt,
+    },
+  })
+  if (owned.count === 0) {
+    const kept = await tx.boardWebhookDelivery.updateMany({
+      where: { id: claim.id, status: { notIn: ['delivered', 'cancelled'] } },
+      data: {
+        status: 'delivered',
+        processingAt: null,
+        lastAttemptAt: deliveredAt,
+        statusCode: result.statusCode,
+        error: null,
+        deliveredAt,
+      },
+    })
+    if (kept.count === 0) return
+  } else {
+    await tx.boardWebhookAttempt.create({
+      data: {
+        deliveryId: claim.id,
+        attemptNumber: attemptCount,
+        statusCode: result.statusCode,
+        durationMs: result.durationMs,
+      },
+    })
+  }
+  await tx.webhookSubscription.update({
+    where: { id: claim.subscriptionId },
+    data: { lastDeliveryAt: deliveredAt, lastDeliveryOk: true },
+  })
+}
+
 export async function deliverBoardWebhook(
   deliveryId: string
 ): Promise<BoardWebhookAttemptResult> {
@@ -36,7 +93,7 @@ export async function deliverBoardWebhook(
   const claimed = await prisma.boardWebhookDelivery.updateMany({
     where: {
       id: deliveryId,
-      status: { in: ['pending', 'retrying', 'processing'] },
+      status: { in: ['pending', 'retrying'] },
       attemptCount: { lt: BOARD_WEBHOOK_MAX_ATTEMPTS },
       nextAttemptAt: { lte: now },
       OR: [{ processingAt: null }, { processingAt: { lt: staleBefore } }],
@@ -97,40 +154,19 @@ export async function deliverBoardWebhook(
     deliveryId: delivery.id,
     body: delivery.payloadBody ?? JSON.stringify(delivery.payload),
   })
-  const attemptCount = delivery.attemptCount + 1
+  const claim: DeliveryClaim = {
+    id: delivery.id,
+    subscriptionId: delivery.subscriptionId,
+    attemptCount: delivery.attemptCount,
+    processingAt: now,
+  }
 
   if (result.ok) {
-    const deliveredAt = new Date()
-    await prisma.$transaction(async (tx) => {
-      const fenced = await tx.boardWebhookDelivery.updateMany({
-        where: { id: delivery.id, processingAt: now },
-        data: {
-          status: 'delivered',
-          attemptCount,
-          processingAt: null,
-          lastAttemptAt: deliveredAt,
-          statusCode: result.statusCode,
-          error: null,
-          deliveredAt,
-        },
-      })
-      if (fenced.count === 0) return
-      await tx.boardWebhookAttempt.create({
-        data: {
-          deliveryId: delivery.id,
-          attemptNumber: attemptCount,
-          statusCode: result.statusCode,
-          durationMs: result.durationMs,
-        },
-      })
-      await tx.webhookSubscription.update({
-        where: { id: delivery.subscriptionId },
-        data: { lastDeliveryAt: deliveredAt, lastDeliveryOk: true },
-      })
-    })
+    await prisma.$transaction((tx) => recordDelivered(tx, claim, result))
     return { status: 'delivered', statusCode: result.statusCode! }
   }
 
+  const attemptCount = claim.attemptCount + 1
   const nextDelay = boardWebhookRetryDelaySeconds(attemptCount)
   const failedPermanently = nextDelay == null
   const failedAt = new Date()

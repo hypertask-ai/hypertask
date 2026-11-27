@@ -12,6 +12,7 @@ const covered = [
   "verification/formal/checks.json",
   "verification/formal/webhook-retry/BoardWebhook.tla",
   "verification/formal/webhook-retry/BoardWebhook.cfg",
+  "verification/formal/webhook-retry/Bug9466.cfg",
   ".claude/skills/formal-verification/SKILL.md",
 ];
 
@@ -21,15 +22,19 @@ test("the webhook retry model covers the files its record names", () => {
   }
 });
 
-test("the webhook retry model raises the recorded finding and nothing else", () => {
+test("the webhook retry model holds on the fixed code and raises the 9466 replay", () => {
   const checked = spawnSync(
     process.execPath,
-    ["scripts/formal-verification/run.mjs", "webhook-retry"],
+    ["scripts/formal-verification/run.mjs", "webhook-retry", "webhook-retry-9466"],
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
   assert.match(
     checked.stdout,
-    /formal-verification: ok webhook-retry matches its record .*AttemptsBound holds, PostsWithinCap violated \(recorded finding\), SuccessNotReportedFailed violated \(recorded finding\)/,
+    /formal-verification: ok webhook-retry matches its record .*AttemptsBound holds, PostsWithinCap holds, SuccessNotReportedFailed holds/,
+  );
+  assert.match(
+    checked.stdout,
+    /formal-verification: ok webhook-retry-9466 matches its record .*PostsWithinCap violated \(recorded finding\), SuccessNotReportedFailed violated \(recorded finding\)/,
   );
 });

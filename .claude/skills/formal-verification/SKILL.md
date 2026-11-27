@@ -29,7 +29,7 @@ Read every result, pass or fail, with the pstack `/statechart` skill. It turns e
 | Check | Model | Covers | Confirmed against |
 |---|---|---|---|
 | seat-billing | `verification/formal/seat-billing/SeatBilling.tla` | `src/lib/syncSeatBilling.ts`, `src/lib/seatBillingLock.ts` | `616b6c73f8` |
-| webhook-retry | `verification/formal/webhook-retry/BoardWebhook.tla` | `src/lib/mcp/webhooks/outboxDelivery.ts`, `src/lib/mcp/webhooks/queue.ts`, `src/lib/mcp/webhooks/events.ts` | `616b6c73f8` |
+| webhook-retry | `verification/formal/webhook-retry/BoardWebhook.tla` | `src/lib/mcp/webhooks/outboxDelivery.ts`, `src/lib/mcp/webhooks/queue.ts`, `src/lib/mcp/webhooks/events.ts` | HTPR-9466 |
 | chat-send-queue | `verification/formal/chat-send-queue/ChatSendQueue.tla` | `src/lib/aiChat/sessionMessageQueue.ts`, `src/lib/aiChat/queuedMessageOrder.ts`, `src/hooks/MultiPages/AIChat/aiChatSend.ts`, `src/hooks/MultiPages/AIChat/useAiChatSessions.ts`, `src/app/api/ai-chat/add-message/route.ts`, `src/app/api/mcp/chat/pending/route.ts` | HTPR-9617 |
 
 ### seat-billing
@@ -62,24 +62,27 @@ Bounds: one team with one subscription item, seat counts 1 and 2, two runs. The 
 | Property | State | In plain words |
 |---|---|---|
 | `AttemptsBound` | holds | A delivery row never records more attempts than `BOARD_WEBHOOK_MAX_ATTEMPTS`. |
-| `PostsWithinCap` | violated, recorded finding | A delivery is never posted to the subscriber more times than the cap allows. |
-| `SuccessNotReportedFailed` | violated, recorded finding | A delivery whose endpoint answered 2xx is never marked failed. |
+| `PostsWithinCap` | holds | A delivery is never posted to the subscriber more times than the cap allows. |
+| `SuccessNotReportedFailed` | holds | A delivery whose endpoint answered 2xx is never marked failed. |
 
 | Action | Code |
 |---|---|
-| `Claim` | the `updateMany` that takes the row while it is pending, retrying, or processing with a stale lease |
-| `PostOk`, `PostFail` | `postSignedWebhook`, returning 2xx or a failure |
-| `Record` | the fenced `updateMany` whose `processingAt` is still this claim's time, then the attempt row |
-| `FenceMiss` | the same write when the lease went stale or another claim took the row, so the fence matches nothing |
+| `Claim` | the `updateMany` that takes the row while it is `pending` or `retrying` |
+| `PostOk` | `postSignedWebhook` returning 2xx, then `recordDelivered`: the fenced write whose `processingAt` is still this claim's time, or its graft on `status` when the fence matched nothing |
+| `PostFail` | `postSignedWebhook` returning a failure |
+| `Record` | the fenced failure `updateMany`, then the attempt row |
+| `FenceMiss` | the same failure write when the sweep took the lease, so it matches nothing |
 | `LeaseStale`, `Sweep` | `PROCESSING_LEASE_MS` passing, then the sweep that returns the row to `retrying` with one more attempt |
 | `Exhaust` | the sweep marking rows failed once `attemptCount` reaches the cap |
 | `PostPastBound` | the model stops counting posts at `MaxPosts`, so a stuck claim cannot grow the state space |
 
-`SuccessNotReportedFailed` fails like this: a worker claims the row and posts, the endpoint answers 2xx, and the 5 minute lease goes stale before the worker writes. The sweep returns the row to `retrying`, the worker's fenced write matches no row, so the success is dropped. A later post fails, the attempts reach the cap, and the row ends `failed` although the endpoint received the event.
+`SuccessNotReportedFailed` holds because a 2xx and its write are one step and `delivered` is terminal. `recordDelivered` commits the fenced write or the graft in one transaction, so a lease that went stale mid-post still keeps the success. `Bug9466.cfg` replays the fenced-only write, where the success is dropped and a later failure ends the row `failed`: `PostOk`, `Claim`, `PostFail`, `Record`.
 
-`PostsWithinCap` fails like this: while the sweep has not run yet, a stale `processing` row can be claimed again by another worker, which posts and is fenced out in turn, so the endpoint receives more posts than the cap while `attemptCount` stands still.
+`PostsWithinCap` holds because `Claim` takes only `pending` and `retrying` rows: an abandoned `processing` row reaches `retrying` only through `Sweep`, which spends the attempt first. `Bug9466.cfg` also claims a stale `processing` row, which posts and is fenced out in turn, so the endpoint receives more posts than the cap while `attemptCount` stands still: `Claim`, `PostFail`, `Record`, `Claim`, `PostFail`, `LeaseStale`, `Claim`, `PostOk`.
 
-Bounds: one delivery row, two workers, two attempts, three posts, no retry delays (a claim is allowed whenever the row is pending or retrying). The post is not gated on the lease, because the code posts first and fences only the write. Not covered: the 30 day retention delete, authorization and cancellation, the retry queue publish (the sweep is the backup), `src/lib/agentWebhooks/delivery.ts`, and the sweep lease in `src/pages/api/queues/sweep.ts`.
+Each check sets the two behaviour constants in its config: `BoardWebhook.cfg` runs the fixed code, `Bug9466.cfg` the pre-fix `Claim` and the pre-fix fenced-only success write.
+
+Bounds: one delivery row, two workers, two attempts, three posts, no retry delays (a claim is allowed whenever the row is pending or retrying). A 2xx and its write are one step, because `recordDelivered` commits the fenced write and the graft in one transaction; a failed post is two, because its write can be fenced out. The post is not gated on the lease, because the code posts first and writes after. Not covered: the 30 day retention delete, authorization and cancellation, the retry queue publish (the sweep is the backup), `src/lib/agentWebhooks/delivery.ts`, and the sweep lease in `src/pages/api/queues/sweep.ts`.
 
 ### chat-send-queue
 

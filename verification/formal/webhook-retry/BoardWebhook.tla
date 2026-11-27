@@ -1,7 +1,8 @@
 --------------------------- MODULE BoardWebhook ----------------------------
 EXTENDS Naturals, TLC
 
-CONSTANTS Workers, MaxAttempts, MaxPosts
+CONSTANTS Workers, MaxAttempts, MaxPosts, ClaimTakesProcessing,
+          SuccessNeedsFence
 
 ASSUME /\ Workers # {}
        /\ MaxAttempts \in Nat
@@ -22,23 +23,46 @@ Init == /\ status = "pending"
         /\ posts = 0
         /\ succeeded = FALSE
 
+claimable == \/ status \in {"pending", "retrying"}
+             \/ /\ ClaimTakesProcessing
+                /\ status = "processing"
+                /\ stale
+
 Claim(w) == /\ phase[w] \in {"idle", "done"}
             /\ attempts < MaxAttempts
-            /\ \/ status \in {"pending", "retrying"} /\ (holder = 0 \/ stale)
-               \/ status = "processing" /\ stale
+            /\ claimable
             /\ status' = "processing"
             /\ holder' = w
             /\ stale' = FALSE
             /\ phase' = [phase EXCEPT ![w] = "post"]
             /\ UNCHANGED <<attempts, lastOk, posts, succeeded>>
 
-PostOk(w) == /\ phase[w] = "post"
-             /\ posts < MaxPosts
-             /\ posts' = posts + 1
-             /\ lastOk' = [lastOk EXCEPT ![w] = TRUE]
-             /\ succeeded' = TRUE
-             /\ phase' = [phase EXCEPT ![w] = "record"]
-             /\ UNCHANGED <<status, attempts, holder, stale>>
+PostOk(w) == LET fenced == /\ status = "processing"
+                           /\ holder = w
+                           /\ ~stale
+             IN /\ phase[w] = "post"
+                /\ posts < MaxPosts
+                /\ posts' = posts + 1
+                /\ lastOk' = [lastOk EXCEPT ![w] = TRUE]
+                /\ succeeded' = TRUE
+                /\ phase' = [phase EXCEPT ![w] = "idle"]
+                /\ \/ /\ fenced
+                      /\ status' = "delivered"
+                      /\ attempts' = attempts + 1
+                      /\ holder' = 0
+                      /\ stale' = FALSE
+                   \/ /\ ~fenced
+                      /\ ~SuccessNeedsFence
+                      /\ status' = "delivered"
+                      /\ attempts' = attempts
+                      /\ holder' = 0
+                      /\ stale' = FALSE
+                   \/ /\ ~fenced
+                      /\ SuccessNeedsFence
+                      /\ status' = status
+                      /\ attempts' = attempts
+                      /\ holder' = holder
+                      /\ stale' = stale
 
 PostFail(w) == /\ phase[w] = "post"
                /\ posts < MaxPosts
@@ -53,19 +77,18 @@ PostPastBound(w) == /\ phase[w] = "post"
                     /\ UNCHANGED <<status, attempts, holder, stale, lastOk, posts, succeeded>>
 
 Record(w) == /\ phase[w] = "record"
+             /\ status = "processing"
              /\ holder = w
              /\ ~stale
              /\ attempts' = attempts + 1
-             /\ status' = IF lastOk[w] THEN "delivered"
-                          ELSE IF attempts + 1 >= MaxAttempts THEN "failed"
-                          ELSE "retrying"
+             /\ status' = IF attempts + 1 >= MaxAttempts THEN "failed" ELSE "retrying"
              /\ holder' = 0
              /\ stale' = FALSE
              /\ phase' = [phase EXCEPT ![w] = "idle"]
              /\ UNCHANGED <<lastOk, posts, succeeded>>
 
 FenceMiss(w) == /\ phase[w] = "record"
-                /\ holder # w \/ stale
+                /\ ~(status = "processing" /\ holder = w /\ ~stale)
                 /\ phase' = [phase EXCEPT ![w] = "idle"]
                 /\ UNCHANGED <<status, attempts, holder, stale, lastOk, posts, succeeded>>
 

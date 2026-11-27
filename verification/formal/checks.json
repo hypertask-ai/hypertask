@@ -20,8 +20,17 @@
       "config": "verification/formal/webhook-retry/BoardWebhook.cfg",
       "properties": [
         {"name": "AttemptsBound", "expect": "holds"},
-        {"name": "PostsWithinCap", "expect": "violated", "witness": ["PostOk", "Record", "PostOk"]},
-        {"name": "SuccessNotReportedFailed", "expect": "violated", "witness": ["PostOk", "Sweep", "PostFail"]}
+        {"name": "PostsWithinCap", "expect": "holds"},
+        {"name": "SuccessNotReportedFailed", "expect": "holds"}
+      ]
+    },
+    "webhook-retry-9466": {
+      "spec": "verification/formal/webhook-retry/BoardWebhook.tla",
+      "config": "verification/formal/webhook-retry/Bug9466.cfg",
+      "properties": [
+        {"name": "AttemptsBound", "expect": "holds"},
+        {"name": "PostsWithinCap", "expect": "violated", "witness": ["Claim", "PostFail", "Record", "Claim", "PostFail", "LeaseStale", "Claim", "PostOk"]},
+        {"name": "SuccessNotReportedFailed", "expect": "violated", "witness": ["PostOk", "Claim", "PostFail", "Record"]}
       ]
     },
     "chat-send-queue": {

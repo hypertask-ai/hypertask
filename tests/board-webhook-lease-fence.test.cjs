@@ -10,14 +10,18 @@ const stubModule = (relativePath, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 
-const load = ({ reclaimed, ok = true }) => {
+const load = ({ fenceMiss, graftMiss = false, ok = true }) => {
   const writes = [];
   const prisma = {
     boardWebhookDelivery: {
       updateMany: async ({ where, data }) => {
         if (data.status === "processing") return { count: 1 };
+        if (where.status && where.status.notIn) {
+          writes.push(`graft:${data.status}`);
+          return { count: graftMiss ? 0 : 1 };
+        }
         writes.push(`delivery:${data.status}`);
-        return { count: reclaimed ? 0 : 1 };
+        return { count: fenceMiss ? 0 : 1 };
       },
       findFirst: async ({ where }) => {
         assert.ok(
@@ -85,18 +89,35 @@ const load = ({ reclaimed, ok = true }) => {
   };
 };
 
-test("a reclaimed worker does not write subscription health", async () => {
-  const success = load({ reclaimed: true, ok: true });
-  await success.module.deliverBoardWebhook("d1");
-  assert.deepEqual(success.writes, ["delivery:delivered"]);
+test("a 2xx whose lease went stale is still recorded as delivered", async () => {
+  const success = load({ fenceMiss: true, ok: true });
+  const result = await success.module.deliverBoardWebhook("d1");
 
-  const failure = load({ reclaimed: true, ok: false });
+  assert.deepEqual(result, { status: "delivered", statusCode: 200 });
+  assert.deepEqual(success.writes, [
+    "delivery:delivered",
+    "graft:delivered",
+    "subscription:true",
+  ]);
+  assert.equal(success.writes.includes("attempt:1:42"), false);
+});
+
+test("a 2xx for a cancelled or delivered row revives nothing", async () => {
+  const success = load({ fenceMiss: true, graftMiss: true, ok: true });
+  const result = await success.module.deliverBoardWebhook("d1");
+
+  assert.deepEqual(result, { status: "delivered", statusCode: 200 });
+  assert.deepEqual(success.writes, ["delivery:delivered", "graft:delivered"]);
+});
+
+test("a failed post whose lease went stale does not write subscription health", async () => {
+  const failure = load({ fenceMiss: true, ok: false });
   await failure.module.deliverBoardWebhook("d1");
   assert.deepEqual(failure.writes, ["delivery:retrying"]);
 });
 
 test("the owning worker records the outcome on both rows", async () => {
-  const success = load({ reclaimed: false, ok: true });
+  const success = load({ fenceMiss: false, ok: true });
   await success.module.deliverBoardWebhook("d1");
   assert.deepEqual(success.writes, [
     "delivery:delivered",
@@ -104,7 +125,7 @@ test("the owning worker records the outcome on both rows", async () => {
     "subscription:true",
   ]);
 
-  const failure = load({ reclaimed: false, ok: false });
+  const failure = load({ fenceMiss: false, ok: false });
   await failure.module.deliverBoardWebhook("d1");
   assert.deepEqual(failure.writes, [
     "delivery:retrying",
