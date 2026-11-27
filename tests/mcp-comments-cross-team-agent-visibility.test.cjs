@@ -117,6 +117,7 @@ function loadRoute(comments) {
   stubs['@/lib/agents/writing'] = require('./task-route-loader.cjs').load('src/lib/agents/writing.ts', {})
   stubs['@/lib/agents/writingEnforcement'] = require('./helpers/stub-map.cjs').enforcementFor(stubs['@/lib/agents/writing'])
   stubs['./agentChatterRouting'] = require('./task-route-loader.cjs').load('src/lib/mcp/operations/comments/agentChatterRouting.ts', {})
+  stubs['./agentLog'] = require('./task-route-loader.cjs').load('src/lib/mcp/operations/comments/agentLog.ts', {})
   loaded.require = (request) => request === "@/lib/mcp/routeWrapper"
       ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
       : stubs[request] ?? require(request);

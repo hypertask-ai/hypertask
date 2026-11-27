@@ -265,6 +265,7 @@ function loadCommentsRoute({
   modules['@/lib/agents/writingEnforcement'] = require('./helpers/stub-map.cjs').enforcementFor(modules['@/lib/agents/writing'])
   const mockRequire = (request) => {
     if (request === './agentChatterRouting') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentChatterRouting.ts'))
+    if (request === './agentLog') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentLog.ts'))
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)
     if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs")
     if (modules[request]) return modules[request]

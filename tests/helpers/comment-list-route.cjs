@@ -107,6 +107,7 @@ function loadRoute(comments) {
   stubs['@/lib/agents/writing'] = require('../task-route-loader.cjs').load('src/lib/agents/writing.ts', {})
   stubs['@/lib/agents/writingEnforcement'] = require('./stub-map.cjs').enforcementFor(stubs['@/lib/agents/writing'])
   stubs['./agentChatterRouting'] = require('../task-route-loader.cjs').load('src/lib/mcp/operations/comments/agentChatterRouting.ts', {})
+  stubs['./agentLog'] = require('../task-route-loader.cjs').load('src/lib/mcp/operations/comments/agentLog.ts', {})
   stubs['@/lib/agentRuns/taskAgentLog'] = require('../task-route-loader.cjs').load('src/lib/agentRuns/taskAgentLog.ts', {
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/utils/controllers/projects/getAllIncludes': {},

@@ -211,15 +211,14 @@ UNREACHABLE rather than claiming rendering proof.
 ### Agent writing rules
 
 Agent comments need `kind: question`, `qa` or `done` to appear in the
-people thread. With `htpr-9063-comment-audience` on (EVERYONE), any agent POST
-without `kind` is refused first with 400 `missing_field`/`kind`, before the log
-routing runs; the log-routing checks below hold only with that flag off, which
-no mode currently gives a normal account. Untyped text otherwise goes to the
-agent log, including mentions and
-replies. A note the log cannot take is never published: a board with no
-agent log answers 400 naming `kind`, an agent outside the board answers 403
-naming board access, and only a log that fails while opening answers 503
-with a retry. File
+people thread. An agent POST without `kind` answers 2xx with
+`routedTo: "log"`, `visibleToPeople: false` and a notice saying it went to
+the agent log, so automatic agent notes are never refused and never lost.
+The text is stored as an activity on a runtime agent run, the same store
+`hypertask activity add` writes, including mentions and replies. A note the
+log cannot take is never published silently: a post with no text the log can
+hold answers 400, an agent outside the board answers 403 naming board access,
+and only a log that fails while opening answers 503 with a retry. File
 uploads require an explicit kind before writing, so a rejected note cannot
 lose its files. Human writes remain unrestricted.
 
