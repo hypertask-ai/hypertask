@@ -28,7 +28,7 @@ Read every result, pass or fail, with the pstack `/statechart` skill. It turns e
 
 | Check | Model | Covers | Confirmed against |
 |---|---|---|---|
-| seat-billing | `verification/formal/seat-billing/SeatBilling.tla` | `src/lib/syncSeatBilling.ts`, `src/lib/seatBillingLock.ts` | `616b6c73f8` |
+| seat-billing | `verification/formal/seat-billing/SeatBilling.tla` | `src/lib/syncSeatBilling.ts`, `src/lib/seatBillingLock.ts` | this branch |
 | webhook-retry | `verification/formal/webhook-retry/BoardWebhook.tla` | `src/lib/mcp/webhooks/outboxDelivery.ts`, `src/lib/mcp/webhooks/queue.ts`, `src/lib/mcp/webhooks/events.ts` | `616b6c73f8` |
 | chat-send-queue | `verification/formal/chat-send-queue/ChatSendQueue.tla` | `src/lib/aiChat/sessionMessageQueue.ts`, `src/lib/aiChat/queuedMessageOrder.ts`, `src/hooks/MultiPages/AIChat/aiChatSend.ts`, `src/hooks/MultiPages/AIChat/useAiChatSessions.ts`, `src/app/api/ai-chat/add-message/route.ts`, `src/app/api/mcp/chat/pending/route.ts` | HTPR-9617 |
 
@@ -37,25 +37,31 @@ Read every result, pass or fail, with the pstack `/statechart` skill. It turns e
 | Property | State | In plain words |
 |---|---|---|
 | `JoinNeverDecreases` | holds | A run that is not the nightly reconcile never asks Stripe for a lower quantity than it read. |
-| `ReconcileMatchesSeats` | violated, recorded finding | After the nightly reconcile finishes and nothing has changed the seats since, the billed quantity equals the seat count. |
-| `LeaseExcludesOverlap` | violated, recorded finding | Two runs are never inside their read-then-write window at the same time. |
+| `ReconcileMatchesSeats` | holds | After the nightly reconcile finishes and nothing has changed the seats since, the billed quantity equals the seat count. |
+| `LeaseExcludesOverlap` | holds | Two runs are never inside their read-then-write window at the same time. |
 
 Each model action stands for one call in the code:
 
 | Action | Code |
 |---|---|
-| `Acquire`, `Release`, `LeaseLost`, `Abort` | `withTeamSeatBillingLock`: `SET NX PX`, renew every 15 seconds, `assertHeld`, release in `finally` |
+| `Acquire` | `withTeamSeatBillingLock`: `SET NX PX`, renew every 15 seconds, then the ledger replay below |
+| `Replayed`, `ReplayDone` | `replayPendingSeatBillingWrite`: a write left in the ledger by a timed-out run is re-sent under its own idempotency key before this run reads anything |
 | `EditSeats` | the mutation callback `mutateAndSyncSeatBilling` runs while the lease is held |
 | `ReadDesired` | `adapter.resolveQuantity`, which is `resolveSeatQuantity` |
 | `ReadItem` | `retrieveCurrentSubscriptionItem`, a live `stripe.subscriptionItems.retrieve` |
-| `NoWrite`, `Write` | the `desiredQuantity === currentQuantity` test and the `!exact` decrease guard, then `updateSubscriptionItem` |
+| `NoWrite` | the `desiredQuantity === currentQuantity` test and the `!exact` decrease guard |
+| `Write` | `applySeatBillingWrite`: `ledger.begin` puts the write in the pending key, then `updateSubscriptionItem` runs with that write's idempotency key, then `ledger.clear` |
 | `Landed`, `Answered`, `TimedOut` | the Stripe call: the write is applied, the response arrives, or the 15 second timeout fires while the request stays in flight |
+| `LeaseLost` | the renewal `eval` returns 0, so `assertHeld` throws and the run aborts without writing |
+| `Abort`, `Release` | the `finally` block: release only under this run's token, and only when the lease is still held |
 
-`ReconcileMatchesSeats` fails like this. A run raises the quantity and its Stripe call times out, so `reportFailure` records an error and the run returns `Error`, but Stripe still applies the write. Another run lowers the seats. The nightly reconcile reads the item before the late write lands, sees the old quantity, decides nothing is due and returns `OK`. The late write then lands and the team pays for a seat it removed. `node verification/formal/seat-billing/repro.cjs` replays it against the real `syncSeatBilling` with a stub Stripe: it prints `join: "Error"`, `reconcile: "OK"`, `seats: 1`, `billed: 2`, and exits 1 while the finding stands.
+`ReconcileMatchesSeats` and `LeaseExcludesOverlap` used to be recorded findings. They were fixed by two changes. A pending write is written to Redis before the Stripe call and cleared only after the response, so a run that times out leaves the intended quantity behind, and the next run under the lease re-sends it under the same idempotency key before it reads the item. That closes the late-write hole where a reconcile read the item before a timed-out write landed, decided nothing was due, and left the team over-billed. A lease that is lost now aborts the run instead of letting it keep writing, so a second run cannot enter the window. `pending[w] # 0` is the claim in the model: `ledger.begin` is the only way to set it, and `ledger.clear` is the only way to clear it.
 
-`LeaseExcludesOverlap` fails like this: a run loses its lease, the code keeps running it until the next `assertHeld` throws, and a second run acquires the lease, so both sit in the window. The lock serializes runs only while it is held.
+Two checked replays keep the pre-fix behaviour honest. `seat-billing-9465` sets `ReplayWrites = FALSE`, so no replay happens before the read, and `ReconcileMatchesSeats` fails on `Write`, `TimedOut`, `Landed`. `seat-billing-9465-overlap` sets `AbortWhenLeaseLost = FALSE`, so a run whose lease expired keeps going, and `LeaseExcludesOverlap` fails on `LeaseLost`, `Acquire`.
 
-Bounds: one team with one subscription item, seat counts 1 and 2, two runs. The lease is atomic and `assertHeld` throws where the code calls it; seat edits happen only inside a run, because every seat path calls `mutateAndSyncSeatBilling`. Not covered: pointer repair, pending-cancellation repair, the snapshot refresh, proration choice, Stripe idempotency keys, Redis, comped teams.
+`node verification/formal/seat-billing/repro.cjs` replays the timed-out write against the real `syncSeatBilling` with a stub Stripe. It prints `join: "Error"`, `reconcile: "RECONCILED"`, `seats: 1`, `billed: 1`, and exits 0.
+
+Bounds: one team with one subscription item, seat counts 1 and 2, two runs. The lease is atomic and `assertHeld` throws where the code calls it; seat edits happen only inside a run, because every seat path calls `mutateAndSyncSeatBilling`. The ledger is modelled as one pending slot per team, which is what the Redis key holds. Not covered: pointer repair, pending-cancellation repair, the snapshot refresh, proration choice, the 24 hour ledger expiry, Redis itself, comped teams.
 
 ### webhook-retry
 

@@ -11,7 +11,16 @@ import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import { isSubscriptionActive } from "@/lib/constants/constants";
 import { reportError } from "@/lib/errors/reportError";
 import { refreshStripeSubscriptionSnapshotWithLockHeld } from "@/lib/stripeSubscriptionSnapshot";
-import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
+import {
+  createMemorySeatBillingWrites,
+  SeatBillingWriteUnsettledError,
+  seatBillingWrites,
+  withTeamSeatBillingLock,
+  type PendingSeatBillingWrite,
+  type SeatBillingLedgerScope,
+  type SeatBillingProration,
+  type SeatBillingWriteLedger,
+} from "@/lib/seatBillingLock";
 import { shouldClearTeamSubscriptionEntitlement } from "@/utils/controllers/stripe/webhook/subscriptionEntitlement";
 
 export type SeatBillingResult =
@@ -70,16 +79,17 @@ export type SeatBillingAdapter = {
     itemId: string,
     update: {
       quantity: number;
-      proration_behavior: "none" | "always_invoice" | "create_prorations";
+      proration_behavior: SeatBillingProration;
     },
-    requestOptions?: { idempotencyKey: string; timeout: number },
+    requestOptions: { idempotencyKey: string; timeout: number },
   ) => Promise<unknown>;
   reportFailure: (error: Error, teamId: string) => Promise<unknown>;
+  writes?: SeatBillingWriteLedger;
 };
 
 export type SeatBillingSerializer = <T>(
   teamId: string,
-  run: (assertHeld: () => void) => Promise<T>,
+  run: (assertHeld: () => void, ledgerScope?: SeatBillingLedgerScope) => Promise<T>,
 ) => Promise<T>;
 
 const STRIPE_UPDATE_TIMEOUT_MS = 15_000;
@@ -332,11 +342,62 @@ async function retrieveCurrentSubscriptionItem(
   return currentItem;
 }
 
+async function replayPendingSeatBillingWrite(
+  teamId: string,
+  pending: PendingSeatBillingWrite,
+  adapter: SeatBillingAdapter,
+  ledger: SeatBillingWriteLedger,
+): Promise<void> {
+  await adapter.updateSubscriptionItem(
+    pending.itemId,
+    {
+      quantity: pending.quantity,
+      proration_behavior: pending.prorationBehavior,
+    },
+    { idempotencyKey: pending.idempotencyKey, timeout: STRIPE_UPDATE_TIMEOUT_MS },
+  );
+  await ledger.clear(teamId, pending.idempotencyKey);
+}
+
+async function applySeatBillingWrite(
+  teamId: string,
+  itemId: string,
+  desiredQuantity: number,
+  isTrialing: boolean,
+  currentQuantity: number,
+  adapter: SeatBillingAdapter,
+  ledger: SeatBillingWriteLedger,
+): Promise<void> {
+  const write: PendingSeatBillingWrite = {
+    idempotencyKey: `seat-billing-${teamId}-${randomUUID()}`,
+    itemId,
+    quantity: desiredQuantity,
+    prorationBehavior: isTrialing
+      ? "none"
+      : desiredQuantity > currentQuantity
+        ? "always_invoice"
+        : "create_prorations",
+  };
+  if (!(await ledger.begin(teamId, write))) {
+    throw new SeatBillingWriteUnsettledError();
+  }
+  await adapter.updateSubscriptionItem(
+    write.itemId,
+    {
+      quantity: write.quantity,
+      proration_behavior: write.prorationBehavior,
+    },
+    { idempotencyKey: write.idempotencyKey, timeout: STRIPE_UPDATE_TIMEOUT_MS },
+  );
+  await ledger.clear(teamId, write.idempotencyKey);
+}
+
 async function syncSeatBilling(
   teamId: string | undefined | null,
   adapter: SeatBillingAdapter,
   exact: boolean,
   assertHeld: () => void = () => {},
+  ledgerScope: SeatBillingLedgerScope = "unlocked",
 ): Promise<SeatBillingResult> {
   if (!teamId) return "SKIPPED";
   try {
@@ -374,6 +435,17 @@ async function syncSeatBilling(
       return "SKIPPED";
     }
 
+    const ledger =
+      adapter.writes ??
+      (ledgerScope === "locked"
+        ? seatBillingWrites
+        : createMemorySeatBillingWrites());
+    const unsettled = await ledger.load(teamId);
+    if (unsettled) {
+      assertHeld();
+      await replayPendingSeatBillingWrite(teamId, unsettled, adapter, ledger);
+    }
+
     const desiredQuantity = await adapter.resolveQuantity(
       teamId,
       team.totalSeats,
@@ -403,20 +475,14 @@ async function syncSeatBilling(
     const isTrialing = activePlan?.subscriptionStatus === "trialing";
 
     assertHeld();
-    await adapter.updateSubscriptionItem(
+    await applySeatBillingWrite(
+      teamId,
       currentItemId,
-      {
-        quantity: desiredQuantity,
-        proration_behavior: isTrialing
-          ? "none"
-          : desiredQuantity > currentQuantity
-            ? "always_invoice"
-            : "create_prorations",
-      },
-      {
-        idempotencyKey: `seat-billing-${randomUUID()}`,
-        timeout: STRIPE_UPDATE_TIMEOUT_MS,
-      },
+      desiredQuantity,
+      isTrialing,
+      currentQuantity,
+      adapter,
+      ledger,
     );
     assertHeld();
     await adapter.refreshSubscriptionSnapshot?.(teamId, activePlan.subscriptionId, assertHeld);
@@ -443,8 +509,8 @@ export async function syncSeatBillingOnJoin(
 ): Promise<SeatBillingResult> {
   if (!teamId) return "SKIPPED";
   try {
-    return await serialize(teamId, (assertHeld) =>
-      syncSeatBilling(teamId, adapter, false, assertHeld),
+    return await serialize(teamId, (assertHeld, ledgerScope) =>
+      syncSeatBilling(teamId, adapter, false, assertHeld, ledgerScope),
     );
   } catch (error) {
     const normalized =
@@ -462,8 +528,8 @@ export async function reconcileSeatBillingForTeam(
   serialize: SeatBillingSerializer = withTeamSeatBillingLock,
 ): Promise<SeatBillingResult> {
   try {
-    return await serialize(teamId, (assertHeld) =>
-      syncSeatBilling(teamId, adapter, true, assertHeld),
+    return await serialize(teamId, (assertHeld, ledgerScope) =>
+      syncSeatBilling(teamId, adapter, true, assertHeld, ledgerScope),
     );
   } catch (error) {
     const normalized =
@@ -490,7 +556,7 @@ export async function mutateAndSyncSeatBilling<T>(
   const adapter = options.adapter ?? productionAdapter;
   const serialize = options.serialize ?? withTeamSeatBillingLock;
 
-  return serialize(teamId, async (assertHeld) => {
+  return serialize(teamId, async (assertHeld, ledgerScope) => {
     assertHeld();
     const mutation = await mutate(assertHeld);
     assertHeld();
@@ -500,6 +566,7 @@ export async function mutateAndSyncSeatBilling<T>(
       adapter,
       options.exact ?? false,
       assertHeld,
+      ledgerScope,
     );
     return { value: mutation.value, billing };
   });
