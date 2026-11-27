@@ -38,6 +38,18 @@ const GENERIC_BASENAMES = new Set([
 const DISTINCTIVE_BASENAME = /^[a-z0-9]+(?:-[a-z0-9]+){1,}\.(?:tsx|ts|jsx|js|scss|md)$/;
 const TEST_PATH = /^tests?\//;
 const SOURCE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+const PRODUCT_EXT = new Set([".ts", ".tsx", ".js", ".jsx"]);
+const NON_PRODUCT = [
+  /^(?:docs?|documentation)\//,
+  /\.(?:md|mdx|txt|rst|adoc|json|yml|yaml|css|scss|snap|png|jpg|jpeg|svg|gif|webp|ico)$/,
+  /^(?:changelog\.d|changelog|news)\//,
+  /^CHANGELOG/,
+  /^(?:\.github|\.circleci|\.buildkite|ci)\//,
+  /^(?:tests?|__tests__|spec|evals?|verification|e2e|fixtures)\//,
+  /(?:^|\/)(?:test|spec)_[^/]+$|\.(?:test|spec)\.[^/]+$|(?:^|\/)conftest\.py$/,
+  /^(?:LICENSE|NOTICE|COPYING|AUTHORS)(?:\.\w+)?$|^\.(?:gitignore|gitattributes|editorconfig|prettierrc|eslintrc)$/,
+];
+const NAMED_LIMIT = 10;
 const SURFACE_FILE = /^src\/(?:pages\/|app\/)/;
 const TRACE_HOPS = 2;
 const ROUTE_HOPS = 4;
@@ -283,12 +295,74 @@ function journeyIds({ pages, bugfix = false } = {}) {
   return [...areas.filter((id) => id !== "area:undefined"), `change:${bugfix ? "repro" : "primary"}`];
 }
 
+function repoPath(file) {
+  return String(file ?? "").trim().replace(/^\.\//, "");
+}
+
+function productChanged(files) {
+  return uniqueSorted((Array.isArray(files) ? files : []).map(repoPath))
+    .filter((file) => file.startsWith("src/") && PRODUCT_EXT.has(path.extname(file)))
+    .filter((file) => !TEST_PATH.test(file) && !/\.(?:test|spec)\.[^/]+$/.test(file));
+}
+
+function notProduct(file) {
+  const name = repoPath(file);
+  return NON_PRODUCT.some((pattern) => pattern.test(name));
+}
+
+function recordedUncovered(unmapped) {
+  return uniqueSorted((Array.isArray(unmapped) ? unmapped : []).map(repoPath).filter(Boolean).filter((file) => !notProduct(file)));
+}
+
+function importClosure({ roots = [], readSource = defaultReadSource } = {}) {
+  const seen = new Set();
+  const covered = new Set();
+  const queue = (Array.isArray(roots) ? roots : []).map(String);
+  while (queue.length) {
+    const file = queue.pop();
+    if (!file || seen.has(moduleKey(file))) continue;
+    seen.add(moduleKey(file));
+    covered.add(moduleKey(file));
+    for (const spec of importSpecifiers(readSource(file))) {
+      const target = importKey(file, spec);
+      if (target) queue.push(target);
+    }
+  }
+  return covered;
+}
+
+function uncoveredFiles({ files = [], unmapped = [], surfaces = [], routes = [], readSource = defaultReadSource } = {}) {
+  const roots = uniqueSorted([...surfaces, ...routes].map((item) => repoPath(item?.file ?? item)).filter(Boolean));
+  const covered = importClosure({ roots: roots.filter((file) => readSource(file) !== ""), readSource });
+  const walked = productChanged(files).filter((file) => !covered.has(moduleKey(file)));
+  return uniqueSorted([...recordedUncovered(unmapped), ...walked]);
+}
+
+function uncoveredReason(paths) {
+  const named = paths.slice(0, NAMED_LIMIT).join(", ");
+  const more = paths.length > NAMED_LIMIT ? ` and ${paths.length - NAMED_LIMIT} more` : "";
+  return `FAIL: ${paths.length} changed product file${paths.length === 1 ? "" : "s"} no planned journey exercises: ${named}${more}. Add or select a journey that exercises ${paths.length === 1 ? "it" : "them"}, then re-run the verifier.`;
+}
+
+function uncoveredPassGate(verdict, { unmapped = [] } = {}) {
+  if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict, notes: "", uncovered: [], demoted: false };
+  const uncovered = recordedUncovered(unmapped);
+  if (!uncovered.length) return { verdict, notes: "", uncovered: [], demoted: false };
+  return { verdict: "FAIL", notes: uncoveredReason(uncovered), uncovered, demoted: true };
+}
+
 module.exports = {
   DISTINCTIVE_BASENAME,
   GENERIC_BASENAMES,
   SHARED_DIRS,
   apiPathOf,
+  importClosure,
   journeyIds,
+  notProduct,
   pagesForFiles,
+  productChanged,
   traceImports,
+  uncoveredFiles,
+  uncoveredPassGate,
+  uncoveredReason,
 };

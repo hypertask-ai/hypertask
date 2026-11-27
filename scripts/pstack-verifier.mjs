@@ -493,6 +493,8 @@ export function decide({ model = {}, plan, evidence, binding, checksPassed = fal
   if (model.unevaluated) return { verdict: "UNEVALUATED", notes: String(model.unevaluated).slice(0, 500) };
   const verdict = normalizeVerdict(model.verdict, model.notes);
   if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict: "FAIL", notes: String(model.notes || "model verdict missing").slice(0, 500) };
+  const gated = uncoveredPassGate(parsed);
+  if (gated.demoted) return { verdict: gated.verdict, notes: gated.notes.slice(0, 500) };
   return { verdict, notes: String(model.notes ?? "").replace(/\s+/g, " ").trim().slice(0, 500) };
 }
 export function noteForeign(list, url, origin, kind) {
@@ -1714,6 +1716,7 @@ export async function planFromRequest(request, deps = {}) {
       console.log(`reach: ${failureText(error, 120)}`);
     }
     const screens = walked ? changedSurfaces({ files: listed.files, walked }) : [];
+    plan.unmapped = journeyLib.uncoveredFiles({ files: listed.files, surfaces: walked?.surfaces ?? [], routes: walked?.routes ?? [], readSource: deps.readSource });
     plan.reachable = surfaces.map((item) => item.file);
     plan.surfaces = screens.map((item) => item.route);
     const reach = [];
@@ -1779,6 +1782,9 @@ export async function planJourneys({ request, pages, ask, key, model, models, bu
   return { items: [...change, ...items], actions: parsed.actions, expect: parsed.expect, reason: parsed.reason, fail: "", unevaluated: "" };
 }
 export const driveNeeded = (plan) => !plan.fail && (plan.actions.length > 0 || (plan.journeys ?? []).some((item) => item.actions.length > 0));
+export function uncoveredPassGate(plan) {
+  return journeyLib.uncoveredPassGate("PASS", { unmapped: plan?.unmapped });
+}
 export const askNeeded = (plan) => !plan.fail && !plan.unevaluated && (plan.journeys ?? []).some((item) => Array.isArray(item.actions) && item.actions.length > 0);
 async function planCommand() {
   const request = JSON.parse(readFileSync(path.join(workDir(), "request", "request.json"), "utf8"));

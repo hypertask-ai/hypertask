@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
+const journeyLib = require("../scripts/lib/pstack-journeys.cjs");
 const load = () => import("../scripts/pstack-verifier.mjs");
 const binding = { sha: "a".repeat(40), run: "9", attempt: "1" };
 const plan = (actions, extra = {}) => ({ ...binding, actions, expect: [], authorFamily: "grok", verifierModel: "deepseek/deepseek-v4.1-flash", ...extra });
@@ -2183,4 +2184,63 @@ test("the app token writes the status and a newer actions status cannot hide it"
     for (const [key, value] of saved) if (value === undefined) delete process.env[key]; else process.env[key] = value;
     fs.rmSync(work, { recursive: true, force: true });
   }
+});
+
+const reachableSources = {
+  "src/app/(board)/page.tsx": 'import { Board } from "@/components/Kanban/board";\n',
+  "src/components/Kanban/board.tsx": "export const Board = 1;\n",
+};
+
+const walk = (files) => journeyLib.uncoveredFiles({
+  files,
+  surfaces: [{ file: "src/app/(board)/page.tsx" }],
+  readSource: (file) => reachableSources[file] ?? "",
+});
+
+test("changed product files no planned journey exercises are named and demote a pass", () => {
+  assert.deepEqual(walk(["src/components/Kanban/board.tsx", "src/utils/orphan-helper.ts"]), ["src/utils/orphan-helper.ts"]);
+  assert.deepEqual(walk(["src/components/Kanban/board.tsx", "src/components/Kanban/missing.tsx"]), ["src/components/Kanban/missing.tsx"]);
+  const gated = journeyLib.uncoveredPassGate("PASS", { unmapped: walk(["src/utils/orphan-helper.ts"]) });
+  assert.equal(gated.verdict, "FAIL");
+  assert.equal(gated.demoted, true);
+  assert.equal(gated.notes, "FAIL: 1 changed product file no planned journey exercises: src/utils/orphan-helper.ts. Add or select a journey that exercises it, then re-run the verifier.");
+  assert.equal(journeyLib.uncoveredPassGate("PASS+NOTES", { unmapped: gated.uncovered }).verdict, "FAIL");
+  assert.equal(journeyLib.uncoveredPassGate("FAIL", { unmapped: gated.uncovered }).verdict, "FAIL");
+});
+
+test("covered product files and docs or test-only changes keep their pass", () => {
+  assert.deepEqual(walk(["src/components/Kanban/board.tsx"]), []);
+  assert.deepEqual(walk(["docs/ci.md", "tests/pstack-verifier.test.cjs", ".github/workflows/ci.yml", "scripts/pstack-verifier.mjs"]), []);
+  assert.deepEqual(journeyLib.uncoveredPassGate("PASS", { unmapped: [] }), { verdict: "PASS", notes: "", uncovered: [], demoted: false });
+  assert.equal(journeyLib.uncoveredPassGate("PASS+NOTES", { unmapped: ["docs/ci.md", "tests/pstack-verifier.test.cjs"] }).verdict, "PASS+NOTES");
+});
+
+test("a plan that left product files unmapped cannot pass on evidence", async () => {
+  const { decide, uncoveredPassGate } = await load();
+  const goto = [{ op: "goto", path: "/project?id=1" }];
+  const mapped = plan(goto, { unmapped: [] });
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: mapped, evidence: evidence(), binding }).verdict, "PASS");
+  assert.equal(decide({ model: { verdict: "PASS+NOTES", notes: "fine" }, plan: mapped, evidence: evidence(), binding }).verdict, "PASS+NOTES");
+  assert.equal(uncoveredPassGate(mapped).demoted, false);
+  const left = plan(goto, { unmapped: ["src/utils/orphan-helper.ts"] });
+  const gated = decide({ model: { verdict: "PASS", notes: "" }, plan: left, evidence: evidence(), binding });
+  assert.equal(gated.verdict, "FAIL");
+  assert.match(gated.notes, /^FAIL: 1 changed product file no planned journey exercises: src\/utils\/orphan-helper\.ts\./);
+  assert.equal(decide({ model: { verdict: "PASS+NOTES", notes: "fine" }, plan: left, evidence: evidence(), binding }).verdict, "FAIL");
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: plan(goto, { unmapped: ["docs/ci.md"] }), evidence: evidence(), binding }).verdict, "PASS");
+});
+
+test("the planner records the product files no journey can reach, so a green run fails", async () => {
+  const { planFromRequest, decide } = await load();
+  const request = { ...binding, baseSha: "b".repeat(40), title: "HTPR-9031 [IMPROVE] Ticket chat starters", body: "Author-Model: codex", diff: "", filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const sources = ["src/app/chat/page.tsx"];
+  const readSource = (file) => (file === "src/app/chat/page.tsx" ? "export default 1;\n" : "");
+  const ask = () => ({ actions: [{ op: "goto", path: "/chat" }], expect: [], reason: "check chat" });
+  const evidence = { ...binding, steps: [{ ok: true, error: "" }], expects: [], navigations: [{ url: "http://127.0.0.1:3100/chat", status: 200 }], offOrigin: [] };
+  const left = await planFromRequest({ ...request, files: ["src/utils/orphan-helper.ts"] }, { binding, pages: [], sources, readSource, ask });
+  assert.deepEqual(left.unmapped, ["src/utils/orphan-helper.ts"]);
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: left, evidence, binding }).verdict, "FAIL");
+  const reached = await planFromRequest({ ...request, files: ["src/app/chat/page.tsx"] }, { binding, pages: [], sources, readSource, ask });
+  assert.deepEqual(reached.unmapped, []);
+  assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: reached, evidence, binding }).verdict, "PASS");
 });
