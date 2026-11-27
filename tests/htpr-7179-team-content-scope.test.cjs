@@ -164,7 +164,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
     test(`${mode} ${actor}: comment access and creation use the real resolver and locked predicate`, async () => {
       const f = teamFixture(mode, actor);
       const { findTaskByIdentifier } = f.load('src/lib/mcp/tasks/resolveTask.ts');
-      const { persistComment } = f.load('src/utils/controllers/comments/persistComment.ts', { './agentCommentFanout': { findCommentWebhookAgentIds: async () => [], isAgentCommentFanoutFixOn: async () => false } });
+      const { persistComment } = f.load('src/utils/controllers/comments/persistComment.ts', { './agentCommentFanout': { findCommentWebhookAgentIds: async () => [] } });
       f.prisma.$queryRaw = async () => [{ id: 1 }];
       for (const board of [15, 16, 25, 26]) {
         await f.run(req('comments', 'POST'), async () => {

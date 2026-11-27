@@ -363,7 +363,7 @@ test("no human recipients means no inbox lock is taken", async () => {
   assert.equal(database.notifications.length, 0);
 });
 
-test("dedupe, board mute and reminder rules pick the same recipients as before", async () => {
+test("dedupe, board mute and reminder rules preserve recipients and broadcast to follower agents", async () => {
   const database = createDatabase({
     mutedUserIds: [12],
     reminders: [
@@ -426,7 +426,7 @@ test("dedupe, board mute and reminder rules pick the same recipients as before",
   }
   assert.deepEqual(
     broadcasts.map(({ userId }) => userId).sort(),
-    [11, 14, 41],
+    [11, 14, 41, 42],
   );
   assert.ok(broadcasts.every(({ originUserId }) => originUserId === 7));
 });

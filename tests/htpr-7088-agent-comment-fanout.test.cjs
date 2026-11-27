@@ -3,21 +3,9 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const flagKey = "htpr-7088-agent-comment-fanout";
 let entryId = 0;
 
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
-
-function load(flagOn, flagChecks) {
-  stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key, userId) => {
-      flagChecks.push([key, userId]);
-      return flagOn;
-    },
-  });
+function load() {
   const jiti = require("jiti")(path.join(root, `tests/htpr-7088-${++entryId}.cjs`), {
     interopDefault: true,
     alias: { "@": path.join(root, "src") },
@@ -60,9 +48,8 @@ function notificationDeps({ assignees = [], followers = [] }) {
 const task = { id: 99, projectId: 15, userId: 8 };
 const comment = { id: 501 };
 
-test("flag on: human comment gives assigned and following agents a row and a live inbox update", async () => {
-  const checks = [];
-  const { notifications } = load(true, checks);
+test("human comment gives assigned and following agents a row and a live inbox update", async () => {
+  const { notifications } = load();
   const { created, broadcasts, deps } = notificationDeps({
     assignees: [agentRow("agent-a", 40)],
     followers: [agentRow("agent-b", 41), agentRow("agent-a", 40)],
@@ -73,22 +60,10 @@ test("flag on: human comment gives assigned and following agents a row and a liv
     [["agent-a", 40, 501, 7, false], ["agent-b", 41, 501, 7, false]],
   );
   assert.deepEqual(broadcasts.map((b) => b.userId).sort(), [40, 41]);
-  assert.deepEqual(checks[0], [flagKey, 7]);
 });
 
-test("flag off: follower agent still gets a row but no live inbox update (today)", async () => {
-  const { notifications } = load(false, []);
-  const { created, broadcasts, deps } = notificationDeps({
-    assignees: [agentRow("agent-a", 40)],
-    followers: [agentRow("agent-b", 41)],
-  });
-  await notifications.createNotificationForComment(deps, task, comment, 7, [], null);
-  assert.deepEqual(created.map((r) => r.agentId), ["agent-a", "agent-b"]);
-  assert.deepEqual(broadcasts.map((b) => b.userId), [40]);
-});
-
-test("flag on: the author agent gets no inbox row, others still do", async () => {
-  const { notifications } = load(true, []);
+test("the author agent gets no inbox row, others still do", async () => {
+  const { notifications } = load();
   const { created, broadcasts, deps } = notificationDeps({
     assignees: [agentRow("agent-a", 40)],
     followers: [agentRow("agent-b", 41)],
@@ -98,42 +73,31 @@ test("flag on: the author agent gets no inbox row, others still do", async () =>
   assert.deepEqual(broadcasts.map((b) => b.userId), [41]);
 });
 
-test("flag on: an author agent that only follows gets no row either", async () => {
-  const { notifications } = load(true, []);
+test("an author agent that only follows gets no row either", async () => {
+  const { notifications } = load();
   const { created, deps } = notificationDeps({ followers: [agentRow("agent-b", 41)] });
   await notifications.createNotificationForComment(deps, task, comment, 7, [], "agent-b");
   assert.deepEqual(created, []);
 });
 
-test("flag off: the author agent still notifies itself (today's bug)", async () => {
-  const { notifications } = load(false, []);
-  const { created, deps } = notificationDeps({ assignees: [agentRow("agent-a", 40)] });
-  await notifications.createNotificationForComment(deps, task, comment, 7, [], "agent-a");
-  assert.deepEqual(created.map((r) => [r.agentId, r.fromAgentId]), [["agent-a", "agent-a"]]);
+test("human assignee and follower rows are unchanged", async () => {
+  const { notifications } = load();
+  const sent = [];
+  const { deps } = notificationDeps({});
+  deps.checkRemindersAndCreateNotifications = async (ids, projectId, taskId, data) => {
+    sent.push([ids, projectId, taskId, data]);
+  };
+  await notifications.createNotificationForComment(deps, task, comment, 7, [11, 12], null);
+  assert.deepEqual(sent, [
+    [[11, 12], 15, 99, { type: "Comment", commentId: 501, taskId: 99, projectId: 15, fromUserId: 7 }],
+  ]);
 });
 
-test("human assignee and follower rows are unchanged with the flag on or off", async () => {
-  for (const flagOn of [true, false]) {
-    const { notifications } = load(flagOn, []);
-    const sent = [];
-    const { deps } = notificationDeps({});
-    deps.checkRemindersAndCreateNotifications = async (ids, projectId, taskId, data) => {
-      sent.push([ids, projectId, taskId, data]);
-    };
-    await notifications.createNotificationForComment(deps, task, comment, 7, [11, 12], null);
-    assert.deepEqual(sent, [
-      [[11, 12], 15, 99, { type: "Comment", commentId: 501, taskId: 99, projectId: 15, fromUserId: 7 }],
-    ]);
-  }
-});
-
-test("no agent recipients: the flag is not even read", async () => {
-  const checks = [];
-  const { notifications } = load(true, checks);
+test("no agent recipients: no inbox rows", async () => {
+  const { notifications } = load();
   const { created, deps } = notificationDeps({});
   await notifications.createNotificationForComment(deps, task, comment, 7, [], null);
   assert.deepEqual(created, []);
-  assert.deepEqual(checks, []);
 });
 
 function webhookTx({ assignees, followers }) {
@@ -143,25 +107,16 @@ function webhookTx({ assignees, followers }) {
   };
 }
 
-test("webhook targets with flag off: assigned agents only, author included (today)", async () => {
-  const { fanout } = load(false, []);
-  const ids = await fanout.findCommentWebhookAgentIds(
-    webhookTx({ assignees: ["agent-a"], followers: ["agent-b"] }),
-    { taskId: 99, authorAgentId: "agent-a", fixOn: false },
-  );
-  assert.deepEqual(ids, ["agent-a"]);
-});
-
-test("webhook targets with flag on: assigned and following agents, deduped, never the author", async () => {
-  const { fanout } = load(true, []);
+test("webhook targets: assigned and following agents, deduped, never the author", async () => {
+  const { fanout } = load();
   const ids = await fanout.findCommentWebhookAgentIds(
     webhookTx({ assignees: ["agent-a", "agent-c"], followers: ["agent-b", "agent-a"] }),
-    { taskId: 99, authorAgentId: "agent-c", fixOn: true },
+    { taskId: 99, authorAgentId: "agent-c" },
   );
   assert.deepEqual(ids.sort(), ["agent-a", "agent-b"]);
   const human = await fanout.findCommentWebhookAgentIds(
     webhookTx({ assignees: ["agent-a"], followers: ["agent-b"] }),
-    { taskId: 99, authorAgentId: null, fixOn: true },
+    { taskId: 99, authorAgentId: null },
   );
   assert.deepEqual(human.sort(), ["agent-a", "agent-b"]);
 });

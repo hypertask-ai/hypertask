@@ -300,7 +300,7 @@ test("ineligible and table boards keep inline behavior, while enabled eligible K
   await withBoard(async ({ render, requests }) => { await render({ active: false }); assert.equal(document.querySelector('[role="dialog"]'), null); assert.ok(document.getElementById("inline-card")); assert.equal(requests.length, 0); });
 });
 
-test("integration wires pointer blocking, keeps the independent inline-removal switch, and opts overlay out of token auto-generation", () => {
+test("integration wires pointer blocking, keeps the inline card removed, and opts overlay out of token auto-generation", () => {
   const home = read("src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx");
   const landing = read("src/app/[...boardURL]/LandingPage.tsx");
   const screen = read("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx");
@@ -311,9 +311,7 @@ test("integration wires pointer blocking, keeps the independent inline-removal s
   assert.match(home, /const connectOverlayEnabled = useFlag\(HTPR_7550_CONNECT_OVERLAY_FLAG\)/);
   assert.match(home, /tasksHydrated && secondaryStartupEnabled/);
   assert.match(home, /displaySections\?\.some/);
-  assert.match(landing, /const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser\?\.id/);
-  assert.match(landing, /\{\(!connectOverlayEnabled \|\| boardLayout === "table"\) && inlineConnectCard\}/);
-  assert.match(landing, /inlineConnectCard=\{connectOverlayEnabled \? inlineConnectCard : null\}/);
+  assert.doesNotMatch(landing, /inlineConnectCard|connectBlockRemoved/);
   assert.match(landing, /connectOverlayEnabled=\{connectOverlayEnabled \? boardRender.boardLayout !== "table" : false\}/);
   assert.doesNotMatch(landing, /useConnectAgentOverlay/);
   assert.match(screen, /overlay=\{overlayEnabled && props.overlay\} onConnected=\{overlayEnabled \? props.onConnected : undefined\}/);

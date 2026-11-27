@@ -38,6 +38,17 @@ const GENERIC_BASENAMES = new Set([
 const DISTINCTIVE_BASENAME = /^[a-z0-9]+(?:-[a-z0-9]+){1,}\.(?:tsx|ts|jsx|js|scss|md)$/;
 const TEST_PATH = /^tests?\//;
 const SOURCE_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+const NON_PRODUCT = [
+  /^(?:docs?|documentation)\//,
+  /\.(?:md|mdx|txt|rst|adoc|json|yml|yaml|css|scss|snap|png|jpg|jpeg|svg|gif|webp|ico)$/,
+  /^(?:changelog\.d|changelog|news)\//,
+  /^CHANGELOG/,
+  /^(?:\.github|\.circleci|\.buildkite|ci)\//,
+  /^(?:tests?|__tests__|spec|evals?|verification|e2e|fixtures)\//,
+  /(?:^|\/)(?:test|spec)_[^/]+$|\.(?:test|spec)\.[^/]+$|(?:^|\/)conftest\.py$/,
+  /^(?:LICENSE|NOTICE|COPYING|AUTHORS)(?:\.\w+)?$|^\.(?:gitignore|gitattributes|editorconfig|prettierrc|eslintrc)$/,
+];
+const NAMED_LIMIT = 10;
 const SURFACE_FILE = /^src\/(?:pages\/|app\/)/;
 const TRACE_HOPS = 2;
 const ROUTE_HOPS = 4;
@@ -116,6 +127,27 @@ function importSpecifiers(text) {
   return [...specs];
 }
 
+function runtimeImportSpecifiers(text) {
+  const source = String(text ?? "").replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (token) => token.startsWith("/") ? " " : token);
+  const pattern = /\b(?:import|export)\b\s*(type\s+(?:\{[^}]*\}|\*(?:\s+as\s+[\w$]+)?|[\w$]+)|(?:[\w$]+\s*,\s*)?(?:\{[^}]*\}|\*(?:\s+as\s+[\w$]+)?)|[\w$]+)\s*from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\s+type\s+[\w$]+\s*=\s*require\s*\([^)]*\)|\b(require|import)\s*\(\s*["']([^"']+)["']\s*\)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g;
+  const specs = new Set();
+  for (const match of source.matchAll(pattern)) {
+    if (match[1]) {
+      const clause = match[1].trim();
+      const members = /^\{([^}]*)\}$/.exec(clause)?.[1].split(",").map((item) => item.trim()).filter(Boolean);
+      if (/^type\s/.test(clause) || (members?.length && members.every((item) => /^type\s+(?!as\b)[\w$]+/.test(item)))) continue;
+      specs.add(match[2]);
+    } else if (match[3]) specs.add(match[3]);
+    else if (match[4]) {
+      const before = source.slice(0, match.index);
+      const after = source.slice(match.index + match[0].length);
+      if (match[4] === "import" && (/\btypeof\s*$/.test(before) || /^\s*\.\s*(?!(?:then|catch|finally)\b)[\w$]+/.test(after))) continue;
+      specs.add(match[5]);
+    }
+  }
+  return [...specs];
+}
+
 function appDirKey(dir) {
   const parts = String(dir).slice("src/app".length).split("/").filter((part) => part && !ROUTE_GROUP.test(part));
   return ["src/app", ...parts].join("/");
@@ -170,11 +202,15 @@ function appRoute(file, { boardPath = "", taskPath = "", pageDirs = new Set() } 
   return `/${parts.join("/")}`;
 }
 
-function importKey(from, spec) {
+function importPath(from, spec) {
   const value = String(spec);
-  if (value.startsWith("@/")) return moduleKey(path.posix.join("src", value.slice(2)));
+  if (value.startsWith("@/")) return path.posix.join("src", value.slice(2));
   if (!value.startsWith(".")) return "";
-  return moduleKey(path.posix.normalize(path.posix.join(path.posix.dirname(from), value)));
+  return path.posix.normalize(path.posix.join(path.posix.dirname(from), value));
+}
+
+function importKey(from, spec) {
+  return moduleKey(importPath(from, spec));
 }
 
 function defaultSources() {
@@ -283,12 +319,105 @@ function journeyIds({ pages, bugfix = false } = {}) {
   return [...areas.filter((id) => id !== "area:undefined"), `change:${bugfix ? "repro" : "primary"}`];
 }
 
+function repoPath(file) { return String(file ?? "").trim().replace(/^\.\//, ""); }
+
+function currentFiles(files) { return (Array.isArray(files) ? files : []).filter((file) => file?.status !== "removed").map((file) => repoPath(typeof file === "string" ? file : file?.filename)).filter(Boolean); }
+
+function productChanged(files) {
+  return uniqueSorted(currentFiles(files))
+    .filter((file) => file.startsWith("src/") && !/\.d\.[cm]?ts$/.test(file) && SOURCE_EXT.includes(path.extname(file)))
+    .filter((file) => !TEST_PATH.test(file) && !/\.(?:test|spec)\.[^/]+$/.test(file));
+}
+
+function notProduct(file) { return NON_PRODUCT.some((pattern) => pattern.test(repoPath(file))); }
+
+function recordedUncovered(unmapped) { return uniqueSorted((Array.isArray(unmapped) ? unmapped : []).map(repoPath).filter(Boolean).filter((file) => !notProduct(file))); }
+
+const RESOLVE_EXT = [...SOURCE_EXT, ...SOURCE_EXT.map((ext) => `/index${ext}`)];
+
+function resolveSource(key, readSource) {
+  if (!key) return "";
+  for (const candidate of [key, ...RESOLVE_EXT.map((ext) => `${key}${ext}`)]) {
+    if (readSource(candidate) !== "") return candidate;
+  }
+  return "";
+}
+
+function importClosure({ roots = [], readSource = defaultReadSource } = {}) {
+  const seen = new Set();
+  const covered = new Set();
+  const queue = (Array.isArray(roots) ? roots : []).map(String);
+  while (queue.length) {
+    const file = queue.pop();
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    covered.add(file);
+    const text = readSource(file);
+    if (!text) continue;
+    for (const spec of runtimeImportSpecifiers(text)) {
+      const target = resolveSource(importPath(file, spec), readSource);
+      if (target) queue.push(target);
+    }
+  }
+  return covered;
+}
+
+function uncoveredFiles({ files = [], unmapped = [], surfaces = [], routes = [], readSource = defaultReadSource } = {}) {
+  const roots = uniqueSorted([...surfaces, ...routes].map((item) => repoPath(item?.file ?? item)).filter(Boolean));
+  const covered = importClosure({ roots: roots.filter((file) => readSource(file) !== ""), readSource });
+  const obsolete = new Set((Array.isArray(files) ? files : []).flatMap((file) => typeof file === "object" && file ? [file.previous_filename, ...(file.status === "removed" ? [file.filename] : [])] : []).filter(Boolean));
+  const walked = productChanged(files).filter((file) => !covered.has(file));
+  return uniqueSorted([...recordedUncovered(unmapped).filter((file) => !obsolete.has(file)), ...walked]);
+}
+
+function apiMethods(file, text) {
+  const methods = /^src\/app\/api\/.*\/route\.[cm]?[jt]sx?$/.test(file)
+    ? [...String(text).matchAll(/\bexport\s+(?:(?:async\s+)?function\s+([A-Z]+)\b|(?:const|let|var)\s+([A-Z]+)\b|\{([^}]+)\})/g)].flatMap((match) => match[1] || match[2] || match[3].split(",").map((item) => item.trim().split(/\s+as\s+/).pop()))
+    : /^src\/pages\/api\//.test(file) ? [...String(text).matchAll(/\bmethod\s*[!=]==?\s*["']([A-Z]+)["']|\bcase\s*["']([A-Z]+)["']\s*:/g)].map((match) => match[1] || match[2]) : [];
+  return uniqueSorted(methods.filter((method) => /^(?:GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$/.test(method)));
+}
+
+function journeyRoots({ sources = defaultSources(), readSource = defaultReadSource, boardPath = "", taskPath = "" } = {}) {
+  const pageDirs = pageRouteDirs(sources);
+  const listed = new Set(sources);
+  const entries = sources.filter((file) => PAGE_FILE.test(path.posix.basename(file)) || /^src\/(?:app|pages)\/api\//.test(file)).map((file) => ({ file, route: appRoute(file, { boardPath, taskPath, pageDirs }), methods: apiMethods(file, readSource(file)) }));
+  return entries.flatMap((entry) => {
+    const roots = [entry];
+    if (/^src\/(?:app|pages)\/api\//.test(entry.file)) return roots;
+    for (let dir = path.posix.dirname(entry.file); dir === "src/app" || dir.startsWith("src/app/"); dir = path.posix.dirname(dir)) {
+      for (const ext of SOURCE_EXT) if (listed.has(`${dir}/layout${ext}`)) roots.push({ file: `${dir}/layout${ext}`, route: entry.route, pageFile: entry.file });
+    }
+    return roots;
+  });
+}
+
+function uncoveredReason(paths) {
+  const named = paths.slice(0, NAMED_LIMIT).join(", ");
+  const more = paths.length > NAMED_LIMIT ? ` and ${paths.length - NAMED_LIMIT} more` : "";
+  return `FAIL: ${paths.length} changed product file${paths.length === 1 ? "" : "s"} no planned journey exercises: ${named}${more}. Add or select a journey that exercises ${paths.length === 1 ? "it" : "them"}, then re-run the verifier.`;
+}
+
+function uncoveredPassGate(verdict, { unmapped = [] } = {}) {
+  if (verdict !== "PASS" && verdict !== "PASS+NOTES") return { verdict, notes: "", uncovered: [], demoted: false };
+  const uncovered = recordedUncovered(unmapped);
+  if (!uncovered.length) return { verdict, notes: "", uncovered: [], demoted: false };
+  return { verdict: "FAIL", notes: uncoveredReason(uncovered), uncovered, demoted: true };
+}
+
 module.exports = {
   DISTINCTIVE_BASENAME,
   GENERIC_BASENAMES,
   SHARED_DIRS,
   apiPathOf,
+  currentFiles,
+  importClosure,
   journeyIds,
+  journeyRoots,
+  notProduct,
   pagesForFiles,
+  productChanged,
   traceImports,
+  uncoveredFiles,
+  uncoveredPassGate,
+  uncoveredReason,
 };
