@@ -2230,6 +2230,99 @@ test("a plan that left product files unmapped cannot pass on evidence", async ()
   assert.equal(decide({ model: { verdict: "PASS", notes: "" }, plan: plan(goto, { unmapped: ["docs/ci.md"] }), evidence: evidence(), binding }).verdict, "PASS");
 });
 
+test("coverage follows final journey actions, not journey names or all traced surfaces", async () => {
+  const { coverageRoots, planFromRequest } = await load();
+  const text = { ...reachableSources, "src/app/detail/page.tsx": 'import { Panel } from "@/components/detail/panel";', "src/components/detail/panel.tsx": "export const Panel = 1;" };
+  const files = ["src/components/Kanban/board.tsx", "src/components/detail/panel.tsx"];
+  const options = { sources: Object.keys(text), readSource: (file) => text[file] ?? "" };
+  const journeys = [{ journey: "change:primary", actions: [{ op: "goto", path: "/" }] }];
+  const held = coverageRoots({ journeys, ...options });
+  assert.deepEqual(held.map((entry) => entry.file), ["src/app/(board)/page.tsx"]);
+  assert.deepEqual(journeyLib.uncoveredFiles({ files, surfaces: held, ...options }), [files[1]]);
+  assert.deepEqual(coverageRoots({ journeys: [{ journey: "area:detail", actions: [{ op: "shot" }] }], ...options }), []);
+  const both = coverageRoots({ journeys: [...journeys, { journey: "area:detail", actions: [{ op: "goto", path: "/detail" }] }], ...options });
+  assert.deepEqual(journeyLib.uncoveredFiles({ files, surfaces: both, ...options }), []);
+  const request = { ...binding, title: "HTPR-9748 [IMPROVE] Coverage", body: "Author-Model: codex", files, diff: "", boardPath: "/", taskPath: "/detail" };
+  const built = await planFromRequest(request, { binding, pages: [{ name: "detail", text: files[1] }], ground: { routes: [], corpus: "Board" }, ...options, ask: (prompt) => ({ actions: prompt.includes("DATA: FEATURE PAGE") ? [{ op: "goto", path: "/detail" }, { op: "click", text: "Missing control" }] : journeys[0].actions, expect: [], reason: "check board" }) });
+  assert.deepEqual(built.journeys.map((item) => item.journey), ["change:primary"]);
+  assert.deepEqual(built.unmapped, [files[1]]);
+});
+
+test("selected page layouts and API actions cover only their own runtime dependencies", async () => {
+  const { coverageRoots } = await load();
+  const sources = ["src/app/chat/page.tsx", "src/app/layout.tsx", "src/app/other/layout.tsx", "src/pages/api/tasks/[id].ts", "src/app/api/other/route.ts"];
+  const journeys = [{ journey: "change:primary", actions: [{ op: "goto", path: "/chat?tab=1" }, { op: "api", path: "/api/tasks/{task}" }] }];
+  assert.deepEqual(coverageRoots({ journeys, sources }).map((entry) => entry.file), [sources[0], sources[1], sources[3]]);
+  assert.deepEqual(coverageRoots({ journeys: [{ actions: [{ op: "goto", path: "/chat/other" }] }], sources }), []);
+});
+
+test("extensionless imports resolve every source and index extension transitively", () => {
+  for (const ext of [".ts", ".tsx", ".js", ".jsx", ".cjs", ".mjs", "/index.ts", "/index.tsx", "/index.js", "/index.jsx", "/index.cjs", "/index.mjs"]) {
+    const sources = { "src/app/chat/page.tsx": 'import "@/components/A";', [`src/components/A${ext}`]: `export { helper } from "${ext.startsWith("/") ? "../../" : "../"}lib/helper";`, "src/lib/helper.ts": "export const helper = 1;" };
+    const readSource = (file) => sources[file] ?? "";
+    const options = { files: ["src/lib/helper.ts"], surfaces: [{ file: "src/app/chat/page.tsx" }], readSource };
+    assert.deepEqual(journeyLib.uncoveredFiles(options), [], ext);
+    sources[`src/components/A${ext}`] = "export const value = 1;";
+    assert.deepEqual(journeyLib.uncoveredFiles(options), ["src/lib/helper.ts"], ext);
+  }
+  const sources = { "src/app/page.tsx": 'import "@/lib/value.js";', "src/lib/value.js": "export const value = 1;", "src/lib/value.ts": "export const value = 2;" };
+  assert.deepEqual(journeyLib.uncoveredFiles({ files: ["src/lib/value.ts"], surfaces: ["src/app/page.tsx"], readSource: (file) => sources[file] ?? "" }), ["src/lib/value.ts"]);
+});
+
+test("type-only imports and exports do not claim runtime coverage", () => {
+  const typed = ['import type { Shape } from "@/lib/value";', 'export type { Shape } from "@/lib/value";', 'export type * from "@/lib/value";', 'import { type Shape, type Other as Alias } from "@/lib/value";', 'export { type Shape } from "@/lib/value";', 'type Shape = import("@/lib/value").Shape;', 'type Shape = typeof import("@/lib/value");', 'let shape: Promise<import("@/lib/value").Shape>;', 'import type Shape = require("@/lib/value");'];
+  const runtime = ['import { type Shape, value } from "@/lib/value";', 'export { type Shape, value } from "@/lib/value";', 'import type from "@/lib/value";', 'import { type as value } from "@/lib/value";', 'import "@/lib/value";', 'export * from "@/lib/value";', 'const value = require("@/lib/value");', 'const value = import("@/lib/value");', 'import("@/lib/value").then(use);'];
+  const check = (text) => journeyLib.uncoveredFiles({ files: ["src/lib/value.ts"], surfaces: ["src/app/page.tsx"], readSource: (file) => ({ "src/app/page.tsx": text, "src/lib/value.ts": "export const value = 1;" }[file] ?? "") });
+  for (const text of typed) assert.deepEqual(check(text), ["src/lib/value.ts"], text);
+  for (const text of runtime) assert.deepEqual(check(text), [], text);
+  for (const text of runtime) assert.deepEqual(check(`${typed[0]}\n${text}`), [], text);
+  assert.deepEqual(check('const text = \'import "@/lib/value"\';'), ["src/lib/value.ts"]);
+});
+
+test("deleted files and old rename paths are excluded without hiding uncovered live files", async () => {
+  const { planFromRequest, takeFileList } = await load();
+  const entries = [{ filename: "src/components/Gone.tsx", status: "removed" }, { filename: "src/components/Live.tsx", previous_filename: "src/components/Old.tsx", status: "renamed" }, { filename: "src/app/chat/page.tsx", status: "modified" }];
+  const files = takeFileList(entries).files;
+  assert.ok(files.includes("src/components/Old.tsx"));
+  assert.deepEqual(journeyLib.productChanged(entries), ["src/app/chat/page.tsx", "src/components/Live.tsx"]);
+  assert.deepEqual(journeyLib.uncoveredFiles({ files: entries, unmapped: ["src/components/Gone.tsx", "src/components/Old.tsx"], readSource: () => "" }), ["src/app/chat/page.tsx", "src/components/Live.tsx"]);
+  const sources = ["src/app/chat/page.tsx", "src/components/Live.tsx"];
+  const readSource = (file) => ({ "src/app/chat/page.tsx": 'import "@/components/Live";', "src/components/Live.tsx": "export const value = 1;" }[file] ?? "");
+  const request = { ...binding, title: "HTPR-9748 [IMPROVE] Coverage", body: "Author-Model: codex", files, coverageFiles: journeyLib.currentFiles(entries), diff: "", boardPath: "/", taskPath: "/detail" };
+  const options = { binding, pages: [], sources, readSource, ground: { routes: [], corpus: "" }, ask: () => ({ actions: [{ op: "goto", path: "/chat" }], expect: [], reason: "check chat" }) };
+  assert.deepEqual((await planFromRequest(request, options)).unmapped, []);
+  assert.deepEqual((await planFromRequest({ ...request, coverageFiles: [...request.coverageFiles, "src/lib/uncovered.ts"] }, options)).unmapped, ["src/lib/uncovered.ts"]);
+  assert.deepEqual((await planFromRequest({ ...request, coverageFiles: [] }, options)).unmapped, []);
+});
+
+test("resolve preserves old paths for guards but passes only current paths to coverage", async () => {
+  const { resolveCommand } = await load();
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pv-coverage-"));
+  const saved = ["GITHUB_REPOSITORY", "GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "WORK", "GITHUB_OUTPUT"].map((key) => [key, process.env[key]]);
+  const entries = [{ filename: "src/lib/gone.ts", status: "removed" }, { filename: "src/lib/live.ts", previous_filename: "src/lib/old.ts", status: "renamed" }];
+  const pull = { number: 7, state: "open", draft: false, commits: 1, user: { login: RUNNER }, body: "Author-Model: codex", base: { ref: "production", sha: "b".repeat(40) }, head: { sha: binding.sha, repo: { full_name: "acme/app" } } };
+  Object.assign(process.env, { GITHUB_REPOSITORY: "acme/app", GITHUB_RUN_ID: binding.run, GITHUB_RUN_ATTEMPT: binding.attempt, WORK: dir, GITHUB_OUTPUT: path.join(dir, "output") });
+  try {
+    await resolveCommand({ event: { workflow_run: { conclusion: "success", head_sha: binding.sha, pull_requests: [{ number: 7 }] } }, gh: (args) => {
+      const url = args.join(" ");
+      if (url.includes("/pulls/7/commits")) return JSON.stringify([[{ sha: binding.sha, author: { login: RUNNER }, committer: { login: RUNNER }, commit: { message: "Author-Model: codex" } }]]);
+      if (url.includes("/pulls/7/files")) { assert.ok(url.includes("status")); return entries.map((entry) => JSON.stringify(entry)).join("\n"); }
+      if (url.includes("vnd.github.diff")) return "";
+      if (url.includes("/pulls/7")) return JSON.stringify(pull);
+      if (url.includes(`/commits/${binding.sha}`)) return JSON.stringify({ commit: { tree: { sha: "e".repeat(40) } } });
+      if (url.includes("/issues/7/comments")) return "[]";
+      throw new Error(url);
+    } });
+    const request = JSON.parse(fs.readFileSync(path.join(dir, "request/request.json"), "utf8"));
+    assert.deepEqual(request.files, ["src/lib/gone.ts", "src/lib/live.ts", "src/lib/old.ts"]);
+    assert.deepEqual(request.coverageFiles, ["src/lib/live.ts"]);
+  } finally {
+    for (const [key, value] of saved) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the planner records the product files no journey can reach, so a green run fails", async () => {
   const { planFromRequest, decide } = await load();
   const request = { ...binding, baseSha: "b".repeat(40), title: "HTPR-9031 [IMPROVE] Ticket chat starters", body: "Author-Model: codex", diff: "", filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };

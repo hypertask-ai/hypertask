@@ -1603,13 +1603,15 @@ export async function resolveCommand(io = {}) {
   if (!eligiblePull(item, repo, sha)) { output({ stop: "true", mark: "skip", sha }); return; }
   let botLogin = "";
   let listed = null;
+  let fileEntries = [];
   const owned = pullCommits(call, repo, item.number, item.commits);
   const commitsKnown = owned ?? [];
   if (BOT_LOGINS.has(item.user?.login)) {
     const again = JSON.parse(call(["api", pullUrl(repo, number)]));
     const lastSha = commitsKnown.at(-1)?.sha;
     if (again?.head?.sha !== sha || (commitsKnown.length > 0 && lastSha !== sha)) { output({ stop: "true", mark: "skip", sha }); return; }
-    listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
+    fileEntries = parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename,status}"]));
+    listed = takeFileList(fileEntries);
     const onBaseBranch = baseBranchMembership(call, repo, item);
     const trusted = commitsTrusted(commitsKnown, onBaseBranch);
     if (!trusted) {
@@ -1631,7 +1633,10 @@ export async function resolveCommand(io = {}) {
     output({ stop: "true", mark: "failure", description: "FAIL: author model unknown", sha });
     return;
   }
-  if (!listed) listed = takeFileList(parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename}"])));
+  if (!listed) {
+    fileEntries = parseFileRows(call(["api", "--paginate", `repos/${repo}/pulls/${item.number}/files`, "--jq", ".[] | {filename,previous_filename,status}"]));
+    listed = takeFileList(fileEntries);
+  }
   const diff = call(["api", "-H", "Accept: application/vnd.github.diff", `repos/${repo}/pulls/${item.number}`]).slice(0, 12000);
   const dir = path.join(workDir(), "request");
   mkdirSync(dir, { recursive: true });
@@ -1643,7 +1648,7 @@ export async function resolveCommand(io = {}) {
   const reused = await reuseVerdict(io, { repo, item, sha, tree: headTree, diff: fullDiff, patchId, author: botLogin || gate.author });
   if (reused) { output({ stop: "true", mark: "success", description: statusDescription(reused), sha }); return; }
   if (!/^[0-9a-f]{40}$/.test(baseSha)) { output({ stop: "true", mark: "skip", sha }); return; }
-  const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
+  const request = { ...bound, pr: item.number, baseSha, tree: headTree, patchId, diffSha256: compareLib.sha256(fullDiff), title: String(item.title ?? "").slice(0, 300), body: String(item.body ?? "").slice(0, 4000), coverageFiles: journeyLib.currentFiles(fileEntries).slice(0, FILE_LIST_CAP), files: listed.files, filesTruncated: listed.filesTruncated, author: botLogin ? "" : gate.author, diff, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
   if (botLogin) request.botLogin = botLogin;
   writeFileSync(path.join(dir, "request.json"), `${JSON.stringify(request)}\n`, { mode: 0o600 });
   output({ stop: "false", mark: "pending", description: "Planning a user check", pr: String(item.number), sha, base: baseSha, files: listed.files.join("\n"), author: request.author });
@@ -1690,6 +1695,12 @@ export async function settleGrounding({ plan, request, pages, reach, ask, picked
   if (!plan.unevaluated && review.dropped.some((text) => text.startsWith("change:")) && kept === 0) plan.unevaluated = `plan expected a failure it cannot force: ${review.dropped.join("; ")}`.slice(0, 500);
   return plan;
 }
+export function coverageRoots({ journeys = [], ...options } = {}) {
+  const actions = journeys.flatMap((item) => item.actions ?? []);
+  return journeyLib.journeyRoots(options).filter((entry) => actions.some((action) => action.op === "api"
+    ? groundLib.routeIn([entry.file], action.path)
+    : action.op === "goto" && entry.route && routeKey(action.path) === routeKey(entry.route)));
+}
 export async function planFromRequest(request, deps = {}) {
   const ask = deps.ask ?? askVerifier;
   const binding = deps.binding ?? bindingNow();
@@ -1716,7 +1727,6 @@ export async function planFromRequest(request, deps = {}) {
       console.log(`reach: ${failureText(error, 120)}`);
     }
     const screens = walked ? changedSurfaces({ files: listed.files, walked }) : [];
-    plan.unmapped = journeyLib.uncoveredFiles({ files: listed.files, surfaces: walked?.surfaces ?? [], routes: walked?.routes ?? [], readSource: deps.readSource });
     plan.reachable = surfaces.map((item) => item.file);
     plan.surfaces = screens.map((item) => item.route);
     const reach = [];
@@ -1748,6 +1758,7 @@ export async function planFromRequest(request, deps = {}) {
       }
     }
     if (!plan.unevaluated) await settleGrounding({ plan, request, pages, reach, ask, picked, deps, bugfix, ground });
+    plan.unmapped = journeyLib.uncoveredFiles({ files: request.coverageFiles ?? listed.files, surfaces: coverageRoots({ journeys: plan.journeys, sources: deps.sources, boardPath: request.boardPath, taskPath: request.taskPath }), readSource: deps.readSource });
   }
   if (driveNeeded(plan)) plan.viewports = [...VIEWPORT_NAMES];
   return plan;

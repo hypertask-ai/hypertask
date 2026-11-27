@@ -128,6 +128,27 @@ function importSpecifiers(text) {
   return [...specs];
 }
 
+function runtimeImportSpecifiers(text) {
+  const source = String(text ?? "").replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (token) => token.startsWith("/") ? " " : token);
+  const pattern = /\b(?:import|export)\b\s*(type\s+(?:\{[^}]*\}|\*(?:\s+as\s+[\w$]+)?|[\w$]+)|(?:[\w$]+\s*,\s*)?(?:\{[^}]*\}|\*(?:\s+as\s+[\w$]+)?)|[\w$]+)\s*from\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']|\bimport\s+type\s+[\w$]+\s*=\s*require\s*\([^)]*\)|\b(require|import)\s*\(\s*["']([^"']+)["']\s*\)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/g;
+  const specs = new Set();
+  for (const match of source.matchAll(pattern)) {
+    if (match[1]) {
+      const clause = match[1].trim();
+      const members = /^\{([^}]*)\}$/.exec(clause)?.[1].split(",").map((item) => item.trim()).filter(Boolean);
+      if (/^type\s/.test(clause) || (members?.length && members.every((item) => /^type\s+(?!as\b)[\w$]+/.test(item)))) continue;
+      specs.add(match[2]);
+    } else if (match[3]) specs.add(match[3]);
+    else if (match[4]) {
+      const before = source.slice(0, match.index);
+      const after = source.slice(match.index + match[0].length);
+      if (match[4] === "import" && (/\btypeof\s*$/.test(before) || /^\s*\.\s*(?!(?:then|catch|finally)\b)[\w$]+/.test(after))) continue;
+      specs.add(match[5]);
+    }
+  }
+  return [...specs];
+}
+
 function appDirKey(dir) {
   const parts = String(dir).slice("src/app".length).split("/").filter((part) => part && !ROUTE_GROUP.test(part));
   return ["src/app", ...parts].join("/");
@@ -182,11 +203,15 @@ function appRoute(file, { boardPath = "", taskPath = "", pageDirs = new Set() } 
   return `/${parts.join("/")}`;
 }
 
-function importKey(from, spec) {
+function importPath(from, spec) {
   const value = String(spec);
-  if (value.startsWith("@/")) return moduleKey(path.posix.join("src", value.slice(2)));
+  if (value.startsWith("@/")) return path.posix.join("src", value.slice(2));
   if (!value.startsWith(".")) return "";
-  return moduleKey(path.posix.normalize(path.posix.join(path.posix.dirname(from), value)));
+  return path.posix.normalize(path.posix.join(path.posix.dirname(from), value));
+}
+
+function importKey(from, spec) {
+  return moduleKey(importPath(from, spec));
 }
 
 function defaultSources() {
@@ -299,8 +324,12 @@ function repoPath(file) {
   return String(file ?? "").trim().replace(/^\.\//, "");
 }
 
+function currentFiles(files) {
+  return (Array.isArray(files) ? files : []).filter((file) => file?.status !== "removed").map((file) => repoPath(typeof file === "string" ? file : file?.filename)).filter(Boolean);
+}
+
 function productChanged(files) {
-  return uniqueSorted((Array.isArray(files) ? files : []).map(repoPath))
+  return uniqueSorted(currentFiles(files))
     .filter((file) => file.startsWith("src/") && PRODUCT_EXT.has(path.extname(file)))
     .filter((file) => !TEST_PATH.test(file) && !/\.(?:test|spec)\.[^/]+$/.test(file));
 }
@@ -314,17 +343,29 @@ function recordedUncovered(unmapped) {
   return uniqueSorted((Array.isArray(unmapped) ? unmapped : []).map(repoPath).filter(Boolean).filter((file) => !notProduct(file)));
 }
 
+const RESOLVE_EXT = [...SOURCE_EXT, ...SOURCE_EXT.map((ext) => `/index${ext}`)];
+
+function resolveSource(key, readSource) {
+  if (!key) return "";
+  for (const candidate of [key, ...RESOLVE_EXT.map((ext) => `${key}${ext}`)]) {
+    if (readSource(candidate) !== "") return candidate;
+  }
+  return "";
+}
+
 function importClosure({ roots = [], readSource = defaultReadSource } = {}) {
   const seen = new Set();
   const covered = new Set();
   const queue = (Array.isArray(roots) ? roots : []).map(String);
   while (queue.length) {
     const file = queue.pop();
-    if (!file || seen.has(moduleKey(file))) continue;
-    seen.add(moduleKey(file));
-    covered.add(moduleKey(file));
-    for (const spec of importSpecifiers(readSource(file))) {
-      const target = importKey(file, spec);
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    covered.add(file);
+    const text = readSource(file);
+    if (!text) continue;
+    for (const spec of runtimeImportSpecifiers(text)) {
+      const target = resolveSource(importPath(file, spec), readSource);
       if (target) queue.push(target);
     }
   }
@@ -334,8 +375,23 @@ function importClosure({ roots = [], readSource = defaultReadSource } = {}) {
 function uncoveredFiles({ files = [], unmapped = [], surfaces = [], routes = [], readSource = defaultReadSource } = {}) {
   const roots = uniqueSorted([...surfaces, ...routes].map((item) => repoPath(item?.file ?? item)).filter(Boolean));
   const covered = importClosure({ roots: roots.filter((file) => readSource(file) !== ""), readSource });
-  const walked = productChanged(files).filter((file) => !covered.has(moduleKey(file)));
-  return uniqueSorted([...recordedUncovered(unmapped), ...walked]);
+  const obsolete = new Set((Array.isArray(files) ? files : []).flatMap((file) => typeof file === "object" && file ? [file.previous_filename, ...(file.status === "removed" ? [file.filename] : [])] : []).filter(Boolean));
+  const walked = productChanged(files).filter((file) => !covered.has(file));
+  return uniqueSorted([...recordedUncovered(unmapped).filter((file) => !obsolete.has(file)), ...walked]);
+}
+
+function journeyRoots({ sources = defaultSources(), boardPath = "", taskPath = "" } = {}) {
+  const pageDirs = pageRouteDirs(sources);
+  const listed = new Set(sources);
+  const entries = sources.filter((file) => PAGE_FILE.test(path.posix.basename(file)) || /^src\/(?:app|pages)\/api\//.test(file)).map((file) => ({ file, route: appRoute(file, { boardPath, taskPath, pageDirs }) }));
+  return entries.flatMap((entry) => {
+    const roots = [entry];
+    if (!entry.route) return roots;
+    for (let dir = path.posix.dirname(entry.file); dir === "src/app" || dir.startsWith("src/app/"); dir = path.posix.dirname(dir)) {
+      for (const ext of SOURCE_EXT) if (listed.has(`${dir}/layout${ext}`)) roots.push({ file: `${dir}/layout${ext}`, route: entry.route });
+    }
+    return roots;
+  });
 }
 
 function uncoveredReason(paths) {
@@ -356,8 +412,10 @@ module.exports = {
   GENERIC_BASENAMES,
   SHARED_DIRS,
   apiPathOf,
+  currentFiles,
   importClosure,
   journeyIds,
+  journeyRoots,
   notProduct,
   pagesForFiles,
   productChanged,
