@@ -60,6 +60,7 @@
 - `thinking-effort` With `htpr-9004-thinking-effort` on, the model selector adds a Thinking switch and an effort of Low, Medium or High. Thinking starts off.
 - `chip-starters` With `htpr-9031-chip-starters` on, starter questions in a new chat sit at the bottom left, just above the message box, only as wide as their text, in the regular chat font with 4px corners.
 - `jev-auto-model-shadow` With `htpr-9048-jev-auto-model-shadow` on, every Auto turn also asks Jev which effort fits and logs that guess beside Auto's choice. The person still sees Auto's model.
+- `older-rail-folded` With `htpr-9079-older-rail-folded` on, the full-screen chat rail starts with Older folded shut and Today and Previous 7 days open. Opening or folding a group is saved. Off starts every group open, except one the person already folded.
 
 ## How to get to it (user POV)
 
@@ -267,6 +268,10 @@ With `htpr-8956-ai-chat-header-menus` on, open the docked chat. The title and ch
 ### Collapsible rail sections
 
 With `htpr-8963-sidebar-sections` on, open `/chat` with several chats. The rail in `src/app/chat/Chat.tsx` groups them as Today, Previous 7 days and Older. A pinned chat also gets a Pinned group. Each header is a button that collapses and expands that group. A pinned chat shows a pin mark on the row, not only while the pointer is over it. Searching the rail does not collapse groups. Off leaves every section open and shows the pin only on hover.
+
+### Older chats start folded
+
+With `htpr-8963-sidebar-sections` and `htpr-9079-older-rail-folded` on, open `/chat` in a fresh browser. The rail in `src/app/chat/Chat.tsx` shows Older folded shut, with Today and Previous 7 days open. Open Older and reload: it stays open. Fold it and reload: it stays shut. Opening or folding Today or Previous 7 days is also kept. Turning `htpr-9079-older-rail-folded` off starts every group open again, except one the person already folded.
 
 ### Thinking and effort
 
