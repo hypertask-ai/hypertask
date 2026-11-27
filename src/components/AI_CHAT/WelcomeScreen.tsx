@@ -127,7 +127,7 @@ export const WelcomeScreen = () => {
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const fullScreenCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-  const chipStarters = useFlag(HTPR_9031_CHIP_STARTERS_FLAG);
+  const chipStartersEnabled = useFlag(HTPR_9031_CHIP_STARTERS_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
   const isEditMode = Boolean(taskId) && editTaskId === taskId;
   const taskSummaryAction = taskSummaryActionFor(taskId);
@@ -315,8 +315,8 @@ export const WelcomeScreen = () => {
     };
 
     return (
-      <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">
-        <div className="flex flex-col gap-2 w-full max-w-md">
+      <div className={chipStartersEnabled ? "flex flex-grow text-white-black flex-col items-start justify-end h-full px-3 pb-2" : "flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4"}>
+        <div className={chipStartersEnabled ? "flex flex-col items-start gap-2 max-w-full" : "flex flex-col gap-2 w-full max-w-md"}>
           {isEditMode && <p className="px-2 text-meta">How do you want to edit this task?</p>}
           {!isEditMode && taskSummaryAction && (
             <button
@@ -340,7 +340,7 @@ export const WelcomeScreen = () => {
           {displayedQuestions.map((suggestion, index) => (
             <button
               key={suggestion}
-              className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
+              className={chipStartersEnabled ? "bg-kanban-active-cardbg hover:bg-hover-active rounded-[4px] text-white-black p-2 text-content font-normal text-left w-fit max-w-full" : "bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"}
               onClick={() => clickChip(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion, index, shownType, suggestion)}
             >
               {suggestion}
@@ -403,12 +403,12 @@ export const WelcomeScreen = () => {
     )
 
   return (
-    <div className={chipStarters ? "flex flex-grow text-white-black flex-col items-start justify-end h-full px-3 pb-2" : "flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4"}>
-      <div className={chipStarters ? "flex flex-col items-start gap-2 max-w-full" : "flex flex-col gap-2 w-full max-w-md"}>
+    <div className={chipStartersEnabled ? "flex flex-grow text-white-black flex-col items-start justify-end h-full px-3 pb-2" : "flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4"}>
+      <div className={chipStartersEnabled ? "flex flex-col items-start gap-2 max-w-full" : "flex flex-col gap-2 w-full max-w-md"}>
         {suggestions.map((suggestion, index) => (
           <button
             key={suggestion}
-            className={chipStarters ? "bg-kanban-active-cardbg hover:bg-hover-active rounded-[4px] text-white-black p-2 text-content font-normal text-left w-fit max-w-full" : `bg-kanban-active-cardbg hover:bg-hover-active ${fullScreenCleanup ? "rounded-[4px]" : "rounded"} text-white-black p-2 text-meta text-left w-full`}
+            className={chipStartersEnabled ? "bg-kanban-active-cardbg hover:bg-hover-active rounded-[4px] text-white-black p-2 text-content font-normal text-left w-fit max-w-full" : `bg-kanban-active-cardbg hover:bg-hover-active ${fullScreenCleanup ? "rounded-[4px]" : "rounded"} text-white-black p-2 text-meta text-left w-full`}
             onClick={() => clickChip(suggestion, index, shownType)}
           >
             {suggestion}

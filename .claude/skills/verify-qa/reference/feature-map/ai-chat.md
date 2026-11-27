@@ -274,7 +274,7 @@ With `htpr-9004-thinking-effort` on, open the model selector in `src/components/
 
 ### Starter questions
 
-With `htpr-9031-chip-starters` on, open a new AI chat so the welcome questions show, in `src/components/AI_CHAT/WelcomeScreen.tsx`. They sit at the bottom left, just above the message box. Each chip is only as wide as its text, uses the regular 14px chat font, and has 4px corners. Off keeps the centered, full-width, 12px questions.
+With `htpr-9031-chip-starters` on, open a new AI chat so the welcome questions show, in `src/components/AI_CHAT/WelcomeScreen.tsx`. They sit at the bottom left, just above the message box. Each chip is only as wide as its text, uses the regular 14px chat font, and has 4px corners. Open a chat on a ticket: that block shows the same layout, and its ticket summary action and Ask all keep their places. Off keeps the centered, full-width, 12px questions on both surfaces.
 
 ### Jev's effort guess
 
