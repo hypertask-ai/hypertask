@@ -1,11 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6921_SLACK_MARKETPLACE_FLAG } from "@/lib/flags/keys";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Hypertask for Slack support" };
 
 export default async function SlackSupportPage() {
+  const user = await getServerCookieUser();
+  if (!(await isFeatureEnabled(HTPR_6921_SLACK_MARKETPLACE_FLAG, user?.id ?? -1))) {
+    notFound();
+  }
+
   return (
     <main className="flex min-h-SVH-full items-center justify-center bg-pageBackground px-4">
       <section className="flex w-full max-w-[520px] flex-col gap-5 rounded-[5px] bg-cardBackground px-4 py-4 shadow-md">
