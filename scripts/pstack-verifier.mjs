@@ -1697,9 +1697,11 @@ export async function settleGrounding({ plan, request, pages, reach, ask, picked
 }
 export function coverageRoots({ journeys = [], ...options } = {}) {
   const actions = journeys.flatMap((item) => item.actions ?? []);
-  return journeyLib.journeyRoots(options).filter((entry) => entry.route
-    ? actions.some((action) => action.op === "goto" && routeKey(action.path) === routeKey(entry.route))
-    : entry.methods?.length && entry.methods.every((method) => actions.some((action) => action.op === "api" && (action.method || "GET").toUpperCase() === method && groundLib.routeIn([entry.file], action.path))));
+  return journeyLib.journeyRoots(options).filter((entry) => {
+    if (!/^src\/(?:app|pages)\/api\//.test(entry.file)) return actions.some((action) => action.op === "goto" && (entry.route ? routeKey(action.path) === routeKey(entry.route) : groundLib.routeIn([entry.pageFile ?? entry.file], action.path)));
+    const api = actions.filter((action) => action.op === "api" && groundLib.routeIn([entry.file], action.path));
+    return api.length && (entry.methods?.length ? entry.methods.every((method) => api.some((action) => (action.method || "GET").toUpperCase() === method)) : entry.file.startsWith("src/pages/api/"));
+  });
 }
 export async function planFromRequest(request, deps = {}) {
   const ask = deps.ask ?? askVerifier;

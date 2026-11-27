@@ -383,9 +383,9 @@ function journeyRoots({ sources = defaultSources(), readSource = defaultReadSour
   const entries = sources.filter((file) => PAGE_FILE.test(path.posix.basename(file)) || /^src\/(?:app|pages)\/api\//.test(file)).map((file) => ({ file, route: appRoute(file, { boardPath, taskPath, pageDirs }), methods: apiMethods(file, readSource(file)) }));
   return entries.flatMap((entry) => {
     const roots = [entry];
-    if (!entry.route) return roots;
+    if (/^src\/(?:app|pages)\/api\//.test(entry.file)) return roots;
     for (let dir = path.posix.dirname(entry.file); dir === "src/app" || dir.startsWith("src/app/"); dir = path.posix.dirname(dir)) {
-      for (const ext of SOURCE_EXT) if (listed.has(`${dir}/layout${ext}`)) roots.push({ file: `${dir}/layout${ext}`, route: entry.route });
+      for (const ext of SOURCE_EXT) if (listed.has(`${dir}/layout${ext}`)) roots.push({ file: `${dir}/layout${ext}`, route: entry.route, pageFile: entry.file });
     }
     return roots;
   });

@@ -2190,19 +2190,15 @@ const reachableSources = { "src/app/(board)/page.tsx": 'import { Board } from "@
 const walk = (files) => journeyLib.uncoveredFiles({ files, surfaces: [{ file: "src/app/(board)/page.tsx" }], readSource: (file) => reachableSources[file] ?? "" });
 
 test("changed product files no planned journey exercises are named and demote a pass", () => {
-  assert.deepEqual(walk(["src/components/Kanban/board.tsx", "src/utils/orphan-helper.ts"]), ["src/utils/orphan-helper.ts"]);
-  assert.deepEqual(walk(["src/components/Kanban/board.tsx", "src/components/Kanban/missing.tsx"]), ["src/components/Kanban/missing.tsx"]);
+  for (const file of ["src/utils/orphan-helper.ts", "src/components/Kanban/missing.tsx"]) assert.deepEqual(walk(["src/components/Kanban/board.tsx", file]), [file]);
   const gated = journeyLib.uncoveredPassGate("PASS", { unmapped: walk(["src/utils/orphan-helper.ts"]) });
-  assert.equal(gated.verdict, "FAIL");
-  assert.equal(gated.demoted, true);
+  assert.deepEqual([gated.verdict, gated.demoted], ["FAIL", true]);
   assert.equal(gated.notes, "FAIL: 1 changed product file no planned journey exercises: src/utils/orphan-helper.ts. Add or select a journey that exercises it, then re-run the verifier.");
-  assert.equal(journeyLib.uncoveredPassGate("PASS+NOTES", { unmapped: gated.uncovered }).verdict, "FAIL");
-  assert.equal(journeyLib.uncoveredPassGate("FAIL", { unmapped: gated.uncovered }).verdict, "FAIL");
+  for (const verdict of ["PASS", "PASS+NOTES", "FAIL"]) assert.equal(journeyLib.uncoveredPassGate(verdict, { unmapped: gated.uncovered }).verdict, "FAIL");
 });
 
 test("covered product files and docs or test-only changes keep their pass", () => {
-  assert.deepEqual(walk(["src/components/Kanban/board.tsx"]), []);
-  assert.deepEqual(walk(["docs/ci.md", "tests/pstack-verifier.test.cjs", ".github/workflows/ci.yml", "scripts/pstack-verifier.mjs"]), []);
+  for (const files of [["src/components/Kanban/board.tsx"], ["docs/ci.md", "tests/pstack-verifier.test.cjs", ".github/workflows/ci.yml", "scripts/pstack-verifier.mjs"]]) assert.deepEqual(walk(files), []);
   assert.deepEqual(journeyLib.uncoveredPassGate("PASS", { unmapped: [] }), { verdict: "PASS", notes: "", uncovered: [], demoted: false });
   assert.equal(journeyLib.uncoveredPassGate("PASS+NOTES", { unmapped: ["docs/ci.md", "tests/pstack-verifier.test.cjs"] }).verdict, "PASS+NOTES");
 });
@@ -2210,7 +2206,7 @@ test("covered product files and docs or test-only changes keep their pass", () =
 test("a plan that left product files unmapped cannot pass on evidence", async () => {
   const { decide, uncoveredPassGate } = await load();
   const goto = [{ op: "goto", path: "/project?id=1" }], mapped = plan(goto, { unmapped: [] });
-  for (const verdict of ["PASS", "PASS+NOTES"]) assert.equal(decide({ model: { verdict, notes: "fine" }, plan: mapped, evidence: evidence(), binding }).verdict, verdict);
+  for (const verdict of ["PASS", "PASS+NOTES"]) assert.equal(decide({ model: { verdict, notes: verdict === "PASS" ? "" : "fine" }, plan: mapped, evidence: evidence(), binding }).verdict, verdict);
   assert.equal(uncoveredPassGate(mapped).demoted, false);
   const left = plan(goto, { unmapped: ["src/utils/orphan-helper.ts"] }), gated = decide({ model: { verdict: "PASS", notes: "" }, plan: left, evidence: evidence(), binding });
   assert.equal(gated.verdict, "FAIL");
@@ -2237,26 +2233,30 @@ test("coverage follows final journey actions, not journey names or all traced su
 
 test("selected page layouts and API actions cover only their own runtime dependencies", async () => {
   const { coverageRoots } = await load();
-  const sources = ["src/app/chat/page.tsx", "src/app/layout.tsx", "src/app/other/layout.tsx", "src/pages/api/tasks/[id].ts", "src/app/api/other/route.ts"];
-  const journeys = [{ journey: "change:primary", actions: [{ op: "goto", path: "/chat?tab=1" }, { op: "api", path: "/api/tasks/{task}" }] }];
-  assert.deepEqual(coverageRoots({ journeys, sources, readSource: () => 'if (req.method !== "GET") return;' }).map((entry) => entry.file), [sources[0], sources[1], sources[3]]);
-  assert.deepEqual(coverageRoots({ journeys: [{ actions: [{ op: "goto", path: "/chat/other" }] }], sources }), []);
+  for (const [dir, path] of [["chat", "/chat"], ["chat/[sessionId]", "/chat/session-123"], ["(group)/chat/[sessionId]", "/chat/session-456"], ["chat/[...sessions]", "/chat/one/two"]]) {
+    const sources = [`src/app/${dir}/page.tsx`, "src/app/layout.tsx", `src/app/${dir}/layout.tsx`, "src/app/other/layout.tsx", "src/pages/api/tasks/[id].ts", "src/app/api/other/route.ts"];
+    const journeys = [{ actions: [{ op: "goto", path: `${path}?tab=1` }, { op: "api", path: "/api/tasks/{task}" }] }];
+    assert.deepEqual(coverageRoots({ journeys, sources, readSource: () => 'if (req.method !== "GET") return;' }).map((entry) => entry.file), [sources[0], sources[2], sources[1], sources[4]]);
+    for (const action of [{ op: "goto", path: "/unrelated" }, { op: "api", path }, { op: "shot" }]) assert.deepEqual(coverageRoots({ journeys: [{ actions: [action] }], sources }), []);
+  }
 });
 
-test("API coverage requires every exposed method on the matching path", async () => {
+test("API coverage requires every exposed method, or any method for unguarded Pages handlers", async () => {
   const { coverageRoots, planFromRequest } = await load();
-  for (const [file, handler] of [
+  for (const [file, handler, agnostic = false] of [
     ["src/app/api/tasks/[id]/route.ts", "export async function GET() {} export const POST = write; export { remove as DELETE };"],
     ["src/pages/api/tasks/[id].ts", 'if (req.method === "GET") read(); if (req.method !== "POST") reject(); switch (req.method) { case "DELETE": remove(); }'],
+    ["src/pages/api/tasks/[id].ts", "export default function handler(req, res) { res.end(); }", true],
   ]) {
     const helper = "src/lib/write.ts", text = { [file]: `import "@/lib/write"; ${handler}`, [helper]: "export const write = 1;" };
     const options = { sources: Object.keys(text), readSource: (file) => text[file] ?? "" };
     const check = (methods, path = "/api/tasks/{task}") => journeyLib.uncoveredFiles({ files: [file, helper], ...options, surfaces: coverageRoots({ ...options, journeys: [{ actions: methods.map((method) => ({ op: "api", path, method })) }] }) });
-    for (const methods of [[undefined], ["GET"], ["GET", "POST"]]) assert.deepEqual(check(methods), [file, helper].sort());
+    assert.deepEqual(check([]), [file, helper].sort());
+    for (const methods of [[undefined], ["GET"], ["post"], ["GET", "POST"]]) assert.deepEqual(check(methods), agnostic ? [] : [file, helper].sort());
     assert.deepEqual(check([undefined, "post", "DELETE"]), []);
-    assert.deepEqual(check(["GET", "POST", "DELETE"], "/api/other/1"), [file, helper].sort());
+    for (const path of ["/api/other/1", "/api/tasks/1/extra", "/chat/1"]) assert.deepEqual(check(["GET", "POST", "DELETE"], path), [file, helper].sort());
     const request = { ...binding, files: [file, helper], author: "codex", title: "HTPR-9748 [IMPROVE] Coverage", body: "", diff: "" };
-    assert.deepEqual((await planFromRequest(request, { binding, ...options, pages: [], ground: { routes: [file], corpus: "" }, ask: () => ({ actions: [{ op: "api", path: "/api/tasks/{task}" }], expect: [], reason: "check API" }) })).unmapped, [file, helper].sort());
+    assert.deepEqual((await planFromRequest(request, { binding, ...options, pages: [], ground: { routes: [file], corpus: "" }, ask: () => ({ actions: [{ op: "api", path: "/api/tasks/{task}" }], expect: [], reason: "check API" }) })).unmapped, agnostic ? [] : [file, helper].sort());
   }
 });
 
@@ -2279,18 +2279,14 @@ test("changed mjs and cjs modules require a selected journey that reaches them",
     const readSource = (file) => sources[file] ?? "";
     const check = (path) => journeyLib.uncoveredFiles({ files: [file], surfaces: coverageRoots({ journeys: [{ actions: [{ op: "goto", path }] }], sources: Object.keys(sources) }), readSource });
     const uncovered = check("/other");
-    assert.deepEqual(uncovered, [file], ext);
-    assert.equal(journeyLib.uncoveredPassGate("PASS", { unmapped: uncovered }).verdict, "FAIL", ext);
-    assert.deepEqual(check("/chat"), [], ext);
-    assert.equal(journeyLib.uncoveredPassGate("PASS", { unmapped: check("/chat") }).verdict, "PASS", ext);
+    assert.deepEqual([uncovered, journeyLib.uncoveredPassGate("PASS", { unmapped: uncovered }).verdict], [[file], "FAIL"], ext);
+    assert.deepEqual([check("/chat"), journeyLib.uncoveredPassGate("PASS", { unmapped: check("/chat") }).verdict], [[], "PASS"], ext);
   }
 });
 
 test("declaration files are excluded from runtime coverage without excluding runtime TypeScript", () => {
   const declarations = ["src/lib/flags/removalWindow.d.ts", "src/lib/flags/removalWindow.d.mts", "src/lib/flags/removalWindow.d.cts"];
-  assert.deepEqual(journeyLib.productChanged(declarations), []);
-  assert.deepEqual(walk(declarations), []);
-  assert.equal(journeyLib.uncoveredPassGate("PASS", { unmapped: walk(declarations) }).verdict, "PASS");
+  assert.deepEqual([journeyLib.productChanged(declarations), walk(declarations), journeyLib.uncoveredPassGate("PASS", { unmapped: walk(declarations) }).verdict], [[], [], "PASS"]);
   assert.deepEqual(walk([...declarations, "src/lib/flags/removalWindow.ts"]), ["src/lib/flags/removalWindow.ts"]);
 });
 
@@ -2298,9 +2294,7 @@ test("type-only imports and exports do not claim runtime coverage", () => {
   const typed = ['import type { Shape } from "@/lib/value";', 'export type { Shape } from "@/lib/value";', 'export type * from "@/lib/value";', 'import { type Shape, type Other as Alias } from "@/lib/value";', 'export { type Shape } from "@/lib/value";', 'type Shape = import("@/lib/value").Shape;', 'type Shape = typeof import("@/lib/value");', 'let shape: Promise<import("@/lib/value").Shape>;', 'import type Shape = require("@/lib/value");'];
   const runtime = ['import { type Shape, value } from "@/lib/value";', 'export { type Shape, value } from "@/lib/value";', 'import type from "@/lib/value";', 'import { type as value } from "@/lib/value";', 'import "@/lib/value";', 'export * from "@/lib/value";', 'const value = require("@/lib/value");', 'const value = import("@/lib/value");', 'import("@/lib/value").then(use);'];
   const check = (text) => journeyLib.uncoveredFiles({ files: ["src/lib/value.ts"], surfaces: ["src/app/page.tsx"], readSource: (file) => ({ "src/app/page.tsx": text, "src/lib/value.ts": "export const value = 1;" }[file] ?? "") });
-  for (const text of typed) assert.deepEqual(check(text), ["src/lib/value.ts"], text);
-  for (const text of runtime) assert.deepEqual(check(text), [], text);
-  for (const text of runtime) assert.deepEqual(check(`${typed[0]}\n${text}`), [], text);
+  for (const [texts, expected] of [[typed, ["src/lib/value.ts"]], [runtime, []], [runtime.map((text) => `${typed[0]}\n${text}`), []]]) for (const text of texts) assert.deepEqual(check(text), expected, text);
   assert.deepEqual(check('const text = \'import "@/lib/value"\';'), ["src/lib/value.ts"]);
 });
 
@@ -2350,8 +2344,7 @@ test("resolve preserves old paths for guards but passes only current paths to co
 test("the planner records the product files no journey can reach, so a green run fails", async () => {
   const { planFromRequest, decide } = await load();
   const request = { ...binding, baseSha: "b".repeat(40), title: "HTPR-9031 [IMPROVE] Ticket chat starters", body: "Author-Model: codex", diff: "", filesTruncated: false, boardPath: "/project?id={id}", taskPath: "/detail/project-{id}/1" };
-  const sources = ["src/app/chat/page.tsx"], readSource = (file) => (file === "src/app/chat/page.tsx" ? "export default 1;\n" : "");
-  const ask = () => ({ actions: [{ op: "goto", path: "/chat" }], expect: [], reason: "check chat" });
+  const sources = ["src/app/chat/page.tsx"], readSource = (file) => (file === "src/app/chat/page.tsx" ? "export default 1;\n" : ""), ask = () => ({ actions: [{ op: "goto", path: "/chat" }], expect: [], reason: "check chat" });
   const proof = evidence({ navigations: [{ url: "http://127.0.0.1:3100/chat", status: 200 }] });
   for (const [file, unmapped, verdict] of [["src/utils/orphan-helper.ts", ["src/utils/orphan-helper.ts"], "FAIL"], [sources[0], [], "PASS"]]) {
     const built = await planFromRequest({ ...request, files: [file] }, { binding, pages: [], sources, readSource, ask });
@@ -2374,8 +2367,7 @@ test("coverage reads newly added roots and changed imports from the pinned candi
       assert.equal(fetched, true);
       if (args[0] === "ls-tree") return { status: 0, stdout: [...Object.keys(text), "src/../escape.ts", "-option.ts"].join("\0") + "\0" };
       assert.deepEqual(args, ["cat-file", "--batch"]);
-      assert.equal(options.encoding, null);
-      assert.equal(options.input, Object.keys(text).map((file) => `${binding.sha}:${file}\n`).join(""));
+      assert.deepEqual([options.encoding, options.input], [null, Object.keys(text).map((file) => `${binding.sha}:${file}\n`).join("")]);
       batches++;
       return { status: 0, stdout: Buffer.from(Object.values(text).map((value) => `${binding.sha} blob ${Buffer.byteLength(value)}\n${value}\n`).join("")) };
     });
