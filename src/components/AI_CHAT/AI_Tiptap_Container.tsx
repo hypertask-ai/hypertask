@@ -60,6 +60,7 @@ import { HTPR_9004_THINKING_EFFORT_FLAG } from "@/lib/flags/definitions/htpr-900
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_9670_PHONE_CHAT_FIELD_MIC_FLAG } from "@/lib/flags/definitions/htpr-9670-phone-chat-field-mic";
 import { HTPR_8032_PHONE_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/definitions/htpr-8032-phone-chat-fullscreen";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
@@ -272,14 +273,40 @@ export function AI_Tiptap_Container({
   const hasComposerText = controlledComposer
     ? controlledComposer.value.trim().length > 0
     : !isEditorEmpty;
+  const phoneFieldMic = useFlag(HTPR_9670_PHONE_CHAT_FIELD_MIC_FLAG);
+  const phoneComposerMic = phoneFieldMic && isMbl && !controlledComposer;
+  const phoneComposerMicFillsRow = phoneComposerMic && isRecording;
   let recorderWrapperClassName: string | undefined;
-  if (mobileDictating) {
+  if (phoneComposerMic) {
+    recorderWrapperClassName = isRecording ? "min-w-0 flex-1" : "shrink-0";
+  } else if (mobileDictating) {
     recorderWrapperClassName = "order-2 min-w-0 flex-1";
   } else if (isMbl) {
     recorderWrapperClassName = hasComposerText
       ? "order-3 ml-auto"
       : "order-4 ml-auto";
   }
+
+  const chatRecorder = (
+    <AudioButton
+      callbackHandler={audioTiptapCallback}
+      editor={editor}
+      id={audioButtonId}
+      active={active}
+      hideDevicePicker={hideMicrophonePicker}
+      compactRecordingPill={fullScreenCleanup}
+      toggleRecording={toggleRecording!}
+      globalRecording={isRecording}
+      hasText={hasComposerText}
+      onProcessingChange={setAudioProcessing}
+      ariaLabel="Start dictation"
+      wrapperClassName={recorderWrapperClassName}
+      compactListeningPill={chatCleanupEnabled}
+      visualizerClassName={
+        mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
+      }
+    />
+  );
 
   let composerClassName = "!rounded-lg p-2";
   if (isMbl) composerClassName = `${chatCleanupEnabled ? "!rounded-[4px]" : "!rounded-[5px]"} px-3 pb-2 pt-3`;
@@ -376,61 +403,68 @@ export function AI_Tiptap_Container({
           <ContextList items={visibleContextList} onClick={(index) => handleRemoveContext(contextList.indexOf(visibleContextList[index]))} />
         )}
         <div
-          className={`
-                transition-all
-                w-full
-                duration-[40ms]
-                scrollbar-none
-                 break-normal
-                 max-h-[380px]
-                 overflow-y-auto
-                ${styles.editorContainer}
-                `}
-          id={
-            controlledComposer
-              ? "agent-chat-composer-editor"
-              : "ai-chat-tiptap-editor"
-          }
-          title={
-            (fullScreenCleanup || chatCleanupEnabled) && sharedShortcuts
-              ? `Focus · ${chatShortcutHint("focus")}`
-              : undefined
-          }
-          onPaste={controlledComposer ? undefined : handleEditorPaste}
+          data-ai-chat-field-row={phoneComposerMic || undefined}
+          className={phoneComposerMic ? "flex w-full items-end gap-1" : "contents"}
         >
-          {controlledComposer ? (
-            controlledComposer.useTiptapEditor ? (
-              <ControlledComposerEditor
-                agentMentionProjectId={agentSessionsEnabled && sidebarAgent ? controlledComposer.projectId ?? undefined : undefined}
+          <div
+            className={`
+                  transition-all
+                  ${phoneComposerMic ? "min-w-0 flex-1" : "w-full"}
+                  ${phoneComposerMicFillsRow ? "hidden" : ""}
+                  duration-[40ms]
+                  scrollbar-none
+                   break-normal
+                   max-h-[380px]
+                   overflow-y-auto
+                  ${styles.editorContainer}
+                  `}
+            id={
+              controlledComposer
+                ? "agent-chat-composer-editor"
+                : "ai-chat-tiptap-editor"
+            }
+            title={
+              (fullScreenCleanup || chatCleanupEnabled) && sharedShortcuts
+                ? `Focus · ${chatShortcutHint("focus")}`
+                : undefined
+            }
+            onPaste={controlledComposer ? undefined : handleEditorPaste}
+          >
+            {controlledComposer ? (
+              controlledComposer.useTiptapEditor ? (
+                <ControlledComposerEditor
+                  agentMentionProjectId={agentSessionsEnabled && sidebarAgent ? controlledComposer.projectId ?? undefined : undefined}
+                  value={controlledComposer.value}
+                  onChange={controlledComposer.onChange}
+                  onKeyDown={controlledComposer.onKeyDown}
+                  placeholder={controlledComposer.placeholder}
+                  ariaLabel={controlledComposer.ariaLabel}
+                  editorRef={controlledComposer.editorRef}
+                  onEditor={setControlledEditor}
+                />
+              ) : (
+              <AiComposerTextarea
+                ref={controlledComposer.inputRef}
                 value={controlledComposer.value}
-                onChange={controlledComposer.onChange}
+                onChange={(event) =>
+                  controlledComposer.onChange(
+                    event.target.value,
+                    event.target.selectionStart ?? event.target.value.length,
+                  )
+                }
                 onKeyDown={controlledComposer.onKeyDown}
+                rows={1}
                 placeholder={controlledComposer.placeholder}
-                ariaLabel={controlledComposer.ariaLabel}
-                editorRef={controlledComposer.editorRef}
-                onEditor={setControlledEditor}
+                aria-label={controlledComposer.ariaLabel}
               />
+              )
+            ) : editor ? (
+              <EditorContent editor={editor} />
             ) : (
-            <AiComposerTextarea
-              ref={controlledComposer.inputRef}
-              value={controlledComposer.value}
-              onChange={(event) =>
-                controlledComposer.onChange(
-                  event.target.value,
-                  event.target.selectionStart ?? event.target.value.length,
-                )
-              }
-              onKeyDown={controlledComposer.onKeyDown}
-              rows={1}
-              placeholder={controlledComposer.placeholder}
-              aria-label={controlledComposer.ariaLabel}
-            />
-            )
-          ) : editor ? (
-            <EditorContent editor={editor} />
-          ) : (
-            <div className="h-[21px]" />
-          )}
+              <div className="h-[21px]" />
+            )}
+          </div>
+          {phoneFieldMic && isMbl && !controlledComposer && chatRecorder}
         </div>
         {oneComposer ? (
           <AiChatOneComposerRow
@@ -529,26 +563,7 @@ export function AI_Tiptap_Container({
                 projectId={controlledComposer.projectId}
               />
               )
-            ) : (
-              <AudioButton
-                callbackHandler={audioTiptapCallback}
-                editor={editor}
-                id={audioButtonId}
-                active={active}
-                hideDevicePicker={hideMicrophonePicker}
-                compactRecordingPill={fullScreenCleanup}
-                toggleRecording={toggleRecording!}
-                globalRecording={isRecording}
-                hasText={hasComposerText}
-                onProcessingChange={setAudioProcessing}
-                ariaLabel="Start dictation"
-                wrapperClassName={recorderWrapperClassName}
-                compactListeningPill={chatCleanupEnabled}
-                visualizerClassName={
-                  mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
-                }
-              />
-            )
+            ) : phoneComposerMic ? null : chatRecorder
           }
           streamControl={
             controlledComposer ? null : isTyping ? (
