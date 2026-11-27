@@ -78,8 +78,9 @@ production OFF mode cannot conceal the PR #997 regression. Neither run changes
 production flags or uses a production session.
 
 The query-string realtime override works for automated browsers only on
-`localhost` and `127.0.0.1`. Production automation remains disconnected from
-hosted realtime even if it adds `?realtime=on`.
+`localhost` and `127.0.0.1`, and the opt-in then sticks to that tab's session
+across in-app navigation until `?realtime=off`. Production automation remains
+disconnected from hosted realtime even if it adds `?realtime=on`.
 
 `browser-smoke` is required by the production ruleset, the live-ruleset
 assertion, and automerge. A failed or missing result blocks merging.

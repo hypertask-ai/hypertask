@@ -119,12 +119,15 @@ key tests) and destructive bulk actions stay with the loopback drives named per 
 
 Prefer `agent-browser`, headless, straight against production:
 `https://app.hypertask.ai/...?realtime=on`, the same param
-`e2e/smoke/lib/realtime.ts` appends. **It does not turn on live push under
-automation**: `src/lib/realtime/client.ts` checks `navigator.webdriver`
-before it even reads the param, and `agent-browser` reports
-`navigator.webdriver === true` like any automated Chromium. So proof is
-always reload-and-re-read-from-the-server, never "watch it update live" (see
-each area file's "what proof to collect"). Pass `--state` explicitly:
+`e2e/smoke/lib/realtime.ts` appends. Against production it does **not** turn on
+live push under automation: `src/lib/realtime/client.ts` checks
+`navigator.webdriver` before it reads a param that is not on a loopback origin,
+and `agent-browser` reports `navigator.webdriver === true` like any automated
+Chromium. So production proof is always reload-and-re-read-from-the-server,
+never "watch it update live" (see each area file's "what proof to collect").
+On a loopback stack the same `?realtime=on` does open live push for an
+automated browser, and the tab keeps it through in-app navigation until
+`?realtime=off`. That is where live-update proof belongs. Pass `--state` explicitly:
 `~/.config/hypertask-videos/storageState-qa.json` (user 985) for a flagged
 path, `storageState-qa-normal.json` (user 2343) for the flag-off path.
 **Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
