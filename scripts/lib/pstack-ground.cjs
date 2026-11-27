@@ -66,7 +66,11 @@ function apiPaths(paths) {
 
 function routeIn(paths, apiPath) {
   const wanted = seed(String(apiPath ?? "")).split("?")[0].split("/").filter(Boolean);
-  if (wanted[0] !== "api" || wanted.length < 2) return false;
+  if (wanted[0] !== "api") return (Array.isArray(paths) ? paths : []).some((file) => {
+    const page = /^src\/app\/(?!api\/)(?:(.*?)\/)?page\.(?:ts|tsx|js|jsx)$/.exec(String(file));
+    return page && routeMatches((page[1] || "").split("/").filter((part) => part && !/^\(.*\)$/.test(part)), wanted);
+  });
+  if (wanted.length < 2) return false;
   return apiPaths(paths).some((file) => routeMatches(routeSegments(file), wanted.slice(1)));
 }
 
