@@ -170,20 +170,18 @@ test('HTPR-7051 a media token the writer puts in the title is removed, and the i
   }
 });
 
-test('compose fallback retains the unfurled image URL and uploaded images use distinct tokens', async () => {
-  for (const writerThrows of [false, true]) {
-    await withWriter({ writerThrows }, async ({ createComposedTask, project, creates, writes }) => {
-      const url = 'https://screencast2.com/hCUBu.png';
-      const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985 });
-      assert.equal(result.writerFailed, writerThrows);
-      const body = new JSDOM(creates[0].description);
-      try {
-        assert.equal(body.window.document.querySelector('a').href, url);
-        assert.deepEqual([...body.window.document.querySelectorAll('img')].map((image) => image.src), [url, 'https://files.hypertask.app/attached.png']);
-        assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p><p>[[HT_MEDIA_2]]</p>');
-      } finally { body.window.close(); }
-    });
-  }
+test('compose retains the unfurled image URL and uploaded images use distinct tokens', async () => {
+  await withWriter({}, async ({ createComposedTask, project, creates, writes }) => {
+    const url = 'https://screencast2.com/hCUBu.png';
+    const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985 });
+    assert.equal(result.writerFailed, false);
+    const body = new JSDOM(creates[0].description);
+    try {
+      assert.equal(body.window.document.querySelector('a').href, url);
+      assert.deepEqual([...body.window.document.querySelectorAll('img')].map((image) => image.src), [url, 'https://files.hypertask.app/attached.png']);
+      assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p><p>[[HT_MEDIA_2]]</p>');
+    } finally { body.window.close(); }
+  });
 });
 
 test('compose keeps non-image URLs as plain links and does not unfurl image URLs embedded in prose', async () => {
@@ -195,7 +193,7 @@ test('compose keeps non-image URLs as plain links and does not unfurl image URLs
       assert.equal(writes[0].body.taskDescription, `<p>${url}</p>`);
     });
   }
-  await withWriter({ writerThrows: true }, async ({ createComposedTask, project, creates }) => {
+  await withWriter({ html: '<h1 id="ai-generated-task-title">Reference</h1><p>Use https://example.com/photo.png as context</p>' }, async ({ createComposedTask, project, creates }) => {
     await createComposedTask({ text: 'Use https://example.com/photo.png as context', files: [], project, userId: 985 });
     assert.equal(creates[0].description, '<p>Use https://example.com/photo.png as context</p>');
   });
@@ -205,17 +203,23 @@ for (const [label, config] of [
   ['HTTP error', { writerOk: false }], ['network failure', { writerThrows: true }],
   ['SSE error after 200', { html: '<h1 id="ai-generated-task-title">Partial</h1>\nevent: error\ndata: {"content":"failed"}\n\nevent: done\n' }],
   ['missing title', { html: '<p>Body only</p>' }], ['missing description', { html: '<h1 id="ai-generated-task-title">Title only</h1>' }],
+  ['invalid JSON', { response: new Response('{', { headers: { 'content-type': 'application/json' } }) }],
+  ['empty batch', { response: Response.json({ tasks: [] }) }],
+  ['partially valid batch', { response: Response.json({ tasks: [{ title: 'Valid', description: '<p>Body</p>' }, { title: '', description: '' }] }) }],
 ]) {
-  test(`task writer ${label} falls back to the full raw note and says so in the chat`, async () => {
-    await withWriter(config, async ({ createComposedTask, composeTaskAssistantMessage, project, creates }) => {
-      const text = '  Fix <login> & spacing\nKeep every line  ';
-      const result = await createComposedTask({ text, files: [], project, userId: 985 });
-      assert.equal(result.writerFailed, true);
-      assert.equal(creates[0].title, text);
-      assert.equal(creates[0].description, '<p>  Fix &lt;login&gt; &amp; spacing<br>Keep every line  </p>');
-      assert.match(composeTaskAssistantMessage('QASA-44', true), /task writer was unavailable.*original text as the title and description/s);
+  for (const existingTaskId of [undefined, 52]) {
+    test(`HTPR-9684 task writer ${label} rejects without creating or filling tickets (existing=${existingTaskId})`, async () => {
+      const response = config.response?.clone();
+      await withWriter({ ...config, ...(response ? { response } : {}) }, async ({ createComposedTask, project, creates, linked }) => {
+        const stages = [];
+        await assert.rejects(createComposedTask({ text: '  Fix <login> & spacing\nKeep every line  ', files: [], project, userId: 985, existingTaskId, onProgress: (stage) => stages.push(stage) }),
+          /The task writer failed\. Your note is still here\. Try again\./);
+        assert.deepEqual(creates, []);
+        assert.deepEqual(linked, []);
+        assert.ok(!stages.includes('Saving the ticket'));
+      });
     });
-  });
+  }
 }
 
 test('initial assistant greeting is exact and contains no model request', async () => {
@@ -401,7 +405,7 @@ test('existing target is forwarded to both writer and save with no new column/ra
 });
 
 test('document attachments stay links rather than broken images and are still bound to the ticket', async () => {
-  await withWriter({ writerThrows: true }, async ({ createComposedTask, project, creates, writes, linked }) => {
+  await withWriter({}, async ({ createComposedTask, project, creates, writes, linked }) => {
     const file = { name: 'brief.txt', type: 'text/plain' };
     await createComposedTask({ text: 'Use the brief', files: [file], project, userId: 985 });
     assert.deepEqual(writes[0].body.images64, []);
@@ -539,7 +543,7 @@ test('progress follows response headers and first output; Saving waits for the c
 });
 
 for (const interrupted of [false, true]) {
-  test(`progress stream failure keeps the raw-note fallback and then saves: interrupted=${interrupted}`, async () => {
+  test(`HTPR-9684 progress stream failure rejects without saving: interrupted=${interrupted}`, async () => {
     const stages = [];
     const response = new Response(new ReadableStream({ start(controller) {
       controller.enqueue(new TextEncoder().encode('<h1 id="ai-generated-task-title">Partial</h1>'));
@@ -549,12 +553,10 @@ for (const interrupted of [false, true]) {
         controller.close();
       }
     } }));
-    await withWriter({ response, onCreate: () => assert.equal(stages.at(-1), 'Saving the ticket') }, async ({ createComposedTask, project, creates }) => {
-      const result = await createComposedTask({ text: 'Keep the raw note', files: [], project, userId: 985, onProgress: (stage) => stages.push(stage) });
-      assert.equal(result.writerFailed, true);
-      assert.equal(creates[0].title, 'Keep the raw note');
-      assert.equal(creates[0].description, '<p>Keep the raw note</p>');
-      assert.equal(stages.at(-1), 'Saving the ticket');
+    await withWriter({ response }, async ({ createComposedTask, project, creates }) => {
+      await assert.rejects(createComposedTask({ text: 'Keep the raw note', files: [], project, userId: 985, onProgress: (stage) => stages.push(stage) }), /The task writer failed/);
+      assert.deepEqual(creates, []);
+      assert.ok(!stages.includes('Saving the ticket'));
     });
   });
 }
@@ -576,9 +578,8 @@ test('an error-only stream never claims that the model is writing', async () => 
     controller.close();
   } }));
   await withWriter({ response }, async ({ createComposedTask, project }) => {
-    const result = await createComposedTask({ text: 'Original note', files: [], project, userId: 985, onProgress: (stage) => stages.push(stage) });
-    assert.equal(result.writerFailed, true);
-    assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context', 'Saving the ticket']);
+    await assert.rejects(createComposedTask({ text: 'Original note', files: [], project, userId: 985, onProgress: (stage) => stages.push(stage) }), /The task writer failed/);
+    assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context']);
   });
 });
 
@@ -606,7 +607,7 @@ test('a structured Free plan refusal keeps the note unsaved instead of using the
   }
 });
 
-test('HTPR-7085 failed writer shows the server reason when asked, the generic line otherwise, and still saves the note', async () => {
+test('HTPR-7085 failed writer shows the server reason when asked, the generic line otherwise, and never saves the note', async () => {
   const failing = { ok: false, status: 402, clone: () => new Response(JSON.stringify({ error: 'Monthly AI allowance used up' })), json: async () => ({ error: 'Monthly AI allowance used up' }), text: async () => '' };
   const sse = 'event: error\ndata: {"code":"task-writer-stream-error","content":"Provider is down"}\n\n';
   const cases = [
@@ -617,14 +618,11 @@ test('HTPR-7085 failed writer shows the server reason when asked, the generic li
     [{ writerThrows: true }, true, undefined],
   ];
   for (const [config, explain, reason] of cases) {
-    await withWriter(config, async ({ createComposedTask, composeTaskAssistantMessage, project, creates }) => {
-      const result = await createComposedTask({ text: 'My note', files: [], project, userId: 985, explainWriterFailure: explain });
-      assert.equal(result.writerFailed, true);
-      assert.equal(result.writerFailureReason, reason);
-      assert.equal(creates[0].title, 'My note');
-      const message = composeTaskAssistantMessage('QASA-44', true, false, undefined, result.writerFailureReason);
-      if (reason) assert.match(message, new RegExp(`unavailable: ${reason}\\. I kept your original text`));
-      else assert.match(message, /The task writer was unavailable, so I kept your original text/);
+    await withWriter(config, async ({ createComposedTask, project, creates }) => {
+      await assert.rejects(createComposedTask({ text: 'My note', files: [], project, userId: 985, explainWriterFailure: explain }), {
+        message: `The task writer failed. Your note is still here. Try again.${reason ? ` ${reason}` : ''}`,
+      });
+      assert.deepEqual(creates, []);
     });
   }
 });

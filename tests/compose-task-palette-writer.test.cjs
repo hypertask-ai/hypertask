@@ -164,6 +164,48 @@ test('create failure keeps the palette open, text unchanged and retry available'
   });
 });
 
+for (const mobile of [false, true]) {
+  for (const existingTask of [false, true]) {
+    test(`HTPR-9684 writer failure keeps the note and shows an error without saving; one action retries (mobile=${mobile}, existing=${existingTask})`, async (t) => {
+      const text = '  Preserve <every> character\nand line  ';
+      const writerRequests = [];
+      const targetTask = { id: 52, projectId: 7, uniqueIndex: 4, title: '', description: '' };
+      await withPalette(t, {
+        tab: 'compose', mobile,
+        ...(existingTask ? { url: '/detail/project-7/4', inView: { taskId: 52, taskProjectId: 7 }, targetTask } : {}),
+        taskWriterFetch: async (url, options) => {
+          assert.equal(url, '/api/ai/task-writer');
+          writerRequests.push(JSON.parse(options.body));
+          return writerRequests.length === 1
+            ? Response.json({ error: 'AI provider refused the request' }, { status: 500 })
+            : new Response('<h1 id="ai-generated-task-title">Fix spacing</h1><p>Keep the note.</p>');
+        },
+      }, async ({ type, press, input, taskSaves, navigations, cacheAdds, values }) => {
+        await type(text);
+        await press('Enter', { code: 'Enter' });
+        assert.equal(writerRequests.length, 1);
+        assert.equal(writerRequests[0].existingTaskId, existingTask ? 52 : undefined);
+        assert.deepEqual(taskSaves, []);
+        assert.deepEqual(cacheAdds, []);
+        assert.deepEqual(navigations, []);
+        assert.equal(values.get('composeTaskChatIntroAtom'), null);
+        assert.equal(values.get('showCommandsAtom').show, true);
+        assert.equal(input().value, text);
+        assert.equal(document.activeElement, input());
+        assert.match(document.querySelector('[role="alert"]').textContent, /task writer failed.*Your note is still here.*Try again/s);
+        await press('Enter', { code: 'Enter' });
+        assert.equal(writerRequests.length, 2);
+        assert.deepEqual(writerRequests[1], writerRequests[0]);
+        assert.equal(taskSaves.length, 1);
+        assert.equal(taskSaves[0].title, 'Fix spacing');
+        assert.equal(taskSaves[0].existingTaskId, existingTask ? 52 : undefined);
+        assert.equal(document.querySelector('[role="alert"]'), null);
+        assert.deepEqual(navigations, ['/detail/project-7/44']);
+      });
+    });
+  }
+}
+
 test('Shift+Enter/IME Enter retain native multiline editing; blank input cannot send', async (t) => {
   await withPalette(t, { tab: 'compose' }, async ({ type, press, requests }) => {
     await press('Enter', { code: 'Enter' });

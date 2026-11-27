@@ -242,12 +242,13 @@ test("all save failures reject instead of announcing success", async () => {
   assert.equal(h.bindings.length, 0);
 });
 
-test("invalid model output falls back to one original note, not partial tasks", async () => {
-  const h = harness({ malformed: true });
-  const result = await h.compose();
-  assert.equal(result.writerFailed, true);
-  assert.equal(h.creates.length, 1);
-  assert.equal(h.creates[0].title, multiPrompt);
+test("HTPR-9684 invalid batch output creates no tickets and does not fill an existing ticket", async () => {
+  for (const existingTaskId of [undefined, 91]) {
+    const h = harness({ malformed: true });
+    await assert.rejects(h.compose(multiPrompt, { existingTaskId }), /The task writer failed/);
+    assert.deepEqual(h.creates, []);
+    assert.deepEqual(h.bindings, []);
+  }
 });
 
 test("manual and Write with AI requests keep the single HTML task stream", async () => {

@@ -247,21 +247,21 @@ test("existing create validation rejects foreign labels, users and agents before
   }
 });
 
-test("active unsaved filters override the saved view, and writer fallback retains view defaults", async () => {
+test("active unsaved filters override the saved view for a successful writer", async () => {
   await withComposer(async api => {
     const board = project();
     board.project_view.user_project_views[0].unsavedView = { board_filters: filters({ Size: [estimate] }) };
     await send(api, { currentProject: board });
-    assert.equal(api.creates[0].title, "Describe this task");
+    assert.equal(api.creates[0].title, "AI title");
     assert.equal(api.creates[0].estimate, estimate);
     assert.equal(api.creates[0].tags, undefined);
     assert.deepEqual(api.creates[0].assignees, []);
     assert.equal(api.creates[0].priority, undefined);
-  }, { writerFails: true });
+  });
 });
 
 
-test("composer submission always preserves a pasted image link when the writer is unavailable", async () => {
+test("composer submission preserves a pasted image link when the writer succeeds", async () => {
   const url = "https://screencast2.com/hCUBu.png";
   await withComposer(async api => {
     await send(api, { text: url });
@@ -269,5 +269,12 @@ test("composer submission always preserves a pasted image link when the writer i
     assert.equal(api.writes[0].body.taskDescription, "<p>[[HT_MEDIA_1]]</p>");
     assert.match(api.creates[0].description, /<a [^>]*href="https:\/\/screencast2\.com\/hCUBu\.png"/);
     assert.match(api.creates[0].description, /<img [^>]*src="https:\/\/screencast2\.com\/hCUBu\.png"/);
+  });
+});
+
+test("HTPR-9684 writer failure never saves raw image notes with view defaults", async () => {
+  await withComposer(async api => {
+    await assert.rejects(send(api, { text: "https://screencast2.com/hCUBu.png" }), /The task writer failed/);
+    assert.deepEqual(api.creates, []);
   }, { writerFails: true });
 });
