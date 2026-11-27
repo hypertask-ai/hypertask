@@ -1,29 +1,13 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
-
-function load(file, stubs) {
-  const filename = path.resolve(__dirname, "..", file);
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    fileName: filename,
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-  }).outputText;
-  const loaded = { exports: {} };
-  new Function("require", "module", "exports", javascript)(specifier => {
-    assert.ok(Object.hasOwn(stubs, specifier), `Unexpected dependency: ${specifier}`);
-    return stubs[specifier];
-  }, loaded, loaded.exports);
-  return loaded.exports;
-}
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 function harness(userId) {
   const queries = [];
   const sessionHeaders = [];
   const data = { projects: [{ id: 15, lastActivity: "2026-01-01T00:00:00.000Z" }] };
   const shared = { "next/server": { NextResponse: Response } };
-  const taskWrites = load("src/lib/api/task-writes/route.ts", {
+  const taskWrites = loadModule("src/lib/api/task-writes/route.ts", {
     ...shared,
     "@/lib/auth/agentScope": {
       withAgentScopeRequest: (_request, operation) => operation(),
@@ -36,7 +20,7 @@ function harness(userId) {
     "better-auth/cookies": {},
     "@/lib/auth/session": {},
   });
-  const { GET } = load("src/lib/api/project-writes/last-activity-read.ts", {
+  const { GET } = loadModule("src/lib/api/project-writes/last-activity-read.ts", {
     ...shared,
     zod: require("zod"),
     "@/lib/api/task-writes/route": taskWrites,

@@ -1,8 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 function loadAuth(clientId = "google-client-fixture", clientSecret = "google-secret-fixture") {
   const captured = [];
@@ -33,21 +31,12 @@ function loadAuth(clientId = "google-client-fixture", clientSecret = "google-sec
     "@/utils/controllers/users/resumeIncompleteSignup": {},
     crypto: require("node:crypto"),
   };
-  const filename = path.resolve(__dirname, "../src/lib/auth/betterAuth.ts");
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    fileName: filename,
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-  }).outputText;
   const previous = { GOOGLE_ID: process.env.GOOGLE_ID, GOOGLE_SECRET: process.env.GOOGLE_SECRET };
   try {
     process.env.GOOGLE_ID = clientId;
     process.env.GOOGLE_SECRET = clientSecret;
-    const loaded = { exports: {} };
-    new Function("require", "module", "exports", javascript)(specifier => {
-      assert.ok(Object.hasOwn(stubs, specifier), `Unexpected dependency: ${specifier}`);
-      return stubs[specifier];
-    }, loaded, loaded.exports);
-    assert.equal(loaded.exports.auth, auth);
+    const loaded = loadModule("src/lib/auth/betterAuth.ts", stubs);
+    assert.equal(loaded.auth, auth);
     assert.equal(captured.length, 1);
     return captured[0];
   } finally {
