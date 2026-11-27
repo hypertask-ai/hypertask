@@ -21,6 +21,7 @@ import {
   HTCTipsConstants,
   InboxPageTipsConstants,
   KanbanTipsConstants,
+  KanbanTipsTidyConstants,
   SearchPageTipsConstants,
   TaskDetailTipsConstants,
 } from "./ConstantsQuickTips";
@@ -42,6 +43,7 @@ import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
+import { HTPR_9018_QUICK_TIPS_FLAG } from "@/lib/flags/definitions/htpr-9018-quick-tips";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
@@ -128,6 +130,9 @@ const BottomSettings_QuickTips = ({
   const boardTips = KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
     ? [tip, { key: ["N"], hint: "quick add" }]
     : [tip]);
+  const tidyBoardTips = KanbanTipsTidyConstants.map(tip => tip.hint === "quick add"
+    ? { ...tip, key: [quickAddShortcutsEnabled ? "N" : "N / Shift+C"] }
+    : tip);
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
   const { toggleShowCommands } = useHypertasksRecoilStates();
@@ -241,13 +246,14 @@ const BottomSettings_QuickTips = ({
         </div>
       )}
 
-      {!mbl && <QuickTips boardTips={quickAddShortcutsEnabled ? boardTips : boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
+      {!mbl && <QuickTips boardTips={quickAddShortcutsEnabled ? boardTips : boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)} tidyBoardTips={tidyBoardTips} />}
     </>
   );
 };
 
-const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
+const QuickTips = ({ boardTips, tidyBoardTips }: { boardTips: ITips[]; tidyBoardTips: ITips[] }) => {
   const pathname = usePathname();
+  const tidyQuickTips = useFlag(HTPR_9018_QUICK_TIPS_FLAG);
   const searchParams = useSearchParams();
   const tutorialRequested = searchParams?.get("tutorial") === "1";
   const [tutorialStored, setTutorialStored] = useState(false);
@@ -282,7 +288,7 @@ const QuickTips = ({ boardTips }: { boardTips: ITips[] }) => {
   }
   if (pathname?.startsWith("/project") || pathname?.startsWith("/demo")) {
     return (
-      <TipsComp tips={boardTips} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
+      <TipsComp tips={tidyQuickTips ? tidyBoardTips : boardTips} toggleQuickTips={toggleQuickTips} appShellRailOn={appShellRailOn} />
     );
   } else if (pathname?.startsWith("/detail")) {
     return (
@@ -321,9 +327,10 @@ const TipsComp = ({
   appShellRailOn?: boolean;
 }) => {
   const isApple = useDeviceContext();
+  const tidyQuickTips = useFlag(HTPR_9018_QUICK_TIPS_FLAG);
   const barRef = useRef<HTMLDivElement>(null);
   const pathanme = usePathname();
-  const { toggleShowCommands } = useHypertasksRecoilStates();
+  const { toggleShowCommands, openShortcuts } = useHypertasksRecoilStates();
   const { mainContentWidth } = useAiChatMainContentLayout();
   const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(
     isXScrollOnKanbanAtom
@@ -371,8 +378,7 @@ const TipsComp = ({
           ? `calc(${mainContentWidth === "100%" ? "100%" : mainContentWidth} - var(--app-shell-rail-w, 48px))`
           : mainContentWidth,
       }}
-      className={`quick-tips-bar xs:hidden lg:flex bg-active-list-element  p-2 items-center text-content ${pathanme?.startsWith("/project") ? "mb-0" : "mb-0"
-        } py-[2px]'`}
+      className={`quick-tips-bar xs:hidden lg:flex bg-active-list-element items-center text-content ${tidyQuickTips ? "px-3 py-1 rounded-[4px]" : "p-2 py-[2px]'"} ${pathanme?.startsWith("/project") ? "mb-0" : "mb-0"}`}
     >
       <div
         className="flex justify-center items-center flex-1 min-w-0 flex-nowrap overflow-hidden whitespace-nowrap gap-[2px]"
@@ -407,7 +413,11 @@ const TipsComp = ({
                   {tip.key.map((tKey, tIndex) => (
                     <KBDElement
                       key={`${tIndex}-quicktips`}
-                      className={`bg-[var(--bg-quick-tip-key)] py-auto px-[6.25px] text-meta leading-[var(--leading-quick-tip-key)] font-semibold h-[20px] flex items-center justify-center mx-[0px] pt-[0px]`}
+                      className={
+                        tidyQuickTips
+                          ? "rounded-sm border-0 bg-label-span px-[5px] py-[2px] font-sans text-micro font-medium leading-none text-white-black"
+                          : "bg-[var(--bg-quick-tip-key)] py-auto px-[6.25px] text-meta leading-[var(--leading-quick-tip-key)] font-semibold h-[20px] flex items-center justify-center mx-[0px] pt-[0px]"
+                      }
                       content={renderShortcut(tKey)}
                     />
                   ))}
@@ -417,13 +427,26 @@ const TipsComp = ({
                 {tip.hint}
               </span>
             </div>
-            {index < tips.length - 1 && (
-              <div className="bg-[#8E9093] h-[4px] w-[4px] rounded-full mx-[4px]" />
-            )}
+            {index < tips.length - 1 &&
+              (tidyQuickTips
+                ? <div className="mx-2 h-[14px] w-px shrink-0 bg-white-black opacity-20" />
+                : <div className="bg-[#8E9093] h-[4px] w-[4px] rounded-full mx-[4px]" />)}
           </React.Fragment>
         ))}
       </div>
 
+      {tidyQuickTips && (
+        <>
+          <div className="mx-2 h-[14px] w-px shrink-0 bg-white-black opacity-20" />
+          <button
+            type="button"
+            onClick={openShortcuts}
+            className="shrink-0 cursor-pointer text-meta text-[var(--color-rich-text-link)] hover:underline"
+          >
+            All shortcuts
+          </button>
+        </>
+      )}
 
       <X size={18}
         className="cursor-pointer text-white-black text-subheading font-bold"
