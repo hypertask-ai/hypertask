@@ -7,10 +7,12 @@ const { loadModule: load } = require("./helpers/loadModule.cjs");
 const legacy = require("./fixtures/cli-install/legacy.json");
 const key = "htpr-7549-first-task-pointer";
 const cliKey = "htpr-7033-cli-install-command";
+const browserKey = "htpr-9530-onboarding-cli-browser-login";
 const commands = load("src/lib/onboarding/installCommands.ts");
 
-async function seed(enabled, cliEnabled) {
+async function seed(enabled, cliEnabled, browserLoginEnabled = true, { sample = false } = {}) {
   const tasks = [];
+  const manifests = [];
   const markers = [];
   const assignments = [];
   const reads = [];
@@ -18,11 +20,11 @@ async function seed(enabled, cliEnabled) {
   const prisma = {
     section: { create: async ({ data }) => ({ id: nextSection++, ...data }) },
     user: { findUnique: async () => ({ id: 900 }) },
-    project: { update: async ({ where, data }) => { assert.equal(where.id, 7); markers.push(data); return data; } },
+    project: { update: async ({ where, data }) => { assert.equal(where.id, 7); markers.push(data); return data; }, findUniqueOrThrow: async () => ({ id: 7 }) },
   };
   const { createOnboardingSampleBoardProject } = load("src/utils/controllers/users/completeOnboardingStep.ts", {
-    "@/lib/planLimits": { isPlanLimitsEnabled: async () => false, isPlanLimitReachedError: () => false },
-    "@/lib/mcp/boards/createBoardFromManifest": {},
+    "@/lib/planLimits": { isPlanLimitsEnabled: async () => sample, isPlanLimitReachedError: () => false },
+    "@/lib/mcp/boards/createBoardFromManifest": { createBoardFromManifest: async (options) => { manifests.push(options.manifest); return { board: { id: 7 }, tasks: [{ id: 71 }] }; } },
     "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "seed", processAnalyticsIntentSoon() {} },
     "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "MYB" },
     "@/utils/controllers/logs/createLog": { __esModule: true, default() {} },
@@ -38,21 +40,28 @@ async function seed(enabled, cliEnabled) {
     "@/lib/flags": {
       HTPR_7549_FIRST_TASK_POINTER_FLAG: key,
       HTPR_7033_CLI_INSTALL_COMMAND_FLAG: cliKey,
+      HTPR_9530_ONBOARDING_CLI_BROWSER_LOGIN_FLAG: browserKey,
       isFeatureEnabled: async (flag, userId) => {
         assert.equal(userId, 2343);
         reads.push(flag);
-        assert.ok([key, cliKey].includes(flag));
+        assert.ok([key, cliKey, browserKey].includes(flag));
+        if (flag === browserKey) return browserLoginEnabled;
         return flag === key ? enabled : cliEnabled;
       },
     },
   });
   await createOnboardingSampleBoardProject({ exist_user: { id: 2343 }, boardTitle: "MyBoard", Team: { id: "team", title: "MyTeam" }, googleAccount: { id: "google" } });
-  assert.equal(tasks.length, 1);
-  assert.equal(tasks[0].sectionId, 10);
-  assert.equal(tasks[0].userId, 900);
-  assert.equal(tasks[0].projectId, 7);
+  if (sample) {
+    assert.equal(manifests.length, 1);
+    assert.equal(manifests[0].tasks.at(-1).title, "Connect your AI to Hypertask");
+  } else {
+    assert.equal(tasks.length, 1);
+    assert.equal(tasks[0].sectionId, 10);
+    assert.equal(tasks[0].userId, 900);
+    assert.equal(tasks[0].projectId, 7);
+  }
   assert.equal(assignments[0][2], 71);
-  return { task: tasks[0], markers, reads };
+  return { task: sample ? manifests[0].tasks.at(-1) : tasks[0], markers, reads };
 }
 
 for (const cliEnabled of [false, true]) {
@@ -67,26 +76,90 @@ for (const cliEnabled of [false, true]) {
     assert.equal(code.find((value) => value === "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp"), "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp");
     assert.equal(code.find((value) => value === "curl -fsSL https://hypertask.ai/install | sh"), "curl -fsSL https://hypertask.ai/install | sh");
     assert.equal(code.find((value) => value === "irm https://hypertask.ai/install.ps1 | iex"), "irm https://hypertask.ai/install.ps1 | iex");
-    assert.ok(code.includes("hypertask login --token <your-agent-token>"));
+    assert.ok(code.includes("hypertask login"));
     assert.match(text, /Approve and connect/);
     assert.match(text, /Never post the token in a task or chat/);
-    assert.match(text, /Bare hypertask login does not sign in today/);
+    assert.match(text, /hypertask login: it opens your browser to authorize/);
+    assert.doesNotMatch(text, /does not sign in today/);
+    assert.doesNotMatch(text, /login --token/);
     assert.doesNotMatch(task.description, /npm|login --code/);
-    assert.deepEqual(reads, [key]);
+    assert.deepEqual(reads, [key, browserKey]);
     assert.deepEqual(markers, [{ firstTaskPointerTaskId: 71, firstTaskPointerSectionId: 10 }]);
     dom.window.close();
   });
 
   test(`normal user with flag off is still refused new copy and preserves old CLI ${cliEnabled} bytes`, async () => {
-    const { task, markers } = await seed(false, cliEnabled);
+    const { task, markers, reads } = await seed(false, cliEnabled);
     const expected = cliEnabled
       ? legacy.onboarding.replace("<li><strong>npm install -g @hypertask/hypertask_cli</strong></li>", `<li><code>${commands.CLI_INSTALL_COMMAND}</code></li>`) + `<p>${commands.CLI_WINDOWS_NOTE}</p>`
       : legacy.onboarding;
     assert.equal(task.title, "Connect Hypertask to Claude or ChatGPT");
     assert.equal(task.description, expected);
+    assert.deepEqual(reads, [key, cliKey]);
     assert.deepEqual(markers, []);
   });
 }
+
+test("HTPR-9530 onboarding CLI step uses browser sign-in", async () => {
+  const { task, reads } = await seed(true, true);
+  const dom = new JSDOM(task.description);
+  const text = dom.window.document.body.textContent;
+  assert.match(text, /hypertask login: it opens your browser to authorize/);
+  assert.doesNotMatch(text, /does not sign in today/);
+  assert.doesNotMatch(text, /login --token/);
+  assert.doesNotMatch(text, /--token/);
+  assert.doesNotMatch(text, /app\.hypertask\.ai\/agents/);
+  assert.deepEqual(reads, [key, browserKey]);
+  dom.window.close();
+});
+
+test("HTPR-9530 off keeps the previous token sentence, agents page included", async () => {
+  const { task } = await seed(true, true, false);
+  const dom = new JSDOM(task.description);
+  const text = dom.window.document.body.textContent;
+  assert.match(text, /https:\/\/app\.hypertask\.ai\/agents/);
+  assert.match(text, /hypertask login --token <your-agent-token>/);
+  assert.match(text, /Bare hypertask login does not sign in today/);
+  assert.doesNotMatch(text, /hypertask login: it opens your browser/);
+  dom.window.close();
+});
+
+test("HTPR-9530 browser sign-in copy does not depend on the CLI install flag", async () => {
+  const { task, reads } = await seed(true, false, true);
+  const dom = new JSDOM(task.description);
+  const text = dom.window.document.body.textContent;
+  assert.match(text, /hypertask login: it opens your browser to authorize/);
+  assert.doesNotMatch(text, /--token/);
+  assert.deepEqual(reads, [key, browserKey]);
+  dom.window.close();
+});
+
+test("HTPR-9530 no onboarding sign-in step prescribes a token", async () => {
+  const { task } = await seed(true, true);
+  const dom = new JSDOM(task.description);
+  assert.doesNotMatch(dom.window.document.body.textContent, /login --token/);
+  dom.window.close();
+  const surfaces = [
+    "src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx",
+    "public/llms.txt",
+  ];
+  for (const file of surfaces) {
+    const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+    assert.ok(source.includes("hypertask login"), file);
+    assert.doesNotMatch(source, /login --token/, file);
+  }
+});
+
+test("HTPR-9530 sample-board path follows the flag off and on", async () => {
+  const off = await seed(true, true, false, { sample: true });
+  const offText = new JSDOM(off.task.description).window.document.body.textContent;
+  assert.match(offText, /hypertask login --token <your-agent-token>/);
+  assert.match(offText, /https:\/\/app\.hypertask\.ai\/agents/);
+  const on = await seed(true, true, true, { sample: true });
+  const onText = new JSDOM(on.task.description).window.document.body.textContent;
+  assert.match(onText, /hypertask login: it opens your browser to authorize/);
+  assert.doesNotMatch(onText, /--token/);
+});
 
 test("legacy factory remains byte-identical to the production baseline", () => {
   const { createHash } = require("node:crypto");

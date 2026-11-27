@@ -12,7 +12,7 @@ import { createProvisionedTaskCore } from "../tasks/createTaskCore";
 import assigneesAssign from "../assignees/assign";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
 import { logPersonal, recordId } from "@/utils/controllers/logs/quietPersonalLog";
-import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_9530_ONBOARDING_CLI_BROWSER_LOGIN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE } from "@/lib/onboarding/installCommands";
 import { isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
 import { createBoardFromManifest } from "@/lib/mcp/boards/createBoardFromManifest";
@@ -146,16 +146,20 @@ const CONNECT_AI_TASK = (cliInstallCommandEnabled: boolean) => ({
   ].join(""),
 });
 
-const CONNECT_YOUR_AI_TASK = {
+const CONNECT_YOUR_AI_CLI_STEP_TOKEN = "<p><strong>Terminal / CLI:</strong> install with <code>curl -fsSL https://hypertask.ai/install | sh</code>. Windows PowerShell: <code>irm https://hypertask.ai/install.ps1 | iex</code>. Create or open an agent at <code>https://app.hypertask.ai/agents</code>, copy its token, then run <code>hypertask login --token &lt;your-agent-token&gt;</code>. Bare <code>hypertask login</code> does not sign in today.</p>";
+
+const CONNECT_YOUR_AI_CLI_STEP_BROWSER = "<p><strong>Terminal / CLI:</strong> install with <code>curl -fsSL https://hypertask.ai/install | sh</code>. Windows PowerShell: <code>irm https://hypertask.ai/install.ps1 | iex</code>. Then run <code>hypertask login</code>: it opens your browser to authorize this Hypertask account.</p>";
+
+const CONNECT_YOUR_AI_TASK = (browserLoginEnabled: boolean) => ({
   title: "Connect your AI to Hypertask",
   description: [
     "<p>Use Claude, ChatGPT, Claude Code, Codex, Cursor or VS Code to read, create and update tasks on this board.</p>",
     "<p><strong>Claude or ChatGPT:</strong> add <code>https://mcp.hypertask.ai/mcp</code> as an MCP server, then use the Hypertask <strong>Approve and connect</strong> page. You do not need to generate a token for this sign-in flow.</p>",
     "<p><strong>Claude Code:</strong> <code>claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp</code> and approve the connection when prompted.</p>",
     "<p><strong>Codex, Cursor or VS Code:</strong> add the same remote HTTP MCP server in your client's MCP settings and approve if supported. For clients that require a config file/token instead, open the board's existing Connect/MCP instructions and use its client-specific configuration. Never post the token in a task or chat.</p>",
-    "<p><strong>Terminal / CLI:</strong> install with <code>curl -fsSL https://hypertask.ai/install | sh</code>. Windows PowerShell: <code>irm https://hypertask.ai/install.ps1 | iex</code>. Create or open an agent at <code>https://app.hypertask.ai/agents</code>, copy its token, then run <code>hypertask login --token &lt;your-agent-token&gt;</code>. Bare <code>hypertask login</code> does not sign in today.</p>",
+    browserLoginEnabled ? CONNECT_YOUR_AI_CLI_STEP_BROWSER : CONNECT_YOUR_AI_CLI_STEP_TOKEN,
   ].join(""),
-};
+});
 
 const STARTER_BOARD_SECTIONS: {
   section_title: string;
@@ -220,7 +224,9 @@ export const createOnboardingSampleBoardProject = async (
     return createProvisionedOnboardingSampleBoardProject(params);
   }
   const firstTaskPointerEnabled = await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, exist_user.id);
-  const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK : CONNECT_AI_TASK(
+  const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK(
+    await isFeatureEnabled(HTPR_9530_ONBOARDING_CLI_BROWSER_LOGIN_FLAG, exist_user.id),
+  ) : CONNECT_AI_TASK(
     await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
   );
   const starterTasks = SEED_STARTER_TASKS
@@ -337,7 +343,9 @@ export const createProvisionedOnboardingSampleBoardProject = async ({
   if (firstSection) {
     try {
       const firstTaskPointerEnabled = await isFeatureEnabled(HTPR_7549_FIRST_TASK_POINTER_FLAG, exist_user.id);
-      const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK : CONNECT_AI_TASK(
+      const connectAiTask = firstTaskPointerEnabled ? CONNECT_YOUR_AI_TASK(
+        await isFeatureEnabled(HTPR_9530_ONBOARDING_CLI_BROWSER_LOGIN_FLAG, exist_user.id),
+      ) : CONNECT_AI_TASK(
         await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
       );
       const { task } = await createProvisionedTaskCore({
