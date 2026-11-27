@@ -11,7 +11,16 @@ import { resolveSeatQuantity } from "@/lib/resolveSeatQuantity";
 import { isSubscriptionActive } from "@/lib/constants/constants";
 import { reportError } from "@/lib/errors/reportError";
 import { refreshStripeSubscriptionSnapshotWithLockHeld } from "@/lib/stripeSubscriptionSnapshot";
-import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
+import {
+  createMemorySeatBillingWrites,
+  SeatBillingWriteUnsettledError,
+  seatBillingWrites,
+  withTeamSeatBillingLock,
+  type PendingSeatBillingWrite,
+  type SeatBillingLedgerScope,
+  type SeatBillingProration,
+  type SeatBillingWriteLedger,
+} from "@/lib/seatBillingLock";
 import { shouldClearTeamSubscriptionEntitlement } from "@/utils/controllers/stripe/webhook/subscriptionEntitlement";
 
 export type SeatBillingResult =
@@ -70,16 +79,17 @@ export type SeatBillingAdapter = {
     itemId: string,
     update: {
       quantity: number;
-      proration_behavior: "none" | "always_invoice" | "create_prorations";
+      proration_behavior: SeatBillingProration;
     },
-    requestOptions?: { idempotencyKey: string; timeout: number },
+    requestOptions: { idempotencyKey: string; timeout: number },
   ) => Promise<unknown>;
   reportFailure: (error: Error, teamId: string) => Promise<unknown>;
+  writes?: SeatBillingWriteLedger;
 };
 
 export type SeatBillingSerializer = <T>(
   teamId: string,
-  run: (assertHeld: () => void) => Promise<T>,
+  run: (assertHeld: () => void, ledgerScope?: SeatBillingLedgerScope) => Promise<T>,
 ) => Promise<T>;
 
 const STRIPE_UPDATE_TIMEOUT_MS = 15_000;
@@ -332,11 +342,45 @@ async function retrieveCurrentSubscriptionItem(
   return currentItem;
 }
 
+function isDefinitiveStripeRejection(error: unknown): boolean {
+  const { code, rawType, type, statusCode } = (error ?? {}) as Record<string, unknown>;
+  if (code === "idempotency_key_in_use" || statusCode === 409 || statusCode === 429 || (typeof statusCode === "number" && statusCode >= 500)) return false;
+  return code === "resource_missing" || rawType === "invalid_request_error" ||
+    type === "invalid_request_error" || type === "StripeInvalidRequestError" ||
+    (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500);
+}
+
+async function settleSeatBillingWrite(
+  teamId: string,
+  write: PendingSeatBillingWrite,
+  subscriptionId: string,
+  activeItemId: string,
+  adapter: SeatBillingAdapter,
+  ledger: SeatBillingWriteLedger,
+): Promise<void> {
+  if (write.subscriptionId === subscriptionId && write.itemId === activeItemId) {
+    try {
+      await adapter.updateSubscriptionItem(
+        write.itemId,
+        { quantity: write.quantity, proration_behavior: write.prorationBehavior },
+        { idempotencyKey: write.idempotencyKey, timeout: STRIPE_UPDATE_TIMEOUT_MS },
+      );
+    } catch (error) {
+      if (isDefinitiveStripeRejection(error)) {
+        await ledger.clear(teamId, write);
+      }
+      throw error;
+    }
+  }
+  await ledger.clear(teamId, write);
+}
+
 async function syncSeatBilling(
   teamId: string | undefined | null,
   adapter: SeatBillingAdapter,
   exact: boolean,
   assertHeld: () => void = () => {},
+  ledgerScope: SeatBillingLedgerScope = "unlocked",
 ): Promise<SeatBillingResult> {
   if (!teamId) return "SKIPPED";
   try {
@@ -374,6 +418,17 @@ async function syncSeatBilling(
       return "SKIPPED";
     }
 
+    const ledger = adapter.writes ??
+      (ledgerScope === "locked" ? seatBillingWrites : createMemorySeatBillingWrites());
+    const unsettled = await ledger.load(teamId);
+    if (unsettled) {
+      assertHeld();
+      await settleSeatBillingWrite(teamId, unsettled, activePlan.subscriptionId, itemId, adapter, ledger).catch((error: unknown) => {
+        if (!isDefinitiveStripeRejection(error)) throw error;
+      });
+      assertHeld();
+    }
+
     const desiredQuantity = await adapter.resolveQuantity(
       teamId,
       team.totalSeats,
@@ -400,24 +455,23 @@ async function syncSeatBilling(
       return "OK";
     }
 
-    const isTrialing = activePlan?.subscriptionStatus === "trialing";
-
-    assertHeld();
-    await adapter.updateSubscriptionItem(
-      currentItemId,
-      {
-        quantity: desiredQuantity,
-        proration_behavior: isTrialing
+    const write: PendingSeatBillingWrite = {
+      idempotencyKey: `seat-billing-${teamId}-${randomUUID()}`,
+      itemId: currentItemId,
+      subscriptionId: activePlan.subscriptionId,
+      quantity: desiredQuantity,
+      prorationBehavior:
+        activePlan?.subscriptionStatus === "trialing"
           ? "none"
           : desiredQuantity > currentQuantity
             ? "always_invoice"
             : "create_prorations",
-      },
-      {
-        idempotencyKey: `seat-billing-${randomUUID()}`,
-        timeout: STRIPE_UPDATE_TIMEOUT_MS,
-      },
-    );
+    };
+    if (!(await ledger.begin(teamId, write))) {
+      throw new SeatBillingWriteUnsettledError();
+    }
+    assertHeld();
+    await settleSeatBillingWrite(teamId, write, activePlan.subscriptionId, currentItemId, adapter, ledger);
     assertHeld();
     await adapter.refreshSubscriptionSnapshot?.(teamId, activePlan.subscriptionId, assertHeld);
     return exact ? "RECONCILED" : "SEATED";
@@ -443,8 +497,8 @@ export async function syncSeatBillingOnJoin(
 ): Promise<SeatBillingResult> {
   if (!teamId) return "SKIPPED";
   try {
-    return await serialize(teamId, (assertHeld) =>
-      syncSeatBilling(teamId, adapter, false, assertHeld),
+    return await serialize(teamId, (assertHeld, ledgerScope) =>
+      syncSeatBilling(teamId, adapter, false, assertHeld, ledgerScope),
     );
   } catch (error) {
     const normalized =
@@ -462,8 +516,8 @@ export async function reconcileSeatBillingForTeam(
   serialize: SeatBillingSerializer = withTeamSeatBillingLock,
 ): Promise<SeatBillingResult> {
   try {
-    return await serialize(teamId, (assertHeld) =>
-      syncSeatBilling(teamId, adapter, true, assertHeld),
+    return await serialize(teamId, (assertHeld, ledgerScope) =>
+      syncSeatBilling(teamId, adapter, true, assertHeld, ledgerScope),
     );
   } catch (error) {
     const normalized =
@@ -490,7 +544,7 @@ export async function mutateAndSyncSeatBilling<T>(
   const adapter = options.adapter ?? productionAdapter;
   const serialize = options.serialize ?? withTeamSeatBillingLock;
 
-  return serialize(teamId, async (assertHeld) => {
+  return serialize(teamId, async (assertHeld, ledgerScope) => {
     assertHeld();
     const mutation = await mutate(assertHeld);
     assertHeld();
@@ -500,6 +554,7 @@ export async function mutateAndSyncSeatBilling<T>(
       adapter,
       options.exact ?? false,
       assertHeld,
+      ledgerScope,
     );
     return { value: mutation.value, billing };
   });

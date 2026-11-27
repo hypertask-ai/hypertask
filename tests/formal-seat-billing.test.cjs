@@ -11,6 +11,8 @@ const covered = [
   "verification/formal/checks.json",
   "verification/formal/seat-billing/SeatBilling.tla",
   "verification/formal/seat-billing/SeatBilling.cfg",
+  "verification/formal/seat-billing/BugLateWrite.cfg",
+  "verification/formal/seat-billing/BugLeaseOverlap.cfg",
   "verification/formal/seat-billing/repro.cjs",
   ".claude/skills/formal-verification/SKILL.md",
 ];
@@ -23,18 +25,29 @@ test("the seat-billing model covers the files its record names", () => {
 
 test("every covered file still feeds the model, so a change there reruns this check", () => {
   const manifest = require(path.join(root, "verification/formal/checks.json"));
-  assert.ok(manifest.checks["seat-billing"].properties.some((property) => property.expect === "violated"));
+  assert.ok(manifest.checks["seat-billing"].properties.some((property) => property.expect === "holds"));
+  for (const replay of ["seat-billing-9465", "seat-billing-9465-overlap"]) {
+    assert.ok(manifest.checks[replay].properties.some((property) => property.expect === "violated"), `${replay} must keep replaying the pre-fix behaviour`);
+  }
 });
 
-test("the seat-billing model raises the recorded finding and nothing else", () => {
+test("the seat-billing model holds, and its pre-fix replays still break it", () => {
   const checked = spawnSync(
     process.execPath,
-    ["scripts/formal-verification/run.mjs", "seat-billing"],
+    ["scripts/formal-verification/run.mjs", "seat-billing", "seat-billing-9465", "seat-billing-9465-overlap"],
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
   assert.match(
     checked.stdout,
-    /formal-verification: ok seat-billing matches its record .*JoinNeverDecreases holds, ReconcileMatchesSeats violated \(recorded finding\), LeaseExcludesOverlap violated \(recorded finding\)/,
+    /formal-verification: ok seat-billing matches its record .*JoinNeverDecreases holds, ReconcileMatchesSeats holds, LeaseExcludesOverlap holds/,
   );
+  for (const [name, property] of [["seat-billing-9465", "ReconcileMatchesSeats"], ["seat-billing-9465-overlap", "LeaseExcludesOverlap"]]) {
+    assert.match(checked.stdout, new RegExp(`formal-verification: ok ${name} matches its record .*${property} violated \\(recorded finding\\)`));
+  }
+});
+
+test("a timed-out Stripe write settles before reconciliation reads its quantity", () => {
+  const checked = spawnSync(process.execPath, ["verification/formal/seat-billing/repro.cjs"], { cwd: root, encoding: "utf8", timeout: 30_000 });
+  assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
 });
