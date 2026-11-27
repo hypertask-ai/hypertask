@@ -46,7 +46,7 @@ stub("src/lib/subscription.ts", { stripe: {
 stub("src/lib/resolveSeatQuantity.ts", { resolveSeatQuantity: async () => team.totalSeats });
 stub("src/lib/errors/reportError.ts", { reportError: async () => {} });
 const passthrough = async (_id, run) => run(() => {});
-stub("src/lib/seatBillingLock.ts", { withTeamSeatBillingLock: passthrough });
+stub("src/lib/redis.ts", { getRedis: async () => { throw new Error("Unexpected Redis access"); } });
 const billing = load(path.join(root, "src/lib/syncSeatBilling.ts"));
 const refresh = (...args) => load(path.join(root, "src/lib/stripeSubscriptionSnapshot.ts")).refreshStripeSubscriptionSnapshotWithLockHeld(...args);
 
