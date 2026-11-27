@@ -111,6 +111,7 @@ const nextConfig = {
   },
   experimental: {
     agentUpgrade: false,
+    reactDebugChannel: false,
     // Release each compiler's heap before page collection and file tracing.
     // Otherwise webpack stays in the main process through the peak (YPER4-184).
     webpackBuildWorker: true,

@@ -32,6 +32,8 @@ export const REALTIME_HIDDEN_DISCONNECT_DELAY_MS = 30_000;
 export const REALTIME_IDLE_DISCONNECT_DELAY_MS = 5_000;
 export const REALTIME_SUBSCRIPTION_GRACE_MS = 15_000;
 export const REALTIME_DISABLED_STORAGE_KEY = "hypertask:realtime-disabled";
+export const REALTIME_LOCAL_OPT_IN_STORAGE_KEY =
+  "hypertask:realtime-local-opt-in";
 export const MULTIPROMPT_AGENT_MARKER =
   "__multipromptNotificationClickBridgeInstalled";
 
@@ -88,11 +90,33 @@ function updateRealtimePreference(
   }
 }
 
+function updateLocalRealtimeOptIn(
+  storage: RealtimeBrowserContext["sessionStorage"],
+  optedIn: boolean,
+): void {
+  try {
+    if (optedIn) storage.setItem(REALTIME_LOCAL_OPT_IN_STORAGE_KEY, "1");
+    else storage.removeItem(REALTIME_LOCAL_OPT_IN_STORAGE_KEY);
+  } catch {
+  }
+}
+
+function localRealtimeOptedInForTab(browser: RealtimeBrowserContext): boolean {
+  try {
+    return (
+      browser.sessionStorage.getItem(REALTIME_LOCAL_OPT_IN_STORAGE_KEY) === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function realtimeDisabledForBrowser(
   browser: RealtimeBrowserContext,
 ): boolean {
   if (browser.__multipromptNotificationClickBridgeInstalled === true) {
     updateRealtimePreference(browser.sessionStorage, true);
+    updateLocalRealtimeOptIn(browser.sessionStorage, false);
     return true;
   }
 
@@ -102,12 +126,18 @@ export function realtimeDisabledForBrowser(
   const localSmokeOrigin = loopbackHost(browser.location.hostname);
   if (localSmokePreference === "off") {
     updateRealtimePreference(browser.sessionStorage, true);
+    updateLocalRealtimeOptIn(browser.sessionStorage, false);
     return true;
   }
   if (
     localSmokeOrigin &&
     (localSmokePreference === "on" || localStackRealtime())
   ) {
+    updateRealtimePreference(browser.sessionStorage, false);
+    updateLocalRealtimeOptIn(browser.sessionStorage, true);
+    return false;
+  }
+  if (localSmokeOrigin && localRealtimeOptedInForTab(browser)) {
     updateRealtimePreference(browser.sessionStorage, false);
     return false;
   }
