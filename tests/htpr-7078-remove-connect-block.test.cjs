@@ -5,10 +5,10 @@ const { definitions } = require("./helpers/flag-files.cjs");
 
 const connectBlockFlag = definitions().find(({ key }) => key === "htpr-7078-remove-connect-block");
 
-test("the flag is a bugfix flag that is on for everyone", () => {
-  assert.ok(connectBlockFlag, "htpr-7078-remove-connect-block must stay defined");
-  assert.equal(connectBlockFlag.kind, "bugfix");
-  assert.equal(connectBlockFlag.defaultMode, "EVERYONE");
+test("the inline card stays removed without a flag", () => {
+  assert.equal(connectBlockFlag, undefined);
+  const landing = fs.readFileSync("src/app/[...boardURL]/LandingPage.tsx", "utf8");
+  assert.doesNotMatch(landing, /AgentConnectCard|connectBlockRemoved|inlineConnectCard/);
 });
 
 test("the card component and onboarding helpers stay in place", () => {
