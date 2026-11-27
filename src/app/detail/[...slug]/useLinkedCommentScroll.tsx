@@ -1,7 +1,5 @@
 import { useEffect, useRef } from "react";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7090_COMMENT_LINK_SCROLL_FLAG } from "@/lib/flags/keys";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
 
 export const LINKED_COMMENT_SCROLL_PASSES_MS = [
@@ -11,7 +9,6 @@ export const LINKED_COMMENT_SCROLL_PASSES_MS = [
 ];
 
 export function useLinkedCommentScroll(context: TaskDetailKeyboardContext) {
-  const enabled = useFlag(HTPR_7090_COMMENT_LINK_SCROLL_FLAG);
   const { comments, scrollVirtualize, searchParams, initialScrollGuard, initialScrollGenerationRef, _parsedTask } = context;
   const latestScrollVirtualize = useRef(scrollVirtualize);
   latestScrollVirtualize.current = scrollVirtualize;
@@ -20,7 +17,7 @@ export function useLinkedCommentScroll(context: TaskDetailKeyboardContext) {
   const hasComments = comments.length > 0;
 
   useEffect(() => {
-    if (!enabled || !linkedComment || !hasComments) return;
+    if (!linkedComment || !hasComments) return;
     const key = `${_parsedTask.id}:${linkedComment}`;
     if (handledKey.current === key) return;
     handledKey.current = key;
@@ -47,5 +44,5 @@ export function useLinkedCommentScroll(context: TaskDetailKeyboardContext) {
       timeouts.forEach(clearTimeout);
       frames.forEach(cancelAnimationFrame);
     };
-  }, [enabled, linkedComment, hasComments, _parsedTask.id]);
+  }, [linkedComment, hasComments, _parsedTask.id]);
 }
