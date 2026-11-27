@@ -1,6 +1,7 @@
 #!/bin/sh
 # Proves the commit-time key scan blocks a fake key, lets clean commits through, keeps a repo's
-# own hooks running and covers husky repos. Runs in a throwaway HOME.
+# own hooks running, covers husky repos and survives a lefthook install that takes over the
+# global hooks path (VSTA-172). Runs in a throwaway HOME.
 set -u
 src=$(cd "$(dirname "$0")" && pwd)
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
@@ -132,5 +133,38 @@ echo "aws_access_key_id = $fake" > c.txt; git add c.txt
 if git commit -qm leak 2>/dev/null; then bad "husky repo blocks fake key"; else ok "husky repo blocks fake key"; fi
 git rm -q --cached c.txt; echo clean > d.txt; git add d.txt
 git commit -qm clean 2>/dev/null && ok "husky repo clean commit passes" || bad "husky repo clean commit passes"
+
+# A repo's `lefthook install --force` replaces the global pre-commit with its own wrapper, which
+# scans nothing (VSTA-172). The scan has to come back, and lefthook has to keep running.
+hooks="$XDG_CONFIG_HOME/git/hooks"; lhran="$tmp/lefthook-ran"
+clobber() {
+  rm -f "$hooks/pre-commit"
+  {
+    echo '#!/bin/sh'
+    echo 'call_lefthook()'
+    echo '{'
+    printf '  echo "lefthook $*" >> "%s"\n' "$lhran"
+    echo '}'
+    echo 'call_lefthook run "pre-commit" "$@"'
+  } > "$hooks/pre-commit"
+  chmod +x "$hooks/pre-commit"
+}
+git init -q "$tmp/lefthook"; cd "$tmp/lefthook"
+clobber
+sh "$src/install" >/dev/null
+[ -L "$hooks/pre-commit" ] && ok "install puts the scan back after lefthook took it" || bad "install puts the scan back after lefthook took it"
+[ -x "$hooks/pre-commit-chained" ] && ok "lefthook's wrapper kept beside the scan" || bad "lefthook's wrapper kept beside the scan"
+echo "aws_access_key_id = $fake" > e.txt; git add e.txt
+if git commit -qm leak 2>/dev/null; then bad "scan back blocks fake key"; else ok "scan back blocks fake key"; fi
+git rm -q --cached e.txt; echo clean > f.txt; git add f.txt
+git commit -qm clean 2>/dev/null && ok "clean commit passes with lefthook chained" || bad "clean commit passes with lefthook chained"
+grep -q 'lefthook run pre-commit' "$lhran" 2>/dev/null && ok "lefthook commands still run" || bad "lefthook commands still run"
+# No reinstall: another hook name still points at the scan, so it heals on the next hook.
+clobber
+: > "$lhran"; echo two >> f.txt; git commit -qam two 2>/dev/null
+[ -L "$hooks/pre-commit" ] && ok "next hook puts the scan back by itself" || bad "next hook puts the scan back by itself"
+echo "aws_access_key_id = $fake" > g.txt; git add g.txt
+if git commit -qm leak2 2>/dev/null; then bad "self-healed scan blocks fake key"; else ok "self-healed scan blocks fake key"; fi
+grep -q 'lefthook run pre-commit' "$lhran" 2>/dev/null && ok "healed scan still chains lefthook" || bad "healed scan still chains lefthook"
 
 exit $fail

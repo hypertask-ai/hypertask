@@ -1,13 +1,31 @@
 #!/bin/sh
 # Global git hook (core.hooksPath). Runs the key scan before a commit, then the repo's own hook
-# of the same name, so setting a global hooks path never switches a repo's hooks off.
+# of the same name and the wrapper that stood here before, so setting a global hooks path never
+# switches a repo's hooks off.
+# `lefthook install --force` in a repo renames pre-commit here and writes its own wrapper, which
+# scans nothing and then cannot find lefthook (VSTA-172). Keep that wrapper as pre-commit-chained
+# so it runs after the scan, and put it back from any other hook name, which lefthook leaves alone.
 name=$(basename "$0")
 here=$(dirname "$0")
+status=0
+if [ "$name" != pre-commit ]; then
+  if [ -f "$here/pre-commit" ] && [ ! -L "$here/pre-commit" ]; then
+    if mv -f "$here/pre-commit" "$here/pre-commit-chained"; then
+      ln -sf git-hook "$here/pre-commit"
+    fi
+  fi
+fi
 if [ "$name" = pre-commit ]; then
   "$here/scan-staged" || exit 1
 fi
 own="$(git rev-parse --git-common-dir)/hooks/$name"
 if [ -x "$own" ]; then
-  exec "$own" "$@"
+  if [ "$name" != pre-commit ]; then
+    exec "$own" "$@"
+  fi
+  "$own" "$@" || status=1
 fi
-exit 0
+if [ "$name" = pre-commit ] && [ -x "$here/pre-commit-chained" ]; then
+  "$here/pre-commit-chained" "$@" || status=1
+fi
+exit $status
