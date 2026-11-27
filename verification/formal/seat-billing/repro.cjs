@@ -12,7 +12,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let seats = 1;
 let billed = 1;
-let appliedKeys = [];
+const landed = new Map();
 const writes = createMemorySeatBillingWrites();
 
 const adapter = {
@@ -25,14 +25,14 @@ const adapter = {
   resolveQuantity: async () => seats,
   retrieveSubscriptionItem: async () => ({ id: "si_1", quantity: billed, priceId: "price_1", subscriptionId: "sub_1" }),
   updateSubscriptionItem: async (_itemId, update, options) => {
-    appliedKeys.push(options.idempotencyKey);
-    const alreadyApplied = appliedKeys.filter((key) => key === options.idempotencyKey).length > 1;
-    if (!alreadyApplied) billed = update.quantity;
-    if (appliedKeys.length === 1) {
+    if (landed.has(options.idempotencyKey)) return landed.get(options.idempotencyKey);
+    const applied = sleep(60).then(() => { billed = update.quantity; });
+    landed.set(options.idempotencyKey, applied);
+    if (landed.size === 1) {
       await sleep(20);
       throw new Error("Stripe request timed out after 15000ms");
     }
-    await sleep(20);
+    await applied;
   },
   reportFailure: async () => {},
 };
@@ -42,7 +42,8 @@ const adapter = {
   const join = await syncSeatBillingOnJoin("team_1", adapter, passthrough);
   seats = 1;
   const reconcile = await reconcileSeatBillingForTeam("team_1", adapter, passthrough);
+  await Promise.all(landed.values());
   const pending = await writes.load("team_1");
   console.log(JSON.stringify({ join, reconcile, seats, billed, pending }, null, 2));
-  process.exitCode = reconcile === "OK" && billed !== seats ? 1 : 0;
+  process.exitCode = join === "Error" && reconcile === "RECONCILED" && billed === seats && pending === null && landed.size === 2 ? 0 : 1;
 })();

@@ -17,16 +17,9 @@ return 0
 `;
 
 const RELEASE_SCRIPT = `
-if redis.call('get', KEYS[1]) == ARGV[1] then
-  return redis.call('del', KEYS[1])
-end
-return 0
-`;
-
-const CLEAR_SCRIPT = `
 local stored = redis.call('get', KEYS[1])
 if not stored then return 1 end
-if cjson.decode(stored)['idempotencyKey'] == ARGV[1] then
+if stored == ARGV[1] then
   return redis.call('del', KEYS[1])
 end
 return 0
@@ -34,14 +27,12 @@ return 0
 
 type RedisClient = Awaited<ReturnType<typeof getRedis>>;
 
-export type SeatBillingProration =
-  | "none"
-  | "always_invoice"
-  | "create_prorations";
+export type SeatBillingProration = "none" | "always_invoice" | "create_prorations";
 
 export type PendingSeatBillingWrite = {
   idempotencyKey: string;
   itemId: string;
+  subscriptionId?: string;
   quantity: number;
   prorationBehavior: SeatBillingProration;
 };
@@ -51,7 +42,7 @@ export type SeatBillingLedgerScope = "locked" | "unlocked";
 export type SeatBillingWriteLedger = {
   load: (teamId: string) => Promise<PendingSeatBillingWrite | null>;
   begin: (teamId: string, write: PendingSeatBillingWrite) => Promise<boolean>;
-  clear: (teamId: string, idempotencyKey: string) => Promise<void>;
+  clear: (teamId: string, write: PendingSeatBillingWrite) => Promise<void>;
 };
 
 export class SeatBillingLockLostError extends Error {
@@ -69,44 +60,25 @@ export class SeatBillingWriteUnsettledError extends Error {
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const prorations = new Set(["none", "always_invoice", "create_prorations"]);
 const digest = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const lockKey = (teamId: string) => `stripe:seat-billing:lock:${digest(teamId)}`;
 const pendingKey = (teamId: string) =>
   `stripe:seat-billing:pending:${digest(teamId)}`;
 
-function isSeatBillingProration(value: unknown): value is SeatBillingProration {
-  return (
-    value === "none" ||
-    value === "always_invoice" ||
-    value === "create_prorations"
-  );
-}
-
-function isPendingSeatBillingWrite(
-  value: unknown,
-): value is PendingSeatBillingWrite {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.idempotencyKey === "string" &&
-    typeof candidate.itemId === "string" &&
-    typeof candidate.quantity === "number" &&
-    isSeatBillingProration(candidate.prorationBehavior)
-  );
-}
-
-function parsePendingSeatBillingWrite(
-  raw: string | null,
-): PendingSeatBillingWrite | null {
-  if (!raw) return null;
-  let parsed: unknown;
+function parsePendingSeatBillingWrite(raw: string | null): PendingSeatBillingWrite | null {
   try {
-    parsed = JSON.parse(raw);
+    const value = JSON.parse(raw ?? "") as PendingSeatBillingWrite;
+    const known =
+      typeof value?.idempotencyKey === "string" &&
+      typeof value.itemId === "string" &&
+      typeof value.quantity === "number" &&
+      prorations.has(value.prorationBehavior);
+    return known ? value : null;
   } catch {
     return null;
   }
-  return isPendingSeatBillingWrite(parsed) ? parsed : null;
 }
 
 export const seatBillingWrites: SeatBillingWriteLedger = {
@@ -114,28 +86,11 @@ export const seatBillingWrites: SeatBillingWriteLedger = {
     const redis = await getRedis();
     return parsePendingSeatBillingWrite(await redis.get(pendingKey(teamId)));
   },
-  begin: async (teamId, write) => {
-    const redis = await getRedis();
-    const claimed = await redis.set(
-      pendingKey(teamId),
-      JSON.stringify(write),
-      "PX",
-      PENDING_WRITE_TTL_MS,
-      "NX",
-    );
-    return claimed === "OK";
-  },
-  clear: async (teamId, idempotencyKey) => {
-    const redis = await getRedis();
-    const cleared = await redis.eval(
-      CLEAR_SCRIPT,
-      1,
-      pendingKey(teamId),
-      idempotencyKey,
-    );
-    if (Number(cleared) !== 1) {
-      throw new SeatBillingWriteUnsettledError();
-    }
+  begin: async (teamId, write) =>
+    (await (await getRedis()).set(pendingKey(teamId), JSON.stringify(write), "PX", PENDING_WRITE_TTL_MS, "NX")) === "OK",
+  clear: async (teamId, write) => {
+    const cleared = await (await getRedis()).eval(RELEASE_SCRIPT, 1, pendingKey(teamId), JSON.stringify(write));
+    if (Number(cleared) !== 1) throw new SeatBillingWriteUnsettledError();
   },
 };
 
@@ -148,11 +103,9 @@ export function createMemorySeatBillingWrites(): SeatBillingWriteLedger {
       writes.set(teamId, write);
       return true;
     },
-    clear: async (teamId, idempotencyKey) => {
+    clear: async (teamId, write) => {
       const stored = writes.get(teamId);
-      if (stored && stored.idempotencyKey !== idempotencyKey) {
-        throw new SeatBillingWriteUnsettledError();
-      }
+      if (stored && stored.idempotencyKey !== write.idempotencyKey) throw new SeatBillingWriteUnsettledError();
       writes.delete(teamId);
     },
   };

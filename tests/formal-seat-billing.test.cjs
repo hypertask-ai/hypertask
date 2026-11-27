@@ -27,22 +27,14 @@ test("every covered file still feeds the model, so a change there reruns this ch
   const manifest = require(path.join(root, "verification/formal/checks.json"));
   assert.ok(manifest.checks["seat-billing"].properties.some((property) => property.expect === "holds"));
   for (const replay of ["seat-billing-9465", "seat-billing-9465-overlap"]) {
-    assert.ok(
-      manifest.checks[replay].properties.some((property) => property.expect === "violated"),
-      `${replay} must keep replaying the pre-fix behaviour`,
-    );
+    assert.ok(manifest.checks[replay].properties.some((property) => property.expect === "violated"), `${replay} must keep replaying the pre-fix behaviour`);
   }
 });
 
 test("the seat-billing model holds, and its pre-fix replays still break it", () => {
   const checked = spawnSync(
     process.execPath,
-    [
-      "scripts/formal-verification/run.mjs",
-      "seat-billing",
-      "seat-billing-9465",
-      "seat-billing-9465-overlap",
-    ],
+    ["scripts/formal-verification/run.mjs", "seat-billing", "seat-billing-9465", "seat-billing-9465-overlap"],
     { cwd: root, encoding: "utf8" },
   );
   assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
@@ -50,12 +42,12 @@ test("the seat-billing model holds, and its pre-fix replays still break it", () 
     checked.stdout,
     /formal-verification: ok seat-billing matches its record .*JoinNeverDecreases holds, ReconcileMatchesSeats holds, LeaseExcludesOverlap holds/,
   );
-  assert.match(
-    checked.stdout,
-    /formal-verification: ok seat-billing-9465 matches its record .*ReconcileMatchesSeats violated \(recorded finding\)/,
-  );
-  assert.match(
-    checked.stdout,
-    /formal-verification: ok seat-billing-9465-overlap matches its record .*LeaseExcludesOverlap violated \(recorded finding\)/,
-  );
+  for (const [name, property] of [["seat-billing-9465", "ReconcileMatchesSeats"], ["seat-billing-9465-overlap", "LeaseExcludesOverlap"]]) {
+    assert.match(checked.stdout, new RegExp(`formal-verification: ok ${name} matches its record .*${property} violated \\(recorded finding\\)`));
+  }
+});
+
+test("a timed-out Stripe write settles before reconciliation reads its quantity", () => {
+  const checked = spawnSync(process.execPath, ["verification/formal/seat-billing/repro.cjs"], { cwd: root, encoding: "utf8", timeout: 30_000 });
+  assert.equal(checked.status, 0, `${checked.stdout}\n${checked.stderr}`);
 });

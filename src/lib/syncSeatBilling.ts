@@ -342,54 +342,37 @@ async function retrieveCurrentSubscriptionItem(
   return currentItem;
 }
 
-async function replayPendingSeatBillingWrite(
-  teamId: string,
-  pending: PendingSeatBillingWrite,
-  adapter: SeatBillingAdapter,
-  ledger: SeatBillingWriteLedger,
-): Promise<void> {
-  await adapter.updateSubscriptionItem(
-    pending.itemId,
-    {
-      quantity: pending.quantity,
-      proration_behavior: pending.prorationBehavior,
-    },
-    { idempotencyKey: pending.idempotencyKey, timeout: STRIPE_UPDATE_TIMEOUT_MS },
-  );
-  await ledger.clear(teamId, pending.idempotencyKey);
+function isDefinitiveStripeRejection(error: unknown): boolean {
+  const { code, rawType, type, statusCode } = (error ?? {}) as Record<string, unknown>;
+  if (code === "idempotency_key_in_use" || statusCode === 409 || statusCode === 429 || (typeof statusCode === "number" && statusCode >= 500)) return false;
+  return code === "resource_missing" || rawType === "invalid_request_error" ||
+    type === "invalid_request_error" || type === "StripeInvalidRequestError" ||
+    (typeof statusCode === "number" && statusCode >= 400 && statusCode < 500);
 }
 
-async function applySeatBillingWrite(
+async function settleSeatBillingWrite(
   teamId: string,
-  itemId: string,
-  desiredQuantity: number,
-  isTrialing: boolean,
-  currentQuantity: number,
+  write: PendingSeatBillingWrite,
+  subscriptionId: string,
+  activeItemId: string,
   adapter: SeatBillingAdapter,
   ledger: SeatBillingWriteLedger,
 ): Promise<void> {
-  const write: PendingSeatBillingWrite = {
-    idempotencyKey: `seat-billing-${teamId}-${randomUUID()}`,
-    itemId,
-    quantity: desiredQuantity,
-    prorationBehavior: isTrialing
-      ? "none"
-      : desiredQuantity > currentQuantity
-        ? "always_invoice"
-        : "create_prorations",
-  };
-  if (!(await ledger.begin(teamId, write))) {
-    throw new SeatBillingWriteUnsettledError();
+  if (write.subscriptionId === subscriptionId && write.itemId === activeItemId) {
+    try {
+      await adapter.updateSubscriptionItem(
+        write.itemId,
+        { quantity: write.quantity, proration_behavior: write.prorationBehavior },
+        { idempotencyKey: write.idempotencyKey, timeout: STRIPE_UPDATE_TIMEOUT_MS },
+      );
+    } catch (error) {
+      if (isDefinitiveStripeRejection(error)) {
+        await ledger.clear(teamId, write);
+      }
+      throw error;
+    }
   }
-  await adapter.updateSubscriptionItem(
-    write.itemId,
-    {
-      quantity: write.quantity,
-      proration_behavior: write.prorationBehavior,
-    },
-    { idempotencyKey: write.idempotencyKey, timeout: STRIPE_UPDATE_TIMEOUT_MS },
-  );
-  await ledger.clear(teamId, write.idempotencyKey);
+  await ledger.clear(teamId, write);
 }
 
 async function syncSeatBilling(
@@ -435,15 +418,15 @@ async function syncSeatBilling(
       return "SKIPPED";
     }
 
-    const ledger =
-      adapter.writes ??
-      (ledgerScope === "locked"
-        ? seatBillingWrites
-        : createMemorySeatBillingWrites());
+    const ledger = adapter.writes ??
+      (ledgerScope === "locked" ? seatBillingWrites : createMemorySeatBillingWrites());
     const unsettled = await ledger.load(teamId);
     if (unsettled) {
       assertHeld();
-      await replayPendingSeatBillingWrite(teamId, unsettled, adapter, ledger);
+      await settleSeatBillingWrite(teamId, unsettled, activePlan.subscriptionId, itemId, adapter, ledger).catch((error: unknown) => {
+        if (!isDefinitiveStripeRejection(error)) throw error;
+      });
+      assertHeld();
     }
 
     const desiredQuantity = await adapter.resolveQuantity(
@@ -472,18 +455,23 @@ async function syncSeatBilling(
       return "OK";
     }
 
-    const isTrialing = activePlan?.subscriptionStatus === "trialing";
-
+    const write: PendingSeatBillingWrite = {
+      idempotencyKey: `seat-billing-${teamId}-${randomUUID()}`,
+      itemId: currentItemId,
+      subscriptionId: activePlan.subscriptionId,
+      quantity: desiredQuantity,
+      prorationBehavior:
+        activePlan?.subscriptionStatus === "trialing"
+          ? "none"
+          : desiredQuantity > currentQuantity
+            ? "always_invoice"
+            : "create_prorations",
+    };
+    if (!(await ledger.begin(teamId, write))) {
+      throw new SeatBillingWriteUnsettledError();
+    }
     assertHeld();
-    await applySeatBillingWrite(
-      teamId,
-      currentItemId,
-      desiredQuantity,
-      isTrialing,
-      currentQuantity,
-      adapter,
-      ledger,
-    );
+    await settleSeatBillingWrite(teamId, write, activePlan.subscriptionId, currentItemId, adapter, ledger);
     assertHeld();
     await adapter.refreshSubscriptionSnapshot?.(teamId, activePlan.subscriptionId, assertHeld);
     return exact ? "RECONCILED" : "SEATED";

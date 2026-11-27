@@ -100,9 +100,9 @@ Write(w) == /\ phase[w] = "decide"
             /\ phase' = [phase EXCEPT ![w] = "await"]
             /\ UNCHANGED <<seats, billed, lock, lost, desired, seen, editedSinceRun, lastRun>>
 
-Landed(v) == /\ pending[v] # 0
-             /\ billed' = pending[v]
-             /\ pending' = [pending EXCEPT ![v] = 0]
+Landed(w) == /\ pending[w] # 0
+             /\ billed' = pending[w]
+             /\ pending' = [pending EXCEPT ![w] = 0]
              /\ UNCHANGED <<seats, lock, lost, phase, desired, seen, writeSeen, editedSinceRun, lastRun>>
 
 Answered(w) == /\ phase[w] = "await"
@@ -148,11 +148,10 @@ Next == \E w \in Workers :
 
 Spec == Init /\ [][Next]_vars
 
-JoinNeverDecreases == \A w \in Workers :
-                        pending[w] # 0 /\ RunKind(w) = "mutate" => pending[w] > writeSeen[w]
+JoinNeverDecreases == \A w \in Workers : pending[w] # 0 /\ RunKind(w) = "mutate" => pending[w] > writeSeen[w]
 
 ReconcileMatchesSeats == Quiet /\ LastRunReconciled /\ ~editedSinceRun => billed = seats
 
-LeaseExcludesOverlap == Cardinality({ w \in Workers : InWindow(w) }) <= 1
+LeaseExcludesOverlap == Cardinality({w \in Workers : InWindow(w)}) <= 1
 
 =============================================================================

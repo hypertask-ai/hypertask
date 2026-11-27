@@ -44,22 +44,17 @@ Each model action stands for one call in the code:
 
 | Action | Code |
 |---|---|
-| `Acquire` | `withTeamSeatBillingLock`: `SET NX PX`, renew every 15 seconds, then the ledger replay below |
-| `Replayed`, `ReplayDone` | `replayPendingSeatBillingWrite`: a write left in the ledger by a timed-out run is re-sent under its own idempotency key before this run reads anything |
+| `Acquire`, `Release`, `LeaseLost`, `Abort` | `withTeamSeatBillingLock`: `SET NX PX`, renew every 15 seconds, `assertHeld`, release in `finally` |
+| `Replayed`, `ReplayDone` | `settleSeatBillingWrite`: replay before reading, with the same idempotency key; discard replaced subscriptions/items and definitive rejections |
 | `EditSeats` | the mutation callback `mutateAndSyncSeatBilling` runs while the lease is held |
 | `ReadDesired` | `adapter.resolveQuantity`, which is `resolveSeatQuantity` |
 | `ReadItem` | `retrieveCurrentSubscriptionItem`, a live `stripe.subscriptionItems.retrieve` |
-| `NoWrite` | the `desiredQuantity === currentQuantity` test and the `!exact` decrease guard |
-| `Write` | `applySeatBillingWrite`: `ledger.begin` puts the write in the pending key, then `updateSubscriptionItem` runs with that write's idempotency key, then `ledger.clear` |
+| `NoWrite`, `Write` | the quantity and `!exact` guards, then `ledger.begin` and `settleSeatBillingWrite` |
 | `Landed`, `Answered`, `TimedOut` | the Stripe call: the write is applied, the response arrives, or the 15 second timeout fires while the request stays in flight |
-| `LeaseLost` | the renewal `eval` returns 0, so `assertHeld` throws and the run aborts without writing |
-| `Abort`, `Release` | the `finally` block: release only under this run's token, and only when the lease is still held |
 
-`ReconcileMatchesSeats` and `LeaseExcludesOverlap` used to be recorded findings. They were fixed by two changes. A pending write is written to Redis before the Stripe call and cleared only after the response, so a run that times out leaves the intended quantity behind, and the next run under the lease re-sends it under the same idempotency key before it reads the item. That closes the late-write hole where a reconcile read the item before a timed-out write landed, decided nothing was due, and left the team over-billed. A lease that is lost now aborts the run instead of letting it keep writing, so a second run cannot enter the window. `pending[w] # 0` is the claim in the model: `ledger.begin` is the only way to set it, and `ledger.clear` is the only way to clear it.
+Redis records each intended write before Stripe receives it. After a timeout, the next run replays the same idempotency key before reading the item. Replaced subscriptions/items and definitive Stripe rejections retire the entry. `node verification/formal/seat-billing/repro.cjs` reproduces a late write against the real sync: `join: "Error"`, `reconcile: "RECONCILED"`, `seats: 1`, `billed: 1`, exit 0.
 
-Two checked replays keep the pre-fix behaviour honest. `seat-billing-9465` sets `ReplayWrites = FALSE`, so no replay happens before the read, and `ReconcileMatchesSeats` fails on `Write`, `TimedOut`, `Landed`. `seat-billing-9465-overlap` sets `AbortWhenLeaseLost = FALSE`, so a run whose lease expired keeps going, and `LeaseExcludesOverlap` fails on `LeaseLost`, `Acquire`.
-
-`node verification/formal/seat-billing/repro.cjs` replays the timed-out write against the real `syncSeatBilling` with a stub Stripe. It prints `join: "Error"`, `reconcile: "RECONCILED"`, `seats: 1`, `billed: 1`, and exits 0.
+The pre-fix checks remain: `seat-billing-9465` disables `ReplayWrites` and violates `ReconcileMatchesSeats`; `seat-billing-9465-overlap` disables `AbortWhenLeaseLost` and violates `LeaseExcludesOverlap`.
 
 Bounds: one team with one subscription item, seat counts 1 and 2, two runs. The lease is atomic and `assertHeld` throws where the code calls it; seat edits happen only inside a run, because every seat path calls `mutateAndSyncSeatBilling`. The ledger is modelled as one pending slot per team, which is what the Redis key holds. Not covered: pointer repair, pending-cancellation repair, the snapshot refresh, proration choice, the 24 hour ledger expiry, Redis itself, comped teams.
 
