@@ -1,7 +1,9 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG } from "@/lib/flags/keys";
 import { HTPR_8961_SELECTION_BAR_BUTTON_FLAG } from "@/lib/flags/definitions/htpr-8961-selection-bar-button";
+import { HTPR_8976_MOUSE_MULTISELECT_FLAG } from "@/lib/flags/definitions/htpr-8976-mouse-multiselect";
+import { markMouseMultiselectHintSeen, mouseMultiselectHintSeen } from "@/lib/kanbanBulkSelection";
 import { BulkActionButtons } from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
@@ -22,6 +24,8 @@ const KanbanBulkActionBar = () => {
   const isMobile = useContext(MobileViewContext);
   const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const neutralOpenActions = useFlag(HTPR_8961_SELECTION_BAR_BUTTON_FLAG);
+  const mouseMultiselect = useFlag(HTPR_8976_MOUSE_MULTISELECT_FLAG);
+  const [showHint, setShowHint] = useState(false);
   const {
     selectedCount,
     failedIds,
@@ -30,6 +34,17 @@ const KanbanBulkActionBar = () => {
     archiveSelected,
     clearSelection,
   } = useKanbanBulkSelection();
+
+  useEffect(() => {
+    if (!mouseMultiselect || isMobile) return;
+    if (selectedCount === 0) {
+      setShowHint(false);
+      return;
+    }
+    if (showHint || mouseMultiselectHintSeen()) return;
+    markMouseMultiselectHintSeen();
+    setShowHint(true);
+  }, [isMobile, mouseMultiselect, selectedCount, showHint]);
 
   if (selectedCount === 0) return null;
 
@@ -49,6 +64,11 @@ const KanbanBulkActionBar = () => {
         {selectedCount} selected
         {failedIds.size > 0 ? ` · ${failedIds.size} failed` : ""}
       </span>
+      {showHint && (
+        <span className="text-meta text-text-light-gray">
+          Ctrl+click or Shift+click for more
+        </span>
+      )}
       {selectAllEnabled && (
         <BulkActionButtons
           isProcessing={isProcessing}

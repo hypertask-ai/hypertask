@@ -15,6 +15,23 @@ export const getInclusiveRange = <T>(
   return items.slice(start, end + 1);
 };
 
+export const MOUSE_MULTISELECT_HINT_KEY = "htpr-8976-mouse-multiselect-hint";
+
+export const mouseMultiselectHintSeen = (): boolean => {
+  try {
+    return window.localStorage.getItem(MOUSE_MULTISELECT_HINT_KEY) === "seen";
+  } catch {
+    return true;
+  }
+};
+
+export const markMouseMultiselectHintSeen = (): void => {
+  try {
+    window.localStorage.setItem(MOUSE_MULTISELECT_HINT_KEY, "seen");
+  } catch {
+  }
+};
+
 export const toggleId = (
   ids: ReadonlySet<number>,
   id: number,
