@@ -1,30 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
-
-const root = path.resolve(__dirname, "..");
-
-function loadQueryOptions() {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/auth/userProfileQuery.ts"),
-    "utf8",
-  );
-  const javascript = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function("module", "exports", javascript)(mod, mod.exports);
-  return mod.exports;
-}
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 test("fresh user profiles remain reusable for five minutes", () => {
   const { getUserProfileQueryOptions, USER_PROFILE_STALE_TIME_MS } =
-    loadQueryOptions();
+    loadModule("src/lib/auth/userProfileQuery.ts");
 
   assert.equal(USER_PROFILE_STALE_TIME_MS, 300_000);
   assert.deepEqual(getUserProfileQueryOptions(6), {
@@ -35,7 +15,7 @@ test("fresh user profiles remain reusable for five minutes", () => {
 });
 
 test("user profile fetching waits for a valid cookie user ID", () => {
-  const { getUserProfileQueryOptions } = loadQueryOptions();
+  const { getUserProfileQueryOptions } = loadModule("src/lib/auth/userProfileQuery.ts");
 
   assert.equal(getUserProfileQueryOptions(undefined).enabled, false);
   assert.equal(getUserProfileQueryOptions(null).enabled, false);

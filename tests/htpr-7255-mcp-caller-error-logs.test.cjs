@@ -1,25 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const Module = require("node:module");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const utils = path.resolve(__dirname, "../src/lib/mcp-server/utils");
-
-function load(name) {
-  const file = path.join(utils, `${name}.ts`);
-  const js = ts.transpileModule(fs.readFileSync(file, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  const mod = new Module(file);
-  mod.filename = file;
-  mod._compile(js, file);
-  return mod.exports;
-}
-
-const { logger } = load("logger");
-const errors = load("errors");
+const { logger } = loadModule("src/lib/mcp-server/utils/logger.ts");
+const errors = loadModule("src/lib/mcp-server/utils/errors.ts");
 
 function streamFor(error) {
   const original = { error: console.error, warn: console.warn };
