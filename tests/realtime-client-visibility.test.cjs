@@ -12,6 +12,111 @@ function loadTs(relativePath) {
   return jiti(path.join(root, relativePath));
 }
 
+function loadTsWithFakePusher(relativePath) {
+  const fs = require("node:fs");
+  const suite = fs.mkdtempSync(
+    path.join(require("node:os").tmpdir(), "realtime-client-visibility-"),
+  );
+  const clientPath = path.join(suite, "client.ts");
+  const fakePath = path.join(suite, "fake-pusher.cjs");
+  fs.writeFileSync(
+    clientPath,
+    fs.readFileSync(path.join(root, relativePath), "utf8"),
+  );
+  fs.writeFileSync(
+    fakePath,
+    `function FakePusher(key, options) {
+  const listeners = new Map();
+  const client = {
+    key,
+    options,
+    allChannels: () => [],
+    connection: {
+      state: "connected",
+      bind: (name, callback) => listeners.set(name, callback),
+      unbind: (name) => listeners.delete(name),
+    },
+    subscribe: () => ({ bind() {}, subscribed: true }),
+    unsubscribe() {},
+    disconnect() { this.connection.state = "disconnected"; },
+  };
+  globalThis.__fakePusherClients.push(client);
+  return client;
+}
+module.exports = FakePusher;
+module.exports.default = FakePusher;
+`,
+  );
+  const jiti = require("jiti")(path.join(suite, "entry.cjs"), {
+    interopDefault: true,
+    alias: { "pusher-js": fakePath },
+  });
+  globalThis.__fakePusherClients = [];
+  const loaded = jiti(clientPath);
+  return {
+    cleanup: () => fs.rmSync(suite, { force: true, recursive: true }),
+    created: globalThis.__fakePusherClients,
+    loaded,
+  };
+}
+
+function fakeWindow(search = "", webdriver = false, hostname = "127.0.0.1") {
+  const values = new Map();
+  return {
+    values,
+    window: {
+      location: { hostname, search },
+      navigator: { webdriver, userAgent: "Mozilla/5.0 Chromium/147.0.0.0" },
+      sessionStorage: {
+        getItem: (key) => values.get(key) ?? null,
+        removeItem: (key) => values.delete(key),
+        setItem: (key, value) => values.set(key, value),
+      },
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
+}
+
+async function withFakeBrowser(args, run) {
+  const saved = {
+    window: global.window,
+    document: global.document,
+    key: process.env.NEXT_PUBLIC_PUSHER_KEY,
+    host: process.env.NEXT_PUBLIC_PUSHER_HOST,
+    baseUrl: process.env.NEXT_PUBLIC_BASEURL,
+    localRealtime: process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME,
+  };
+  const { window } = fakeWindow(args.search, true, args.hostname);
+  global.window = window;
+  global.document = {
+    visibilityState: "visible",
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  process.env.NEXT_PUBLIC_PUSHER_KEY = "app-key";
+  process.env.NEXT_PUBLIC_PUSHER_HOST = "127.0.0.1";
+  delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_BASEURL = args.baseUrl ?? `http://${args.hostname}:3100`;
+  const fake = loadTsWithFakePusher("src/lib/realtime/client.ts");
+  try {
+    await run(fake);
+  } finally {
+    fake.cleanup();
+    global.window = saved.window;
+    global.document = saved.document;
+    for (const [name, value] of [
+      ["NEXT_PUBLIC_PUSHER_KEY", saved.key],
+      ["NEXT_PUBLIC_PUSHER_HOST", saved.host],
+      ["NEXT_PUBLIC_BASEURL", saved.baseUrl],
+      ["NEXT_PUBLIC_HT_LOCAL_REALTIME", saved.localRealtime],
+    ]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
 function fakeDocument(initialVisibility = "visible") {
   const listeners = new Map();
   return {
@@ -195,6 +300,83 @@ test("a non-loopback public base URL is not a local copy", () => {
   }
 });
 
+function withCloudBuild(run) {
+  const previous = {
+    baseUrl: process.env.NEXT_PUBLIC_BASEURL,
+    localRealtime: process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME,
+  };
+  delete process.env.NEXT_PUBLIC_HT_LOCAL_REALTIME;
+  process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
+  try {
+    run();
+  } finally {
+    for (const [name, value] of [
+      ["NEXT_PUBLIC_BASEURL", previous.baseUrl],
+      ["NEXT_PUBLIC_HT_LOCAL_REALTIME", previous.localRealtime],
+    ]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+test("a loopback opt-in survives client-side navigation away from the query string", () =>
+  withCloudBuild(() => {
+    const {
+      REALTIME_DISABLED_STORAGE_KEY,
+      REALTIME_LOCAL_OPT_IN_STORAGE_KEY,
+      realtimeDisabledForBrowser,
+    } = loadTs("src/lib/realtime/client.ts");
+    const { browser, values } = fakeBrowser("?realtime=on", true, "127.0.0.1");
+
+    assert.equal(realtimeDisabledForBrowser(browser), false);
+    assert.equal(values.has(REALTIME_LOCAL_OPT_IN_STORAGE_KEY), true);
+    assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+
+    browser.location.search = "?id=15&surface=board";
+    assert.equal(realtimeDisabledForBrowser(browser), false);
+    assert.equal(values.has(REALTIME_DISABLED_STORAGE_KEY), false);
+  }));
+
+test("an explicit opt-out revokes the tab's loopback opt-in", () =>
+  withCloudBuild(() => {
+    const {
+      REALTIME_DISABLED_STORAGE_KEY,
+      REALTIME_LOCAL_OPT_IN_STORAGE_KEY,
+      realtimeDisabledForBrowser,
+    } = loadTs("src/lib/realtime/client.ts");
+    const { browser, values } = fakeBrowser("?realtime=on", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(browser), false);
+
+    browser.location.search = "?realtime=off";
+    assert.equal(realtimeDisabledForBrowser(browser), true);
+    assert.equal(values.has(REALTIME_LOCAL_OPT_IN_STORAGE_KEY), false);
+
+    browser.location.search = "?id=15&surface=board";
+    assert.equal(realtimeDisabledForBrowser(browser), true);
+    assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
+  }));
+
+test("a loopback opt-in never follows the tab to a non-loopback origin", () =>
+  withCloudBuild(() => {
+    const { realtimeDisabledForBrowser } = loadTs("src/lib/realtime/client.ts");
+    const { browser, values } = fakeBrowser("?realtime=on", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(browser), false);
+
+    browser.location.hostname = "app.hypertask.ai";
+    browser.location.search = "";
+    assert.equal(realtimeDisabledForBrowser(browser), true);
+    assert.equal(values.get("hypertask:realtime-disabled"), "1");
+  }));
+
+test("a cold automated browser on loopback keeps realtime off with no opt-in", () =>
+  withCloudBuild(() => {
+    const { realtimeDisabledForBrowser } = loadTs("src/lib/realtime/client.ts");
+    const cold = fakeBrowser("?id=15&surface=board", true, "127.0.0.1");
+    assert.equal(realtimeDisabledForBrowser(cold.browser), true);
+    assert.equal(cold.values.get("hypertask:realtime-disabled"), "1");
+  }));
+
 test("headless agent-browser contexts disable realtime without webdriver", () => {
   const { REALTIME_DISABLED_STORAGE_KEY, realtimeDisabledForBrowser } = loadTs(
     "src/lib/realtime/client.ts",
@@ -205,10 +387,35 @@ test("headless agent-browser contexts disable realtime without webdriver", () =>
   assert.equal(values.get(REALTIME_DISABLED_STORAGE_KEY), "1");
 });
 
-test("a production build keeps realtime off for automated browsers on loopback", () => {
-  const { realtimeDisabledForBrowser } = loadTs("src/lib/realtime/client.ts");
-  const { browser } = fakeBrowser("", true, "127.0.0.1");
-  assert.equal(realtimeDisabledForBrowser(browser), true);
+test("an opted-in automated browser opens one realtime connection", async () => {
+  await withFakeBrowser({ search: "?realtime=on", hostname: "127.0.0.1" }, async ({ created, loaded }) => {
+    const client = await loaded.connectRealtimeClient();
+    assert.equal(created.length, 1, "one Pusher client for the opted-in tab");
+    assert.equal(client, created[0]);
+    assert.equal(client.key, "app-key");
+    assert.equal(client.options.wsHost, "127.0.0.1");
+  });
+});
+
+test("an automated browser with no opt-in opens no realtime connection", async () => {
+  await withFakeBrowser(
+    {
+      search: "?id=15&surface=board",
+      hostname: "127.0.0.1",
+      baseUrl: "https://app.hypertask.ai",
+    },
+    async ({ created, loaded }) => {
+      assert.equal(await loaded.connectRealtimeClient(), null);
+      assert.equal(created.length, 0, "no socket without an explicit opt-in");
+    },
+  );
+});
+
+test("a production automated browser stays disconnected with the query param", async () => {
+  await withFakeBrowser({ search: "?realtime=on", hostname: "app.hypertask.ai" }, async ({ created, loaded }) => {
+    assert.equal(await loaded.connectRealtimeClient(), null);
+    assert.equal(created.length, 0);
+  });
 });
 
 test("managed Multiprompt agent panes always disable realtime", () => {
