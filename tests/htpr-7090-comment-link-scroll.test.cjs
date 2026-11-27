@@ -7,13 +7,10 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 
-const flag = read("src/lib/flags/definitions/htpr-7090-comment-link-scroll.ts");
 const comp = read("src/app/detail/[...slug]/TaskDetailComp.tsx");
 
-test("the flag is a bugfix flag that is on for everyone", () => {
-  assert.match(flag, /kind: "bugfix"/);
-  assert.match(flag, /defaultMode: "EVERYONE"/);
-  assert.match(flag, /releaseRisk/);
+test("linked-comment scrolling is permanent", () => {
+  assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions/htpr-7090-comment-link-scroll.ts")), false);
 });
 
 test("the ticket page runs the linked-comment scroll next to the initial scroll", () => {
@@ -29,7 +26,7 @@ const config = (() => {
   return exports.default;
 })();
 
-function createHarness(flagOn, element = null) {
+function createHarness(element = null) {
   const refs = [];
   const frames = [];
   let effectCalls = [];
@@ -45,8 +42,6 @@ function createHarness(flagOn, element = null) {
   const mocks = {
     react,
     "@/lib/configs/taskDetail.config": { __esModule: true, default: config },
-    "@/hooks/useFlag": { useFlag: () => flagOn },
-    "@/lib/flags/keys": { HTPR_7090_COMMENT_LINK_SCROLL_FLAG: "htpr-7090-comment-link-scroll" },
   };
   const fakeSetTimeout = (callback, delay) => timers.push({ callback, delay, cleared: false }) - 1;
   const fakeClearTimeout = (id) => { timers[id].cleared = true; };
@@ -86,7 +81,7 @@ const makeContext = (comments, calls, search = "commentId=comment-270430") => ({
 
 test("a direct load scrolls to the linked comment once the comments arrive", () => {
   const calls = [];
-  const harness = createHarness(true);
+  const harness = createHarness();
   harness.render(makeContext([], calls));
   assert.equal(harness.timers.length, 0, "nothing is scheduled while the comment list is empty");
   const staleScroll = (...args) => calls.push(["stale", ...args]);
@@ -107,7 +102,7 @@ test("a rendered comment the virtualizer left off screen is centred", () => {
     getBoundingClientRect: () => ({ top, bottom: top + 80 }),
     scrollIntoView: (options) => scrolled.push(options),
   });
-  const offScreen = createHarness(true, makeElement(947));
+  const offScreen = createHarness(makeElement(947));
   offScreen.render(makeContext([{ id: "270430" }], calls));
   for (const timer of offScreen.timers) timer.callback();
   for (const frame of offScreen.frames) frame.callback();
@@ -115,23 +110,23 @@ test("a rendered comment the virtualizer left off screen is centred", () => {
   assert.deepEqual(scrolled[0], { behavior: "auto", block: "center" });
 
   scrolled.length = 0;
-  const inView = createHarness(true, makeElement(400));
+  const inView = createHarness(makeElement(400));
   inView.render(makeContext([{ id: "270430" }], calls));
   for (const timer of inView.timers) timer.callback();
   for (const frame of inView.frames) frame.callback();
   assert.equal(scrolled.length, 0, "a comment already in view is left alone");
 });
 
-test("with the flag off nothing is scheduled", () => {
+test("an invalid comment link schedules nothing", () => {
   const calls = [];
-  const harness = createHarness(false);
-  harness.render(makeContext([{ id: "270430" }], calls));
+  const harness = createHarness();
+  harness.render(makeContext([{ id: "270430" }], calls, "commentId=invalid"));
   assert.equal(harness.timers.length, 0);
 });
 
 test("without a comment link nothing is scheduled", () => {
   const calls = [];
-  const harness = createHarness(true);
+  const harness = createHarness();
   harness.render(makeContext([{ id: "270430" }], calls, ""));
   assert.equal(harness.timers.length, 0);
 });

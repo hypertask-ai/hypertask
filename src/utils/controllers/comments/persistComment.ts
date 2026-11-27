@@ -1,7 +1,7 @@
 import type { CommentDependencies } from './commentCreationTypes';
 import type { WebhookDelivery } from "@/lib/mcp/webhooks/events";
 import type { CreateCommentParams } from './commentCreationTypes';
-import { findCommentWebhookAgentIds, isAgentCommentFanoutFixOn } from './agentCommentFanout';
+import { findCommentWebhookAgentIds } from './agentCommentFanout';
 
 const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
 
@@ -308,7 +308,6 @@ export async function persistComment(
     const assignedAgentIds = await findCommentWebhookAgentIds(tx, {
       taskId,
       authorAgentId: agentId,
-      fixOn: await isAgentCommentFanoutFixOn(creatorIdNum),
     });
     webhookDeliveryIds.push(
       ...(await persistAgentWebhookEvents(tx, {
