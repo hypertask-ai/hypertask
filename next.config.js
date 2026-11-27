@@ -111,6 +111,12 @@ const nextConfig = {
   },
   experimental: {
     agentUpgrade: false,
+    // Next 16 turns the React debug channel on by default. In dev that makes the
+    // flight client wait for React stack chunks the dev HTML never sends, so the
+    // inline payload never resolves, hydrateRoot never runs and every page stays
+    // static SSR: the board sits on "Loading board…" forever (HTPR-9750).
+    // Production never creates a debug channel, so this only changes dev.
+    reactDebugChannel: false,
     // Release each compiler's heap before page collection and file tracing.
     // Otherwise webpack stays in the main process through the peak (YPER4-184).
     webpackBuildWorker: true,
