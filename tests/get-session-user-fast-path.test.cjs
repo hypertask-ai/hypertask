@@ -19,7 +19,7 @@ const javascript = ts.transpileModule(source, {
 }).outputText;
 
 const originalRedis = global.redis;
-global.redis = { get: async () => null };
+global.redis = { get: async () => null, mget: async (...keys) => keys.map(() => null) };
 const originalSessionSecret = process.env.SESSION_SECRET;
 process.env.SESSION_SECRET = "test-secret-value-that-is-long-enough";
 test.after(() => {

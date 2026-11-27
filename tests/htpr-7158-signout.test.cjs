@@ -32,10 +32,11 @@ function harness() {
   const events = []
   const redis = {
     set: async (key, value) => { events.push('revoke'); store.set(key, value); return 'OK' },
-    get: async (key) => store.get(key) ?? null,
+    mget: async (...keys) => keys.map((key) => store.get(key) ?? null),
   }
   const revocation = load('src/lib/auth/sessionRevocation.ts', {
     '@/lib/auth/session': session, '@/lib/redis': { getRedis: async () => redis },
+    react: require('react'),
   })
   return {
     events, store, redis, revocation,

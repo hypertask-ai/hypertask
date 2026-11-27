@@ -284,6 +284,20 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
     : DEFAULT_FEATURE_FLAG_MODE);
 }
 
+const FLAG_SNAPSHOT_PREFIX = "gz:";
+
+export async function encodeFlagSnapshot(snapshot: Array<number | RawFlagMode>): Promise<string> {
+  const { gzipSync } = await import("node:zlib");
+  return FLAG_SNAPSHOT_PREFIX + gzipSync(JSON.stringify(snapshot)).toString("base64");
+}
+
+async function decodeFlagSnapshot(raw: string): Promise<unknown> {
+  if (!raw.startsWith(FLAG_SNAPSHOT_PREFIX)) return JSON.parse(raw);
+  const { gunzipSync } = await import("node:zlib");
+  const compressed = Buffer.from(raw.slice(FLAG_SNAPSHOT_PREFIX.length), "base64");
+  return JSON.parse(gunzipSync(compressed).toString("utf8"));
+}
+
 const flagModeLookups = new Map<"agent" | "cli" | "human", { generation: number; promise: Promise<RawFlagMode[] | null> }>();
 
 async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
@@ -323,7 +337,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       if (writers && writers !== "0") return null;
       let rows: RawFlagMode[];
       if (cached) {
-        const snapshot: unknown = JSON.parse(cached);
+        const snapshot: unknown = await decodeFlagSnapshot(cached);
         if (!Array.isArray(snapshot) || typeof snapshot[0] !== "number"
           || snapshot[0] > startedAt || snapshot[0] + FLAG_SNAPSHOT_MAX_AGE_MS <= Date.now()) return null;
         rows = snapshot.slice(1);
@@ -341,7 +355,7 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
         end
         return 0
       `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
-      generation ?? "0", JSON.stringify([startedAt, ...rows]))).catch(() => undefined);
+      generation ?? "0", await encodeFlagSnapshot([startedAt, ...rows]))).catch(() => undefined);
       if (filled === 0) return null;
       return storeProcessFlagCache(rows, startedAt, processGeneration) ? rows : null;
     } catch {

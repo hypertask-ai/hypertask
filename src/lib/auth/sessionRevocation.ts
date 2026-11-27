@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { cache } from 'react'
 
 import { SESSION_TTL_SECONDS, sessionRevocationClaims } from '@/lib/auth/session'
 import { getRedis } from '@/lib/redis'
@@ -47,6 +48,12 @@ async function withDeadline<T>(operation: () => Promise<T>, milliseconds: number
     clearTimeout(timer)
   }
 }
+
+const readRevocation = cache(async (fingerprint: string, userId: number): Promise<[string | null, string | null]> => {
+  const redis = await getRedis()
+  const [revoked, revokedBefore] = await redis.mget(`ht_session:revoked:${fingerprint}`, userRevokedBeforeKey(userId))
+  return [revoked ?? null, revokedBefore ?? null]
+})
 
 export async function revokeSessionToken(token: string | undefined): Promise<void> {
   const verified = verifiedToken(token)
@@ -100,13 +107,10 @@ export async function isSessionTokenRevoked(
   }
 
   try {
-    const [revoked, revokedBefore] = await withDeadline(async () => {
-      const redis = await getRedis()
-      return await Promise.all([
-        redis.get(`ht_session:revoked:${verified.fingerprint}`),
-        redis.get(userRevokedBeforeKey(verified.userId)),
-      ])
-    }, READ_DEADLINE_MS)
+    const [revoked, revokedBefore] = await withDeadline(
+      () => readRevocation(verified.fingerprint, verified.userId),
+      READ_DEADLINE_MS,
+    )
     if (revokedBefore !== null && verified.issuedAt < Number(revokedBefore)) return true
     if (revoked !== null) {
       cacheRevocation(verified.fingerprint, verified.exp)
