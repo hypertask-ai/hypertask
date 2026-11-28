@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       data: { productTours: updatedTours },
     });
 
-    console.log(`✅ Tour status updated: ${tourId}`, { completed, skipped });
+    console.log("✅ Tour status updated", { tourId, completed, skipped });
 
     status = 200;
     return NextResponse.json({ success: true, tours: updatedTours });
