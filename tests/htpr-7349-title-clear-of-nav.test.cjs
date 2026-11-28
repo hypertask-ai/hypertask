@@ -1,30 +1,19 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
 const { renderToString } = require("react-dom/server");
-const ts = require("typescript");
-
-const root = path.resolve(__dirname, "..");
-const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 function loadTitleContainer({ mobile = false } = {}) {
-  const js = ts.transpileModule(read("src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true },
-  }).outputText;
   const MobileViewContext = React.createContext(mobile);
-  const loaded = { exports: {} };
-  new Function("require", "module", "exports", js)((name) => {
-    if (name === "react") return React;
-    if (name === "@/utils/undoActions/helperFuncs") return { cn: (...parts) => parts.flat().filter(Boolean).join(" ") };
-    if (name === "@/lib/contexts/mobileContext") return { MobileViewContext };
-    if (name === "@/hooks/useFlag") return { useFlag: () => false };
-    if (name === "@/lib/flags/definitions/htpr-8955-chat-over-title") return { HTPR_8955_CHAT_OVER_TITLE_FLAG: "htpr-8955-chat-over-title" };
-    if (name === "@/lib/flags/definitions/htpr-8992-sticky-title") return { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" };
-    throw new Error(`Unexpected dependency ${name}`);
-  }, loaded, loaded.exports);
-  return loaded.exports.default;
+  return loadModule("src/components/PageComponents/TaskDetail/TopRow/BaseTitleContainer.tsx", {
+    react: React,
+    "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.flat().filter(Boolean).join(" ") },
+    "@/lib/contexts/mobileContext": { MobileViewContext },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8955-chat-over-title": { HTPR_8955_CHAT_OVER_TITLE_FLAG: "htpr-8955-chat-over-title" },
+    "@/lib/flags/definitions/htpr-8992-sticky-title": { HTPR_8992_STICKY_TITLE_FLAG: "htpr-8992-sticky-title" },
+  }).default;
 }
 
 function containerClasses(props, options) {
