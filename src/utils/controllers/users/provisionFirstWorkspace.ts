@@ -1,12 +1,11 @@
-import type { IUser } from "@/models/model";
 import { Status } from "@prisma/client";
 import { HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { adoptGuestBoards } from "@/utils/controllers/demo/adoptGuestBoards";
-import { CompleteOnboardingFirstStepProvisioning } from "@/utils/controllers/users/completeOnboardingStep";
+import { CompleteOnboardingFirstStepProvisioning, type OnboardingUser } from "@/utils/controllers/users/completeOnboardingStep";
 
 export async function provisionFirstWorkspace(
-  user: IUser,
+  user: OnboardingUser,
   previousSessionToken: string | undefined | null,
   teamTitle: string,
   boardTitle: string,

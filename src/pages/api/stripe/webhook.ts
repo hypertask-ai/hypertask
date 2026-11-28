@@ -8,6 +8,10 @@ import { enqueueAnalyticsIntent, processAnalyticsIntentSoon } from "@/lib/teleme
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
 import { logPersonal, recordId } from "@/utils/controllers/logs/quietPersonalLog";
 
+type WebhookSubscription = PinnedApiVersionSubscription & {
+  plan: Pick<Stripe.Plan, "id" | "interval"> & { product: string };
+};
+
 export const config = {
   api: {
     bodyParser: false,
@@ -76,9 +80,9 @@ export default async function checkoutsWebhooksHandler(
           const session = event.data.object as Stripe.Checkout.Session;
           await logPersonal(null, "stripe webhook session", { sessionId: recordId(session?.id), customerId: recordId(session?.customer), subscriptionId: recordId(session?.subscription), outcome: "completed", }, session)
           const subscriptionId = await getSubscriptionIdFromSession(event);
-          const subscription: any = await stripe.subscriptions.retrieve(
+          const subscription = (await stripe.subscriptions.retrieve(
             subscriptionId
-          );
+          )) as WebhookSubscription;
           await sessionOnSuccess(subscription, subscription.plan);
           return res.status(200).json({ message: "success" });
         }
@@ -143,9 +147,9 @@ export default async function checkoutsWebhooksHandler(
     const subscriptionId = session.id as string;
     console.log("🚀 ~ getSubscription ~ subscriptionId:", subscriptionId);
 
-    const subscription: any = await stripe.subscriptions.retrieve(
+    const subscription = (await stripe.subscriptions.retrieve(
       subscriptionId
-    );
+    )) as WebhookSubscription;
     await logPersonal(null, "stripe webhook subscription", { subscriptionId: recordId(subscription?.id), customerId: recordId(subscription?.customer), outcome: "retrieved", }, subscription);
     return subscription;
   }

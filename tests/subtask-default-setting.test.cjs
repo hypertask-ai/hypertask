@@ -1,40 +1,16 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
-
-const root = path.resolve(__dirname, "..");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 function loadSubtaskHelpers() {
-  const filename = path.join(
-    root,
-    "src/utils/helperFunctions/Views/SubtaskHelperFunction.ts",
-  );
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: filename,
-  }).outputText;
-  const loadedModule = { exports: {} };
-  const stubs = {
+  return loadModule("src/utils/helperFunctions/Views/SubtaskHelperFunction.ts", {
     "@/models/Views/model": {
       DEFAULT_SUBTASK_SETTING: "Flattened_Card",
     },
     "./ViewsHelperFunctions": {
       getActiveSubtaskSettingFromProject: () => "Flattened_Card",
     },
-  };
-
-  new Function("module", "exports", "require", javascript)(
-    loadedModule,
-    loadedModule.exports,
-    (request) => stubs[request] ?? require(request),
-  );
-  return loadedModule.exports;
+  });
 }
 
 test("the application default keeps subtasks on the board", () => {

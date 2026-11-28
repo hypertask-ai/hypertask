@@ -34,7 +34,7 @@ const teamForCustomer = (customerId: string, teamId: string) =>
 
 export const applySubscriptionUpdatedWithTeamLockHeld = async (
   subscription: PinnedApiVersionSubscription,
-  plan: ISubscriptionPlan | undefined,
+  plan: Pick<ISubscriptionPlan, "id" | "product" | "interval"> | undefined,
   teamId: string,
   assertHeld: () => void,
 ) => {
@@ -159,7 +159,7 @@ export const applySubscriptionUpdatedWithTeamLockHeld = async (
 
 const onSubscriptionUpdated = async (
   subscription: PinnedApiVersionSubscription,
-  plan?: ISubscriptionPlan,
+  plan?: Pick<ISubscriptionPlan, "id" | "product" | "interval">,
 ) => {
   const discoveredTeam = await prisma.team.findFirst({
     where: {

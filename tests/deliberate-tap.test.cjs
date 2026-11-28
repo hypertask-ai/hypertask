@@ -1,25 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const source = fs.readFileSync(
-  path.join(__dirname, "../src/lib/utils/deliberateTap.ts"),
-  "utf8",
-);
-
-const javascript = ts.transpileModule(source, {
-  compilerOptions: {
-    esModuleInterop: true,
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
-
-const module_ = { exports: {} };
-new Function("module", "exports", javascript)(module_, module_.exports);
-const { createTapGuard } = module_.exports;
+const { createTapGuard } = loadModule("src/lib/utils/deliberateTap.ts");
 
 test("a mouse click passes: no touch ever happened", () => {
   const guard = createTapGuard();
