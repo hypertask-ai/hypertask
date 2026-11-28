@@ -1,7 +1,7 @@
 import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
-import { LogType, Status } from "@prisma/client";
+import { LogType, Status, type User } from "@prisma/client";
 import createLog from "@/utils/controllers/logs/createLog";
 import prisma from "@/lib/prisma";
 import { stripe } from "@/lib/subscription";
@@ -17,12 +17,15 @@ import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE } from "@/lib/
 import { isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
 import { createBoardFromManifest } from "@/lib/mcp/boards/createBoardFromManifest";
 
+export type OnboardingUser = Pick<User, "id"> &
+  Partial<Pick<User, "email" | "displayName" | "stripe_customer_id">>;
+
 type CompleteOnboardingFirstStepOptions = {
   createInitialBoard?: boolean;
 };
 
 const completeOnboardingFirstStep = async (
-  exist_user: IUser,
+  exist_user: OnboardingUser,
   teamTitle: string,
   boardTitle: string,
   companySize: string,
@@ -111,7 +114,7 @@ const completeOnboardingFirstStep = async (
 };
 
 export const CompleteOnboardingFirstStep = (
-  exist_user: IUser,
+  exist_user: OnboardingUser,
   teamTitle: string,
   boardTitle: string,
   companySize: string,
@@ -120,7 +123,7 @@ export const CompleteOnboardingFirstStep = (
 ) => completeOnboardingFirstStep(exist_user, teamTitle, boardTitle, companySize, companyRole, options, createOnboardingSampleBoardProject);
 
 export const CompleteOnboardingFirstStepProvisioning = (
-  exist_user: IUser,
+  exist_user: OnboardingUser,
   teamTitle: string,
   boardTitle: string,
   companySize: string,
@@ -264,7 +267,7 @@ export const createProvisionedOnboardingSampleBoardProject = async ({
   Team,
   googleAccount,
 }: {
-  exist_user: IUser;
+  exist_user: OnboardingUser;
   boardTitle: string;
   Team: { id: string; title: string | null };
   googleAccount: { id: string };
