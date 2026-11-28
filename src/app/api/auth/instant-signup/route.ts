@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const userData = userUpdateResult.res.user
+    const userData: Parameters<typeof provisionFirstWorkspace>[0] | null | undefined = userUpdateResult.res.user
     if (!userData) {
       return NextResponse.json(
         { 
@@ -228,7 +228,7 @@ export async function POST(request: NextRequest) {
       try {
         console.log('🚀 Completing onboarding step 1 for instant signup user')
         const onboardingResult = await provisionFirstWorkspace(
-          userData as any,
+          userData,
           request.cookies.get(SESSION_COOKIE)?.value,
           'MyTeam',
           'MyBoard',

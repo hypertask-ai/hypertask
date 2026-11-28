@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { waitUntil } from '@vercel/functions'
 import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
 import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
@@ -21,6 +22,8 @@ import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { consumeEmailLinkToken } from '@/lib/auth/emailLinkToken'
 import { revokeOtherUserSessions } from '@/lib/auth/sessionRevocation'
+
+type AuthUser = Prisma.UserGetPayload<{ include: { UserSetting: true } }>
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
@@ -131,7 +134,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let userData = userUpdateResult.res.user
+    let userData: AuthUser | null | undefined = userUpdateResult.res.user
     if (!userData) {
       console.error('❌ User data not found in response')
       return NextResponse.json(
@@ -168,20 +171,20 @@ export async function POST(request: NextRequest) {
         include: { UserSetting: true, userPicture: true },
       })
       if (updatedUser) {
-        userData = updatedUser as any
+        userData = updatedUser
       }
     } else {
       console.log('🔐 Login token - preserving existing verification status')
     }
 
-    await logPersonal(userData!.id, '✅ User updated successfully (email link):', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTutorialStatus: (userData as any).UserSetting?.onboardingTutorialStatus, onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus, trialStatus: (userData as any).UserSetting?.trialStatus, displayName: userData!.displayName, })
+    await logPersonal(userData!.id, '✅ User updated successfully (email link):', { id: userData!.id, email: userData!.email, outcome: 'signed-in', }, { id: userData!.id, email: userData!.email, onboardingTutorialStatus: userData.UserSetting?.onboardingTutorialStatus, onboardingTourStatus: userData.UserSetting?.onboardingTourStatus, trialStatus: userData.UserSetting?.trialStatus, displayName: userData!.displayName, })
 
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
         console.log('🚀 Completing onboarding step 1 for new email-link user')
         const onboardingResult = await provisionFirstWorkspace(
-          userData as any,
+          userData,
           request.cookies.get(SESSION_COOKIE)?.value,
           'MyTeam',
           'MyBoard',
@@ -290,8 +293,8 @@ async function getProjects(userId: number, baseUrl: string): Promise<IProject | 
 }
 
 function getRedirectUrl(
-  user: any,
-  prevBoard: any,
+  user: Pick<AuthUser, 'UserSetting'> | null | undefined,
+  prevBoard: Awaited<ReturnType<typeof resolveLoginBoard>>,
   isMobile: boolean,
   abTestVariant?: string,
   view?: string,

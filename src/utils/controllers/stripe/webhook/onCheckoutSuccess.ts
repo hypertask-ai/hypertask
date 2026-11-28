@@ -52,7 +52,7 @@ const teamForCustomer = (customerId: string, teamId?: string) =>
 
 const sessionOnSuccess = async (
   subscription: PinnedApiVersionSubscription,
-  plan: ISubscriptionPlan,
+  plan: Pick<ISubscriptionPlan, "id" | "product" | "interval">,
 ) => {
   const customerId = subscription.customer as string;
   const discoveredTeam = await teamForCustomer(customerId);

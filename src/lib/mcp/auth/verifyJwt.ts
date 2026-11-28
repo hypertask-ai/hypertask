@@ -107,24 +107,24 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
         audience: JWT_MCP_AUDIENCE,
       }) as jwt.JwtPayload
       log('[MCP Auth] JWT verified with current format (mcp-api)')
-    } catch (err: any) {
-      log('[MCP Auth] Current format failed:', err?.message)
+    } catch (err: unknown) {
+      log('[MCP Auth] Current format failed:', (err as { message?: unknown } | null | undefined)?.message)
       try {
         decoded = jwt.verify(token, JWT_SECRET, {
           issuer: 'hypertasks',
           audience: JWT_LEGACY_MCP_AUDIENCE,
         }) as jwt.JwtPayload
         log('[MCP Auth] JWT verified with legacy format (hypertasks-mcp)')
-      } catch (err2: any) {
-        log('[MCP Auth] Legacy format failed:', err2?.message)
+      } catch (err2: unknown) {
+        log('[MCP Auth] Legacy format failed:', (err2 as { message?: unknown } | null | undefined)?.message)
         try {
           decoded = jwt.verify(token, JWT_SECRET, {
             issuer: JWT_OAUTH_ISSUER,
             audience: [JWT_OAUTH_AUDIENCE, JWT_LEGACY_OAUTH_AUDIENCE],
           }) as jwt.JwtPayload
           log('[MCP Auth] JWT verified as OAuth access token')
-        } catch (errOAuth: any) {
-          log('[MCP Auth] OAuth format failed:', errOAuth?.message)
+        } catch (errOAuth: unknown) {
+          log('[MCP Auth] OAuth format failed:', (errOAuth as { message?: unknown } | null | undefined)?.message)
           if (decodedWithoutVerify.aud !== undefined) {
             log('[MCP Auth] Token has an unsupported audience:', decodedWithoutVerify.aud)
             return null
@@ -134,9 +134,9 @@ export function verifyMcpJwtToken(token: string, options: ValidateMcpAuthOptions
               issuer: ['hypertasks', JWT_ISSUER, JWT_OAUTH_ISSUER],
             }) as jwt.JwtPayload
             log('[MCP Auth] Legacy audience-less JWT verified')
-          } catch (err3: any) {
+          } catch (err3: unknown) {
             log('[MCP Auth] All verification attempts failed')
-            log('[MCP Auth] Signature error details:', err3?.message)
+            log('[MCP Auth] Signature error details:', (err3 as { message?: unknown } | null | undefined)?.message)
             log('[MCP Auth] JWT_SECRET exists:', !!JWT_SECRET, 'Length:', JWT_SECRET?.length)
             log('[MCP Auth] Token issuer:', decodedWithoutVerify?.iss, 'Expected:', ['hypertasks', JWT_ISSUER])
             log('[MCP Auth] Token audience:', decodedWithoutVerify?.aud, 'Expected:', [JWT_LEGACY_MCP_AUDIENCE, JWT_MCP_AUDIENCE])
@@ -463,7 +463,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
 export function createMcpToken(
   userId: number,
   email: string,
-  expiresIn: string | number = '30d',
+  expiresIn: NonNullable<jwt.SignOptions['expiresIn']> = '30d',
   agentId?: string,
   agentTeamScope?: AgentTokenTeamScope
 ): string {
@@ -496,7 +496,7 @@ export function createMcpToken(
   const signOptions: jwt.SignOptions = {
     issuer: JWT_ISSUER,
     audience: JWT_MCP_AUDIENCE,
-    ...(agentId ? {} : { expiresIn: expiresIn as any }),
+    ...(agentId ? {} : { expiresIn }),
   }
 
   return jwt.sign(payload as jwt.JwtPayload, JWT_SECRET, signOptions)
