@@ -31,7 +31,7 @@ A comprehensive tour tracking system has been implemented using react-joyride. T
    - `TOUR_IDS` constants (PROJECT, CREATE_TASK_MODAL, SHORTCUTS, TASK_DETAIL)
    - `ProductToursData` type with `_hasSeenAnyTour` flag
 
-2. **`src/pages/api/tours/update.ts`**
+2. **`src/app/api/tours/update/route.ts`**
    - API endpoint to update tour status
    - Automatically sets `_hasSeenAnyTour: true` when any tour is tracked
 

@@ -1,9 +1,6 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
-const { load } = require("./task-route-loader.cjs");
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const policyMocks = {
   "@/lib/agents/publicAgent": {}, "@/lib/cycles": {},
@@ -21,6 +18,7 @@ function matches(project, where) {
   return !where.OR || where.OR.some(branch => matches(project, branch));
 }
 
+for (const method of ["POST", "GET"]) {
 function harness({ userId = 42, ownerId = 99, members = [], status = "Normal", teamId = 7, empty = false, failure = false } = {}) {
   const project = { id: 17, ownerId, members, status, teamId };
   const calls = { queries: [], protectedReads: 0, rendered: [] };
@@ -49,27 +47,24 @@ function harness({ userId = 42, ownerId = 99, members = [], status = "Normal", t
     } },
   };
   const controller = load("src/utils/controllers/trash/getByProjectId.ts", mocks).default;
-  const handler = load("src/pages/api/trash/getTrashByProjectId.ts", mocks).default;
+  const handler = load("src/app/api/trash/getTrashByProjectId/route.ts", mocks)[method];
   async function request(projectId = "17") {
-    const res = { status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
-    await handler({ headers: {}, query: { projectId, userId: 99 }, body: { userId: 99 } }, res);
-    return res;
+    const url = new URL("https://app.test/api/trash/getTrashByProjectId?userId=99");
+    if (projectId !== null) url.searchParams.set("projectId", projectId);
+    const res = await handler(new Request(url, {
+      method,
+      ...(method === "POST" ? { body: JSON.stringify({ userId: 99 }) } : {}),
+    }));
+    return { statusCode: res.status, body: await res.json() };
   }
-  const filename = path.resolve(__dirname, "../src/app/trash/[projectId]/page.tsx");
-  const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    fileName: filename,
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-  }).outputText;
-  const pageModule = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    if (specifier === "react/jsx-runtime") return { jsx: (component, props) => component(props) };
-    if (specifier === "@/components/PageComponents/Trash/TrashComp") return { __esModule: true, default: props => { calls.rendered.push(props); return props; } };
-    if (specifier === "next/navigation") return { notFound: () => { throw new Error("NOT_FOUND"); }, redirect: () => { throw new Error("LOGIN_REDIRECT"); } };
-    if (specifier === "@/utils/controllers/trash/getByProjectId") return { __esModule: true, default: controller };
-    if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
-    return load(`src/${specifier.slice(2)}.ts`, mocks);
-  }, pageModule, pageModule.exports);
-  const page = projectId => pageModule.exports.default({ params: Promise.resolve({ projectId }) });
+  const pageModule = load("src/app/trash/[projectId]/page.tsx", {
+    ...mocks,
+    "react/jsx-runtime": { jsx: (component, props) => component(props) },
+    "@/components/PageComponents/Trash/TrashComp": { default: props => { calls.rendered.push(props); return props; } },
+    "next/navigation": { notFound: () => { throw new Error("NOT_FOUND"); } },
+    "@/utils/controllers/trash/getByProjectId": { default: controller },
+  });
+  const page = projectId => pageModule.default({ params: Promise.resolve({ projectId }) });
   return { request, page, controller, project, calls };
 }
 
@@ -79,7 +74,7 @@ for (const [name, options] of [
   ["agent-only member", { members: [{ userId: 42, agentId: "agent-only" }] }],
   ["deleted project owner", { ownerId: 42, status: "Deleted" }],
 ]) {
-  test(`trash API and page deny ${name} before loading tasks or creator profiles`, async () => {
+  test(`${method}: trash API and page deny ${name} before loading tasks or creator profiles`, async () => {
     const h = harness(options);
     const res = await h.request();
     assert.equal(res.statusCode, 404);
@@ -99,7 +94,7 @@ for (const [name, options] of [
   ["teamless member", { teamId: null, members: [{ userId: 42, agentId: null }] }],
   ["archived board owner", { ownerId: 42, status: "Archive" }],
 ]) {
-  test(`trash preserves deleted-task results and rendering for ${name}`, async () => {
+  test(`${method}: trash preserves deleted-task results and rendering for ${name}`, async () => {
     const h = harness(options);
     const res = await h.request();
     assert.equal(res.statusCode, 200);
@@ -112,7 +107,7 @@ for (const [name, options] of [
   });
 }
 
-test("missing project and inaccessible project have the same 404", async () => {
+test(`${method}: missing project and inaccessible project have the same 404`, async () => {
   const h = harness();
   const missing = await h.request("999");
   const denied = await h.request();
@@ -122,7 +117,7 @@ test("missing project and inaccessible project have the same 404", async () => {
   assert.equal(h.calls.protectedReads, 0);
 });
 
-test("membership removal takes effect on the next trash read", async () => {
+test(`${method}: membership removal takes effect on the next trash read`, async () => {
   const h = harness({ members: [{ userId: 42, agentId: null }] });
   assert.equal((await h.request()).statusCode, 200);
   h.project.members.length = 0;
@@ -131,33 +126,37 @@ test("membership removal takes effect on the next trash read", async () => {
   assert.equal(h.calls.protectedReads, 1);
 });
 
-test("anonymous API and page requests never read projects", async () => {
+test(`${method}: anonymous API and page requests never read projects`, async () => {
   const h = harness({ userId: null });
-  assert.equal((await h.request()).statusCode, 401);
+  assert.deepEqual(await h.request(), { statusCode: 401, body: { message: "Unauthorized" } });
   assert.equal(await h.controller({ projectId: 17, userId: 0 }), null);
   await assert.rejects(h.page("17"), /LOGIN_REDIRECT/);
   assert.deepEqual(h.calls.queries, []);
 });
 
-for (const projectId of [undefined, "", "abc", "17tail", "17.5", "0", "-17", ["17"], "9007199254740992"]) {
-  test(`invalid project id ${JSON.stringify(projectId)} is rejected before queries`, async () => {
+for (const projectId of [undefined, "", "abc", "17tail", "17.5", "0", "-17", "17,18", "9007199254740992"]) {
+  test(`${method}: invalid project id ${JSON.stringify(projectId)} is rejected before queries`, async () => {
     const h = harness({ ownerId: 42 });
-    assert.equal((await h.request(projectId === undefined ? null : projectId)).statusCode, 400);
+    assert.deepEqual(await h.request(projectId === undefined ? null : projectId), {
+      statusCode: 400, body: { message: "Missing Required information" },
+    });
+    await assert.rejects(h.page(["17"]), /NOT_FOUND/);
     await assert.rejects(h.page(projectId), /NOT_FOUND/);
     assert.deepEqual(h.calls.queries, []);
   });
 }
 
-test("authorized empty trash is successful, not not-found", async () => {
+test(`${method}: authorized empty trash is successful, not not-found`, async () => {
   const h = harness({ ownerId: 42, empty: true });
   const res = await h.request();
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body.tasks, []);
 });
 
-test("database failures remain errors rather than not-found", async () => {
+test(`${method}: database failures remain errors rather than not-found`, async () => {
   const h = harness({ ownerId: 42, failure: true });
-  assert.equal((await h.request()).statusCode, 500);
+  assert.deepEqual(await h.request(), { statusCode: 500, body: {} });
   await assert.rejects(h.controller({ projectId: 17, userId: 42 }), /synthetic database failure/);
   await assert.rejects(h.page("17"), /synthetic database failure/);
 });
+}
