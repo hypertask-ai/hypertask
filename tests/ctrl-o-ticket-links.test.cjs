@@ -176,13 +176,12 @@ for (const enabled of [true, false]) {
     const calls = [];
     let authorized = true;
     const handler = load("src/pages/api/urls/fetchUrls.ts", {
-      "@/utils/controllers/urls/fetchUrls": { default: async (...args) => { calls.push(args); return { status: 200, json: [] }; } },
+      "@/utils/controllers/urls/fetchUrls": { default: async (...args) => { calls.push(args); return { status: 200, json: [] }; }, resolveTicketUrls: async rows => rows },
       "@/lib/prisma": { default: { task: { findFirst: async ({ where }) => { assert.equal(where.id, 99); return authorized ? { id: 99 } : null; } } } },
       "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
       "@/lib/flags": {
         HTPR_7050_CTRL_O_LINKS_FLAG: "htpr-7050-ctrl-o-links",
-        HTPR_8096_CTRL_O_TICKET_TITLES_FLAG: "htpr-8096-ctrl-o-ticket-titles",
-        isFeatureEnabled: async (key, userId) => { if (key === "htpr-8096-ctrl-o-ticket-titles") return false; assert.equal(key, "htpr-7050-ctrl-o-links"); assert.equal(userId, 7); assert.ok(authorized); return enabled; },
+        isFeatureEnabled: async (key, userId) => { assert.equal(key, "htpr-7050-ctrl-o-links"); assert.equal(userId, 7); assert.ok(authorized); return enabled; },
       },
       "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: userId => { assert.equal(userId, 7); return {}; } },
     }).default;

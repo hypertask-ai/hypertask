@@ -267,8 +267,7 @@ never another board's private title or a raw ticket URL. External links and
 attachments keep their labels and destinations. Check after reload and at
 1440x900 and 390x844 across Porcelain, Graphite, AMOLED and Dia.
 
-The `htpr-8096-ctrl-o-ticket-titles` bugfix flag defaults to Everyone. Off
-preserves the old link labels; test Off only in an isolated route test.
+Ticket ID and title labels are always enabled and respect board read access.
 
 With `htpr-8804-visible-links-first` on (Everyone by default), open Ctrl+O on a ticket
 with visible and offscreen saved links, including in an embedded ticket panel.

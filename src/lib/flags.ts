@@ -39,6 +39,7 @@ export const FEATURE_FLAG_QA_USER = {
 } as const;
 
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-8096-ctrl-o-ticket-titles",
   "htpr-6934-server-first-screen",
   "htpr-5913-consistent-comment-shortcuts",
   "htpr-6160-inbox-archive-cluster",
@@ -92,6 +93,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-7924-free-storage-2gb",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
+  "htpr-8096-ctrl-o-ticket-titles": true,
   "htpr-5913-consistent-comment-shortcuts": true,
   "htpr-6091-feature-flags": true,
   "htpr-6133-feature-flag-details": true,
